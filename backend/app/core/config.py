@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     bot_token: str | None = None
     auth_secret_key: str | None = None
     auth_token_ttl_seconds: int = 3600
+    cors_allowed_origins: list[str] = [\n        "http://localhost:5173",\n        "http://127.0.0.1:5173",\n    ]
 
     model_config = SettingsConfigDict(
         env_file=".env",
