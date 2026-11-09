@@ -5,7 +5,6 @@ from app.api.auth import TelegramAuthRequest
 from app.api.listings import ListingCreateRequest
 from app.db.models import PriceCurrency
 
-
 ASSET_ID = "00000000-0000-0000-0000-000000000001"
 
 
@@ -22,7 +21,11 @@ def test_listing_request_accepts_positive_price() -> None:
 @pytest.mark.parametrize("price", ["0", "-1", "0.0000000001"])
 def test_listing_request_rejects_invalid_price(price: str) -> None:
     with pytest.raises(ValidationError):
-        ListingCreateRequest(asset_id=ASSET_ID, price_amount=price, price_currency=PriceCurrency.TON)
+        ListingCreateRequest(
+            asset_id=ASSET_ID,
+            price_amount=price,
+            price_currency=PriceCurrency.TON,
+        )
 
 
 @pytest.mark.parametrize("price", ["1e30", "1234567890123456.1234567890"])
