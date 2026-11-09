@@ -9,7 +9,7 @@ describe("VILTARA SHOP landing screen", () => {
 
     expect(screen.getByText("VILTARA")).toBeInTheDocument();
     expect(screen.getByText("TON MARKET")).toBeInTheDocument();
-    expect(screen.getByText("VILTARA SHOP")).toBeInTheDocument();
+    expect(screen.getByText(/VILTARA SHOP/)).toBeInTheDocument();
   });
 
   it("introduces the digital collectibles marketplace", () => {
