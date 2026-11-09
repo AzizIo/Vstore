@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -80,7 +80,9 @@ async def make_user(session: AsyncSession, telegram_id: int = 700000001) -> User
     return user
 
 
-async def make_asset(session: AsyncSession, owner: User, external_id: str = "nft-asset-1") -> NFTAsset:
+async def make_asset(
+    session: AsyncSession, owner: User, external_id: str = "nft-asset-1"
+) -> NFTAsset:
     asset = NFTAsset(
         asset_type=AssetType.TON_NFT,
         external_id=external_id,
