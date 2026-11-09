@@ -1,30 +1,220 @@
+import { useEffect, useState } from "react";
+import {
+  fetchListing,
+  fetchListings,
+  type AssetType,
+  type Listing,
+  type ListingSort,
+} from "./api/listings";
+
+const assetTypeLabels: Record<AssetType, string> = {
+  ton_nft: "TON NFT",
+  telegram_gift: "Telegram gift",
+};
+
+function formatPrice(amount: string, currency: string) {
+  const numericAmount = Number(amount);
+  const formattedAmount = Number.isFinite(numericAmount)
+    ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(numericAmount)
+    : amount;
+  return `${formattedAmount} ${currency}`;
+}
+
+function AssetArtwork({ imageUrl, name }: { imageUrl: string | null; name: string }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => setImageFailed(false), [imageUrl]);
+
+  return (
+    <div className="artwork">
+      {imageUrl && !imageFailed ? (
+        <img src={imageUrl} alt={name} loading="lazy" onError={() => setImageFailed(true)} />
+      ) : (
+        <div className="artwork-placeholder" aria-label="Image unavailable"><span>V</span></div>
+      )}
+    </div>
+  );
+}
+
+function ListingCard({ listing, onOpen }: { listing: Listing; onOpen: () => void }) {
+  const title = listing.title || listing.asset.name || "Untitled asset";
+  return (
+    <button className="listing-card" type="button" onClick={onOpen}>
+      <AssetArtwork imageUrl={listing.asset.image_url} name={title} />
+      <span className="listing-card-content">
+        <span className="listing-card-type">{assetTypeLabels[listing.asset.asset_type]}</span>
+        <span className="listing-card-title">{title}</span>
+        <span className="listing-card-price">{formatPrice(listing.price_amount, listing.price_currency)}</span>
+      </span>
+    </button>
+  );
+}
+
+function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () => void }) {
+  const [listing, setListing] = useState<Listing | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError("");
+    fetchListing(listingId, controller.signal)
+      .then(setListing)
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(reason instanceof Error ? reason.message : "Unable to load this listing.");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [listingId, retry]);
+
+  if (loading) return <p className="detail-message" role="status">Loading listing...</p>;
+  if (error || !listing) {
+    return (
+      <section className="detail-message" role="alert">
+        <p>{error || "This listing is unavailable."}</p>
+        <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button>
+      </section>
+    );
+  }
+
+  const title = listing.title || listing.asset.name || "Untitled asset";
+  const seller = listing.seller.first_name || listing.seller.username || "Seller";
+  return (
+    <section className="detail-view" aria-labelledby="detail-title">
+      <button className="text-button back-button" type="button" onClick={onBack}>
+        <span aria-hidden="true">←</span> Back to catalog
+      </button>
+      <div className="detail-layout">
+        <AssetArtwork imageUrl={listing.asset.image_url} name={title} />
+        <div className="detail-copy">
+          <p className="eyebrow">{assetTypeLabels[listing.asset.asset_type]}</p>
+          <h1 id="detail-title">{title}</h1>
+          <p className="detail-price">{formatPrice(listing.price_amount, listing.price_currency)}</p>
+          {listing.description && <p className="detail-description">{listing.description}</p>}
+          {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
+          <dl className="detail-facts">
+            <div><dt>Seller</dt><dd>{seller}</dd></div>
+            <div><dt>Asset ID</dt><dd>{listing.asset.external_id}</dd></div>
+            <div><dt>Verification</dt><dd>{listing.asset.verification_status}</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function App() {
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
+  const [assetType, setAssetType] = useState<AssetType | "all">("all");
+  const [sort, setSort] = useState<ListingSort>("newest");
+  const [listingId, setListingId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError("");
+    fetchListings({ search, assetType, sort }, controller.signal)
+      .then((page) => {
+        setListings(page.items);
+        setTotal(page.total);
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(reason instanceof Error ? reason.message : "Unable to load the catalog.");
+          setListings([]);
+          setTotal(0);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [search, assetType, sort, retry]);
+
   return (
     <main className="app-shell">
       <header className="topbar">
-        <span className="brand-mark">V</span>
-        <span className="brand-name">VILTARA</span>
+        <a className="brand" href="#catalog" onClick={() => setListingId(null)}>
+          <span className="brand-mark" aria-hidden="true">V</span>
+          <span className="brand-name">VILTARA</span>
+        </a>
         <span className="network-label">TON MARKET</span>
       </header>
 
-      <section className="hero">
-        <p className="eyebrow">DIGITAL COLLECTIBLES MARKETPLACE</p>
-        <h1>Discover rare<br /><span>digital gifts.</span></h1>
-        <p className="hero-copy">
-          A curated marketplace for verifiable Telegram collectibles and TON NFTs.
-        </p>
-        <div className="hero-actions">
-          <button className="primary-button" type="button">Explore collection</button>
-          <span className="status-pill"><i /> Marketplace preview</span>
-        </div>
-      </section>
+      {listingId ? (
+        <ListingDetail listingId={listingId} onBack={() => setListingId(null)} />
+      ) : (
+        <>
+          <section className="catalog-intro" id="catalog">
+            <p className="eyebrow">DIGITAL COLLECTIBLES · TON</p>
+            <h1>Find your next<br /><span>favorite thing.</span></h1>
+            <p className="intro-copy">A live catalog of listed digital collectibles.</p>
+          </section>
+          <section className="catalog" aria-label="Marketplace catalog">
+            <div className="catalog-heading">
+              <h2>Explore listings</h2>
+              {!loading && !error && <span className="result-count">{total} {total === 1 ? "item" : "items"}</span>}
+            </div>
+            <form className="catalog-controls" onSubmit={(event) => event.preventDefault()}>
+              <label className="search-control">
+                <span className="sr-only">Search listings</span>
+                <span aria-hidden="true">⌕</span>
+                <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search collectibles" />
+              </label>
+              <label className="select-control">
+                <span className="sr-only">Asset type</span>
+                <select value={assetType} onChange={(event) => setAssetType(event.target.value as AssetType | "all")}>
+                  <option value="all">All assets</option>
+                  <option value="ton_nft">TON NFT</option>
+                  <option value="telegram_gift">Telegram gift</option>
+                </select>
+              </label>
+              <label className="select-control">
+                <span className="sr-only">Sort listings</span>
+                <select value={sort} onChange={(event) => setSort(event.target.value as ListingSort)}>
+                  <option value="newest">Newest</option>
+                  <option value="price_asc">Price: low to high</option>
+                  <option value="price_desc">Price: high to low</option>
+                </select>
+              </label>
+            </form>
 
-      <section className="notice">
-        <strong>Coming together, one verified asset at a time.</strong>
-        <p>The marketplace interface is being prepared. Asset verification and safe transfers come first.</p>
-      </section>
-
-      <footer>VILTARA SHOP <span>•</span> Built on TON</footer>
+            {loading ? (
+              <div className="listing-grid" aria-label="Listings loading" aria-busy="true">
+                {Array.from({ length: 8 }, (_, index) => (
+                  <div className="listing-skeleton" key={index} aria-hidden="true"><span /><i /><i /></div>
+                ))}
+              </div>
+            ) : error ? (
+              <div className="catalog-message" role="alert">
+                <h3>Catalog unavailable</h3><p>{error}</p>
+                <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button>
+              </div>
+            ) : listings.length === 0 ? (
+              <div className="catalog-message" role="status">
+                <h3>No listings found</h3><p>Try changing your search or asset type.</p>
+              </div>
+            ) : (
+              <div className="listing-grid">
+                {listings.map((listing) => (
+                  <ListingCard key={listing.id} listing={listing} onOpen={() => setListingId(listing.id)} />
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+      <footer>VILTARA SHOP <span>·</span> Built on TON</footer>
     </main>
   );
 }
