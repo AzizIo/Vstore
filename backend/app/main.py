@@ -25,7 +25,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(\n    CORSMiddleware,\n    allow_origins=settings.cors_allowed_origins,\n    allow_credentials=False,\n    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],\n    allow_headers=["Authorization", "Content-Type"],\n)\n\napp.include_router(health_router, prefix="/api")\napp.include_router(auth_router, prefix="/api")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
+
+app.include_router(health_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
 
 
 @app.get("/", tags=["meta"])
