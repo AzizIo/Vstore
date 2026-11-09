@@ -18,6 +18,7 @@ build/
 # Node
 node_modules/
 frontend/dist/
+frontend/coverage/
 
 # Editors / OS
 .DS_Store
