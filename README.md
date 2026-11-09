@@ -150,7 +150,13 @@ Telegram-бот с интегрированным Telegram Mini App — марк
    docker compose up --build
    ```
 
-3. Применить миграции базы данных:\n\n   ```bash\n   docker compose exec api alembic upgrade head\n   ```\n\n4. Проверить сервисы:
+3. Применить миграции базы данных:
+
+   ```bash
+   docker compose exec api alembic upgrade head
+   ```
+
+4. Проверить сервисы:
    - Mini App: http://localhost:5173
    - API: http://localhost:8000
    - Swagger: http://localhost:8000/docs
