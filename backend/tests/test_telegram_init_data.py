@@ -7,7 +7,6 @@ import pytest
 
 from app.auth.telegram import TelegramInitDataError, verify_telegram_init_data
 
-
 BOT_TOKEN = "123456:TEST_TOKEN"
 
 
