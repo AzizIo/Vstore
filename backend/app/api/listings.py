@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
@@ -7,8 +8,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.auth.dependencies import get_current_user
 from app.db.models import (
@@ -55,7 +56,7 @@ class ListingResponse(BaseModel):
     price_currency: PriceCurrency
     title: str | None
     description: str | None
-    created_at: object
+    created_at: datetime
     asset: ListingAssetResponse
     seller: ListingSellerResponse
 
@@ -184,8 +185,5 @@ async def create_listing_draft(
     )
     session.add(listing)
     await session.commit()
-    await session.refresh(listing)
-    await session.refresh(asset)
-    listing.asset = asset
-    listing.seller = user
-    return listing
+    result = await session.scalars(_listing_query().where(Listing.id == listing.id))
+    return result.unique().one()
