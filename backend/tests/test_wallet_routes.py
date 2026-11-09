@@ -1,5 +1,7 @@
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
+
+import pytest
 from fastapi.testclient import TestClient
 
 from app.auth.dependencies import get_current_user
