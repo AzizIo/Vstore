@@ -169,6 +169,10 @@ Telegram-бот с интегрированным Telegram Mini App — марк
    - Readiness: http://localhost:8000/api/health/ready
    - Telegram login: `POST /api/auth/telegram` с JSON body `{"init_data":"<Telegram.WebApp.initData>"}`. Передавать нужно именно `Telegram.WebApp.initData`, не `initDataUnsafe`.
    - Current user: `GET /api/users/me` с заголовком `Authorization: Bearer <access_token>`.
+   - Public catalog: `GET /api/listings?limit=24&offset=0&sort=newest`; filters: `asset_type`, `currency`, `search`, `sort=price_asc|price_desc|newest`.
+   - Listing details: `GET /api/listings/{listing_id}` (только активные объявления).
+   - My listings: `GET /api/listings/me` (требуется Bearer token).
+   - Create listing draft: `POST /api/listings` (требуется Bearer token; только для уже подтверждённого актива, принадлежащего пользователю).
 
 6. Для запуска Telegram-бота указать `BOT_TOKEN` в `.env` и выполнить:
 
@@ -190,10 +194,11 @@ Telegram-бот с интегрированным Telegram Mini App — марк
 - [ ] Frontend session integration and role-based authorization.
 - [ ] TON Connect manifest и wallet proof flow.
 - [ ] TEP-62 NFT verification adapter.
-- [ ] Каталог, объявления и заказы.
+- [x] Read-only API каталога и карточки активного объявления; приватные черновики объявлений для подтверждённых активов.
+- [ ] Публикация объявлений после live ownership re-check и заказы.
 - [ ] Платежи, escrow и production hardening.
 
-**Важно:** текущие пароли PostgreSQL в Compose предназначены только для локальной разработки. Перед production необходимо использовать секреты, отдельные учётные данные, миграции, TLS, резервное копирование и ограничение сетевого доступа. Каркас пока не принимает реальные платежи и не передаёт NFT.
+**Важно:** текущие пароли PostgreSQL в Compose предназначены только для локальной разработки. Перед production необходимо использовать секреты, отдельные учётные данные, миграции, TLS, резервное копирование и ограничение сетевого доступа. Публикация объявлений пока намеренно отключена: сначала нужен live ownership re-check через TON NFT adapter. Каркас пока не принимает реальные платежи и не передаёт NFT.
 
 ---
 
