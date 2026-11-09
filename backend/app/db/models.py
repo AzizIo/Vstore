@@ -89,7 +89,9 @@ class User(TimestampMixin, Base):
     first_name: Mapped[str] = mapped_column(String(128), nullable=False)
     last_name: Mapped[str | None] = mapped_column(String(128))
     language_code: Mapped[str | None] = mapped_column(String(16))
-    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    is_blocked: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
 
     wallets: Mapped[list[Wallet]] = relationship(back_populates="user")
     assets: Mapped[list[NFTAsset]] = relationship(back_populates="owner")
@@ -107,9 +109,15 @@ class Wallet(TimestampMixin, Base):
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     address: Mapped[str] = mapped_column(String(128), nullable=False)
-    network: Mapped[str] = mapped_column(String(16), default="mainnet", server_default="mainnet", nullable=False)
-    is_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
-    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    network: Mapped[str] = mapped_column(
+        String(16), default="mainnet", server_default="mainnet", nullable=False
+    )
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
+    is_primary: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
 
     user: Mapped[User] = relationship(back_populates="wallets")
 
@@ -138,7 +146,9 @@ class NFTAsset(TimestampMixin, Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    asset_type: Mapped[AssetType] = mapped_column(enum_column(AssetType, "asset_type"), nullable=False)
+    asset_type: Mapped[AssetType] = mapped_column(
+        enum_column(AssetType, "asset_type"), nullable=False
+    )
     external_id: Mapped[str] = mapped_column(String(160), nullable=False)
     item_address: Mapped[str | None] = mapped_column(String(128), index=True)
     collection_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -178,7 +188,10 @@ class Listing(TimestampMixin, Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     asset_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("nft_assets.id", ondelete="RESTRICT"), nullable=False, index=True
+        Uuid(as_uuid=True),
+        ForeignKey("nft_assets.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     seller_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
