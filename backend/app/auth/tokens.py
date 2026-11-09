@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import jwt
@@ -16,7 +16,7 @@ def create_access_token(
     if expires_in_seconds <= 0:
         raise ValueError("Token lifetime must be positive")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": str(user_id),
         "telegram_id": telegram_id,
