@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from decimal import Decimal
 from uuid import uuid4
 
@@ -42,9 +43,10 @@ def migrated_database(test_database_url: str):
     os.environ["DATABASE_URL"] = test_database_url
     get_settings.cache_clear()
     try:
-        command.upgrade(Config("alembic.ini"), "head")
+        alembic_config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        command.upgrade(alembic_config, "head")
         yield
-        command.downgrade(Config("alembic.ini"), "base")
+        command.downgrade(alembic_config, "base")
     finally:
         if previous_url is None:
             os.environ.pop("DATABASE_URL", None)
