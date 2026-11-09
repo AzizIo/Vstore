@@ -21,8 +21,12 @@ def upgrade() -> None:
         sa.Column("last_name", sa.String(length=128), nullable=True),
         sa.Column("language_code", sa.String(length=16), nullable=True),
         sa.Column("is_blocked", sa.Boolean(), server_default=sa.text("false"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint("telegram_id > 0", name="ck_users_telegram_id_positive"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("telegram_id"),
@@ -37,8 +41,12 @@ def upgrade() -> None:
         sa.Column("network", sa.String(length=16), server_default="mainnet", nullable=False),
         sa.Column("is_verified", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("is_primary", sa.Boolean(), server_default=sa.text("false"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("network", "address", name="uq_wallets_network_address"),
@@ -53,8 +61,12 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=160), nullable=True),
         sa.Column("marketplace_name", sa.String(length=160), nullable=True),
         sa.Column("metadata", sa.JSON(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("network", "address", name="uq_nft_collections_network_address"),
     )
@@ -71,10 +83,16 @@ def upgrade() -> None:
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("image_url", sa.Text(), nullable=True),
         sa.Column("metadata", sa.JSON(), nullable=True),
-        sa.Column("verification_status", sa.String(length=32), server_default="pending", nullable=False),
+        sa.Column(
+            "verification_status", sa.String(length=32), server_default="pending", nullable=False
+        ),
         sa.Column("verified_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint("length(external_id) > 0", name="ck_nft_assets_external_id_nonempty"),
         sa.ForeignKeyConstraint(["collection_id"], ["nft_collections.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="SET NULL"),
@@ -96,8 +114,12 @@ def upgrade() -> None:
         sa.Column("title", sa.String(length=200), nullable=True),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint("price_amount > 0", name="ck_listings_price_positive"),
         sa.ForeignKeyConstraint(["asset_id"], ["nft_assets.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["seller_id"], ["users.id"], ondelete="RESTRICT"),
