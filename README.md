@@ -144,16 +144,16 @@ Telegram-бот с интегрированным Telegram Mini App — марк
    cp .env.example .env
    ```
 
-2. Запустить API, Mini App, PostgreSQL и Redis:
-
-   ```bash
-   docker compose up --build
-   ```
-
-3. Сгенерировать секрет API (вставить результат в `AUTH_SECRET_KEY` в `.env`):
+2. Сгенерировать секрет API (вставить результат в `AUTH_SECRET_KEY` в `.env`):
 
    ```bash
    openssl rand -hex 32
+   ```
+
+3. Запустить API, Mini App, PostgreSQL и Redis:
+
+   ```bash
+   docker compose up --build
    ```
 
 4. Применить миграции базы данных:
