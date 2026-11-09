@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from typing import Annotated
 from pydantic import BaseModel
 
 from app.auth.dependencies import get_current_user
@@ -18,7 +19,7 @@ class UserProfileResponse(BaseModel):
 
 @router.get("/me", response_model=UserProfileResponse)
 async def get_my_profile(
-    user: User = Depends(get_current_user),
+    user: Annotated[User, Depends(get_current_user)],
 ) -> UserProfileResponse:
     return UserProfileResponse(
         id=str(user.id),
