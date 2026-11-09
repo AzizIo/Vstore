@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -32,6 +33,9 @@ class ScalarRows:
 
     def one_or_none(self):
         return self.rows[0] if self.rows else None
+
+    def one(self):
+        return self.rows[0]
 
 
 @pytest.fixture
@@ -82,6 +86,7 @@ def make_listing(seller: User, asset: NFTAsset, status=ListingStatus.ACTIVE):
         price_amount=Decimal("2.500000000"),
         price_currency=PriceCurrency.TON,
         title="Rare Gift",
+        created_at=datetime.now(UTC),
         asset=asset,
         seller=seller,
     )
