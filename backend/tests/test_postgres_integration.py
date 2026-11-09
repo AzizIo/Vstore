@@ -214,3 +214,42 @@ async def test_listing_query_returns_only_requested_sellers_assets(
         await db_session.scalars(select(Listing).where(Listing.seller_id == first_owner.id))
     ).all()
     assert [listing.id for listing in results] == [first_listing.id]
+
+
+async def test_same_external_id_is_allowed_for_different_asset_types(
+    db_session: AsyncSession,
+) -> None:
+    owner = await make_user(db_session, telegram_id=700000010)
+    await make_asset(db_session, owner, external_id="shared-external-id")
+    gift = NFTAsset(
+        asset_type=AssetType.TELEGRAM_GIFT,
+        external_id="shared-external-id",
+        owner_id=owner.id,
+        verification_status=AssetVerificationStatus.PENDING,
+    )
+    db_session.add(gift)
+    await db_session.flush()
+
+    assert gift.id is not None
+
+
+async def test_listing_rejects_non_positive_price(db_session: AsyncSession) -> None:
+    owner = await make_user(db_session, telegram_id=700000011)
+    asset = await make_asset(db_session, owner, external_id="invalid-price-nft")
+    listing = make_listing(owner, asset, ListingStatus.DRAFT)
+    listing.price_amount = Decimal("0")
+    db_session.add(listing)
+
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+
+
+async def test_seller_cannot_be_deleted_while_listing_exists(db_session: AsyncSession) -> None:
+    owner = await make_user(db_session, telegram_id=700000012)
+    asset = await make_asset(db_session, owner, external_id="protected-seller-nft")
+    db_session.add(make_listing(owner, asset, ListingStatus.DRAFT))
+    await db_session.flush()
+
+    await db_session.delete(owner)
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
