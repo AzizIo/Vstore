@@ -168,6 +168,7 @@ Telegram-бот с интегрированным Telegram Mini App — марк
    - Swagger: http://localhost:8000/docs
    - Readiness: http://localhost:8000/api/health/ready
    - Telegram login: `POST /api/auth/telegram` с JSON body `{"init_data":"<Telegram.WebApp.initData>"}`. Передавать нужно именно `Telegram.WebApp.initData`, не `initDataUnsafe`.
+   - Current user: `GET /api/users/me` с заголовком `Authorization: Bearer <access_token>`.
 
 6. Для запуска Telegram-бота указать `BOT_TOKEN` в `.env` и выполнить:
 
@@ -185,7 +186,8 @@ Telegram-бот с интегрированным Telegram Mini App — марк
 - [x] Docker Compose для локальной среды.
 - [x] Alembic async migrations и базовые доменные модели (users, wallets, NFT collections/assets, listings).
 - [x] HMAC-проверка Telegram Mini App initData, короткий срок действия и API JWT login endpoint.
-- [ ] Frontend session integration, authorization dependencies and role checks.
+- [x] Bearer JWT dependency and protected `GET /api/users/me` endpoint.
+- [ ] Frontend session integration and role-based authorization.
 - [ ] TON Connect manifest и wallet proof flow.
 - [ ] TEP-62 NFT verification adapter.
 - [ ] Каталог, объявления и заказы.
