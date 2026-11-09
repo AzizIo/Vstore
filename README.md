@@ -138,7 +138,7 @@ Telegram-бот с интегрированным Telegram Mini App — марк
 
 Требования: Docker Desktop / Docker Engine с Docker Compose.
 
-1. Скопировать пример переменных окружения:
+1. Скопировать пример переменных окружения и указать токен бота из BotFather в `BOT_TOKEN` (он нужен для проверки Mini App `initData`):
 
    ```bash
    cp .env.example .env
