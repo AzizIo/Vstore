@@ -130,7 +130,9 @@ class NFTCollection(TimestampMixin, Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     address: Mapped[str] = mapped_column(String(128), nullable=False)
-    network: Mapped[str] = mapped_column(String(16), default="mainnet", server_default="mainnet", nullable=False)
+    network: Mapped[str] = mapped_column(
+        String(16), default="mainnet", server_default="mainnet", nullable=False
+    )
     name: Mapped[str | None] = mapped_column(String(160))
     marketplace_name: Mapped[str | None] = mapped_column(String(160))
     metadata_json: Mapped[dict[str, object] | None] = mapped_column("metadata", JSON)
