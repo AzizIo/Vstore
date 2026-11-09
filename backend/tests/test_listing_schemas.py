@@ -31,7 +31,11 @@ def test_listing_request_rejects_invalid_price(price: str) -> None:
 @pytest.mark.parametrize("price", ["1e30", "1234567890123456.1234567890"])
 def test_listing_request_rejects_precision_overflow(price: str) -> None:
     with pytest.raises(ValidationError):
-        ListingCreateRequest(asset_id=ASSET_ID, price_amount=price, price_currency=PriceCurrency.TON)
+        ListingCreateRequest(
+            asset_id=ASSET_ID,
+            price_amount=price,
+            price_currency=PriceCurrency.TON,
+        )
 
 
 def test_listing_request_rejects_overlong_description() -> None:
