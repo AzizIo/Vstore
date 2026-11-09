@@ -1,7 +1,5 @@
 from unittest.mock import AsyncMock
 from uuid import uuid4
-
-import pytest
 from fastapi.testclient import TestClient
 
 from app.auth.dependencies import get_current_user
@@ -60,10 +58,6 @@ def test_wallet_list_returns_only_authenticated_users_wallets(wallet_client):
 
 def test_add_wallet_creates_unverified_wallet(wallet_client):
     client, user, session = wallet_client
-
-    def refresh(wallet):
-        wallet.id = uuid4()
-        wallet.created_at = None
 
     async def refresh_async(wallet):
         wallet.id = uuid4()
