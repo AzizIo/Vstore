@@ -22,7 +22,7 @@ def signed_init_data(fields: dict[str, str]) -> str:
 
 def test_valid_init_data_returns_verified_telegram_user() -> None:
     fields = {
-        "auth_date": "1_000_000",
+        "auth_date": "1000000",
         "query_id": "AAExampleQuery",
         "user": json.dumps(
             {"id": 42, "first_name": "Aziz", "username": "aziz_dev"},
@@ -31,7 +31,7 @@ def test_valid_init_data_returns_verified_telegram_user() -> None:
     }
 
     result = verify_telegram_init_data(
-        signed_init_data(fields), BOT_TOKEN, now=1_000_100
+        signed_init_data(fields), BOT_TOKEN, now=1000100
     )
 
     assert result.user.id == 42
@@ -42,57 +42,57 @@ def test_valid_init_data_returns_verified_telegram_user() -> None:
 
 def test_tampered_init_data_is_rejected() -> None:
     fields = {
-        "auth_date": "1_000_000",
+        "auth_date": "1000000",
         "user": json.dumps({"id": 42, "first_name": "Aziz"}),
     }
     payload = signed_init_data(fields).replace("Aziz", "Attacker")
 
     with pytest.raises(TelegramInitDataError, match="signature"):
-        verify_telegram_init_data(payload, BOT_TOKEN, now=1_000_100)
+        verify_telegram_init_data(payload, BOT_TOKEN, now=1000100)
 
 
 def test_expired_init_data_is_rejected() -> None:
     fields = {
-        "auth_date": "1_000_000",
+        "auth_date": "1000000",
         "user": json.dumps({"id": 42, "first_name": "Aziz"}),
     }
 
     with pytest.raises(TelegramInitDataError, match="expired"):
         verify_telegram_init_data(
-            signed_init_data(fields), BOT_TOKEN, now=1_000_301
+            signed_init_data(fields), BOT_TOKEN, now=1000301
         )
 
 
 def test_future_auth_date_is_rejected() -> None:
     fields = {
-        "auth_date": "1_000_100",
+        "auth_date": "1000100",
         "user": json.dumps({"id": 42, "first_name": "Aziz"}),
     }
 
     with pytest.raises(TelegramInitDataError, match="future"):
         verify_telegram_init_data(
-            signed_init_data(fields), BOT_TOKEN, now=1_000_000
+            signed_init_data(fields), BOT_TOKEN, now=1000000
         )
 
 
 def test_duplicate_fields_are_rejected() -> None:
     fields = {
-        "auth_date": "1_000_000",
+        "auth_date": "1000000",
         "user": json.dumps({"id": 42, "first_name": "Aziz"}),
     }
     payload = signed_init_data(fields) + "&auth_date=1000000"
 
     with pytest.raises(TelegramInitDataError, match="Duplicate"):
-        verify_telegram_init_data(payload, BOT_TOKEN, now=1_000_100)
+        verify_telegram_init_data(payload, BOT_TOKEN, now=1000100)
 
 
 def test_non_positive_telegram_user_id_is_rejected() -> None:
     fields = {
-        "auth_date": "1_000_000",
+        "auth_date": "1000000",
         "user": json.dumps({"id": 0, "first_name": "Aziz"}),
     }
 
     with pytest.raises(TelegramInitDataError, match="user ID"):
         verify_telegram_init_data(
-            signed_init_data(fields), BOT_TOKEN, now=1_000_100
+            signed_init_data(fields), BOT_TOKEN, now=1000100
         )
