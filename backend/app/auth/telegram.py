@@ -76,10 +76,10 @@ def verify_telegram_init_data(
     if not hmac.compare_digest(expected_hash, received_hash.lower()):
         raise TelegramInitDataError("initData signature verification failed")
 
-    try:
-        auth_date = int(data["auth_date"])
-    except (KeyError, ValueError) as exc:
-        raise TelegramInitDataError("Missing or invalid auth_date") from exc
+    auth_date_value = data.get("auth_date", "")
+    if not auth_date_value.isdecimal():
+        raise TelegramInitDataError("Missing or invalid auth_date")
+    auth_date = int(auth_date_value)
 
     current_time = int(time.time()) if now is None else now
     age = current_time - auth_date
