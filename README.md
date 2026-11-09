@@ -150,13 +150,13 @@ Telegram-бот с интегрированным Telegram Mini App — марк
    docker compose up --build
    ```
 
-3. Проверить сервисы:
+3. Применить миграции базы данных:\n\n   ```bash\n   docker compose exec api alembic upgrade head\n   ```\n\n4. Проверить сервисы:
    - Mini App: http://localhost:5173
    - API: http://localhost:8000
    - Swagger: http://localhost:8000/docs
    - Readiness: http://localhost:8000/api/health/ready
 
-4. Для запуска Telegram-бота указать `BOT_TOKEN` в `.env` и выполнить:
+5. Для запуска Telegram-бота указать `BOT_TOKEN` в `.env` и выполнить:
 
    ```bash
    docker compose --profile bot up --build
@@ -170,7 +170,7 @@ Telegram-бот с интегрированным Telegram Mini App — марк
 - [x] Базовый aiogram polling entrypoint.
 - [x] React + TypeScript + Vite Mini App shell.
 - [x] Docker Compose для локальной среды.
-- [ ] Alembic migrations и доменные модели.
+- [x] Alembic async migrations и базовые доменные модели (users, wallets, NFT collections/assets, listings).
 - [ ] Проверка Telegram Mini App initData.
 - [ ] TON Connect manifest и wallet proof flow.
 - [ ] TEP-62 NFT verification adapter.
