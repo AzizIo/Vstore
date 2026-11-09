@@ -19,7 +19,7 @@ describe("VILTARA SHOP landing screen", () => {
       screen.getByText("DIGITAL COLLECTIBLES MARKETPLACE"),
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Discover rare digital gifts.",
+      /Discover rare\s*digital gifts\./,
     );
     expect(
       screen.getByText(
