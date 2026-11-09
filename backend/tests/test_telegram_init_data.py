@@ -1,7 +1,8 @@
+from urllib.parse import urlencode
+
 import hashlib
 import hmac
 import json
-from urllib.parse import urlencode
 
 import pytest
 
