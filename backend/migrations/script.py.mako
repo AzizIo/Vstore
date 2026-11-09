@@ -1,6 +1,6 @@
 """\u0024{message}"""
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 import sqlalchemy as sa
@@ -8,9 +8,9 @@ import sqlalchemy as sa
 \u0024{imports if imports else ""}
 
 revision: str = \u0024{repr(up_revision)}
-down_revision: Union[str, None] = \u0024{repr(down_revision)}
-branch_labels: Union[str, Sequence[str], None] = \u0024{repr(branch_labels)}
-depends_on: Union[str, Sequence[str], None] = \u0024{repr(depends_on)}
+down_revision: str | None = \u0024{repr(down_revision)}
+branch_labels: str | Sequence[str] | None = \u0024{repr(branch_labels)}
+depends_on: str | Sequence[str] | None = \u0024{repr(depends_on)}
 
 
 def upgrade() -> None:
