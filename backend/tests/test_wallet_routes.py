@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 from fastapi.testclient import TestClient
 
@@ -18,6 +18,7 @@ def wallet_client():
     )
     app.dependency_overrides[get_current_user] = lambda: user
     session = AsyncMock()
+    session.add = Mock()
 
     async def override_session():
         yield session
@@ -38,7 +39,8 @@ def test_wallet_list_requires_authentication():
 
 def test_wallet_list_returns_only_authenticated_users_wallets(wallet_client):
     client, user, session = wallet_client
-    session.scalars.return_value.all.return_value = [
+    rows = Mock()
+    rows.all.return_value = [
         Wallet(
             id=uuid4(),
             user_id=user.id,
@@ -48,6 +50,7 @@ def test_wallet_list_returns_only_authenticated_users_wallets(wallet_client):
             is_primary=True,
         )
     ]
+    session.scalars.return_value = rows
 
     response = client.get("/api/users/me/wallets")
 
