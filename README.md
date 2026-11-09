@@ -133,6 +133,52 @@ Telegram-бот с интегрированным Telegram Mini App — марк
 7. Платёжная интеграция и escrow только после подтверждения реализуемой схемы.
 8. Тестирование, аудит безопасности и production deployment.
 
+
+## Локальный запуск каркаса
+
+Требования: Docker Desktop / Docker Engine с Docker Compose.
+
+1. Скопировать пример переменных окружения:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Запустить API, Mini App, PostgreSQL и Redis:
+
+   ```bash
+   docker compose up --build
+   ```
+
+3. Проверить сервисы:
+   - Mini App: http://localhost:5173
+   - API: http://localhost:8000
+   - Swagger: http://localhost:8000/docs
+   - Readiness: http://localhost:8000/api/health/ready
+
+4. Для запуска Telegram-бота указать `BOT_TOKEN` в `.env` и выполнить:
+
+   ```bash
+   docker compose --profile bot up --build
+   ```
+
+### Текущий статус каркаса
+
+- [x] Backend FastAPI и конфигурация через environment.
+- [x] Асинхронное подключение SQLAlchemy к PostgreSQL.
+- [x] Проверка готовности PostgreSQL и Redis.
+- [x] Базовый aiogram polling entrypoint.
+- [x] React + TypeScript + Vite Mini App shell.
+- [x] Docker Compose для локальной среды.
+- [ ] Alembic migrations и доменные модели.
+- [ ] Проверка Telegram Mini App initData.
+- [ ] TON Connect manifest и wallet proof flow.
+- [ ] TEP-62 NFT verification adapter.
+- [ ] Каталог, объявления и заказы.
+- [ ] Платежи, escrow и production hardening.
+
+**Важно:** текущие пароли PostgreSQL в Compose предназначены только для локальной разработки. Перед production необходимо использовать секреты, отдельные учётные данные, миграции, TLS, резервное копирование и ограничение сетевого доступа. Каркас пока не принимает реальные платежи и не передаёт NFT.
+
 ---
 
 *Проект находится в разработке. Описание будет дополняться по мере реализации функциональности.*
