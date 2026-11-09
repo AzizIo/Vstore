@@ -125,7 +125,7 @@ class NFTCollection(TimestampMixin, Base):
     network: Mapped[str] = mapped_column(String(16), default="mainnet", server_default="mainnet", nullable=False)
     name: Mapped[str | None] = mapped_column(String(160))
     marketplace_name: Mapped[str | None] = mapped_column(String(160))
-    metadata: Mapped[dict[str, object] | None] = mapped_column(JSON)
+    metadata_json: Mapped[dict[str, object] | None] = mapped_column("metadata", JSON)
 
     assets: Mapped[list[NFTAsset]] = relationship(back_populates="collection")
 
@@ -150,7 +150,7 @@ class NFTAsset(TimestampMixin, Base):
     name: Mapped[str | None] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(Text)
     image_url: Mapped[str | None] = mapped_column(Text)
-    metadata: Mapped[dict[str, object] | None] = mapped_column(JSON)
+    metadata_json: Mapped[dict[str, object] | None] = mapped_column("metadata", JSON)
     verification_status: Mapped[AssetVerificationStatus] = mapped_column(
         enum_column(AssetVerificationStatus, "asset_verification_status"),
         default=AssetVerificationStatus.PENDING,
