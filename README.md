@@ -150,7 +150,13 @@ Telegram-бот с интегрированным Telegram Mini App — марк
    docker compose up --build
    ```
 
-3. Сгенерировать секрет API (вставить результат в `AUTH_SECRET_KEY` в `.env`):\n\n   ```bash\n   openssl rand -hex 32\n   ```\n\n4. Применить миграции базы данных:
+3. Сгенерировать секрет API (вставить результат в `AUTH_SECRET_KEY` в `.env`):
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+4. Применить миграции базы данных:
 
    ```bash
    docker compose exec api alembic upgrade head
@@ -160,7 +166,8 @@ Telegram-бот с интегрированным Telegram Mini App — марк
    - Mini App: http://localhost:5173
    - API: http://localhost:8000
    - Swagger: http://localhost:8000/docs
-   - Readiness: http://localhost:8000/api/health/ready\n   - Telegram login: `POST /api/auth/telegram` с JSON body `{"init_data":"<Telegram.WebApp.initData>"}`. Передавать нужно именно `Telegram.WebApp.initData`, не `initDataUnsafe`.
+   - Readiness: http://localhost:8000/api/health/ready
+   - Telegram login: `POST /api/auth/telegram` с JSON body `{"init_data":"<Telegram.WebApp.initData>"}`. Передавать нужно именно `Telegram.WebApp.initData`, не `initDataUnsafe`.
 
 6. Для запуска Telegram-бота указать `BOT_TOKEN` в `.env` и выполнить:
 
@@ -177,7 +184,8 @@ Telegram-бот с интегрированным Telegram Mini App — марк
 - [x] React + TypeScript + Vite Mini App shell.
 - [x] Docker Compose для локальной среды.
 - [x] Alembic async migrations и базовые доменные модели (users, wallets, NFT collections/assets, listings).
-- [x] HMAC-проверка Telegram Mini App initData, короткий срок действия и API JWT login endpoint.\n- [ ] Frontend session integration, authorization dependencies and role checks.
+- [x] HMAC-проверка Telegram Mini App initData, короткий срок действия и API JWT login endpoint.
+- [ ] Frontend session integration, authorization dependencies and role checks.
 - [ ] TON Connect manifest и wallet proof flow.
 - [ ] TEP-62 NFT verification adapter.
 - [ ] Каталог, объявления и заказы.
