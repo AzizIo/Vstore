@@ -83,12 +83,34 @@ Telegram-бот с интегрированным Telegram Mini App — марк
 
 | Инструмент | Назначение |
 |---|---|
-| pytest / pytest-asyncio | Backend tests |
+| pytest / pytest-asyncio / pytest-cov | Backend tests и coverage report |
 | Ruff | Python lint и format |
 | mypy | Статическая проверка типов Python |
-| Vitest | Frontend unit tests |
+| Vitest / @vitest/coverage-v8 | Frontend unit tests и coverage report |
 | Playwright | E2E-тестирование Mini App |
 | GitHub Actions | Автоматический запуск проверок |
+
+## Запуск тестов
+
+Backend:
+
+```bash
+cd backend
+python -m pip install -e ".[dev]"
+ruff check app tests migrations
+pytest --cov=app --cov-report=term-missing -q
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run test:coverage
+npm run build
+```
+
+Обе проверки запускаются автоматически через GitHub Actions: Backend CI и Frontend CI. Coverage выводится в логах соответствующего workflow.
 
 ## Архитектурные решения
 
