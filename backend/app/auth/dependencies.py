@@ -1,3 +1,4 @@
+from typing import Annotated
 from uuid import UUID
 
 import jwt
@@ -12,7 +13,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
 ) -> User:
     if credentials is None:
         raise HTTPException(
