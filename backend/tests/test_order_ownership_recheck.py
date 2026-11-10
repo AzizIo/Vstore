@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
@@ -27,7 +26,6 @@ from app.db.models import (
     NFTAsset,
     Order,
     OrderStatus,
-    PriceCurrency,
     User,
     Wallet,
 )
@@ -136,8 +134,6 @@ async def _seed(
         asset_id=asset.id,
         seller_id=seller.id,
         status=ListingStatus.ACTIVE,
-        price_amount=Decimal("1.250000000"),
-        price_currency=PriceCurrency.TON,
         title="Reservation listing",
     )
     session.add(listing)
@@ -219,7 +215,6 @@ async def test_reservation_verifies_ownership_outside_any_transaction(
             assert stored_listing.status is ListingStatus.RESERVED
             assert stored_order is not None
             assert stored_order.status is OrderStatus.PENDING_PAYMENT
-            assert stored_order.price_amount == Decimal("1.250000000")
     finally:
         await _cleanup(
             session_factory,
