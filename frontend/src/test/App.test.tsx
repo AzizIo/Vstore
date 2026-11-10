@@ -29,8 +29,13 @@ const listing = {
   created_at: "2026-01-01T00:00:00Z",
   asset: {
     id: "asset-1", asset_type: "ton_nft" as const, external_id: "nft-001",
-    item_address: null, name: "Lantern", description: null,
+    item_address: "0:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    name: "Lantern", description: null,
     image_url: "https://example.com/lantern.jpg", verification_status: "verified",
+    collection: {
+      id: "collection-1", address: "0:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      network: "mainnet", name: "Lantern Guild", marketplace_name: "Getgems",
+    },
   },
   seller: { id: "seller-1", username: "collector", first_name: "Ari" },
 };
@@ -297,6 +302,38 @@ describe("marketplace catalog", () => {
     expect(screen.getByText("nft-001")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Back to catalog/ }));
     await waitFor(() => expect(screen.getByText("Explore listings")).toBeInTheDocument());
+  });
+
+  it("shows the collection and item address on the listing detail view", async () => {
+    vi.mocked(fetch).mockImplementation(async (input) =>
+      String(input).endsWith("/api/listings/listing-1") ? jsonResponse(listing) : jsonResponse(page),
+    );
+    renderMarketplace();
+    fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
+    expect(await screen.findByRole("heading", { name: "Moon Lantern" })).toBeInTheDocument();
+
+    expect(screen.getByText("Lantern Guild")).toBeInTheDocument();
+    expect(
+      screen.getByText("0:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("verified")).toBeInTheDocument();
+  });
+
+  it("shows an uncollected label when the asset has no collection", async () => {
+    const uncollected = {
+      ...listing,
+      asset: { ...listing.asset, collection: null, item_address: null },
+    };
+    vi.mocked(fetch).mockImplementation(async (input) =>
+      String(input).endsWith("/api/listings/listing-1")
+        ? jsonResponse(uncollected)
+        : jsonResponse(page),
+    );
+    renderMarketplace();
+    fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
+
+    expect(await screen.findByText("Uncollected NFT")).toBeInTheDocument();
+    expect(screen.getByText("Not available")).toBeInTheDocument();
   });
 
   it("authenticates with raw Telegram initData, loads the Bearer profile, and keeps the token in memory", async () => {

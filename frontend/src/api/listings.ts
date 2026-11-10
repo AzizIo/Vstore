@@ -4,6 +4,14 @@ export type AssetType = "ton_nft" | "telegram_gift";
 export type PriceCurrency = "TON" | "XTR";
 export type ListingSort = "newest" | "price_asc" | "price_desc";
 
+export interface ListingCollection {
+  id: string;
+  address: string;
+  network: string;
+  name: string | null;
+  marketplace_name: string | null;
+}
+
 export interface ListingAsset {
   id: string;
   asset_type: AssetType;
@@ -13,6 +21,7 @@ export interface ListingAsset {
   description: string | null;
   image_url: string | null;
   verification_status: string;
+  collection?: ListingCollection | null;
 }
 
 export interface ListingSeller {
@@ -48,6 +57,20 @@ export interface ListingFilters {
   offset?: number;
 }
 
+function isCollection(value: unknown): value is ListingCollection | null {
+  if (value === null || value === undefined) return true;
+  if (typeof value !== "object") return false;
+  const collection = value as Partial<ListingCollection>;
+  return (
+    typeof collection.id === "string" &&
+    typeof collection.address === "string" &&
+    typeof collection.network === "string" &&
+    (collection.name === null || typeof collection.name === "string") &&
+    (collection.marketplace_name === null ||
+      typeof collection.marketplace_name === "string")
+  );
+}
+
 export function isListing(value: unknown): value is Listing {
   if (!value || typeof value !== "object") return false;
   const listing = value as Partial<Listing>;
@@ -67,6 +90,7 @@ export function isListing(value: unknown): value is Listing {
     nullableString(asset.item_address) && nullableString(asset.name) &&
     nullableString(asset.description) && nullableString(asset.image_url) &&
     typeof asset.verification_status === "string" &&
+    isCollection(asset.collection) &&
     !!seller && typeof seller.id === "string" &&
     nullableString(seller.username) && typeof seller.first_name === "string"
   );

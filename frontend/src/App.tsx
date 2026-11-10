@@ -155,6 +155,16 @@ function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () =>
           {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
           <dl className="detail-facts">
             <div><dt>Seller</dt><dd>{seller}</dd></div>
+            <div>
+              <dt>Collection</dt>
+              <dd>{listing.asset.collection?.name ?? "Uncollected NFT"}</dd>
+            </div>
+            <div>
+              <dt>Item address</dt>
+              <dd>
+                <code className="mono">{listing.asset.item_address ?? "Not available"}</code>
+              </dd>
+            </div>
             <div><dt>Asset ID</dt><dd>{listing.asset.external_id}</dd></div>
             <div><dt>Verification</dt><dd>{listing.asset.verification_status}</dd></div>
           </dl>
