@@ -7,9 +7,8 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.assets.ton_nft.dependencies import get_ton_nft_verifier
 from app.api import listings as listings_api
-from app.listings.service import ListingConflict, ListingNotFound, ListingVerificationUnavailable
+from app.assets.ton_nft.dependencies import get_ton_nft_verifier
 from app.assets.ton_nft.models import (
     NFTMetadata,
     VerificationResult,
@@ -27,6 +26,7 @@ from app.db.models import (
     Wallet,
 )
 from app.db.session import get_db_session
+from app.listings.service import ListingConflict, ListingNotFound, ListingVerificationUnavailable
 from app.main import app
 
 
