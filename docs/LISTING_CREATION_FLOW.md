@@ -85,8 +85,6 @@ Keep the existing request contract:
 ```json
 {
   "asset_id": "asset-database-uuid",
-  "price_amount": "1.25",
-  "price_currency": "TON",
   "title": "Optional seller title",
   "description": "Optional description"
 }
@@ -116,7 +114,7 @@ Authentication: Bearer JWT required. The caller must own the listing.
 
 ### PATCH /api/listings/{listing_id} and POST /api/listings/{listing_id}/cancel
 
-Both endpoints require the authenticated seller. Edits are limited to price_amount, title, and description; seller IDs, asset ownership, currency, and status are never client-editable. Edits are allowed only while DRAFT or ACTIVE. Cancellation is allowed for a private DRAFT or public ACTIVE listing; cancelling an active listing unpublishes it. RESERVED, SOLD, CANCELLED, and EXPIRED listings are not editable or cancellable. These transitions lock and re-read the seller-owned listing inside a transaction.
+Both endpoints require the authenticated seller. Edits are limited to title, description, and expiry; seller IDs, asset ownership, and status are never client-editable. Listings are free and have no price or currency fields. Edits are allowed only while DRAFT or ACTIVE. Cancellation is allowed for a private DRAFT or public ACTIVE listing; cancelling an active listing unpublishes it. RESERVED, SOLD, CANCELLED, and EXPIRED listings are not editable or cancellable. These transitions lock and re-read the seller-owned listing inside a transaction.
 
 ## 4. Frontend flow after the API exists
 
@@ -124,10 +122,10 @@ Both endpoints require the authenticated seller. Edits are limited to price_amou
 2. If no verified wallet exists, show a connect/verify-wallet state and link to the existing TON Connect UI. A connected wallet alone is not proof of ownership.
 3. Load `GET /api/assets/me` with the current SessionProvider access token.
 4. Show only verified eligible TON NFTs; include loading, empty, error/retry, and `has_more`/`next_offset` pagination states.
-5. User selects an NFT, enters a price and optional title/description.
+5. User selects an NFT and optionally enters a title/description.
 6. Submit the existing draft request.
 7. Show a success state and refresh My Listings. Clearly label the result **Draft — not published**.
-8. From a draft detail, the seller can edit price/title/description, request publication (with confirmation), and cancel the draft. Publication displays a verifying/loading state and reports provider/state conflicts accessibly.
+8. From a draft detail, the seller can edit title/description/expiry, request publication (with confirmation), and cancel the draft. Publication displays a verifying/loading state and reports provider/state conflicts accessibly.
 9. From an active listing, the seller can edit permitted fields or confirm unpublishing. Listings reserved by a pending order are read-only until the reservation ends.
 
 Telegram Gifts remain excluded from this first creation flow until a supported, tested ownership and transfer capability is available for the specific account/gift type.
