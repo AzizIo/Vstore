@@ -16,7 +16,7 @@ def test_cors_allows_configured_local_frontend_origin() -> None:
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
-    assert response.headers["access-control-allow-credentials"] == "false"
+    assert "access-control-allow-credentials" not in response.headers
     assert "GET" in response.headers["access-control-allow-methods"]
     allowed_headers = response.headers["access-control-allow-headers"].lower()
     assert "authorization" in allowed_headers
