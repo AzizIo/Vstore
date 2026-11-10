@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from app.assets.ton_nft.address import AddressError, normalize_address
-from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable
+from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable, UnsupportedAsset
 from app.assets.ton_nft.models import NFTItemSnapshot, NFTMetadata, VerificationStatus
 from app.assets.ton_nft.provider import TONCenterV3Config, TONCenterV3Provider
 from app.assets.ton_nft.verifier import TONNFTVerifier
@@ -149,3 +149,9 @@ async def test_malformed_provider_item_maps_to_invalid_data() -> None:
     with pytest.raises(InvalidProviderData):
         await provider.get_item(ITEM)
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_unsupported_asset_has_distinct_status() -> None:
+    result = await TONNFTVerifier(FakeProvider(error=UnsupportedAsset("unsupported"))).verify(ITEM, OWNER)
+    assert result.status is VerificationStatus.UNSUPPORTED
