@@ -28,9 +28,10 @@ Outcomes:
 | Situation | Result | State change |
 |---|---|---|
 | Ownership verified, listing unchanged | order created, listing `RESERVED` | order + event + notifications |
-| `OWNER_MISMATCH` from the provider | `OrderConflict`, HTTP 409 | asset `STALE`, listing `EXPIRED` |
+| `OWNER_MISMATCH` from the provider | `OrderConflict`, HTTP 409 | asset `STALE`, listing `EXPIRED`, any pending order `CANCELLED` |
 | Provider unavailable | `OrderVerificationUnavailable`, HTTP 503 | none — the outage is not proof of lost ownership |
 | Provider inconclusive (`NOT_FOUND`, `UNSUPPORTED`, `INVALID_DATA`) | `OrderConflict`, HTTP 409 | none — unconfirmed is not the same as transferred |
+| Asset network differs from the verifier's configured network | `OrderVerificationUnavailable`, HTTP 503 | none — the wrong indexer is never queried |
 | Listing/asset changed during the check | `OrderConflict`, HTTP 409 | none |
 | Verified wallet unbound during the check | `OrderConflict`, HTTP 409 | none |
 | Same idempotency key, same listing | returns the existing order id | none; the provider is not called again |
@@ -38,6 +39,24 @@ Outcomes:
 Only an affirmative `OWNER_MISMATCH` marks the asset `STALE`, because only that is evidence the
 seller no longer owns the NFT. An inconclusive provider answer fails closed without rewriting
 asset state, so a provider quirk cannot destroy a valid listing.
+
+### Invariants added after review
+
+**Ownership can be lost while another buyer already holds the reservation.** The verifying
+request then must not leave the listing `RESERVED` with a live pending order, because
+cancellation and the expiry worker would otherwise release it back to `ACTIVE` and re-expose an
+NFT the seller no longer owns. Losing ownership therefore closes the dependent order
+(`CANCELLED`, with an event and notifications for both parties) and moves the listing to
+`EXPIRED` in the same transaction, before the 409 is returned.
+
+**`_release_listing` refuses to re-expose an unsellable asset.** The catalog filters on listing
+status alone, so a stale or unverified asset — or one whose owner no longer matches the seller —
+forces `EXPIRED` instead of `ACTIVE` on every release path.
+
+**Lock order is shared with publication.** `create_order` locks `listing -> wallet -> asset`,
+identical to `publish_listing`. Rows of one asset are reachable from both paths concurrently
+(a buyer reserving the active listing while the seller publishes a second draft), so diverging
+orders deadlock. A regression test reproduces the deadlock by reserving and publishing at once.
 
 The stale-asset transition is committed before the 409 is returned, so the failed reservation
 is durable rather than rolled back with the request.

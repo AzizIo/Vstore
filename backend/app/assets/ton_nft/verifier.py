@@ -19,8 +19,12 @@ from app.assets.ton_nft.provider import NFTDataProvider
 class TONNFTVerifier:
     """Verify an NFT item against an expected seller wallet, without writes."""
 
-    def __init__(self, provider: NFTDataProvider) -> None:
+    def __init__(self, provider: NFTDataProvider, *, network: str | None = None) -> None:
         self.provider = provider
+        # The TON network this verifier's provider actually queries. Callers that
+        # persist network-scoped assets must compare it with the asset's network
+        # before trusting any result.
+        self.network = network
 
     async def verify(
         self,

@@ -147,6 +147,10 @@ async def publish_listing(
 
     # No external request is made below this point. Acquire locks in the same
     # listing -> wallet -> asset order used by the existing draft-creation flow.
+    # `create_order` (app/orders/service.py) follows the identical order, because
+    # rows of the same asset can be reached by both paths concurrently: one buyer
+    # reserving the ACTIVE listing while the seller publishes a second draft.
+    # Diverging orders form a lock cycle there. Keep them in sync.
     # The asset lock serializes publications for the same NFT.
     async with session.begin():
         locked_listing = await session.scalar(

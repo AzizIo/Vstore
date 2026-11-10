@@ -13,9 +13,10 @@ def build_ton_nft_verifier() -> TONNFTVerifier:
     """
 
     settings = get_settings()
+    network = settings.ton_connect_network
     base_url = (
         settings.ton_center_mainnet_base_url
-        if settings.ton_connect_network == "mainnet"
+        if network == "mainnet"
         else settings.ton_center_testnet_base_url
     )
     api_key = (
@@ -30,7 +31,8 @@ def build_ton_nft_verifier() -> TONNFTVerifier:
                 api_key=api_key,
                 timeout_seconds=settings.ton_center_timeout_seconds,
             )
-        )
+        ),
+        network=network,
     )
 
 
