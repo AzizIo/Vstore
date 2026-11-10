@@ -26,6 +26,7 @@ const inventoryPage = {
   items: [nft], wallet_id: "wallet-id", limit: 24, offset: 0, next_offset: 1, has_more: false,
 };
 const draft: Listing = {
+  id: "draft-id", status: "draft",
   title: "My collectible", description: null, created_at: "2026-01-01T00:00:00Z",
   asset: {
     id: nft.id, asset_type: "ton_nft", external_id: nft.external_id,
