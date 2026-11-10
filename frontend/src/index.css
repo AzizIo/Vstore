@@ -418,3 +418,89 @@ footer span { padding: 0 6px; color: var(--accent); }
   .order-card { padding: 15px; }
   .order-card-heading h2 { font-size: 20px; }
 }
+
+/* Seller listing lifecycle controls */
+.listing-management {
+  display: grid;
+  max-width: 680px;
+  gap: 16px;
+  margin: 34px 0 0;
+  padding-top: 26px;
+  border-top: 1px solid var(--line);
+}
+.listing-management h2 {
+  margin: 0;
+  font: 400 26px/1.1 var(--serif);
+}
+.listing-edit-form {
+  display: grid;
+  gap: 14px;
+}
+.listing-edit-form > label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.listing-edit-form input,
+.listing-edit-form textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+  color: #f3f0e9;
+  font: inherit;
+}
+.listing-edit-form textarea {
+  resize: vertical;
+}
+.listing-edit-form small {
+  color: #858b82;
+  font-size: 10px;
+}
+.listing-management-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+.listing-cancel-action {
+  color: #d29d95;
+}
+.listing-cancel-action:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+.listing-confirmation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.listing-confirmation p {
+  flex-basis: 100%;
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.listing-confirmation button:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+.listing-management-error,
+.listing-management-success,
+.listing-management-note {
+  max-width: 680px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.listing-management-error { color: #e19a8c; }
+.listing-management-success { color: #a4d5a5; }
+.listing-management-note { color: var(--muted); }
