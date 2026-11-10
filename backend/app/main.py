@@ -17,7 +17,6 @@ from app.core.config import get_settings
 from app.db.session import async_session_factory, dispose_engine
 from app.orders.service import expire_pending_orders
 
-
 logger = getLogger(__name__)
 
 
