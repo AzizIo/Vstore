@@ -306,3 +306,49 @@ async def test_worker_respects_claim_leases_for_duplicate_processing(
     assert first.claimed == 2
     assert second.claimed == 0
     assert {row.attempt_count for row in await _outbox_rows(notification_session)} == {1}
+
+
+
+async def test_transient_retries_stop_at_configured_max_attempts(
+    notification_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    import app.notifications.service as notification_service
+
+    buyer, _, listing = await _seed_active_listing(notification_session)
+    await create_order(
+        notification_session,
+        buyer_id=buyer.id,
+        listing_id=listing.id,
+        idempotency_key="notification-max-attempts",
+    )
+    await notification_session.commit()
+
+    monkeypatch.setattr(
+        notification_service,
+        "get_settings",
+        lambda: SimpleNamespace(
+            notification_batch_size=10,
+            notification_claim_lease_seconds=300,
+            notification_max_attempts=2,
+            notification_retry_base_seconds=5,
+            notification_retry_max_seconds=30,
+            telegram_mini_app_url=None,
+        ),
+    )
+
+    now = datetime.now(UTC)
+    sender = _FakeSender(TransientNotificationError("still unavailable"))
+    first = await process_due_notifications(notification_session, sender, now=now)
+    assert first.retried == 2
+    await notification_session.commit()
+
+    second = await process_due_notifications(
+        notification_session, sender, now=now + timedelta(seconds=10)
+    )
+    assert second.failed == 2
+    rows = await _outbox_rows(notification_session)
+    assert {row.status for row in rows} == {"failed"}
+    assert {row.attempt_count for row in rows} == {2}

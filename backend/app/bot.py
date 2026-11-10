@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from contextlib import suppress
 
 from aiogram import Bot, Dispatcher
 from app.core.config import get_settings
@@ -40,12 +41,14 @@ async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     bot = Bot(token=settings.bot_token)
     dispatcher = Dispatcher()
+    notification_task = asyncio.create_task(_run_notification_worker(bot))
 
     try:
-        async with asyncio.TaskGroup() as tasks:
-            tasks.create_task(dispatcher.start_polling(bot))
-            tasks.create_task(_run_notification_worker(bot))
+        await dispatcher.start_polling(bot)
     finally:
+        notification_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await notification_task
         await bot.session.close()
 
 
