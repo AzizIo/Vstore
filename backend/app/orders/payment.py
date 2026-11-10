@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
+
 class PriceCurrency(str, enum.Enum):
     """Currency options reserved for a separately approved future payment phase."""
 
