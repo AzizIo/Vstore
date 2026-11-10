@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.api.assets import _upsert_verified_asset
 from app.assets.ton_nft.models import NFTItemSnapshot, NFTMetadata
-from app.orders.service import OrderConflict, cancel_order, create_order, expire_pending_orders
 from app.core.config import get_settings
 from app.db.models import (
     AssetType,
@@ -31,6 +30,7 @@ from app.db.models import (
     User,
     Wallet,
 )
+from app.orders.service import OrderConflict, cancel_order, create_order, expire_pending_orders
 
 pytestmark = pytest.mark.integration
 
