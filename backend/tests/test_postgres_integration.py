@@ -328,6 +328,8 @@ async def test_concurrent_reservation_idempotency_cancellation_and_expiry(
         async with session_factory() as session:
             order = await session.get(Order, order_id)
             assert order is not None and order.price_amount == Decimal("1.250000000")
+
+        async with session_factory() as session:
             await cancel_order(
                 session,
                 order_id=order_id,
