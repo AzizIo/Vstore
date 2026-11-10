@@ -622,6 +622,8 @@ async def _create_publishable_listing(
         is_verified=True,
         is_primary=True,
     )
+    session.add_all([asset, wallet])
+    await session.flush()
     listing = Listing(
         asset_id=asset.id,
         seller_id=owner.id,
@@ -630,7 +632,7 @@ async def _create_publishable_listing(
         price_currency=PriceCurrency.TON,
         title="Seller draft",
     )
-    session.add_all([asset, wallet, listing])
+    session.add(listing)
     await session.flush()
     return owner, asset, wallet, listing
 
