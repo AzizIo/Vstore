@@ -44,3 +44,18 @@ def test_only_one_open_listing_per_asset_is_enforced_on_postgres() -> None:
     assert index.unique is True
     assert "active" in str(index.dialect_options["postgresql"]["where"])
     assert "reserved" in str(index.dialect_options["postgresql"]["where"])
+
+
+def test_nft_asset_external_identity_is_scoped_by_network() -> None:
+    table = Base.metadata.tables["nft_assets"]
+    constraint = next(
+        constraint
+        for constraint in table.constraints
+        if constraint.name == "uq_nft_assets_type_network_external_id"
+    )
+
+    assert [column.name for column in constraint.columns] == [
+        "asset_type",
+        "network",
+        "external_id",
+    ]

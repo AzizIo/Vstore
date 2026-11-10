@@ -143,13 +143,23 @@ class NFTCollection(TimestampMixin, Base):
 class NFTAsset(TimestampMixin, Base):
     __tablename__ = "nft_assets"
     __table_args__ = (
-        UniqueConstraint("asset_type", "external_id", name="uq_nft_assets_type_external_id"),
-        CheckConstraint("length(external_id) > 0", name="ck_nft_assets_external_id_nonempty"),
+        UniqueConstraint(
+            "asset_type",
+            "network",
+            "external_id",
+            name="uq_nft_assets_type_network_external_id",
+        ),
+        CheckConstraint(
+            "length(external_id) > 0", name="ck_nft_assets_external_id_nonempty"
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     asset_type: Mapped[AssetType] = mapped_column(
         enum_column(AssetType, "asset_type"), nullable=False
+    )
+    network: Mapped[str] = mapped_column(
+        String(16), default="mainnet", server_default="mainnet", nullable=False
     )
     external_id: Mapped[str] = mapped_column(String(160), nullable=False)
     item_address: Mapped[str | None] = mapped_column(String(128), index=True)

@@ -7,6 +7,12 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+from app.assets.ton_nft.dependencies import get_ton_nft_verifier
+from app.assets.ton_nft.models import (
+    NFTMetadata,
+    VerificationResult,
+    VerificationStatus,
+)
 from app.auth.dependencies import get_current_user
 from app.db.models import (
     AssetType,
@@ -16,6 +22,7 @@ from app.db.models import (
     NFTAsset,
     PriceCurrency,
     User,
+    Wallet,
 )
 from app.db.session import get_db_session
 from app.main import app
@@ -70,11 +77,39 @@ def make_verified_asset(owner_id):
     return NFTAsset(
         id=uuid4(),
         asset_type=AssetType.TON_NFT,
-        external_id="ton-item-123",
+        external_id="0:" + "11" * 32,
+        item_address="0:" + "11" * 32,
         owner_id=owner_id,
         name="Rare Gift",
         verification_status=AssetVerificationStatus.VERIFIED,
     )
+
+
+def make_verified_wallet(owner_id):
+    return Wallet(
+        id=uuid4(),
+        user_id=owner_id,
+        address="0:" + "22" * 32,
+        network="mainnet",
+        is_verified=True,
+        is_primary=True,
+    )
+
+
+class StubVerifier:
+    def __init__(self, result=None):
+        self.result = result or VerificationResult(
+            VerificationStatus.VERIFIED,
+            "0:" + "11" * 32,
+            owner_address="0:" + "22" * 32,
+            expected_owner_address="0:" + "22" * 32,
+            metadata=NFTMetadata(name="Fresh NFT"),
+        )
+        self.calls = []
+
+    async def verify(self, item_address, expected_owner_address):
+        self.calls.append((item_address, expected_owner_address))
+        return self.result
 
 
 def make_listing(seller: User, asset: NFTAsset, status=ListingStatus.ACTIVE):
@@ -143,21 +178,31 @@ def test_create_listing_rejects_asset_not_verified_or_not_owned(api_client, sell
         app.dependency_overrides.pop(get_db_session, None)
 
     assert response.status_code == 409
-    assert "verified assets" in response.json()["detail"]
+    assert "verified TON NFTs" in response.json()["detail"]
     session.add.assert_not_called()
     session.commit.assert_not_awaited()
 
 
 def test_create_listing_creates_draft_for_verified_owned_asset(api_client, seller) -> None:
     asset = make_verified_asset(seller.id)
+    wallet = make_verified_wallet(seller.id)
     created_listing = make_listing(seller, asset, ListingStatus.DRAFT)
+    verifier = StubVerifier()
     session = SimpleNamespace(
-        scalar=AsyncMock(return_value=asset),
+        scalar=AsyncMock(side_effect=[asset, None, asset, None]),
         add=Mock(),
         commit=AsyncMock(),
-        scalars=AsyncMock(return_value=ScalarRows([created_listing])),
+        scalars=AsyncMock(
+            side_effect=[
+                ScalarRows([wallet]),
+                ScalarRows([wallet]),
+                ScalarRows([created_listing]),
+            ]
+        ),
+        rollback=AsyncMock(),
     )
     install_session_override(session)
+    app.dependency_overrides[get_ton_nft_verifier] = lambda: verifier
     try:
         response = api_client.post(
             "/api/listings",
@@ -170,12 +215,115 @@ def test_create_listing_creates_draft_for_verified_owned_asset(api_client, selle
         )
     finally:
         app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_ton_nft_verifier, None)
 
     assert response.status_code == 201
     assert response.json()["status"] == "draft"
     assert response.json()["asset"]["id"] == str(asset.id)
+    assert response.json()["asset"]["name"] == "Fresh NFT"
+    assert verifier.calls == [(asset.item_address, wallet.address)]
     session.add.assert_called_once()
     session.commit.assert_awaited_once()
+
+
+def test_create_listing_rejects_conflicting_open_listing(api_client, seller) -> None:
+    asset = make_verified_asset(seller.id)
+    session = SimpleNamespace(scalar=AsyncMock(side_effect=[asset, uuid4()]))
+    install_session_override(session)
+    try:
+        response = api_client.post(
+            "/api/listings",
+            json={
+                "asset_id": str(asset.id),
+                "price_amount": "1",
+                "price_currency": "TON",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+
+    assert response.status_code == 409
+    assert "active or reserved" in response.json()["detail"]
+
+
+def test_create_listing_rejects_stale_owner_and_marks_asset_stale(
+    api_client, seller
+) -> None:
+    asset = make_verified_asset(seller.id)
+    wallet = make_verified_wallet(seller.id)
+    verifier = StubVerifier(
+        VerificationResult(
+            VerificationStatus.OWNER_MISMATCH,
+            asset.item_address or "",
+            owner_address="0:" + "33" * 32,
+            expected_owner_address=wallet.address,
+        )
+    )
+    session = SimpleNamespace(
+        scalar=AsyncMock(side_effect=[asset, None, asset]),
+        scalars=AsyncMock(return_value=ScalarRows([wallet])),
+        commit=AsyncMock(),
+        rollback=AsyncMock(),
+    )
+    install_session_override(session)
+    app.dependency_overrides[get_ton_nft_verifier] = lambda: verifier
+    try:
+        response = api_client.post(
+            "/api/listings",
+            json={
+                "asset_id": str(asset.id),
+                "price_amount": "1",
+                "price_currency": "TON",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_ton_nft_verifier, None)
+
+    assert response.status_code == 409
+    assert "freshly verified" in response.json()["detail"]
+    assert asset.owner_id is None
+    assert asset.verification_status is AssetVerificationStatus.STALE
+    session.commit.assert_awaited_once()
+
+
+def test_create_listing_returns_503_when_owner_provider_fails(
+    api_client, seller
+) -> None:
+    asset = make_verified_asset(seller.id)
+    wallet = make_verified_wallet(seller.id)
+    verifier = StubVerifier(
+        VerificationResult(
+            VerificationStatus.PROVIDER_UNAVAILABLE,
+            asset.item_address or "",
+            expected_owner_address=wallet.address,
+        )
+    )
+    session = SimpleNamespace(
+        scalar=AsyncMock(side_effect=[asset, None]),
+        scalars=AsyncMock(return_value=ScalarRows([wallet])),
+        commit=AsyncMock(),
+        add=Mock(),
+        rollback=AsyncMock(),
+    )
+    install_session_override(session)
+    app.dependency_overrides[get_ton_nft_verifier] = lambda: verifier
+    try:
+        response = api_client.post(
+            "/api/listings",
+            json={
+                "asset_id": str(asset.id),
+                "price_amount": "1",
+                "price_currency": "TON",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_ton_nft_verifier, None)
+
+    assert response.status_code == 503
+    session.add.assert_not_called()
+    session.commit.assert_not_awaited()
 
 
 @pytest.mark.parametrize(

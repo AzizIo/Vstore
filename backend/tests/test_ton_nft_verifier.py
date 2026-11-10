@@ -5,8 +5,17 @@ import pytest
 
 from app.assets.ton_nft.address import AddressError, normalize_address
 from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable, UnsupportedAsset
-from app.assets.ton_nft.models import NFTItemSnapshot, NFTMetadata, VerificationStatus
-from app.assets.ton_nft.provider import TONCenterV3Config, TONCenterV3Provider
+from app.assets.ton_nft.models import (
+    NFTInventoryPage,
+    NFTItemSnapshot,
+    NFTMetadata,
+    VerificationStatus,
+)
+from app.assets.ton_nft.provider import (
+    MAX_PROVIDER_RESPONSE_BYTES,
+    TONCenterV3Config,
+    TONCenterV3Provider,
+)
 from app.assets.ton_nft.verifier import TONNFTVerifier
 
 ITEM = "0:" + "11" * 32
@@ -36,6 +45,11 @@ class FakeProvider:
         if self.error:
             raise self.error
         return self.item
+
+    async def get_items_by_owner(
+        self, owner_address: str, *, limit: int, offset: int
+    ) -> NFTInventoryPage:
+        return NFTInventoryPage(items=(), has_more=False, next_offset=offset)
 
     async def get_item_address_by_index(self, collection_address: str, index: int) -> str | None:
         self.calls.append(("index", collection_address, index))
@@ -144,6 +158,77 @@ async def test_toncenter_provider_parses_item_and_queries_collection_index() -> 
 
 
 @pytest.mark.asyncio
+async def test_toncenter_owner_inventory_uses_bounded_offset_pagination() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        rows = [
+            {
+                "address": f"0:{index:064x}",
+                "owner_address": OWNER,
+                "collection_address": None,
+                "index": str(index),
+                "init": True,
+            }
+            for index in range(3)
+        ]
+        return httpx.Response(200, json={"nft_items": rows})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://mock.test/api/v3"
+    )
+    provider = TONCenterV3Provider(
+        TONCenterV3Config(base_url="https://mock.test/api/v3"), client=client
+    )
+
+    page = await provider.get_items_by_owner(OWNER, limit=2, offset=4)
+
+    assert len(page.items) == 2
+    assert page.has_more is True
+    assert page.next_offset == 6
+    assert requests[0].url.params["owner_address"] == OWNER
+    assert requests[0].url.params["limit"] == "3"
+    assert requests[0].url.params["offset"] == "4"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_toncenter_owner_inventory_reports_last_page_without_fabricated_total() -> (
+    None
+):
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                json={
+                    "nft_items": [
+                        {
+                            "address": ITEM,
+                            "owner_address": OWNER,
+                            "collection_address": None,
+                            "index": "0",
+                            "init": True,
+                        }
+                    ]
+                },
+            )
+        ),
+        base_url="https://mock.test/api/v3",
+    )
+    provider = TONCenterV3Provider(
+        TONCenterV3Config(base_url="https://mock.test/api/v3"), client=client
+    )
+
+    page = await provider.get_items_by_owner(OWNER, limit=2, offset=0)
+
+    assert len(page.items) == 1
+    assert page.has_more is False
+    assert page.next_offset == 1
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_provider_timeout_maps_to_unavailable() -> None:
     def handler(_: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("timed out")
@@ -170,6 +255,24 @@ async def test_malformed_provider_item_maps_to_invalid_data() -> None:
     )
     with pytest.raises(InvalidProviderData):
         await provider.get_item(ITEM)
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_provider_rejects_oversized_inventory_response_before_parsing() -> None:
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200, content=b" " * (MAX_PROVIDER_RESPONSE_BYTES + 1)
+            )
+        ),
+        base_url="https://mock.test/api/v3",
+    )
+    provider = TONCenterV3Provider(
+        TONCenterV3Config(base_url="https://mock.test/api/v3"), client=client
+    )
+    with pytest.raises(InvalidProviderData, match="exceeds the allowed size"):
+        await provider.get_items_by_owner(OWNER, limit=2, offset=0)
     await client.aclose()
 
 

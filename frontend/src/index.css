@@ -91,6 +91,178 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .my-listing-detail-copy { padding-top: 20px; }
 .my-listing-detail-copy > .listing-status { margin-bottom: 20px; }
 .my-listing-detail-copy h1 { margin: 0; font: 400 clamp(36px, 5vw, 54px)/1 var(--serif); }
+.create-listing-action {
+  margin-left: auto;
+}
+
+.create-listing-view {
+  padding: 28px 0 72px;
+}
+
+.create-listing-view>h1 {
+  margin: 0;
+  font: 400 clamp(36px, 5vw, 54px)/1 var(--serif);
+}
+
+.create-listing-note {
+  margin: 12px 0 26px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.inventory-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inventory-card:hover {
+  border-color: #69734a;
+}
+
+.inventory-image {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  place-items: center;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 40%, #424b32 0, #262c25 48%, #202420 100%);
+  color: #d3dc82;
+  font: italic 48px var(--serif);
+}
+
+.inventory-image img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.inventory-card-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px;
+}
+
+.inventory-card-title {
+  overflow: hidden;
+  font: 18px/1.2 var(--serif);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-card-address {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.inventory-load-more {
+  display: block;
+  margin: 20px auto 0;
+}
+
+.selected-inventory-asset {
+  display: flex;
+  max-width: 480px;
+  align-items: center;
+  gap: 14px;
+  margin: 24px 0;
+  color: #f3f0e9;
+  font: 20px var(--serif);
+}
+
+.selected-inventory-asset .inventory-image {
+  width: 76px;
+  flex: 0 0 76px;
+}
+
+.draft-form {
+  display: grid;
+  max-width: 560px;
+  gap: 18px;
+}
+
+.draft-form>label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.draft-form label>span:first-child {
+  display: flex;
+  justify-content: space-between;
+}
+
+.draft-form small {
+  color: #777f76;
+  font-size: 10px;
+}
+
+.draft-form input,
+.draft-form textarea,
+.draft-form select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+  color: #f3f0e9;
+  font-size: 13px;
+}
+
+.draft-form textarea {
+  resize: vertical;
+}
+
+.price-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px;
+  gap: 8px;
+}
+
+.draft-form .load-more-button {
+  justify-self: start;
+}
+
+.creation-error {
+  margin: 0;
+  color: #e19a8c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.creation-success {
+  max-width: 560px;
+  padding: 24px 0;
+}
+
+.creation-success h2 {
+  margin: 16px 0 8px;
+  color: #f3f0e9;
+  font: 25px var(--serif);
+}
+
+.creation-success p {
+  color: var(--accent);
+  font-size: 14px;
+}
 .catalog-intro { padding: 66px 0 42px; }
 .eyebrow { margin: 0 0 18px; color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: .18em; }
 .catalog-intro h1, .detail-copy h1 { margin: 0; font: 400 clamp(46px, 6vw, 76px)/.98 var(--serif); }
@@ -170,6 +342,36 @@ footer span { padding: 0 6px; color: var(--accent); }
   .listing-status { padding: 4px 6px; font-size: 8px; }
   .my-listings-toolbar .select-control { flex: 1; }
   .my-listings-toolbar .select-control select { min-width: 0; }
+        .my-listings-heading {
+          flex-wrap: wrap;
+          align-items: center;
+        }
+    
+        .create-listing-action {
+          margin-left: auto;
+        }
+    
+        .inventory-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 9px;
+        }
+    
+        .inventory-card-copy {
+          gap: 6px;
+          padding: 9px;
+        }
+    
+        .inventory-card-title {
+          font-size: 16px;
+        }
+    
+        .selected-inventory-asset {
+          font-size: 17px;
+        }
+    
+        .draft-form {
+          max-width: none;
+        }
   .my-listing-detail-layout { grid-template-columns: 1fr; gap: 18px; }
   .my-listing-detail-layout > .my-listing-image { max-height: none; }
   .my-listing-detail-copy { padding-top: 0; }

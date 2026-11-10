@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchMyListings, type Listing } from "../api/listings";
 import { useSession } from "../auth/SessionProvider";
+import { CreateListing } from "./CreateListing";
 
 const listingStatuses = ["draft", "active", "reserved", "sold", "cancelled", "expired"] as const;
 type KnownStatus = (typeof listingStatuses)[number];
@@ -91,6 +92,7 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -121,6 +123,16 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
     return listing.status === statusFilter;
   });
 
+  if (creating) {
+    return (
+      <CreateListing
+        accessToken={accessToken}
+        onCancel={() => setCreating(false)}
+        onDraftCreated={() => setRetry((value) => value + 1)}
+      />
+    );
+  }
+
   if (selectedListing) {
     return <MyListingDetail listing={selectedListing} onBack={() => setSelectedListing(null)} />;
   }
@@ -133,6 +145,9 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
           <h1 id="my-listings-title">My Listings</h1>
         </div>
         {!loading && !error && <span className="my-listings-count">{listings.length} total</span>}
+        <button className="load-more-button create-listing-action" type="button" onClick={() => setCreating(true)}>
+          Create listing
+        </button>
       </div>
 
       {!loading && !error && listings.length > 0 && (
