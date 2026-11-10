@@ -26,7 +26,6 @@ const inventoryPage = {
   items: [nft], wallet_id: "wallet-id", limit: 24, offset: 0, next_offset: 1, has_more: false,
 };
 const draft: Listing = {
-  id: "draft-id", status: "draft", price_amount: "1.5", price_currency: "TON",
   title: "My collectible", description: null, created_at: "2026-01-01T00:00:00Z",
   asset: {
     id: nft.id, asset_type: "ton_nft", external_id: nft.external_id,
@@ -65,7 +64,6 @@ describe("CreateListing seller flow", () => {
       expect.any(AbortSignal),
     );
     fireEvent.click(screen.getByRole("button", { name: /Verified collectible/ }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Price amount" }), { target: { value: "1.5" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Title Optional" }), { target: { value: "My collectible" } });
     fireEvent.click(screen.getByRole("button", { name: "Create private draft" }));
 
@@ -74,8 +72,6 @@ describe("CreateListing seller flow", () => {
       "memory-session-token",
       {
         asset_id: "asset-id",
-        price_amount: "1.5",
-        price_currency: "TON",
         title: "My collectible",
       },
       expect.any(AbortSignal),
@@ -87,7 +83,6 @@ describe("CreateListing seller flow", () => {
     renderCreateListing();
 
     fireEvent.click(await screen.findByRole("button", { name: /Verified collectible/ }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Price amount" }), { target: { value: "1.5" } });
     fireEvent.change(screen.getByLabelText("Listing expiration"), {
       target: { value: "2030-05-02T12:30" },
     });
@@ -98,8 +93,6 @@ describe("CreateListing seller flow", () => {
       "memory-session-token",
       expect.objectContaining({
         asset_id: "asset-id",
-        price_amount: "1.5",
-        price_currency: "TON",
         expires_at: new Date("2030-05-02T12:30").toISOString(),
       }),
       expect.any(AbortSignal),
@@ -164,7 +157,6 @@ describe("CreateListing seller flow", () => {
     renderCreateListing();
 
     fireEvent.click(await screen.findByRole("button", { name: /Verified collectible/ }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Price amount" }), { target: { value: "1" } });
     fireEvent.click(screen.getByRole("button", { name: "Create private draft" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("NFT ownership could not be freshly verified");
