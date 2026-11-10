@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import os
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
@@ -32,7 +31,6 @@ from app.db.models import (
     Order,
     OrderEvent,
     OrderStatus,
-    PriceCurrency,
     User,
     Wallet,
 )
@@ -130,15 +128,13 @@ def make_listing(owner: User, asset: NFTAsset, status: ListingStatus) -> Listing
         asset_id=asset.id,
         seller_id=owner.id,
         status=status,
-        price_amount=Decimal("1.250000000"),
-        price_currency=PriceCurrency.TON,
         title="Integration listing",
     )
 
 
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0004_tg_notif_outbox"
+    assert revision == "0005_free_listings"
 
 
 async def test_users_reject_duplicate_telegram_ids(db_session: AsyncSession) -> None:
@@ -219,8 +215,6 @@ async def test_listing_foreign_keys_reject_missing_asset(db_session: AsyncSessio
             asset_id=uuid4(),
             seller_id=owner.id,
             status=ListingStatus.DRAFT,
-            price_amount=Decimal("1"),
-            price_currency=PriceCurrency.TON,
         )
     )
 
@@ -287,15 +281,21 @@ async def test_same_ton_item_address_is_scoped_to_network(
     assert mainnet_asset.id != testnet_asset.id
 
 
-async def test_listing_rejects_non_positive_price(db_session: AsyncSession) -> None:
-    owner = await make_user(db_session, telegram_id=700000011)
-    asset = await make_asset(db_session, owner, external_id="invalid-price-nft")
-    listing = make_listing(owner, asset, ListingStatus.DRAFT)
-    listing.price_amount = Decimal("0")
-    db_session.add(listing)
-
-    with pytest.raises(IntegrityError):
-        await db_session.flush()
+async def test_free_listing_migration_removes_legacy_price_columns(
+    db_session: AsyncSession,
+) -> None:
+    rows = await db_session.execute(
+        text(
+            """
+            SELECT table_name, column_name
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name IN ('listings', 'orders')
+              AND column_name IN ('price_amount', 'price_currency')
+            """
+        )
+    )
+    assert rows.all() == []
 
 
 async def test_seller_cannot_be_deleted_while_listing_exists(db_session: AsyncSession) -> None:
@@ -493,14 +493,9 @@ async def test_concurrent_reservation_idempotency_cancellation_and_expiry(
                 verifier=_StaticOwnershipVerifier(session=session),
             )
             assert retry_id == order_id
-            listing = await session.get(Listing, listing_id)
-            assert listing is not None
-            listing.price_amount = Decimal("99")
-            await session.commit()
-
-        async with session_factory() as session:
             order = await session.get(Order, order_id)
-            assert order is not None and order.price_amount == Decimal("1.250000000")
+            assert order is not None
+            assert order.status is OrderStatus.PENDING_PAYMENT
 
         async with session_factory() as session:
             await cancel_order(
@@ -666,8 +661,6 @@ async def _create_publishable_listing(
         asset_id=asset.id,
         seller_id=owner.id,
         status=status,
-        price_amount=Decimal("1.25"),
-        price_currency=PriceCurrency.TON,
         title="Seller draft",
     )
     session.add(listing)
