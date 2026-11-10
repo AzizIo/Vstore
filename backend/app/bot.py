@@ -2,7 +2,6 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
-
 from app.core.config import get_settings
 from app.db.session import async_session_factory
 from app.notifications.service import process_due_notifications

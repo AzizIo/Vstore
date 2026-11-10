@@ -69,6 +69,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_telegram_notification_outbox_order", table_name="telegram_notification_outbox")
+    op.drop_index(
+        "ix_telegram_notification_outbox_order", table_name="telegram_notification_outbox"
+    )
     op.drop_index("ix_telegram_notification_outbox_due", table_name="telegram_notification_outbox")
     op.drop_table("telegram_notification_outbox")

@@ -107,11 +107,7 @@ async def claim_due_notifications(
                     event_type=notification.event_type,
                     order_id=notification.order_id,
                     price_amount=Decimal(price_amount),
-                    price_currency=(
-                        price_currency.value
-                        if hasattr(price_currency, "value")
-                        else str(price_currency)
-                    ),
+                    price_currency=str(price_currency),
                     attempt_count=notification.attempt_count,
                 )
             )
