@@ -14,6 +14,8 @@ def test_marketplace_tables_are_registered() -> None:
         "nft_collections",
         "nft_assets",
         "listings",
+        "orders",
+        "order_events",
     }
 
 

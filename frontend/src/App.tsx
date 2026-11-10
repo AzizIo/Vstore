@@ -6,8 +6,10 @@ import {
   type Listing,
   type ListingSort,
 } from "./api/listings";
+import { createOrder } from "./api/orders";
 import { SessionProvider, useSession } from "./auth/SessionProvider";
 import { MyListings } from "./listings/MyListings";
+import { Orders } from "./orders/Orders";
 import { WalletConnection } from "./wallet/WalletConnection";
 
 const assetTypeLabels: Record<AssetType, string> = {
@@ -66,10 +68,15 @@ function appendUniqueListings(current: Listing[], nextPage: Listing[]) {
 }
 
 function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () => void }) {
+  const session = useSession();
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
+  const [ordering, setOrdering] = useState(false);
+  const [orderError, setOrderError] = useState("");
+  const [orderCreated, setOrderCreated] = useState(false);
+  const idempotencyKey = useRef<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -98,8 +105,24 @@ function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () =>
     );
   }
 
-  const title = listing.title || listing.asset.name || "Untitled asset";
-  const seller = listing.seller.first_name || listing.seller.username || "Seller";
+  const activeListing = listing;
+  const title = activeListing.title || activeListing.asset.name || "Untitled asset";
+  const seller = activeListing.seller.first_name || activeListing.seller.username || "Seller";
+  const canOrder = session.status === "authenticated" && session.user.id !== activeListing.seller.id;
+  async function handleOrder() {
+    if (session.status !== "authenticated") return;
+    setOrdering(true);
+    setOrderError("");
+    try {
+      idempotencyKey.current ??= crypto.randomUUID();
+    await createOrder(activeListing.id, session.accessToken, idempotencyKey.current);
+      setOrderCreated(true);
+    } catch (reason) {
+      setOrderError(reason instanceof Error ? reason.message : "Unable to create this order.");
+    } finally {
+      setOrdering(false);
+    }
+  }
   return (
     <section className="detail-view" aria-labelledby="detail-title">
       <button className="text-button back-button" type="button" onClick={onBack}>
@@ -108,15 +131,30 @@ function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () =>
       <div className="detail-layout">
         <AssetArtwork imageUrl={listing.asset.image_url} name={title} />
         <div className="detail-copy">
-          <p className="eyebrow">{assetTypeLabels[listing.asset.asset_type]}</p>
+          <p className="eyebrow">{assetTypeLabels[activeListing.asset.asset_type]}</p>
           <h1 id="detail-title">{title}</h1>
-          <p className="detail-price">{formatPrice(listing.price_amount, listing.price_currency)}</p>
-          {listing.description && <p className="detail-description">{listing.description}</p>}
-          {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
+          <p className="detail-price">{formatPrice(activeListing.price_amount, activeListing.price_currency)}</p>
+          {canOrder ? (
+            <div className="order-action">
+              <button className="primary-button" type="button" disabled={ordering || orderCreated} onClick={() => void handleOrder()}>
+                {ordering ? "Reserving listing..." : orderCreated ? "Order created" : "Place order"}
+              </button>
+              {orderError && <p role="alert">{orderError}</p>}
+              {orderCreated && (
+                <p role="status">Order created. Payment is not enabled; check its status in Orders.</p>
+              )}
+            </div>
+          ) : session.status === "authenticated" ? (
+            <p className="detail-description">You cannot order your own listing.</p>
+          ) : (
+            <p className="detail-description">Open this Mini App in Telegram to sign in and place an order.</p>
+          )}
+          {activeListing.description && <p className="detail-description">{activeListing.description}</p>}
+          {activeListing.asset.description && <p className="detail-description">{activeListing.asset.description}</p>}
           <dl className="detail-facts">
             <div><dt>Seller</dt><dd>{seller}</dd></div>
-            <div><dt>Asset ID</dt><dd>{listing.asset.external_id}</dd></div>
-            <div><dt>Verification</dt><dd>{listing.asset.verification_status}</dd></div>
+            <div><dt>Asset ID</dt><dd>{activeListing.asset.external_id}</dd></div>
+            <div><dt>Verification</dt><dd>{activeListing.asset.verification_status}</dd></div>
           </dl>
         </div>
       </div>
@@ -155,7 +193,8 @@ function SessionBanner() {
 }
 
 function MarketplaceApp() {
-  const [section, setSection] = useState<"catalog" | "my-listings">("catalog");
+  const session = useSession();
+  const [section, setSection] = useState<"catalog" | "my-listings" | "orders">("catalog");
   const [listings, setListings] = useState<Listing[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -285,9 +324,29 @@ function MarketplaceApp() {
         >
           My Listings
         </button>
+        <button
+          className="navigation-tab"
+          type="button"
+          aria-pressed={section === "orders"}
+          onClick={() => {
+            setListingId(null);
+            setSection("orders");
+          }}
+        >
+          Orders
+        </button>
       </nav>
 
-      {section === "my-listings" ? (
+      {section === "orders" ? (
+        session.status === "authenticated" ? (
+          <Orders accessToken={session.accessToken} />
+        ) : (
+          <div className="orders-message" role="status">
+            <h2>Sign in to view orders</h2>
+            <p>Order history is private and requires a verified Telegram session.</p>
+          </div>
+        )
+      ) : section === "my-listings" ? (
         <MyListings />
       ) : listingId ? (
         <ListingDetail listingId={listingId} onBack={() => setListingId(null)} />

@@ -614,4 +614,52 @@ describe("My Listings dashboard", () => {
 
     expect(await screen.findByText("Explore listings")).toBeInTheDocument();
   });
+
+  it("creates an authenticated order from listing detail and shows its pending status", async () => {
+    setTelegramInitData();
+    const pendingOrder = {
+      id: "order-1",
+      listing_id: listing.id,
+      buyer_id: profile.id,
+      seller_id: listing.seller.id,
+      status: "pending_payment",
+      price_amount: "12.5",
+      price_currency: "TON",
+      title: listing.title,
+      asset_name: listing.asset.name,
+      asset_type: listing.asset.asset_type,
+      expires_at: "2026-01-01T00:15:00Z",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      events: [{
+        from_status: null,
+        to_status: "pending_payment",
+        actor_type: "buyer",
+        created_at: "2026-01-01T00:00:00Z",
+      }],
+    };
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
+      if (url.endsWith("/api/users/me")) return jsonResponse(profile);
+      if (url.endsWith(`/api/listings/${listing.id}`)) return jsonResponse(listing);
+      if (url.endsWith("/api/orders") && init?.method === "POST") return jsonResponse(pendingOrder, 201);
+      if (url.includes("/api/orders?")) return jsonResponse({ items: [pendingOrder] });
+      return jsonResponse(page);
+    });
+    renderMarketplace();
+    fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Place order" }));
+
+    expect(await screen.findByText(/Order created\. Payment is not enabled/)).toBeInTheDocument();
+    const orderRequest = vi.mocked(fetch).mock.calls.find(([input, init]) =>
+      String(input).endsWith("/api/orders") && init?.method === "POST"
+    );
+    expect(orderRequest).toBeDefined();
+    expect(JSON.parse(String(orderRequest?.[1]?.body))).toEqual({ listing_id: listing.id });
+    expect(new Headers(orderRequest?.[1]?.headers).get("Idempotency-Key")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Orders" }));
+    expect(await screen.findByText("Payment pending")).toBeInTheDocument();
+  });
 });

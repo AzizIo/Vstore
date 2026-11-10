@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import os
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
@@ -10,7 +12,7 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
 from app.db.models import (
@@ -19,10 +21,14 @@ from app.db.models import (
     Listing,
     ListingStatus,
     NFTAsset,
+    Order,
+    OrderEvent,
+    OrderStatus,
     PriceCurrency,
     User,
     Wallet,
 )
+from app.orders.service import OrderConflict, cancel_order, create_order, expire_pending_orders
 
 pytestmark = pytest.mark.integration
 
@@ -109,7 +115,7 @@ def make_listing(owner: User, asset: NFTAsset, status: ListingStatus) -> Listing
 
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0001_initial_marketplace"
+    assert revision == "0002_orders"
 
 
 async def test_users_reject_duplicate_telegram_ids(db_session: AsyncSession) -> None:
@@ -254,3 +260,144 @@ async def test_seller_cannot_be_deleted_while_listing_exists(db_session: AsyncSe
     await db_session.delete(owner)
     with pytest.raises(IntegrityError):
         await db_session.flush()
+
+
+async def test_concurrent_reservation_idempotency_cancellation_and_expiry(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    seller_id = uuid4()
+    first_buyer_id = uuid4()
+    second_buyer_id = uuid4()
+    listing_id = uuid4()
+
+    try:
+        async with session_factory() as session:
+            seller = await make_user(session, telegram_id=700000000 + seller_id.int % 1000000000)
+            first_buyer = await make_user(
+                session, telegram_id=700000000 + first_buyer_id.int % 1000000000
+            )
+            second_buyer = await make_user(
+                session, telegram_id=700000000 + second_buyer_id.int % 1000000000
+            )
+            asset = await make_asset(session, seller, external_id=f"order-{listing_id}")
+            listing = make_listing(seller, asset, ListingStatus.ACTIVE)
+            session.add(listing)
+            await session.commit()
+            seller_id, first_buyer_id, second_buyer_id, listing_id = (
+                seller.id,
+                first_buyer.id,
+                second_buyer.id,
+                listing.id,
+            )
+
+        async def attempt_order(buyer_id):
+            async with session_factory() as session:
+                try:
+                    return await create_order(
+                        session,
+                        buyer_id=buyer_id,
+                        listing_id=listing_id,
+                        idempotency_key=f"concurrent-{buyer_id}",
+                    )
+                except OrderConflict:
+                    return None
+
+        outcomes = await asyncio.gather(
+            attempt_order(first_buyer_id), attempt_order(second_buyer_id)
+        )
+        successful_order_ids = [order_id for order_id in outcomes if order_id is not None]
+        assert len(successful_order_ids) == 1
+        order_id = successful_order_ids[0]
+        winning_buyer_id = first_buyer_id if outcomes[0] is not None else second_buyer_id
+
+        async with session_factory() as session:
+            retry_id = await create_order(
+                session,
+                buyer_id=winning_buyer_id,
+                listing_id=listing_id,
+                idempotency_key=f"concurrent-{winning_buyer_id}",
+            )
+            assert retry_id == order_id
+            listing = await session.get(Listing, listing_id)
+            assert listing is not None
+            listing.price_amount = Decimal("99")
+            await session.commit()
+
+        async with session_factory() as session:
+            order = await session.get(Order, order_id)
+            assert order is not None and order.price_amount == Decimal("1.250000000")
+            await cancel_order(
+                session,
+                order_id=order_id,
+                buyer_id=winning_buyer_id,
+                now=datetime.now(UTC) + timedelta(seconds=1),
+            )
+            await cancel_order(
+                session,
+                order_id=order_id,
+                buyer_id=winning_buyer_id,
+                now=datetime.now(UTC) + timedelta(seconds=2),
+            )
+
+        async with session_factory() as session:
+            listing = await session.get(Listing, listing_id)
+            order = await session.get(Order, order_id)
+            events = (
+                await session.scalars(select(OrderEvent).where(OrderEvent.order_id == order_id))
+            ).all()
+            assert listing is not None and listing.status == ListingStatus.ACTIVE
+            assert order is not None and order.status == OrderStatus.CANCELLED
+            assert len(events) == 2
+
+        async with session_factory() as session:
+            expiring_order_id = await create_order(
+                session,
+                buyer_id=second_buyer_id if winning_buyer_id == first_buyer_id else first_buyer_id,
+                listing_id=listing_id,
+                idempotency_key="expiring-order",
+                now=datetime.now(UTC),
+            )
+            expired_count = await expire_pending_orders(
+                session, now=datetime.now(UTC) + timedelta(hours=1)
+            )
+            assert expired_count == 1
+            listing = await session.get(Listing, listing_id)
+            expired_order = await session.get(Order, expiring_order_id)
+            assert listing is not None and listing.status == ListingStatus.ACTIVE
+            assert expired_order is not None and expired_order.status == OrderStatus.EXPIRED
+
+        async with session_factory() as session:
+            await session.execute(
+                text(
+                    "DELETE FROM order_events WHERE order_id IN "
+                    "(SELECT id FROM orders WHERE listing_id = :listing_id)"
+                ),
+                {"listing_id": listing_id},
+            )
+            await session.execute(
+                text("DELETE FROM orders WHERE listing_id = :listing_id"),
+                {"listing_id": listing_id},
+            )
+            await session.execute(
+                text("DELETE FROM listings WHERE id = :listing_id"), {"listing_id": listing_id}
+            )
+            await session.execute(
+                text("DELETE FROM nft_assets WHERE external_id = :external_id"),
+                {"external_id": f"order-{listing_id}"},
+            )
+            await session.execute(
+                text(
+                    "DELETE FROM users WHERE id IN "
+                    "(:seller_id, :first_buyer_id, :second_buyer_id)"
+                ),
+                {
+                    "seller_id": seller_id,
+                    "first_buyer_id": first_buyer_id,
+                    "second_buyer_id": second_buyer_id,
+                },
+            )
+            await session.commit()
+    finally:
+        await engine.dispose()

@@ -53,6 +53,28 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .session-error {
   color: #e19a8c;
 }
+.orders-view { padding: 42px 0 72px; }
+.orders-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.orders-heading .eyebrow { margin-bottom: 12px; }
+.orders-heading h1 { margin: 0; font: 400 clamp(36px, 5vw, 54px)/1 var(--serif); }
+.orders-message { padding: 42px 0; color: var(--muted); }
+.orders-message h2 { margin: 0 0 8px; color: #f3f0e9; font: 25px var(--serif); }
+.orders-message p, .orders-error { max-width: 580px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.orders-error { color: #e19a8c; }
+.orders-list { display: grid; gap: 14px; }
+.order-card { padding: 20px; border: 1px solid var(--line); background: var(--surface); }
+.order-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.order-card-heading h2 { margin: 0; font: 24px/1.2 var(--serif); }
+.order-status { flex: 0 0 auto; padding: 5px 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); font-size: 10px; }
+.order-status-pending_payment { border-color: #526879; color: #9dc4df; }
+.order-status-cancelled, .order-status-expired { border-color: #684e4b; color: #d29d95; }
+.order-card-price { margin: 12px 0; color: var(--accent); font-size: 14px; font-weight: 600; }
+.order-card-note, .order-card-date { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.order-history { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 16px 0; padding-left: 18px; color: var(--muted); font-size: 11px; }
+.primary-button { min-height: 42px; padding: 0 16px; border: 1px solid var(--accent); border-radius: 5px; background: var(--accent); color: #171a13; font-size: 12px; font-weight: 700; cursor: pointer; }
+.primary-button:disabled { opacity: .6; cursor: wait; }
+.order-action { margin: 20px 0; }
+.order-action p { color: var(--muted); font-size: 12px; }
 .app-navigation { display: flex; gap: 22px; border-bottom: 1px solid var(--line); }
 .navigation-tab { position: relative; min-height: 46px; padding: 0 2px; border: 0; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
 .navigation-tab[aria-pressed="true"] { color: #f3f0e9; }
