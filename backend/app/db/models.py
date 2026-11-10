@@ -67,6 +67,12 @@ class PriceCurrency(str, enum.Enum):
     XTR = "XTR"
 
 
+class OrderStatus(str, enum.Enum):
+    PENDING_PAYMENT = "pending_payment"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
 def enum_column(enum_type: type[enum.Enum], name: str) -> Enum:
     return Enum(
         enum_type,
@@ -96,6 +102,12 @@ class User(TimestampMixin, Base):
     wallets: Mapped[list[Wallet]] = relationship(back_populates="user")
     assets: Mapped[list[NFTAsset]] = relationship(back_populates="owner")
     listings: Mapped[list[Listing]] = relationship(back_populates="seller")
+    purchases: Mapped[list[Order]] = relationship(
+        back_populates="buyer", foreign_keys="Order.buyer_id"
+    )
+    sales: Mapped[list[Order]] = relationship(
+        back_populates="seller", foreign_keys="Order.seller_id"
+    )
 
 
 class Wallet(TimestampMixin, Base):
@@ -225,3 +237,91 @@ class Listing(TimestampMixin, Base):
 
     asset: Mapped[NFTAsset] = relationship(back_populates="listings")
     seller: Mapped[User] = relationship(back_populates="listings")
+    orders: Mapped[list[Order]] = relationship(back_populates="listing")
+
+
+class Order(TimestampMixin, Base):
+    __tablename__ = "orders"
+    __table_args__ = (
+        CheckConstraint("price_amount > 0", name="ck_orders_price_positive"),
+        CheckConstraint(
+            "status IN ('pending_payment', 'cancelled', 'expired')",
+            name="ck_orders_status",
+        ),
+        UniqueConstraint("buyer_id", "idempotency_key", name="uq_orders_buyer_idempotency"),
+        Index(
+            "uq_orders_pending_listing",
+            "listing_id",
+            unique=True,
+            postgresql_where=text("status = 'pending_payment'"),
+        ),
+        Index("ix_orders_buyer_created_at", "buyer_id", "created_at"),
+        Index("ix_orders_seller_created_at", "seller_id", "created_at"),
+        Index("ix_orders_status_expires_at", "status", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    listing_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("listings.id", ondelete="RESTRICT"), nullable=False
+    )
+    buyer_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    seller_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[OrderStatus] = mapped_column(
+        enum_column(OrderStatus, "order_status"),
+        default=OrderStatus.PENDING_PAYMENT,
+        server_default=OrderStatus.PENDING_PAYMENT.value,
+        nullable=False,
+    )
+    price_amount: Mapped[Decimal] = mapped_column(Numeric(24, 9), nullable=False)
+    price_currency: Mapped[PriceCurrency] = mapped_column(
+        enum_column(PriceCurrency, "price_currency"), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    listing: Mapped[Listing] = relationship(back_populates="orders")
+    buyer: Mapped[User] = relationship(back_populates="purchases", foreign_keys=[buyer_id])
+    seller: Mapped[User] = relationship(back_populates="sales", foreign_keys=[seller_id])
+    events: Mapped[list[OrderEvent]] = relationship(
+        back_populates="order", order_by="OrderEvent.created_at"
+    )
+
+
+class OrderEvent(Base):
+    __tablename__ = "order_events"
+    __table_args__ = (
+        CheckConstraint(
+            "actor_type IN ('buyer', 'system')",
+            name="ck_order_events_actor_type",
+        ),
+        CheckConstraint(
+            "(from_status IS NULL OR from_status IN ('pending_payment', 'cancelled', 'expired')) "
+            "AND to_status IN ('pending_payment', 'cancelled', 'expired')",
+            name="ck_order_events_statuses",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    from_status: Mapped[OrderStatus | None] = mapped_column(
+        enum_column(OrderStatus, "order_event_from_status")
+    )
+    to_status: Mapped[OrderStatus] = mapped_column(
+        enum_column(OrderStatus, "order_event_to_status"), nullable=False
+    )
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    actor_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    order: Mapped[Order] = relationship(back_populates="events")
+    actor: Mapped[User | None] = relationship()

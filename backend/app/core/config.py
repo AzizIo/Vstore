@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     bot_token: str | None = None
     auth_secret_key: str | None = None
     auth_token_ttl_seconds: int = 3600
+    order_pending_ttl_seconds: int = Field(default=900, gt=0)
+    order_expiration_poll_seconds: int = Field(default=30, gt=0)
     ton_connect_allowed_domains: list[str] = Field(default_factory=list)
     ton_connect_network: Literal["mainnet", "testnet"] = "mainnet"
     ton_center_api_key: SecretStr | None = None
