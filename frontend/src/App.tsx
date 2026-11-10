@@ -115,7 +115,7 @@ function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () =>
     setOrderError("");
     try {
       idempotencyKey.current ??= crypto.randomUUID();
-      await createOrder(listing.id, session.accessToken, idempotencyKey.current);
+      await createOrder(listingId, session.accessToken, idempotencyKey.current);
       setOrderCreated(true);
     } catch (reason) {
       setOrderError(reason instanceof Error ? reason.message : "Unable to create this order.");
