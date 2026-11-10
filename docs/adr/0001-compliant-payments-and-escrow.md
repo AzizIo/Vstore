@@ -1,11 +1,13 @@
 # ADR-0001: Compliant payments and escrow architecture
 
-- **Status:** Proposed — awaiting maintainer review
+- **Status:** Proposed research/architecture candidate — not approved for implementation
 - **Date:** 2026-11-10
 - **Review date for external references:** 2026-11-10
 - **Issue:** https://github.com/AzizIo/Vstore/issues/30
 - **Supersedes:** none
 - **Companion design document:** [`docs/PAYMENTS_ESCROW_DESIGN.md`](../PAYMENTS_ESCROW_DESIGN.md)
+
+> **Product-scope notice (Issue #48):** The current MVP does not collect payments, custody funds, run escrow, refund buyers, charge commissions, or pay sellers. A future guaranteed-transaction phase is intended, but remains planned and subject to product, architecture, platform, legal, and security review. This ADR records options and recommendations for that future phase; its candidate decisions below are not authorization to implement or launch a payment flow.
 
 ## 1. Context
 

@@ -1,12 +1,10 @@
 # Compliant Payments and Escrow — Technical Design
 
-**Status:** design for review; no implementation.
+**Status:** research/design proposal only; not approved for implementation.
 **Issue:** https://github.com/AzizIo/Vstore/issues/30
 **Decision record:** [`docs/adr/0001-compliant-payments-and-escrow.md`](adr/0001-compliant-payments-and-escrow.md)
 **Review date for external references:** 2026-11-10
-**Non-goal:** live payment credentials, mainnet contracts, custody of funds or
-secrets, enabled paid/completed transitions. This document does not implement
-anything and is not legal advice.
+**Product boundary (Issue #48):** The current MVP is non-custodial listing and direct NFT-transfer coordination. No checkout, payment collection, Telegram Stars, TON payment collection, escrow/custody of funds, commissions, refunds, seller payouts, disputes, or buyer-protection claims are available in the MVP. A future guarantee/escrow phase is planned, but its architecture and permissibility are unresolved. This document is background research for that later phase, not an approved implementation specification, and it does not authorize live payment credentials, mainnet contracts, custody of funds or secrets, or enabled paid/completed transitions. It is not legal advice.
 
 ## 1. What exists today (baseline)
 
