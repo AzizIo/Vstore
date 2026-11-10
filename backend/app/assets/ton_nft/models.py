@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+
 class VerificationStatus(StrEnum):
     VERIFIED = "verified"
     NOT_FOUND = "not_found"
@@ -14,7 +15,10 @@ class VerificationStatus(StrEnum):
     INVALID_DATA = "invalid_data"
     OWNER_MISMATCH = "owner_mismatch"
 
+
 @dataclass(frozen=True, slots=True)
+
+
 class NFTMetadata:
     """Untrusted, display-only metadata; never proof of ownership."""
     name: str | None = None
@@ -22,7 +26,10 @@ class NFTMetadata:
     image: str | None = None
     attributes: tuple[dict[str, Any], ...] = ()
 
+
 @dataclass(frozen=True, slots=True)
+
+
 class NFTItemSnapshot:
     address: str
     initialized: bool
@@ -31,7 +38,10 @@ class NFTItemSnapshot:
     owner_address: str
     metadata: NFTMetadata = field(default_factory=NFTMetadata)
 
+
 @dataclass(frozen=True, slots=True)
+
+
 class VerificationResult:
     status: VerificationStatus
     item_address: str
