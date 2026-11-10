@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import select
@@ -242,7 +241,6 @@ async def update_listing(
     *,
     listing_id: UUID,
     seller_id: UUID,
-    price_amount: Decimal | None = None,
     title: str | None = None,
     description: str | None = None,
     expires_at: datetime | None = None,
@@ -250,10 +248,6 @@ async def update_listing(
 ) -> Listing:
     if not fields_set:
         raise ListingConflict("Provide at least one listing field to update")
-    if "price_amount" in fields_set and (
-        price_amount is None or price_amount <= 0
-    ):
-        raise ListingConflict("Price must be greater than zero")
     if "expires_at" in fields_set and expires_at is not None:
         if expires_at.tzinfo is None or expires_at.utcoffset() is None:
             raise ListingConflict("Expiration must include a timezone")
@@ -276,8 +270,6 @@ async def update_listing(
                 "Only draft or active listings can be edited"
             )
 
-        if "price_amount" in fields_set:
-            listing.price_amount = price_amount  # type: ignore[assignment]
         if "title" in fields_set:
             listing.title = title
         if "description" in fields_set:
