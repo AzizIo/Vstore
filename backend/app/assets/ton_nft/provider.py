@@ -53,7 +53,7 @@ class TONCenterV3Provider:
 
     async def _get_items(self, **params: str | int) -> list[dict[str, Any]]:
         try:
-            response = await self._client.get("/nft/items", params={**params, "limit": 2})
+            response = await self._client.get("nft/items", params={**params, "limit": 2})
             response.raise_for_status()
         except (httpx.RequestError, httpx.HTTPStatusError) as exc:
             raise ProviderUnavailable("TON Center NFT indexer request failed") from exc
