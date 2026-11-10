@@ -21,7 +21,7 @@ function getDate(value: string) {
 
 function statusLabel(status: MarketplaceOrder["status"]) {
   switch (status) {
-    case "pending_payment": return "Payment pending";
+    case "pending_payment": return "Reserved";
     case "cancelled": return "Cancelled";
     case "expired": return "Expired";
   }
@@ -47,10 +47,9 @@ function OrderCard({
         <h2>{getOrderTitle(order)}</h2>
         <span className={`order-status order-status-${order.status}`}>{statusLabel(order.status)}</span>
       </div>
-      <p className="order-card-price">{order.price_amount} {order.price_currency}</p>
       <p className="order-card-note">
         {order.status === "pending_payment"
-          ? "Payment processing is not enabled. The listing remains reserved until this order is cancelled or expires."
+          ? "No payment is collected in this MVP. The listing remains reserved until this order is cancelled or expires."
           : `Order ${order.status} on ${getDate(order.updated_at)}.`}
       </p>
       <p className="order-card-date">Created {getDate(order.created_at)}</p>
