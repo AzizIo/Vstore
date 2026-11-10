@@ -14,6 +14,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
@@ -325,3 +326,57 @@ class OrderEvent(Base):
 
     order: Mapped[Order] = relationship(back_populates="events")
     actor: Mapped[User | None] = relationship()
+
+
+
+class TelegramNotificationOutbox(Base):
+    __tablename__ = "telegram_notification_outbox"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'processing', 'delivered', 'failed')",
+            name="ck_telegram_notification_outbox_status",
+        ),
+        CheckConstraint(
+            "recipient_role IN ('buyer', 'seller')",
+            name="ck_telegram_notification_outbox_recipient_role",
+        ),
+        CheckConstraint(
+            "event_type IN ('order_created', 'order_cancelled', 'order_expired')",
+            name="ck_telegram_notification_outbox_event_type",
+        ),
+        CheckConstraint(
+            "attempt_count >= 0",
+            name="ck_telegram_notification_outbox_attempt_count",
+        ),
+        UniqueConstraint("dedupe_key", name="uq_telegram_notification_outbox_dedupe_key"),
+        Index("ix_telegram_notification_outbox_due", "status", "next_attempt_at"),
+        Index("ix_telegram_notification_outbox_order", "order_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    dedupe_key: Mapped[str] = mapped_column(String(192), nullable=False)
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False
+    )
+    recipient_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    recipient_telegram_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    recipient_role: Mapped[str] = mapped_column(String(16), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", server_default="pending", nullable=False
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claim_token: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

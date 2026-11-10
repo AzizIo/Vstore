@@ -225,3 +225,18 @@ npm run build
 ---
 
 *Проект находится в разработке. Описание будет дополняться по мере реализации функциональности.*
+
+
+### Telegram order notifications
+
+Order creation, buyer cancellation, and automatic expiry enqueue recipient notifications in the
+same transaction as the order state change. Delivery is handled by the separate optional bot
+container using a PostgreSQL-backed outbox. Configure `BOT_TOKEN` and
+`TELEGRAM_MINI_APP_URL` in `.env`, then start the bot profile:
+
+```bash
+docker compose --profile bot up --build
+```
+
+See [docs/TELEGRAM_NOTIFICATIONS.md](docs/TELEGRAM_NOTIFICATIONS.md) for retry, monitoring,
+and delivery-guarantee details.

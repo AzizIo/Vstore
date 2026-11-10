@@ -17,12 +17,42 @@ from app.db.models import (
     Order,
     OrderEvent,
     OrderStatus,
+    TelegramNotificationOutbox,
     User,
 )
 
 
 class OrderConflict(Exception):
     """The listing or idempotency key cannot be used for this order."""
+
+
+
+
+async def _enqueue_order_notifications(
+    session: AsyncSession,
+    *,
+    order: Order,
+    event_type: str,
+    recipients: dict[uuid.UUID, str],
+) -> None:
+    if not recipients:
+        return
+    users = (
+        await session.scalars(
+            select(User).where(User.id.in_(tuple(recipients.keys())))
+        )
+    ).all()
+    for recipient in users:
+        session.add(
+            TelegramNotificationOutbox(
+                dedupe_key=f"order:{order.id}:{event_type}:{recipient.id}",
+                order_id=order.id,
+                recipient_user_id=recipient.id,
+                recipient_telegram_id=recipient.telegram_id,
+                recipient_role=recipients[recipient.id],
+                event_type=event_type,
+            )
+        )
 
 
 async def create_order(
@@ -99,6 +129,12 @@ async def create_order(
                         actor_type="buyer",
                     )
                 )
+                await _enqueue_order_notifications(
+                    session,
+                    order=order,
+                    event_type="order_created",
+                    recipients={buyer_id: "buyer", listing.seller_id: "seller"},
+                )
                 order_id = order.id
 
     if unavailable:
@@ -158,6 +194,14 @@ async def cancel_order(
                 actor_id=actor_id,
                 actor_type=actor_type,
             )
+        )
+        await _enqueue_order_notifications(
+            session,
+            order=order,
+            event_type=(
+                "order_expired" if target_status == OrderStatus.EXPIRED else "order_cancelled"
+            ),
+            recipients={order.buyer_id: "buyer", order.seller_id: "seller"},
         )
         _release_listing(listing, current_time)
         return order.id
@@ -231,6 +275,12 @@ async def expire_pending_orders(
                     actor_id=None,
                     actor_type="system",
                 )
+            )
+            await _enqueue_order_notifications(
+                session,
+                order=order,
+                event_type="order_expired",
+                recipients={order.buyer_id: "buyer", order.seller_id: "seller"},
             )
             expired_count += 1
 
