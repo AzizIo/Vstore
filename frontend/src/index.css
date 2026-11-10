@@ -80,7 +80,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .listing-status-cancelled, .listing-status-expired { border-color: #684e4b; color: #d29d95; }
 .listing-status-unknown { border-color: #625776; color: #c3b4df; }
 .my-listing-card-title { max-width: 100%; overflow: hidden; font: 19px/1.2 var(--serif); text-overflow: ellipsis; white-space: nowrap; }
-.my-listing-card-price { color: var(--accent); font-size: 12px; font-weight: 600; }
 .my-listing-card-date { margin-top: auto; color: var(--muted); font-size: 10px; }
 .my-listings-message { padding: 42px 0; color: var(--muted); }
 .my-listings-message h2 { margin: 0 0 8px; color: #f3f0e9; font: 25px var(--serif); }
@@ -231,12 +230,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   resize: vertical;
 }
 
-.price-field {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 100px;
-  gap: 8px;
-}
-
 .draft-form .load-more-button {
   justify-self: start;
 }
@@ -291,7 +284,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .listing-card-content { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; padding: 13px 10px 15px; }
 .listing-card-type { color: var(--muted); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
 .listing-card-title { max-width: 100%; overflow: hidden; font-family: var(--serif); font-size: 18px; text-overflow: ellipsis; white-space: nowrap; }
-.listing-card-price { color: var(--accent); font-size: 12px; font-weight: 600; }
 .catalog-pagination { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 28px 0 8px; }
 .pagination-count { margin: 0; color: var(--muted); font-size: 11px; }
 .pagination-error { margin: 0; color: #e19a8c; font-size: 12px; text-align: center; }
@@ -315,7 +307,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .detail-layout > .artwork { max-height: 680px; aspect-ratio: 1 / 1; }
 .detail-copy { padding-top: 20px; }
 .detail-copy h1 { font-size: clamp(38px, 5vw, 60px); }
-.detail-price { margin: 22px 0; color: var(--accent); font-size: 18px; font-weight: 600; }
 .detail-description { color: #c2c7bf; font-size: 14px; line-height: 1.7; white-space: pre-wrap; }
 .seller-profile { display: flex; align-items: center; gap: 12px; margin: 24px 0; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .seller-profile-avatar { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border-radius: 50%; background: #252b24; color: var(--accent); font-size: 15px; font-weight: 700; }
@@ -413,7 +404,6 @@ footer span { padding: 0 6px; color: var(--accent); }
 .order-status { flex: 0 0 auto; padding: 5px 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); font-size: 10px; }
 .order-status-pending_payment { border-color: #526879; color: #9dc4df; }
 .order-status-cancelled, .order-status-expired { border-color: #684e4b; color: #d29d95; }
-.order-card-price { margin: 12px 0; color: var(--accent); font-size: 14px; font-weight: 600; }
 .order-card-note, .order-card-date { color: var(--muted); font-size: 12px; line-height: 1.6; }
 .order-history { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 16px 0; padding-left: 18px; color: var(--muted); font-size: 11px; }
 .primary-button { min-height: 42px; padding: 0 16px; border: 1px solid var(--accent); border-radius: 5px; background: var(--accent); color: #171a13; font-size: 12px; font-weight: 700; cursor: pointer; }
