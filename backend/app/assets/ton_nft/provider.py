@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 from urllib.parse import urlparse
 
@@ -23,8 +23,8 @@ class NFTDataProvider(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class TONCenterV3Config:
-    base_url: str = "https://toncenter.com/api/v3"
-    api_key: str | None = None
+    base_url: str
+    api_key: str | None = field(default=None, repr=False)
     timeout_seconds: float = 8.0
 
     def __post_init__(self) -> None:
@@ -40,11 +40,11 @@ class TONCenterV3Provider:
 
     def __init__(
         self,
-        config: TONCenterV3Config | None = None,
+        config: TONCenterV3Config,
         *,
         client: httpx.AsyncClient | None = None,
     ) -> None:
-        self.config = config or TONCenterV3Config()
+        self.config = config
         headers = {"X-API-Key": self.config.api_key} if self.config.api_key else {}
         self._client = client or httpx.AsyncClient(
             base_url=self.config.base_url.rstrip("/"),
@@ -68,6 +68,7 @@ class TONCenterV3Provider:
             response = await self._client.get(
                 "nft/items",
                 params={**params, "limit": 2},
+                headers={"X-API-Key": self.config.api_key} if self.config.api_key else None,
             )
             response.raise_for_status()
         except (httpx.RequestError, httpx.HTTPStatusError) as exc:
