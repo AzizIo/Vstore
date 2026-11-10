@@ -136,6 +136,15 @@ function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () =>
           <p className="eyebrow">{assetTypeLabels[listing.asset.asset_type]}</p>
           <h1 id="detail-title">{title}</h1>
           <p className="detail-price">{formatPrice(listing.price_amount, listing.price_currency)}</p>
+          <section className="seller-profile" aria-label="Seller profile">
+            <div className="seller-profile-avatar" aria-hidden="true">
+              {(seller.trim().charAt(0) || "S").toUpperCase()}
+            </div>
+            <div className="seller-profile-copy">
+              <strong>{seller}</strong>
+              <span>{listing.seller.username ? `@${listing.seller.username}` : "Telegram seller"}</span>
+            </div>
+          </section>
           {canOrder ? (
             <div className="order-action">
               <button className="primary-button" type="button" disabled={ordering || orderCreated} onClick={() => void handleOrder()}>
@@ -154,7 +163,6 @@ function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () =>
           {listing.description && <p className="detail-description">{listing.description}</p>}
           {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
           <dl className="detail-facts">
-            <div><dt>Seller</dt><dd>{seller}</dd></div>
             <div>
               <dt>Collection</dt>
               <dd>{listing.asset.collection?.name ?? "Uncollected NFT"}</dd>
