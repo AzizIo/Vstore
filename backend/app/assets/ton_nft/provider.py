@@ -12,11 +12,15 @@ from app.assets.ton_nft.address import AddressError, normalize_address
 from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable
 from app.assets.ton_nft.models import NFTItemSnapshot, NFTMetadata
 
+
 class NFTDataProvider(Protocol):
     async def get_item(self, address: str) -> NFTItemSnapshot | None: ...
     async def get_item_address_by_index(self, collection_address: str, index: int) -> str | None: ...
 
+
 @dataclass(frozen=True, slots=True)
+
+
 class TONCenterV3Config:
     base_url: str = "https://toncenter.com/api/v3"
     api_key: str | None = None
@@ -28,6 +32,7 @@ class TONCenterV3Config:
             raise ValueError("TON Center base_url must be an absolute HTTP(S) URL")
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
+
 
 class TONCenterV3Provider:
     """Fetch NFT item snapshots from the documented TON Center v3 indexer."""
