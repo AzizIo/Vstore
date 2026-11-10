@@ -3,6 +3,9 @@ import {
   fetchListing,
   fetchListings,
   fetchMyListings,
+  publishListing,
+  updateListing,
+  cancelListing,
   type Listing,
   type ListingPage,
 } from "../api/listings";
@@ -199,4 +202,75 @@ describe("listing API client", () => {
 
     await expect(fetchListing("listing-1")).rejects.toThrow("invalid response");
   });
+
+  it("publishes a listing with the seller session token", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...listing, status: "active" }));
+    const controller = new AbortController();
+
+    await expect(publishListing("listing/one", "seller-token", controller.signal))
+      .resolves.toMatchObject({ id: listing.id, status: "active" });
+
+    const [url, options] = vi.mocked(fetch).mock.calls[0];
+    expect(new URL(String(url)).pathname).toBe("/api/listings/listing%2Fone/publish");
+    expect(options?.method).toBe("POST");
+    expect(new Headers(options?.headers).get("Authorization")).toBe("Bearer seller-token");
+    expect(options?.signal).toBe(controller.signal);
+    expect(options?.body).toBeUndefined();
+  });
+
+  it("updates only price and optional seller-provided details", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({
+      ...listing,
+      price_amount: "15",
+      title: "Updated Lantern",
+      description: null,
+    }));
+
+    await updateListing("listing-1", "seller-token", {
+      price_amount: "15",
+      title: "Updated Lantern",
+      description: null,
+    });
+
+    const [url, options] = vi.mocked(fetch).mock.calls[0];
+    expect(new URL(String(url)).pathname).toBe("/api/listings/listing-1");
+    expect(options?.method).toBe("PATCH");
+    expect(new Headers(options?.headers).get("Authorization")).toBe("Bearer seller-token");
+    expect(new Headers(options?.headers).get("Content-Type")).toBe("application/json");
+    expect(JSON.parse(String(options?.body))).toEqual({
+      price_amount: "15",
+      title: "Updated Lantern",
+      description: null,
+    });
+    expect(String(options?.body)).not.toMatch(/status|seller_id|owner_id/);
+  });
+
+  it("cancels a listing through the seller-only cancel action", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...listing, status: "cancelled" }));
+
+    await expect(cancelListing("listing-1", "seller-token"))
+      .resolves.toMatchObject({ id: listing.id, status: "cancelled" });
+
+    const [url, options] = vi.mocked(fetch).mock.calls[0];
+    expect(new URL(String(url)).pathname).toBe("/api/listings/listing-1/cancel");
+    expect(options?.method).toBe("POST");
+    expect(new Headers(options?.headers).get("Authorization")).toBe("Bearer seller-token");
+  });
+
+  it("surfaces provider failures from the publish endpoint", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ detail: "TON NFT ownership provider is temporarily unavailable" }, 503),
+    );
+
+    await expect(publishListing("listing-1", "seller-token"))
+      .rejects.toThrow("TON NFT ownership provider is temporarily unavailable");
+  });
+
+  it("rejects malformed seller mutation responses", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...listing, seller: null }));
+
+    await expect(cancelListing("listing-1", "seller-token"))
+      .rejects.toThrow("invalid listing response");
+  });
+
 });
