@@ -6,6 +6,7 @@ import {
   type Listing,
   type ListingSort,
 } from "./api/listings";
+import { SessionProvider, useSession } from "./auth/SessionProvider";
 
 const assetTypeLabels: Record<AssetType, string> = {
   ton_nft: "TON NFT",
@@ -109,6 +110,36 @@ function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () =>
 }
 
 export function App() {
+  return (
+    <SessionProvider>
+      <MarketplaceApp />
+    </SessionProvider>
+  );
+}
+
+function SessionBanner() {
+  const session = useSession();
+  if (session.status === "loading") {
+    return <p className="session-banner" role="status">Checking Telegram session...</p>;
+  }
+  if (session.status === "authenticated") {
+    const name = [session.user.first_name, session.user.last_name].filter(Boolean).join(" ");
+    const username = session.user.username ? ` · @${session.user.username}` : "";
+    return <p className="session-banner session-authenticated" role="status">Signed in as {name || session.user.username}{username}</p>;
+  }
+  if (session.status === "error") {
+    return <p className="session-banner session-error" role="alert">{session.message}</p>;
+  }
+  return (
+    <p className="session-banner" role="status">
+      {session.reason === "missing_init_data"
+        ? "Open this mini app in Telegram to sign in. The public catalog is available."
+        : "Telegram session could not be verified. Reopen this mini app in Telegram."}
+    </p>
+  );
+}
+
+function MarketplaceApp() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -150,6 +181,7 @@ export function App() {
         </a>
         <span className="network-label">TON MARKET</span>
       </header>
+      <SessionBanner />
 
       {listingId ? (
         <ListingDetail listingId={listingId} onBack={() => setListingId(null)} />
