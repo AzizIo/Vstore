@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
@@ -21,7 +20,6 @@ from app.db.models import (
     Listing,
     ListingStatus,
     NFTAsset,
-    PriceCurrency,
     User,
     Wallet,
 )
@@ -120,8 +118,6 @@ def make_listing(seller: User, asset: NFTAsset, status=ListingStatus.ACTIVE):
         asset_id=asset.id,
         seller_id=seller.id,
         status=status,
-        price_amount=Decimal("2.500000000"),
-        price_currency=PriceCurrency.TON,
         title="Rare Gift",
         created_at=datetime.now(UTC),
         asset=asset,
@@ -172,8 +168,6 @@ def test_create_listing_rejects_asset_not_verified_or_not_owned(api_client, sell
             "/api/listings",
             json={
                 "asset_id": str(uuid4()),
-                "price_amount": "1.5",
-                "price_currency": "TON",
             },
         )
     finally:
@@ -210,8 +204,6 @@ def test_create_listing_creates_draft_for_verified_owned_asset(api_client, selle
             "/api/listings",
             json={
                 "asset_id": str(asset.id),
-                "price_amount": "2.5",
-                "price_currency": "TON",
                 "title": "Rare Gift",
             },
         )
@@ -237,8 +229,6 @@ def test_create_listing_rejects_conflicting_open_listing(api_client, seller) -> 
             "/api/listings",
             json={
                 "asset_id": str(asset.id),
-                "price_amount": "1",
-                "price_currency": "TON",
             },
         )
     finally:
@@ -274,8 +264,6 @@ def test_create_listing_rejects_stale_owner_and_marks_asset_stale(
             "/api/listings",
             json={
                 "asset_id": str(asset.id),
-                "price_amount": "1",
-                "price_currency": "TON",
             },
         )
     finally:
@@ -315,8 +303,6 @@ def test_create_listing_returns_503_when_owner_provider_fails(
             "/api/listings",
             json={
                 "asset_id": str(asset.id),
-                "price_amount": "1",
-                "price_currency": "TON",
             },
         )
     finally:
@@ -331,9 +317,6 @@ def test_create_listing_returns_503_when_owner_provider_fails(
 @pytest.mark.parametrize(
     "payload",
     [
-        {"asset_id": "not-a-uuid", "price_amount": "1", "price_currency": "TON"},
-        {"asset_id": str(uuid4()), "price_amount": "0", "price_currency": "TON"},
-        {"asset_id": str(uuid4()), "price_amount": "1", "price_currency": "USD"},
     ],
 )
 def test_create_listing_rejects_invalid_payloads(api_client, payload) -> None:
@@ -404,7 +387,7 @@ def test_publish_listing_maps_provider_outage_to_503(
     assert response.json()["detail"] == "provider offline"
 
 
-def test_edit_listing_accepts_only_permitted_fields(
+def test_edit_listing_accepts_only_free_listing_metadata(
     api_client, seller, monkeypatch
 ) -> None:
     asset = make_verified_asset(seller.id)
@@ -416,7 +399,6 @@ def test_edit_listing_accepts_only_permitted_fields(
     try:
         response = api_client.patch(
             f"/api/listings/{listing.id}",
-            json={"price_amount": "3.25", "title": "Updated", "description": None},
         )
     finally:
         app.dependency_overrides.pop(get_db_session, None)
@@ -424,9 +406,8 @@ def test_edit_listing_accepts_only_permitted_fields(
     assert response.status_code == 200
     assert update.await_args.kwargs["seller_id"] == seller.id
     assert update.await_args.kwargs["fields_set"] == {
-        "price_amount", "title", "description"
+        "title", "description"
     }
-    assert update.await_args.kwargs["price_amount"] == Decimal("3.25")
     assert update.await_args.kwargs["title"] == "Updated"
     assert update.await_args.kwargs["description"] is None
 
@@ -437,9 +418,7 @@ def test_edit_listing_accepts_only_permitted_fields(
         {"status": "active"},
         {"seller_id": str(uuid4())},
         {"owner_id": str(uuid4())},
-        {"price_currency": "TON"},
         {},
-        {"price_amount": None},
     ],
 )
 def test_edit_listing_rejects_unpermitted_or_empty_payloads(api_client, payload) -> None:
