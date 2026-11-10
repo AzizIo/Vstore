@@ -8,8 +8,10 @@ import re
 
 _RAW_ADDRESS_RE = re.compile(r"^(-?\d+):([0-9a-fA-F]{64})$")
 
+
 class AddressError(ValueError):
     """An address is not a valid TON account address."""
+
 
 def _crc16_xmodem(data: bytes) -> int:
     crc = 0
@@ -18,6 +20,7 @@ def _crc16_xmodem(data: bytes) -> int:
         for _ in range(8):
             crc = ((crc << 1) ^ 0x1021) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
     return crc
+
 
 def normalize_address(value: str) -> str:
     """Return a validated TON address as workchain:64-lowercase-hex."""
