@@ -1,5 +1,6 @@
 export interface TelegramWebApp {
   initData?: string;
+  initDataUnsafe?: { start_param?: string };
   ready?: () => void;
   expand?: () => void;
 }
@@ -52,4 +53,21 @@ export function getTelegramInitData(signal?: AbortSignal): Promise<string | null
     signal?.addEventListener("abort", onAbort, { once: true });
     if (signal?.aborted) finish();
   });
+}
+
+export function getTelegramStartOrderId(): string | null {
+  const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
+  if (typeof startParam !== "string") return null;
+
+  const match = /^order_([0-9a-f]{32})$/i.exec(startParam);
+  if (!match) return null;
+
+  const hex = match[1].toLowerCase();
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20),
+  ].join("-");
 }

@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 
-import { cancelOrder, fetchOrders, type MarketplaceOrder, type OrderRole } from "../api/orders";
+import {
+  cancelOrder,
+  fetchOrder,
+  fetchOrders,
+  type MarketplaceOrder,
+  type OrderRole,
+} from "../api/orders";
 
 function getOrderTitle(order: MarketplaceOrder) {
   return order.title || order.asset_name || "Untitled asset";
@@ -21,14 +27,100 @@ function statusLabel(status: MarketplaceOrder["status"]) {
   }
 }
 
-export function Orders({ accessToken }: { accessToken: string }) {
+function OrderCard({
+  order,
+  role,
+  busy,
+  onCancel,
+  highlighted = false,
+}: {
+  order: MarketplaceOrder;
+  role: OrderRole;
+  busy: boolean;
+  onCancel: (orderId: string) => void;
+  highlighted?: boolean;
+}) {
+  return (
+    <article className={highlighted ? "order-card order-card-linked" : "order-card"}>
+      {highlighted && <p className="eyebrow">OPENED FROM TELEGRAM NOTIFICATION</p>}
+      <div className="order-card-heading">
+        <h2>{getOrderTitle(order)}</h2>
+        <span className={`order-status order-status-${order.status}`}>{statusLabel(order.status)}</span>
+      </div>
+      <p className="order-card-price">{order.price_amount} {order.price_currency}</p>
+      <p className="order-card-note">
+        {order.status === "pending_payment"
+          ? "Payment processing is not enabled. The listing remains reserved until this order is cancelled or expires."
+          : `Order ${order.status} on ${getDate(order.updated_at)}.`}
+      </p>
+      <p className="order-card-date">Created {getDate(order.created_at)}</p>
+      <ol className="order-history" aria-label="Order history">
+        {order.events.map((event, index) => (
+          <li key={`${event.to_status}-${event.created_at}-${index}`}>
+            {statusLabel(event.to_status)} · {getDate(event.created_at)}
+          </li>
+        ))}
+      </ol>
+      {role === "buyer" && order.status === "pending_payment" && (
+        <button
+          className="text-button"
+          type="button"
+          disabled={busy}
+          onClick={() => onCancel(order.id)}
+        >
+          {busy ? "Cancelling..." : "Cancel order"}
+        </button>
+      )}
+    </article>
+  );
+}
+
+export function Orders({
+  accessToken,
+  userId,
+  initialOrderId = null,
+}: {
+  accessToken: string;
+  userId?: string;
+  initialOrderId?: string | null;
+}) {
   const [role, setRole] = useState<OrderRole>("buyer");
   const [orders, setOrders] = useState<MarketplaceOrder[]>([]);
+  const [linkedOrder, setLinkedOrder] = useState<MarketplaceOrder | null>(null);
+  const [linkedOrderError, setLinkedOrderError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [busyOrderId, setBusyOrderId] = useState("");
   const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    if (!initialOrderId || !userId) {
+      setLinkedOrder(null);
+      setLinkedOrderError("");
+      return;
+    }
+
+    const controller = new AbortController();
+    setLinkedOrder(null);
+    setLinkedOrderError("");
+    fetchOrder(initialOrderId, accessToken, controller.signal)
+      .then((order) => {
+        if (order.buyer_id !== userId && order.seller_id !== userId) {
+          throw new Error("This order is not available for this account.");
+        }
+        setLinkedOrder(order);
+        setRole(order.buyer_id === userId ? "buyer" : "seller");
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setLinkedOrderError(
+            reason instanceof Error ? reason.message : "Unable to open this order.",
+          );
+        }
+      });
+    return () => controller.abort();
+  }, [accessToken, initialOrderId, userId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -54,12 +146,17 @@ export function Orders({ accessToken }: { accessToken: string }) {
     try {
       const updated = await cancelOrder(orderId, accessToken);
       setOrders((current) => current.map((order) => order.id === updated.id ? updated : order));
+      setLinkedOrder((current) => current?.id === updated.id ? updated : current);
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : "Unable to cancel this order.");
     } finally {
       setBusyOrderId("");
     }
   }
+
+  const visibleOrders = linkedOrder
+    ? [linkedOrder, ...orders.filter((order) => order.id !== linkedOrder.id)]
+    : orders;
 
   return (
     <section className="orders-view" aria-labelledby="orders-title">
@@ -78,6 +175,7 @@ export function Orders({ accessToken }: { accessToken: string }) {
       </div>
 
       {actionError && <p className="orders-error" role="alert">{actionError}</p>}
+      {linkedOrderError && <p className="orders-error" role="alert">{linkedOrderError}</p>}
       {loading ? (
         <p className="orders-message" role="status">Loading orders...</p>
       ) : error ? (
@@ -88,44 +186,22 @@ export function Orders({ accessToken }: { accessToken: string }) {
             Try again
           </button>
         </div>
-      ) : orders.length === 0 ? (
+      ) : visibleOrders.length === 0 ? (
         <div className="orders-message" role="status">
           <h2>No {role === "buyer" ? "purchases" : "sales"} yet</h2>
           <p>Order activity will appear here.</p>
         </div>
       ) : (
         <div className="orders-list">
-          {orders.map((order) => (
-            <article className="order-card" key={order.id}>
-              <div className="order-card-heading">
-                <h2>{getOrderTitle(order)}</h2>
-                <span className={`order-status order-status-${order.status}`}>{statusLabel(order.status)}</span>
-              </div>
-              <p className="order-card-price">{order.price_amount} {order.price_currency}</p>
-              <p className="order-card-note">
-                {order.status === "pending_payment"
-                  ? "Payment processing is not enabled. The listing remains reserved until this order is cancelled or expires."
-                  : `Order ${order.status} on ${getDate(order.updated_at)}.`}
-              </p>
-              <p className="order-card-date">Created {getDate(order.created_at)}</p>
-              <ol className="order-history" aria-label="Order history">
-                {order.events.map((event, index) => (
-                  <li key={`${event.to_status}-${event.created_at}-${index}`}>
-                    {statusLabel(event.to_status)} · {getDate(event.created_at)}
-                  </li>
-                ))}
-              </ol>
-              {role === "buyer" && order.status === "pending_payment" && (
-                <button
-                  className="text-button"
-                  type="button"
-                  disabled={busyOrderId === order.id}
-                  onClick={() => void handleCancel(order.id)}
-                >
-                  {busyOrderId === order.id ? "Cancelling..." : "Cancel order"}
-                </button>
-              )}
-            </article>
+          {visibleOrders.map((order) => (
+            <OrderCard
+              key={order.id}
+              order={order}
+              role={role}
+              busy={busyOrderId === order.id}
+              onCancel={(orderId) => void handleCancel(orderId)}
+              highlighted={order.id === linkedOrder?.id}
+            />
           ))}
         </div>
       )}

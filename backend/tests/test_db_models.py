@@ -17,6 +17,7 @@ def test_marketplace_tables_are_registered() -> None:
         "listings",
         "orders",
         "order_events",
+        "telegram_notification_outbox",
     }
 
 

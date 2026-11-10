@@ -32,3 +32,35 @@ and independently verify provider notifications before any trusted payment-state
 introduced. The order and its listing reservation must be reconciled atomically. TON escrow
 contract deployment, on-chain payment collection, NFT transfer, refunds, and Telegram Stars
 are out of scope until separately designed, security-reviewed, and validated on testnet.
+
+
+## Telegram notifications and delivery guarantees
+
+Lifecycle notifications are written to `telegram_notification_outbox` in the same database
+transaction as each order transition. The optional Compose bot service consumes this durable
+queue; run `docker compose --profile bot up --build` with `BOT_TOKEN` configured.
+
+Set `TELEGRAM_MINI_APP_URL` to the direct Telegram Mini App link, for example
+`https://t.me/<bot_username>/<app_short_name>`. Each notification appends a
+`startapp=order_<order-id>` parameter. Without this setting, messages are still delivered but
+will not contain an in-app deep link.
+
+The worker uses PostgreSQL row locks with `SKIP LOCKED`, a claim lease, and unique event
+deduplication keys so multiple bot workers can safely share the outbox. Transient failures are
+retried with exponential backoff (5 seconds up to 1 hour by default); Telegram flood-control
+`retry_after` values are respected but capped. Permanent recipient/request failures and events
+that exhaust the configured attempt count are retained as `failed` with the last error.
+Tune with `NOTIFICATION_POLL_SECONDS`, `NOTIFICATION_BATCH_SIZE`,
+`NOTIFICATION_CLAIM_LEASE_SECONDS`, `NOTIFICATION_MAX_ATTEMPTS`,
+`NOTIFICATION_RETRY_BASE_SECONDS`, and `NOTIFICATION_RETRY_MAX_SECONDS`.
+
+Telegram's `sendMessage` method does not expose a client idempotency key. The outbox guarantees
+one persisted event per lifecycle transition and prevents concurrent workers from claiming the
+same live lease; delivery is therefore at-least-once. A process crash after Telegram accepted a
+message but before the database records success can still result in a duplicate after the lease
+expires. Delivered and failed rows remain available for operational inspection; monitor pending
+age, attempt counts, and failed rows in the outbox table.
+
+Messages contain only the order reference, lifecycle status, amount/currency, and Mini App link.
+They explicitly state that payment is not enabled and never claim that payment was received or an
+NFT was transferred.

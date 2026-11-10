@@ -95,3 +95,29 @@ describe("orders", () => {
     rerender(<Orders accessToken="private-token" />);
   });
 });
+
+
+  it("opens an order deep link and selects the seller view for the recipient", async () => {
+    const linkedOrder = { ...order, buyer_id: "buyer-other", seller_id: "seller-current" };
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith(`/api/orders/${order.id}`)) return jsonResponse(linkedOrder);
+      if (url.includes("/api/orders?role=seller")) return jsonResponse({ items: [linkedOrder] });
+      return jsonResponse({ items: [order] });
+    });
+
+    render(
+      <Orders
+        accessToken="private-token"
+        userId="seller-current"
+        initialOrderId={order.id}
+      />,
+    );
+
+    expect(await screen.findByText("OPENED FROM TELEGRAM NOTIFICATION")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Order role" })).toHaveValue("seller");
+    expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/api/orders?role=seller"))).toBe(true);
+    });
+  });

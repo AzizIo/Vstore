@@ -8,6 +8,7 @@ import {
 } from "./api/listings";
 import { createOrder } from "./api/orders";
 import { SessionProvider, useSession } from "./auth/SessionProvider";
+import { getTelegramStartOrderId } from "./auth/telegram";
 import { MyListings } from "./listings/MyListings";
 import { Orders } from "./orders/Orders";
 import { WalletConnection } from "./wallet/WalletConnection";
@@ -195,6 +196,7 @@ function SessionBanner() {
 
 function MarketplaceApp() {
   const session = useSession();
+  const [initialOrderId, setInitialOrderId] = useState<string | null>(null);
   const [section, setSection] = useState<"catalog" | "my-listings" | "orders">("catalog");
   const [listings, setListings] = useState<Listing[]>([]);
   const [total, setTotal] = useState(0);
@@ -211,6 +213,16 @@ function MarketplaceApp() {
   const requestVersion = useRef(0);
   const loadingMoreRef = useRef(false);
   const loadMoreController = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (session.status === "loading") return;
+    const orderId = getTelegramStartOrderId();
+    if (orderId) {
+      setInitialOrderId(orderId);
+      setListingId(null);
+      setSection("orders");
+    }
+  }, [session.status]);
 
   useEffect(() => {
     const version = ++requestVersion.current;
@@ -340,7 +352,7 @@ function MarketplaceApp() {
 
       {section === "orders" ? (
         session.status === "authenticated" ? (
-          <Orders accessToken={session.accessToken} />
+          <Orders accessToken={session.accessToken} userId={session.user.id} initialOrderId={initialOrderId} />
         ) : (
           <div className="orders-message" role="status">
             <h2>Sign in to view orders</h2>

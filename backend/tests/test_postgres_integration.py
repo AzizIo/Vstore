@@ -127,7 +127,7 @@ def make_listing(owner: User, asset: NFTAsset, status: ListingStatus) -> Listing
 
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0003_orders"
+    assert revision == "0004_tg_notif_outbox"
 
 
 async def test_users_reject_duplicate_telegram_ids(db_session: AsyncSession) -> None:
@@ -526,6 +526,13 @@ async def test_concurrent_reservation_idempotency_cancellation_and_expiry(
             await session.execute(
                 text(
                     "DELETE FROM order_events WHERE order_id IN "
+                    "(SELECT id FROM orders WHERE listing_id = :listing_id)"
+                ),
+                {"listing_id": listing_id},
+            )
+            await session.execute(
+                text(
+                    "DELETE FROM telegram_notification_outbox WHERE order_id IN "
                     "(SELECT id FROM orders WHERE listing_id = :listing_id)"
                 ),
                 {"listing_id": listing_id},
