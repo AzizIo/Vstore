@@ -17,7 +17,7 @@ The intended product includes:
 - admin tools, disputes, fees and audit history;
 - payment and escrow flows, but only after the technical and policy constraints are solved.
 
-The product is **not yet a complete marketplace**. The repository currently contains an early modular-monolith backend, a minimal frontend shell, database migrations/models, authentication and listing endpoints, and automated tests. Do not describe planned features as implemented.
+The product is **not yet a complete marketplace**. The repository currently contains an early modular-monolith backend, a functional Telegram Mini App frontend with a public catalog (filters, sorting and pagination), listing details and seller listing management, Telegram authentication, wallet connection, and buyer/seller order views, alongside database migrations/models, authentication and listing/order endpoints, and automated tests. Payment/checkout, NFT delivery confirmation, deal chat and admin tools are not implemented. Do not describe planned features as implemented.
 
 ## 2. Repository map — where to look first
 
