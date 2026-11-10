@@ -4,7 +4,6 @@ from app.db.models import (
     Base,
     ListingStatus,
     OrderStatus,
-    PriceCurrency,
 )
 
 
@@ -29,7 +28,7 @@ def test_asset_verification_has_safe_pending_default() -> None:
     assert AssetVerificationStatus.PENDING.value == "pending"
 
 
-def test_listing_lifecycle_and_price_currencies_are_explicit() -> None:
+def test_listing_lifecycle_and_free_schema_are_explicit() -> None:
     assert {item.value for item in ListingStatus} == {
         "draft",
         "active",
@@ -38,7 +37,10 @@ def test_listing_lifecycle_and_price_currencies_are_explicit() -> None:
         "cancelled",
         "expired",
     }
-    assert {item.value for item in PriceCurrency} == {"TON", "XTR"}
+    assert "price_amount" not in Base.metadata.tables["listings"].columns
+    assert "price_currency" not in Base.metadata.tables["listings"].columns
+    assert "price_amount" not in Base.metadata.tables["orders"].columns
+    assert "price_currency" not in Base.metadata.tables["orders"].columns
 
 
 def test_only_one_open_listing_per_asset_is_enforced_on_postgres() -> None:
