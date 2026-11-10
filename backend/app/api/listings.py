@@ -82,6 +82,7 @@ class ListingResponse(BaseModel):
     title: str | None
     description: str | None
     created_at: datetime
+    expires_at: datetime | None
     asset: ListingAssetResponse
     seller: ListingSellerResponse
 
@@ -94,11 +95,23 @@ class ListingPageResponse(BaseModel):
 
 
 class ListingCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     asset_id: UUID
     price_amount: Decimal = Field(gt=0, max_digits=24, decimal_places=9)
     price_currency: PriceCurrency
     title: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=4_000)
+    expires_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_expiration(self) -> ListingCreateRequest:
+        if self.expires_at is not None:
+            if self.expires_at.tzinfo is None or self.expires_at.utcoffset() is None:
+                raise ValueError("Expiration must include a timezone")
+            if self.expires_at <= datetime.now(UTC):
+                raise ValueError("Expiration must be in the future")
+        return self
 
 
 class ListingUpdateRequest(BaseModel):
@@ -109,6 +122,7 @@ class ListingUpdateRequest(BaseModel):
     )
     title: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=4_000)
+    expires_at: datetime | None = None
 
     @model_validator(mode="after")
     def validate_update_fields(self) -> ListingUpdateRequest:
@@ -116,6 +130,11 @@ class ListingUpdateRequest(BaseModel):
             raise ValueError("Provide at least one field to update")
         if "price_amount" in self.model_fields_set and self.price_amount is None:
             raise ValueError("Price cannot be null")
+        if self.expires_at is not None and "expires_at" in self.model_fields_set:
+            if self.expires_at.tzinfo is None or self.expires_at.utcoffset() is None:
+                raise ValueError("Expiration must include a timezone")
+            if self.expires_at <= datetime.now(UTC):
+                raise ValueError("Expiration must be in the future")
         return self
 
 
@@ -137,6 +156,7 @@ def _purchasable_conditions() -> list:
 
     return [
         Listing.status == ListingStatus.ACTIVE,
+        or_(Listing.expires_at.is_(None), Listing.expires_at > func.now()),
         NFTAsset.verification_status == AssetVerificationStatus.VERIFIED,
         NFTAsset.owner_id == Listing.seller_id,
     ]
@@ -401,6 +421,7 @@ async def create_listing_draft(
         price_currency=payload.price_currency,
         title=payload.title,
         description=payload.description,
+        expires_at=payload.expires_at,
     )
     session.add(listing)
     await session.commit()
@@ -450,6 +471,7 @@ async def edit_my_listing(
             price_amount=payload.price_amount,
             title=payload.title,
             description=payload.description,
+            expires_at=payload.expires_at,
             fields_set=set(payload.model_fields_set),
         )
     except ListingNotFound as exc:
