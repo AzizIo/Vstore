@@ -22,8 +22,6 @@ vi.mock("@tonconnect/ui-react", () => ({
 const listing = {
   id: "listing-1",
   status: "active",
-  price_amount: "12.5",
-  price_currency: "TON" as const,
   title: "Moon Lantern",
   description: "A collectible lantern.",
   created_at: "2026-01-01T00:00:00Z",
@@ -126,7 +124,6 @@ describe("marketplace catalog", () => {
   it("renders listings returned by the public API", async () => {
     renderMarketplace();
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
-    expect(screen.getByText("12.5 TON")).toBeInTheDocument();
     expect(screen.getByText("TON NFT", { selector: ".listing-card-type" })).toBeInTheDocument();
     expect(screen.getByText("1 item")).toBeInTheDocument();
   });
@@ -155,17 +152,15 @@ describe("marketplace catalog", () => {
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
   });
 
-  it("sends search, asset type, and sort using supported query parameters", async () => {
+  it("sends search and asset type using supported query parameters", async () => {
     renderMarketplace();
     await screen.findByText("Moon Lantern");
     fireEvent.change(screen.getByRole("searchbox", { name: "Search listings" }), { target: { value: "lantern" } });
     await waitFor(() => expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("search=lantern"));
     fireEvent.change(screen.getByRole("combobox", { name: "Asset type" }), { target: { value: "telegram_gift" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "Sort listings" }), { target: { value: "price_desc" } });
     await waitFor(() => {
       const requestUrl = String(vi.mocked(fetch).mock.calls.at(-1)?.[0]);
       expect(requestUrl).toContain("asset_type=telegram_gift");
-      expect(requestUrl).toContain("sort=price_desc");
     });
   });
 
@@ -192,12 +187,12 @@ describe("marketplace catalog", () => {
     expect(pageRequests.map((url) => url.searchParams.get("offset"))).toEqual(["0", "24"]);
   });
 
-  it("resets catalog results and offset to zero when search, type, or sort changes", async () => {
+  it("resets catalog results and offset to zero when search or type changes", async () => {
     const initialListings = makeListings(24, "initial");
     const filteredListing = { ...listing, id: "filtered", title: "Filtered result" };
     vi.mocked(fetch).mockImplementation(async (input) => {
       const requestUrl = new URL(String(input));
-      if (requestUrl.searchParams.has("search") || requestUrl.searchParams.has("asset_type") || requestUrl.searchParams.get("sort") !== "newest") {
+      if (requestUrl.searchParams.has("search") || requestUrl.searchParams.has("asset_type")) {
         return jsonResponse({ items: [filteredListing], total: 1, limit: 24, offset: 0 });
       }
       if (requestUrl.searchParams.get("offset") === "24") {
@@ -215,8 +210,6 @@ describe("marketplace catalog", () => {
     expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).searchParams.get("offset")).toBe("0");
 
     fireEvent.change(screen.getByRole("combobox", { name: "Asset type" }), { target: { value: "telegram_gift" } });
-    await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).searchParams.get("offset")).toBe("0"));
-    fireEvent.change(screen.getByRole("combobox", { name: "Sort listings" }), { target: { value: "price_desc" } });
     await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).searchParams.get("offset")).toBe("0"));
 
     expect(screen.getByText("Filtered result")).toBeInTheDocument();
@@ -430,8 +423,6 @@ describe("Buyer orders", () => {
       buyer_id: profile.id,
       seller_id: listing.seller.id,
       status: "pending_payment",
-      price_amount: "12.5",
-      price_currency: "TON",
       title: listing.title,
       asset_name: listing.asset.name,
       asset_type: listing.asset.asset_type,
@@ -463,7 +454,7 @@ describe("Buyer orders", () => {
     setTelegramInitData();
     const pendingOrder = {
       id: "order-1", listing_id: listing.id, buyer_id: profile.id, seller_id: listing.seller.id,
-      status: "pending_payment", price_amount: "12.5", price_currency: "TON",
+      status: "pending_payment",
       title: listing.title, asset_name: listing.asset.name, asset_type: listing.asset.asset_type,
       expires_at: "2026-01-01T00:15:00Z", created_at: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-01T00:00:00Z",
@@ -491,7 +482,7 @@ describe("Buyer orders", () => {
     expect(new Headers(orderRequest?.[1]?.headers).get("Idempotency-Key")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Orders" }));
-    expect(await screen.findByText("Payment pending")).toBeInTheDocument();
+    expect(await screen.findByText("Reserved")).toBeInTheDocument();
   });
 });
 
