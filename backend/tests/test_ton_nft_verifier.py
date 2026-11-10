@@ -46,9 +46,16 @@ def test_normalizes_raw_address() -> None:
     assert normalize_address(ITEM.upper().replace("0:", "0:")) == ITEM
 
 
-def test_rejects_invalid_raw_address() -> None:
+def test_normalizes_checksum_valid_friendly_address() -> None:
+    friendly = "EQD3LzasMd4GAmhIEkCQ4k6LnziTqNZ6VPtRfeZKHu0Fmkho"
+    assert normalize_address(friendly) == "0:f72f36ac31de06026848124090e24e8b9f3893a8d67a54fb517de64a1eed059a"
+
+
+def test_rejects_invalid_raw_address_and_friendly_checksum() -> None:
     with pytest.raises(AddressError):
         normalize_address("0:1234")
+    with pytest.raises(AddressError):
+        normalize_address("EQD3LzasMd4GAmhIEkCQ4k6LnziTqNZ6VPtRfeZKHu0Fmkha")
 
 
 @pytest.mark.asyncio
@@ -122,6 +129,7 @@ async def test_toncenter_provider_parses_item_and_queries_collection_index() -> 
     resolved = await provider.get_item_address_by_index(COLLECTION, 7)
     assert parsed is not None and parsed.metadata.name == "NFT"
     assert resolved == ITEM
+    assert requests[0].url.path == "/api/v3/nft/items"
     assert requests[1].url.params["collection_address"] == COLLECTION
     assert requests[1].url.params["index"] == "7"
     await client.aclose()
