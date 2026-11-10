@@ -144,3 +144,18 @@ export async function cancelOrder(
   if (!isOrder(order)) throw new Error("Orders returned an invalid order.");
   return order;
 }
+
+
+export async function fetchOrder(
+  orderId: string,
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<MarketplaceOrder> {
+  const order = await requestJson<unknown>(
+    `${API_BASE_URL}/api/orders/${encodeURIComponent(orderId)}`,
+    accessToken,
+    { signal },
+  );
+  if (!isOrder(order)) throw new Error("Orders returned an invalid order.");
+  return order;
+}

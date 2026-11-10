@@ -70,10 +70,10 @@ function renderMarketplace(queryClient = new QueryClient()) {
   };
 }
 
-function setTelegramInitData(initData = "query_id=raw&hash=verified") {
+function setTelegramInitData(initData = "query_id=raw&hash=verified", startParam?: string) {
   const ready = vi.fn();
   const expand = vi.fn();
-  window.Telegram = { WebApp: { initData, ready, expand } };
+  window.Telegram = { WebApp: { initData, initDataUnsafe: startParam ? { start_param: startParam } : undefined, ready, expand } };
   return { ready, expand };
 }
 
@@ -369,6 +369,45 @@ describe("Buyer orders", () => {
     tonConnectMocks.wallet = null;
     Reflect.deleteProperty(window, "Telegram");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(page)));
+  });
+
+
+
+  it("opens the exact order from a Telegram startapp deep link", async () => {
+    const orderId = "123e4567-e89b-12d3-a456-426614174000";
+    const order = {
+      id: orderId,
+      listing_id: listing.id,
+      buyer_id: profile.id,
+      seller_id: listing.seller.id,
+      status: "pending_payment",
+      price_amount: "12.5",
+      price_currency: "TON",
+      title: listing.title,
+      asset_name: listing.asset.name,
+      asset_type: listing.asset.asset_type,
+      expires_at: "2026-01-01T00:15:00Z",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      events: [{ from_status: null, to_status: "pending_payment", actor_type: "buyer", created_at: "2026-01-01T00:00:00Z" }],
+    };
+    setTelegramInitData("query_id=raw&hash=verified", `order_${orderId.replace(/-/g, "")}`);
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
+      if (url.endsWith("/api/users/me")) return jsonResponse(profile);
+      if (url.endsWith(`/api/orders/${orderId}`)) return jsonResponse(order);
+      if (url.includes("/api/orders?")) return jsonResponse({ items: [order] });
+      return jsonResponse(page);
+    });
+
+    renderMarketplace();
+
+    expect(await screen.findByText("OPENED FROM TELEGRAM NOTIFICATION")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Orders" })).toHaveAttribute("aria-pressed", "true");
+    expect(vi.mocked(fetch).mock.calls.some(([input]) =>
+      String(input).endsWith(`/api/orders/${orderId}`)
+    )).toBe(true);
   });
 
   it("creates an authenticated order from listing detail and displays its status", async () => {
