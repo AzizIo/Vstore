@@ -8,6 +8,7 @@ from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.api.listings import router as listings_router
 from app.api.users import router as users_router
+from app.api.wallets import router as wallets_router
 from app.core.config import get_settings
 from app.db.session import dispose_engine
 
@@ -39,6 +40,7 @@ app.include_router(health_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(listings_router, prefix="/api")
+app.include_router(wallets_router, prefix="/api")
 
 
 @app.get("/", tags=["meta"])
