@@ -15,8 +15,8 @@ from app.api.users import router as users_router
 from app.api.wallets import router as wallets_router
 from app.core.config import get_settings
 from app.db.session import async_session_factory, dispose_engine
-from app.orders.service import expire_pending_orders
 from app.listings.service import expire_active_listings
+from app.orders.service import expire_pending_orders
 
 logger = getLogger(__name__)
 
