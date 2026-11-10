@@ -9,7 +9,6 @@ from app.db.session import async_session_factory
 from app.notifications.service import process_due_notifications
 from app.notifications.telegram import TelegramNotificationSender
 
-
 logger = logging.getLogger(__name__)
 
 
