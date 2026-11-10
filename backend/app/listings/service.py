@@ -18,7 +18,6 @@ from app.db.models import (
     Listing,
     ListingStatus,
     NFTAsset,
-    User,
     Wallet,
 )
 
@@ -37,19 +36,6 @@ class ListingConflict(ListingError):
 
 class ListingVerificationUnavailable(ListingError):
     """The external ownership provider could not verify the NFT."""
-
-
-async def _load_listing_response(
-    session: AsyncSession, listing_id: UUID
-) -> Listing:
-    listing = await session.scalar(
-        select(Listing)
-        .options(selectinload(Listing.asset), selectinload(Listing.seller))
-        .where(Listing.id == listing_id)
-    )
-    if listing is None:
-        raise ListingNotFound("Listing not found")
-    return listing
 
 
 async def publish_listing(
