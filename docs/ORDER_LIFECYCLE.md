@@ -2,7 +2,7 @@
 
 This document describes the current no-payment order coordination flow. Creating an order reserves a listing; it does not mean that the buyer has paid or that an NFT has been transferred.
 
-Orders can only be created from an `ACTIVE` listing. Creating an order atomically snapshots the listing's amount and currency, changes the listing to `RESERVED`, and appends the initial order event. A buyer-scoped `Idempotency-Key` prevents retries from creating a second order; reusing that key for a different listing conflicts.
+Orders can only be created from an `ACTIVE` listing. Creating an order records the listing, buyer, seller, idempotency key, expiry, and initial event, then changes the listing to `RESERVED`. No amount or currency is stored: current MVP listings are free and order creation does not collect payment. A buyer-scoped `Idempotency-Key` prevents retries from creating a second order; reusing that key for a different listing conflicts.
 
 ## Fresh ownership re-check before reservation
 
@@ -93,4 +93,4 @@ The worker uses PostgreSQL row locks with `SKIP LOCKED`, a claim lease, and uniq
 
 Telegram's `sendMessage` does not expose a client idempotency key. The outbox guarantees one persisted event per lifecycle transition and prevents concurrent workers from claiming the same live lease; delivery is therefore at-least-once. A process crash after Telegram accepted a message but before the database records success can still result in a duplicate after the lease expires. Delivered and failed rows remain available for operational inspection; monitor pending age, attempt counts, and failed rows in the outbox table.
 
-Messages contain only the order reference, lifecycle status, amount/currency, and Mini App link. They explicitly state that payment is not enabled and never claim that payment was received or an NFT was transferred.
+Messages contain only the order reference, lifecycle status, and Mini App link. They explicitly state that the MVP does not collect payments and never claim that payment was received or an NFT was transferred.
