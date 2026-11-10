@@ -328,7 +328,6 @@ class OrderEvent(Base):
     actor: Mapped[User | None] = relationship()
 
 
-
 class TelegramNotificationOutbox(Base):
     __tablename__ = "telegram_notification_outbox"
     __table_args__ = (
