@@ -144,6 +144,10 @@ npm run build
 
 Ключевое решение: первый реальный сценарий строить вокруг проверяемых TON NFT стандарта TEP-62. Telegram Gifts поддерживать отдельным адаптером; автоматическую передачу разрешать только в сценариях, подтверждённых возможностями Telegram Business API. Escrow оставить выключенным до разработки и проверки отдельного механизма.
 
+Архитектурное решение по платежам и escrow (ADR) и технический дизайн описаны в
+[`docs/adr/0001-compliant-payments-and-escrow.md`](docs/adr/0001-compliant-payments-and-escrow.md)
+и [`docs/PAYMENTS_ESCROW_DESIGN.md`](docs/PAYMENTS_ESCROW_DESIGN.md).
+
 ## Предлагаемый порядок разработки
 
 1. Аудит Telegram Gifts / TON NFT и фиксация поддерживаемых сценариев.
