@@ -13,8 +13,6 @@ import {
 const listing: Listing = {
   id: "listing-1",
   status: "active",
-  price_amount: "12.500000000",
-  price_currency: "TON",
   title: "Moon Lantern",
   description: "A collectible lantern.",
   created_at: "2026-01-01T00:00:00Z",
@@ -56,7 +54,6 @@ describe("listing API client", () => {
     await expect(fetchListings({
       search: "  lantern  ",
       assetType: "telegram_gift",
-      sort: "price_desc",
     })).resolves.toEqual(page);
 
     const [url, options] = vi.mocked(fetch).mock.calls[0];
@@ -66,15 +63,13 @@ describe("listing API client", () => {
     expect(parsed.searchParams.get("offset")).toBe("0");
     expect(parsed.searchParams.get("search")).toBe("lantern");
     expect(parsed.searchParams.get("asset_type")).toBe("telegram_gift");
-    expect(parsed.searchParams.get("sort")).toBe("price_desc");
-    expect(parsed.searchParams.has("currency")).toBe(false);
+        expect(parsed.searchParams.has("currency")).toBe(false);
     expect(options?.signal).toBeUndefined();
   });
 
   it("omits blank search and the all-assets filter", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...page, items: [] }));
 
-    await fetchListings({ search: "   ", assetType: "all", sort: "newest" });
 
     const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]));
     expect(parsed.searchParams.has("search")).toBe(false);
@@ -86,7 +81,6 @@ describe("listing API client", () => {
     const controller = new AbortController();
 
     await fetchListings(
-      { search: "", assetType: "all", sort: "newest" },
       controller.signal,
     );
 
@@ -96,7 +90,6 @@ describe("listing API client", () => {
   it("requests an explicitly selected page limit and offset", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...page, limit: 3, offset: 3 }));
 
-    await fetchListings({ search: "", assetType: "all", sort: "newest", limit: 3, offset: 3 });
 
     const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]));
     expect(parsed.searchParams.get("limit")).toBe("3");
@@ -109,7 +102,6 @@ describe("listing API client", () => {
     await expect(fetchListings({
       search: "",
       assetType: "all",
-      sort: "newest",
     })).rejects.toThrow("invalid catalog response");
   });
 
@@ -119,7 +111,6 @@ describe("listing API client", () => {
     await expect(fetchListings({
       search: "",
       assetType: "all",
-      sort: "newest",
       limit: 24,
       offset: 48,
     })).rejects.toThrow("invalid catalog response");
@@ -134,7 +125,6 @@ describe("listing API client", () => {
     await expect(fetchListings({
       search: "",
       assetType: "all",
-      sort: "newest",
     })).rejects.toThrow("invalid catalog response");
   });
 
@@ -218,16 +208,14 @@ describe("listing API client", () => {
     expect(options?.body).toBeUndefined();
   });
 
-  it("updates only price and optional seller-provided details", async () => {
+  it("updates only optional seller-provided details", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({
       ...listing,
-      price_amount: "15",
       title: "Updated Lantern",
       description: null,
     }));
 
     await updateListing("listing-1", "seller-token", {
-      price_amount: "15",
       title: "Updated Lantern",
       description: null,
     });
@@ -238,7 +226,6 @@ describe("listing API client", () => {
     expect(new Headers(options?.headers).get("Authorization")).toBe("Bearer seller-token");
     expect(new Headers(options?.headers).get("Content-Type")).toBe("application/json");
     expect(JSON.parse(String(options?.body))).toEqual({
-      price_amount: "15",
       title: "Updated Lantern",
       description: null,
     });
