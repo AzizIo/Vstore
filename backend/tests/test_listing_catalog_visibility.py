@@ -6,7 +6,6 @@ because reservation is not a purchasable state, visibility needs its own guard.
 """
 
 from datetime import UTC, datetime
-from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
@@ -20,7 +19,6 @@ from app.db.models import (
     Listing,
     ListingStatus,
     NFTAsset,
-    PriceCurrency,
     User,
 )
 from app.db.session import get_db_session
@@ -79,8 +77,6 @@ def make_listing(
         asset_id=asset.id,
         seller_id=seller.id,
         status=status,
-        price_amount=Decimal("1.5"),
-        price_currency=PriceCurrency.TON,
         title="Catalog listing",
         created_at=created_at or datetime.now(UTC),
         asset=asset,
@@ -160,21 +156,21 @@ def test_catalog_ordering_is_stable_across_pages(api_client) -> None:
     assert "listings.id ASC" in rendered
 
 
-def test_catalog_filters_by_currency_and_asset_type(api_client) -> None:
+def test_catalog_filters_by_asset_type(api_client) -> None:
     seller = User(id=uuid4(), telegram_id=555005, first_name="Seller")
     asset = make_asset(seller)
     session = catalog_session([make_listing(seller, asset)])
 
     install_session(session)
     try:
-        response = api_client.get("/api/listings?currency=TON&asset_type=ton_nft")
+        response = api_client.get("/api/listings?asset_type=ton_nft")
     finally:
         app.dependency_overrides.pop(get_db_session, None)
 
     assert response.status_code == 200
     rendered = str(session.scalars.await_args.args[0])
-    assert "listings.price_currency" in rendered
     assert "nft_assets.asset_type" in rendered
+    assert "price_" not in rendered
 
 
 def test_catalog_session_is_used_without_writes(api_client) -> None:
