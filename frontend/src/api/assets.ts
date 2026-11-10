@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "./config";
-import { isListing, type Listing, type ListingAsset, type PriceCurrency } from "./listings";
+import { isListing, type Listing, type ListingAsset } from "./listings";
 
 export interface InventoryAsset extends ListingAsset {
   item_address: string;
@@ -23,8 +23,6 @@ export interface InventoryPageRequest {
 
 export interface CreateListingDraftRequest {
   asset_id: string;
-  price_amount: string;
-  price_currency: PriceCurrency;
   title?: string;
   description?: string;
   expires_at?: string | null;
