@@ -521,6 +521,13 @@ async def test_concurrent_reservation_idempotency_cancellation_and_expiry(
                 {"listing_id": listing_id},
             )
             await session.execute(
+                text(
+                    "DELETE FROM telegram_notification_outbox WHERE order_id IN "
+                    "(SELECT id FROM orders WHERE listing_id = :listing_id)"
+                ),
+                {"listing_id": listing_id},
+            )
+            await session.execute(
                 text("DELETE FROM orders WHERE listing_id = :listing_id"),
                 {"listing_id": listing_id},
             )
