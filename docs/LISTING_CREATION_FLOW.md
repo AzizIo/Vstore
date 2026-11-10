@@ -1,6 +1,6 @@
 # Listing Creation Flow — Technical Design
 
-**Status:** proposal for implementation after TON Connect proof work (Issue #9) is merged and reviewed.  
+**Status:** technical design for the next seller-inventory implementation step. TON Connect wallet proof (Issue #9) is now merged; this document is still a proposal, not implemented functionality.  
 **Scope:** seller-owned TON NFT discovery and safe creation of private listing drafts.  
 **Non-goal:** publishing, checkout, escrow, payment collection, NFT transfers, or Telegram Gift custody.
 
@@ -15,13 +15,13 @@
 
 The existing draft endpoint is not enough for a usable create-listing flow: the frontend has no supported way to discover and select an eligible asset.
 
-## 2. Dependency on Issue #9
+## 2. Dependency on the merged wallet-proof flow
 
-Do not implement wallet ownership or proof verification here. Issue #9 is owned by Claude Code.
+Issue #9 is merged. The backend now exposes authenticated `POST /api/wallets/proof/challenge`, `POST /api/wallets/proof/verify`, and `GET /api/wallets/me` endpoints. A wallet is marked verified only after the server validates its TON Connect proof and binds it to the authenticated user.
 
-After Issue #9 is merged, the inventory endpoint must consume only server-side wallet records associated with the authenticated user and marked verified. It must never accept an arbitrary wallet address as proof that the caller owns that wallet.
+The inventory endpoint must consume only server-side wallet records associated with the authenticated user and marked verified. It must never accept an arbitrary wallet address as proof that the caller owns that wallet. Read `docs/TON_CONNECT_PROOF.md` and the actual `Wallet` model/API implementation before coding; the exact owner-address format and supported network/workchain limitations must be respected.
 
-If Issue #9 changes the wallet response/model contract, adapt this design through a reviewed follow-up rather than duplicating proof logic.
+A verified wallet proof is not an NFT ownership proof. The inventory flow must still verify each NFT owner against that wallet, and must re-check ownership before accepting a listing draft.
 
 ## 3. Proposed API contract
 
