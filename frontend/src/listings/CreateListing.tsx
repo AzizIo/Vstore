@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { createListingDraft, fetchMyInventory, type InventoryAsset } from "../api/assets";
-import type { Listing, PriceCurrency } from "../api/listings";
+import type { Listing } from "../api/listings";
 
 const PAGE_SIZE = 24;
 
@@ -62,8 +62,6 @@ export function CreateListing({
   const [error, setError] = useState("");
   const [loadMoreError, setLoadMoreError] = useState("");
   const [retry, setRetry] = useState(0);
-  const [priceAmount, setPriceAmount] = useState("");
-  const [priceCurrency, setPriceCurrency] = useState<PriceCurrency>("TON");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
@@ -147,8 +145,6 @@ export function CreateListing({
     try {
       const draft = await createListingDraft(accessToken, {
         asset_id: selectedAsset.id,
-        price_amount: priceAmount,
-        price_currency: priceCurrency,
         ...(title.trim() ? { title: title.trim() } : {}),
         ...(description.trim() ? { description: description.trim() } : {}),
         ...(expiresAt ? { expires_at: new Date(expiresAt).toISOString() } : {}),
@@ -176,7 +172,6 @@ export function CreateListing({
         <div className="creation-success" role="status">
           <span className="listing-status listing-status-draft">Draft — not published</span>
           <h2>{createdListing.title || createdListing.asset.name || "TON NFT listing"}</h2>
-          <p>{createdListing.price_amount} {createdListing.price_currency}</p>
           <button className="text-button" type="button" onClick={onCancel}>View My Listings</button>
         </div>
       </section>
@@ -198,24 +193,6 @@ export function CreateListing({
             <InventoryImage asset={selectedAsset} />
             <span>{assetTitle(selectedAsset)}</span>
           </div>
-          <label>
-            <span>Price</span>
-            <span className="price-field">
-              <input
-                aria-label="Price amount"
-                type="number"
-                min="0.000000001"
-                step="0.000000001"
-                required
-                value={priceAmount}
-                onChange={(event) => setPriceAmount(event.target.value)}
-              />
-              <select aria-label="Price currency" value={priceCurrency} onChange={(event) => setPriceCurrency(event.target.value as PriceCurrency)}>
-                <option value="TON">TON</option>
-                <option value="XTR">XTR</option>
-              </select>
-            </span>
-          </label>
           <label>
             <span>Title <small>Optional</small></span>
             <input maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} />
