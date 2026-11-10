@@ -28,6 +28,8 @@ class NFTDataProvider(Protocol):
         self, collection_address: str, index: int
     ) -> str | None: ...
 
+    async def aclose(self) -> None: ...
+
 
 @dataclass(frozen=True, slots=True)
 class TONCenterV3Config:

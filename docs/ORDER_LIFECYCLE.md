@@ -5,6 +5,43 @@ the listing's amount and currency, changes the listing to `RESERVED`, and append
 order event. A buyer-scoped `Idempotency-Key` prevents retries from creating a second order;
 reusing that key for a different listing conflicts.
 
+## Fresh ownership re-check before reservation
+
+Persisted `nft_assets.owner_id` and `verification_status` can be stale after an on-chain
+transfer, so a reservation requires more than those columns. Order creation runs in two
+phases:
+
+1. **Snapshot (no locks).** Read the listing, asset and the seller's verified wallets on the
+   asset's network from server-side data only. Nothing supplied by the buyer beyond the
+   listing id and the idempotency key is trusted. The read transaction is released before any
+   network call.
+2. **Provider check (outside any transaction).** Run the existing TEP-62 verifier for each
+   verified seller wallet. No database transaction or row lock is held while the TON provider
+   is queried.
+3. **Revalidate and reserve (single locked transaction).** Lock the buyer, listing, asset and
+   the wallet that proved ownership, then compare every field against the snapshot. The
+   listing must still be `ACTIVE`, unexpired, not the buyer's own, and belong to a verified
+   TON NFT owned by the same seller.
+
+Outcomes:
+
+| Situation | Result | State change |
+|---|---|---|
+| Ownership verified, listing unchanged | order created, listing `RESERVED` | order + event + notifications |
+| `OWNER_MISMATCH` from the provider | `OrderConflict`, HTTP 409 | asset `STALE`, listing `EXPIRED` |
+| Provider unavailable | `OrderVerificationUnavailable`, HTTP 503 | none — the outage is not proof of lost ownership |
+| Provider inconclusive (`NOT_FOUND`, `UNSUPPORTED`, `INVALID_DATA`) | `OrderConflict`, HTTP 409 | none — unconfirmed is not the same as transferred |
+| Listing/asset changed during the check | `OrderConflict`, HTTP 409 | none |
+| Verified wallet unbound during the check | `OrderConflict`, HTTP 409 | none |
+| Same idempotency key, same listing | returns the existing order id | none; the provider is not called again |
+
+Only an affirmative `OWNER_MISMATCH` marks the asset `STALE`, because only that is evidence the
+seller no longer owns the NFT. An inconclusive provider answer fails closed without rewriting
+asset state, so a provider quirk cannot destroy a valid listing.
+
+The stale-asset transition is committed before the 409 is returned, so the failed reservation
+is durable rather than rolled back with the request.
+
 The implemented state transitions are:
 
 ```text
@@ -23,6 +60,10 @@ Order events are append-only through the application service and include the pre
 status, actor type, optional actor identity, and timestamp. Buyers can list and inspect their
 purchases and cancel their pending orders. Sellers can list sales and see their statuses; they
 cannot cancel a buyer's order.
+
+`POST /api/orders` resolves the TON NFT verifier from the configured network through the same
+dependency used by listing publishing, so reservation and publication share one ownership
+check implementation.
 
 ## Future payment adapter boundary
 

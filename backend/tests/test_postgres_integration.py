@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.api.assets import _upsert_verified_asset
+from app.assets.ton_nft.address import AddressError, normalize_address
 from app.assets.ton_nft.models import (
     NFTItemSnapshot,
     NFTMetadata,
@@ -40,7 +41,12 @@ from app.listings.service import (
     ListingVerificationUnavailable,
     publish_listing,
 )
-from app.orders.service import OrderConflict, cancel_order, create_order, expire_pending_orders
+from app.orders.service import (
+    OrderConflict,
+    cancel_order,
+    create_order,
+    expire_pending_orders,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -99,12 +105,17 @@ async def make_user(session: AsyncSession, telegram_id: int = 700000001) -> User
 
 
 async def make_asset(
-    session: AsyncSession, owner: User, external_id: str = "nft-asset-1"
+    session: AsyncSession,
+    owner: User,
+    external_id: str | None = None,
+    *,
+    item_address: str | None = None,
 ) -> NFTAsset:
+    external_id = external_id or f"0:{uuid4().hex}{uuid4().hex}"
     asset = NFTAsset(
         asset_type=AssetType.TON_NFT,
         external_id=external_id,
-        item_address=f"EQ{external_id}",
+        item_address=item_address or f"0:{uuid4().hex}{uuid4().hex}",
         owner_id=owner.id,
         name="Integration NFT",
         verification_status=AssetVerificationStatus.VERIFIED,
@@ -434,6 +445,14 @@ async def test_concurrent_reservation_idempotency_cancellation_and_expiry(
                 session, telegram_id=700000000 + second_buyer_id.int % 1000000000
             )
             asset = await make_asset(session, seller, external_id=f"order-{listing_id}")
+            wallet = Wallet(
+                user_id=seller.id,
+                address=f"0:{uuid4().hex}{uuid4().hex}",
+                network="mainnet",
+                is_verified=True,
+                is_primary=True,
+            )
+            session.add(wallet)
             listing = make_listing(seller, asset, ListingStatus.ACTIVE)
             session.add(listing)
             await session.commit()
@@ -452,6 +471,7 @@ async def test_concurrent_reservation_idempotency_cancellation_and_expiry(
                         buyer_id=buyer_id,
                         listing_id=listing_id,
                         idempotency_key=f"concurrent-{buyer_id}",
+                        verifier=_StaticOwnershipVerifier(session=session),
                     )
                 except OrderConflict:
                     return None
@@ -470,6 +490,7 @@ async def test_concurrent_reservation_idempotency_cancellation_and_expiry(
                 buyer_id=winning_buyer_id,
                 listing_id=listing_id,
                 idempotency_key=f"concurrent-{winning_buyer_id}",
+                verifier=_StaticOwnershipVerifier(session=session),
             )
             assert retry_id == order_id
             listing = await session.get(Listing, listing_id)
@@ -511,6 +532,7 @@ async def test_concurrent_reservation_idempotency_cancellation_and_expiry(
                 buyer_id=second_buyer_id if winning_buyer_id == first_buyer_id else first_buyer_id,
                 listing_id=listing_id,
                 idempotency_key="expiring-order",
+                verifier=_StaticOwnershipVerifier(session=session),
                 now=datetime.now(UTC),
             )
             expired_count = await expire_pending_orders(
@@ -573,6 +595,15 @@ def _publishable_wallet_address() -> str:
     return f"0:{uuid4().hex}{uuid4().hex}"
 
 
+def _canonical(address: str) -> str:
+    """Return a raw TON address; provider snapshots are always canonical."""
+
+    try:
+        return normalize_address(address)
+    except AddressError:
+        return f"0:{uuid4().hex}{uuid4().hex}"
+
+
 class _StaticOwnershipVerifier:
     def __init__(
         self,
@@ -594,9 +625,9 @@ class _StaticOwnershipVerifier:
             await self.callback()
         return VerificationResult(
             status=self.status,
-            item_address=item_address,
-            owner_address=expected_owner_address,
-            expected_owner_address=expected_owner_address,
+            item_address=_canonical(item_address),
+            owner_address=_canonical(expected_owner_address),
+            expected_owner_address=_canonical(expected_owner_address),
         )
 
 
