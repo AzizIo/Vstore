@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import suppress
 
 from fastapi import APIRouter, HTTPException, status
 from redis.asyncio import Redis
@@ -34,7 +35,8 @@ async def _redis_ready() -> bool:
         return False
     finally:
         if redis is not None:
-            await redis.aclose()
+            with suppress(Exception):
+                await redis.aclose()
 
 
 @router.get("/health/live")
