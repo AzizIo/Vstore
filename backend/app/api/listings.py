@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
@@ -23,7 +22,6 @@ from app.db.models import (
     Listing,
     ListingStatus,
     NFTAsset,
-    PriceCurrency,
     User,
     Wallet,
 )
@@ -77,8 +75,6 @@ class ListingResponse(BaseModel):
 
     id: UUID
     status: ListingStatus
-    price_amount: Decimal
-    price_currency: PriceCurrency
     title: str | None
     description: str | None
     created_at: datetime
@@ -98,8 +94,6 @@ class ListingCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     asset_id: UUID
-    price_amount: Decimal = Field(gt=0, max_digits=24, decimal_places=9)
-    price_currency: PriceCurrency
     title: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=4_000)
     expires_at: datetime | None = None
@@ -117,9 +111,6 @@ class ListingCreateRequest(BaseModel):
 class ListingUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    price_amount: Decimal | None = Field(
-        default=None, gt=0, max_digits=24, decimal_places=9
-    )
     title: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=4_000)
     expires_at: datetime | None = None
@@ -128,8 +119,6 @@ class ListingUpdateRequest(BaseModel):
     def validate_update_fields(self) -> ListingUpdateRequest:
         if not self.model_fields_set:
             raise ValueError("Provide at least one field to update")
-        if "price_amount" in self.model_fields_set and self.price_amount is None:
-            raise ValueError("Price cannot be null")
         if self.expires_at is not None and "expires_at" in self.model_fields_set:
             if self.expires_at.tzinfo is None or self.expires_at.utcoffset() is None:
                 raise ValueError("Expiration must include a timezone")
@@ -168,15 +157,12 @@ async def get_listings(
     limit: Annotated[int, Query(ge=1, le=100)] = 24,
     offset: Annotated[int, Query(ge=0)] = 0,
     asset_type: AssetType | None = None,
-    currency: PriceCurrency | None = None,
     search: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
-    sort: Annotated[str, Query(pattern="^(newest|price_asc|price_desc)$")] = "newest",
+    sort: Annotated[str, Query(pattern="^newest$")] = "newest",
 ) -> ListingPageResponse:
     conditions = _purchasable_conditions()
     if asset_type is not None:
         conditions.append(NFTAsset.asset_type == asset_type)
-    if currency is not None:
-        conditions.append(Listing.price_currency == currency)
     if search:
         pattern = f"%{search.strip()}%"
         conditions.append(or_(Listing.title.ilike(pattern), NFTAsset.name.ilike(pattern)))
@@ -186,19 +172,8 @@ async def get_listings(
     total = await session.scalar(count_statement) or 0
 
     statement = _listing_query().join(NFTAsset).where(*conditions)
-    # Every ordering ends with the primary key so pagination is stable when
-    # timestamps or prices collide; without it, limit/offset can repeat or skip
-    # rows across pages.
-    if sort == "price_asc":
-        statement = statement.order_by(
-            Listing.price_amount.asc(), Listing.created_at.desc(), Listing.id.asc()
-        )
-    elif sort == "price_desc":
-        statement = statement.order_by(
-            Listing.price_amount.desc(), Listing.created_at.desc(), Listing.id.asc()
-        )
-    else:
-        statement = statement.order_by(Listing.created_at.desc(), Listing.id.asc())
+    # Newest-first ordering uses the primary key as a stable pagination tiebreaker.
+    statement = statement.order_by(Listing.created_at.desc(), Listing.id.asc())
 
     result = await session.scalars(statement.limit(limit).offset(offset))
     return ListingPageResponse(
@@ -417,8 +392,6 @@ async def create_listing_draft(
         asset_id=locked_asset.id,
         seller_id=user_id,
         status=ListingStatus.DRAFT,
-        price_amount=payload.price_amount,
-        price_currency=payload.price_currency,
         title=payload.title,
         description=payload.description,
         expires_at=payload.expires_at,
@@ -468,7 +441,6 @@ async def edit_my_listing(
             session,
             listing_id=listing_id,
             seller_id=user.id,
-            price_amount=payload.price_amount,
             title=payload.title,
             description=payload.description,
             expires_at=payload.expires_at,
