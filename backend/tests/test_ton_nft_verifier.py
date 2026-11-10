@@ -75,7 +75,8 @@ async def test_item_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_uninitialized_item_is_invalid() -> None:
-    result = await TONNFTVerifier(FakeProvider(item=snapshot(initialized=False))).verify(ITEM, OWNER)
+    provider = FakeProvider(item=snapshot(initialized=False))
+    result = await TONNFTVerifier(provider).verify(ITEM, OWNER)
     assert result.status is VerificationStatus.INVALID_DATA
 
 
@@ -87,13 +88,15 @@ async def test_collection_index_mismatch_is_invalid() -> None:
 
 @pytest.mark.asyncio
 async def test_owner_mismatch_is_not_verified() -> None:
-    result = await TONNFTVerifier(FakeProvider(item=snapshot(owner_address=OTHER))).verify(ITEM, OWNER)
+    provider = FakeProvider(item=snapshot(owner_address=OTHER))
+    result = await TONNFTVerifier(provider).verify(ITEM, OWNER)
     assert result.status is VerificationStatus.OWNER_MISMATCH
 
 
 @pytest.mark.asyncio
 async def test_provider_timeout_is_not_owner_mismatch() -> None:
-    result = await TONNFTVerifier(FakeProvider(error=ProviderUnavailable("timeout"))).verify(ITEM, OWNER)
+    provider = FakeProvider(error=ProviderUnavailable("timeout"))
+    result = await TONNFTVerifier(provider).verify(ITEM, OWNER)
     assert result.status is VerificationStatus.PROVIDER_UNAVAILABLE
 
 
@@ -124,7 +127,8 @@ async def test_toncenter_provider_parses_item_and_queries_collection_index() -> 
         return httpx.Response(200, json={"nft_items": [row]})
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://mock.test/api/v3")
-    provider = TONCenterV3Provider(TONCenterV3Config(base_url="https://mock.test/api/v3"), client=client)
+    config = TONCenterV3Config(base_url="https://mock.test/api/v3")
+    provider = TONCenterV3Provider(config, client=client)
     parsed = await provider.get_item(ITEM)
     resolved = await provider.get_item_address_by_index(COLLECTION, 7)
     assert parsed is not None and parsed.metadata.name == "NFT"
@@ -150,7 +154,9 @@ async def test_provider_timeout_maps_to_unavailable() -> None:
 @pytest.mark.asyncio
 async def test_malformed_provider_item_maps_to_invalid_data() -> None:
     client = httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda _: httpx.Response(200, json={"nft_items": [{"address": ITEM}]})),
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, json={"nft_items": [{"address": ITEM}]})
+        ),
         base_url="https://mock.test/api/v3",
     )
     provider = TONCenterV3Provider(client=client)
