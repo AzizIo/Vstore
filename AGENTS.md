@@ -1,7 +1,7 @@
 # VILTARA SHOP — Agent Onboarding
 
 > Read this file before changing code. It is a navigation guide and collaboration contract, not a replacement for inspecting the exact files involved in your task.
-> Last checked: 2026-11-11. The repository changes continuously; verify the current branch, open PRs, and file contents before relying on status notes below.
+> Last checked: 2026-11-10. The repository changes continuously; verify the current branch, open PRs, and file contents before relying on status notes below.
 > **Product model and stage boundaries:** read `docs/PRODUCT_MODEL.md` first — prices are a mandatory part of listings; reservation is not payment; payment/escrow must not be imitated.
 
 ## 1. What this project is
@@ -220,7 +220,7 @@ These rules are non-negotiable:
 - Publishing listings is intentionally disabled at present: current create endpoint only creates drafts from verified assets owned by the seller. Do not bypass this guard to make the UI look complete.
 - Do not add fake marketplace listings or fake payment/transfer success states to production UI.
 
-## 10. Project status snapshot (2026-11-11)
+## 10. Project status snapshot (2026-11-10)
 
 This is a snapshot, not a promise that every item remains current. Verify the live repository and PR list before starting work. Product model and roadmap: `docs/PRODUCT_MODEL.md`.
 
@@ -252,7 +252,7 @@ This is a snapshot, not a promise that every item remains current. Verify the li
 
 ### Open decisions for the maintainer (as of this snapshot)
 
-- **PR #49 `docs/issue-48-mvp-scope`** — removes listing prices across the stack and adds a destructive migration `0005_free_listings`. It contradicts the product model (prices are mandatory). Not merged; closing vs reworking needs an owner decision. Do not merge as-is.
+- **PR #49 `docs/issue-48-mvp-scope` — closed without merge by owner decision.** It removes listing prices across the stack and adds a destructive migration `0005_free_listings`, contradicting the mandatory-price product model. Do not reopen or reuse its branch as-is.
 - Renaming the `pending_payment` order status (mentions a payment that does not exist) — requires a migration; raised as an open question, not done unilaterally.
 
 ### Recommended next implementation sequence
