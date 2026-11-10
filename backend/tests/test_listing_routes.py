@@ -8,6 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.assets.ton_nft.dependencies import get_ton_nft_verifier
+from app.api import listings as listings_api
+from app.listings.service import ListingConflict, ListingNotFound, ListingVerificationUnavailable
 from app.assets.ton_nft.models import (
     NFTMetadata,
     VerificationResult,
@@ -337,3 +339,144 @@ def test_create_listing_returns_503_when_owner_provider_fails(
 def test_create_listing_rejects_invalid_payloads(api_client, payload) -> None:
     response = api_client.post("/api/listings", json=payload)
     assert response.status_code == 422
+
+
+def test_publish_listing_requires_authentication() -> None:
+    with TestClient(app) as client:
+        response = client.post(f"/api/listings/{uuid4()}/publish")
+    assert response.status_code == 401
+
+
+def test_edit_listing_requires_authentication() -> None:
+    with TestClient(app) as client:
+        response = client.patch(
+            f"/api/listings/{uuid4()}",
+            json={"title": "Changed title"},
+        )
+    assert response.status_code == 401
+
+
+def test_cancel_listing_requires_authentication() -> None:
+    with TestClient(app) as client:
+        response = client.post(f"/api/listings/{uuid4()}/cancel")
+    assert response.status_code == 401
+
+
+def test_publish_listing_uses_authenticated_seller_and_verified_provider(
+    api_client, seller, monkeypatch
+) -> None:
+    asset = make_verified_asset(seller.id)
+    draft = make_listing(seller, asset, ListingStatus.ACTIVE)
+    verifier = StubVerifier()
+    session = SimpleNamespace(rollback=AsyncMock())
+    install_session_override(session)
+    app.dependency_overrides[get_ton_nft_verifier] = lambda: verifier
+    publish = AsyncMock(return_value=draft)
+    monkeypatch.setattr(listings_api, "publish_listing", publish)
+    try:
+        response = api_client.post(f"/api/listings/{draft.id}/publish")
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_ton_nft_verifier, None)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "active"
+    assert publish.await_args.kwargs["seller_id"] == seller.id
+    assert publish.await_args.kwargs["verifier"] is verifier
+
+
+def test_publish_listing_maps_provider_outage_to_503(
+    api_client, seller, monkeypatch
+) -> None:
+    session = SimpleNamespace(rollback=AsyncMock())
+    install_session_override(session)
+    monkeypatch.setattr(
+        listings_api,
+        "publish_listing",
+        AsyncMock(side_effect=ListingVerificationUnavailable("provider offline")),
+    )
+    try:
+        response = api_client.post(f"/api/listings/{uuid4()}/publish")
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "provider offline"
+
+
+def test_edit_listing_accepts_only_permitted_fields(
+    api_client, seller, monkeypatch
+) -> None:
+    asset = make_verified_asset(seller.id)
+    listing = make_listing(seller, asset, ListingStatus.DRAFT)
+    session = SimpleNamespace()
+    install_session_override(session)
+    update = AsyncMock(return_value=listing)
+    monkeypatch.setattr(listings_api, "update_listing", update)
+    try:
+        response = api_client.patch(
+            f"/api/listings/{listing.id}",
+            json={"price_amount": "3.25", "title": "Updated", "description": None},
+        )
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+
+    assert response.status_code == 200
+    assert update.await_args.kwargs["seller_id"] == seller.id
+    assert update.await_args.kwargs["fields_set"] == {
+        "price_amount", "title", "description"
+    }
+    assert update.await_args.kwargs["price_amount"] == Decimal("3.25")
+    assert update.await_args.kwargs["title"] == "Updated"
+    assert update.await_args.kwargs["description"] is None
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"status": "active"},
+        {"seller_id": str(uuid4())},
+        {"owner_id": str(uuid4())},
+        {"price_currency": "TON"},
+        {},
+        {"price_amount": None},
+    ],
+)
+def test_edit_listing_rejects_unpermitted_or_empty_payloads(api_client, payload) -> None:
+    response = api_client.patch(f"/api/listings/{uuid4()}", json=payload)
+    assert response.status_code == 422
+
+
+def test_cancel_listing_hides_another_sellers_listing(
+    api_client, monkeypatch
+) -> None:
+    session = SimpleNamespace()
+    install_session_override(session)
+    monkeypatch.setattr(
+        listings_api,
+        "cancel_listing",
+        AsyncMock(side_effect=ListingNotFound("Listing not found")),
+    )
+    try:
+        response = api_client.post(f"/api/listings/{uuid4()}/cancel")
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+
+    assert response.status_code == 404
+
+
+def test_cancel_listing_rejects_reserved_listing(api_client, monkeypatch) -> None:
+    session = SimpleNamespace()
+    install_session_override(session)
+    monkeypatch.setattr(
+        listings_api,
+        "cancel_listing",
+        AsyncMock(side_effect=ListingConflict("Only draft or active listings can be cancelled")),
+    )
+    try:
+        response = api_client.post(f"/api/listings/{uuid4()}/cancel")
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+
+    assert response.status_code == 409
+
