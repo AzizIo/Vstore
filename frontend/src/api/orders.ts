@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "./config";
-import type { AssetType, PriceCurrency } from "./listings";
+import type { AssetType } from "./listings";
 
 export type OrderStatus = "pending_payment" | "cancelled" | "expired";
 export type OrderRole = "buyer" | "seller";
@@ -17,8 +17,6 @@ export interface MarketplaceOrder {
   buyer_id: string;
   seller_id: string;
   status: OrderStatus;
-  price_amount: string;
-  price_currency: PriceCurrency;
   title: string | null;
   asset_name: string | null;
   asset_type: AssetType;
@@ -41,8 +39,6 @@ function isOrder(value: unknown): value is MarketplaceOrder {
     typeof order.buyer_id === "string" &&
     typeof order.seller_id === "string" &&
     isOrderStatus(order.status) &&
-    typeof order.price_amount === "string" &&
-    (order.price_currency === "TON" || order.price_currency === "XTR") &&
     (order.title === null || typeof order.title === "string") &&
     (order.asset_name === null || typeof order.asset_name === "string") &&
     (order.asset_type === "ton_nft" || order.asset_type === "telegram_gift") &&
