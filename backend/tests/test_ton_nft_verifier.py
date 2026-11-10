@@ -51,7 +51,8 @@ def test_normalizes_checksum_valid_friendly_address() -> None:
     friendly = (
         "EQD3LzasMd4GAmhIEkCQ4k6LnziTqNZ6VPtRfeZKHu0Fmkho"
     )
-    assert normalize_address(friendly) == "0:f72f36ac31de06026848124090e24e8b9f3893a8d67a54fb517de64a1eed059a"
+    expected = "0:f72f36ac31de06026848124090e24e8b9f3893a8d67a54fb517de64a1eed059a"
+    assert normalize_address(friendly) == expected
 
 
 def test_rejects_invalid_raw_address_and_friendly_checksum() -> None:
