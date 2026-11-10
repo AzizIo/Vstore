@@ -3,7 +3,6 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime
-from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
@@ -15,7 +14,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -61,11 +59,6 @@ class ListingStatus(str, enum.Enum):
     SOLD = "sold"
     CANCELLED = "cancelled"
     EXPIRED = "expired"
-
-
-class PriceCurrency(str, enum.Enum):
-    TON = "TON"
-    XTR = "XTR"
 
 
 class OrderStatus(str, enum.Enum):
@@ -202,7 +195,6 @@ class NFTAsset(TimestampMixin, Base):
 class Listing(TimestampMixin, Base):
     __tablename__ = "listings"
     __table_args__ = (
-        CheckConstraint("price_amount > 0", name="ck_listings_price_positive"),
         Index(
             "uq_listings_open_asset",
             "asset_id",
@@ -228,10 +220,6 @@ class Listing(TimestampMixin, Base):
         nullable=False,
         index=True,
     )
-    price_amount: Mapped[Decimal] = mapped_column(Numeric(24, 9), nullable=False)
-    price_currency: Mapped[PriceCurrency] = mapped_column(
-        enum_column(PriceCurrency, "price_currency"), nullable=False
-    )
     title: Mapped[str | None] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(Text)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -244,7 +232,6 @@ class Listing(TimestampMixin, Base):
 class Order(TimestampMixin, Base):
     __tablename__ = "orders"
     __table_args__ = (
-        CheckConstraint("price_amount > 0", name="ck_orders_price_positive"),
         CheckConstraint(
             "status IN ('pending_payment', 'cancelled', 'expired')",
             name="ck_orders_status",
@@ -277,10 +264,6 @@ class Order(TimestampMixin, Base):
         default=OrderStatus.PENDING_PAYMENT,
         server_default=OrderStatus.PENDING_PAYMENT.value,
         nullable=False,
-    )
-    price_amount: Mapped[Decimal] = mapped_column(Numeric(24, 9), nullable=False)
-    price_currency: Mapped[PriceCurrency] = mapped_column(
-        enum_column(PriceCurrency, "price_currency"), nullable=False
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
