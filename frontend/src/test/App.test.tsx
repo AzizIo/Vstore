@@ -304,6 +304,18 @@ describe("marketplace catalog", () => {
     await waitFor(() => expect(screen.getByText("Explore listings")).toBeInTheDocument());
   });
 
+  it("shows the seller profile name and Telegram handle on listing detail", async () => {
+    vi.mocked(fetch).mockImplementation(async (input) =>
+      String(input).endsWith("/api/listings/listing-1") ? jsonResponse(listing) : jsonResponse(page),
+    );
+    renderMarketplace();
+    fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
+
+    const sellerProfile = await screen.findByRole("region", { name: "Seller profile" });
+    expect(sellerProfile).toHaveTextContent("Ari");
+    expect(sellerProfile).toHaveTextContent("@collector");
+  });
+
   it("shows the collection and item address on the listing detail view", async () => {
     vi.mocked(fetch).mockImplementation(async (input) =>
       String(input).endsWith("/api/listings/listing-1") ? jsonResponse(listing) : jsonResponse(page),
