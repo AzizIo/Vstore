@@ -75,7 +75,7 @@ describe("seller listing management", () => {
   it("saves an optional expiration date through the listing API", async () => {
     await openDraft();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Listing expiration" }), {
+    fireEvent.change(screen.getByLabelText("Listing expiration"), {
       target: { value: "2030-05-02T12:30" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
