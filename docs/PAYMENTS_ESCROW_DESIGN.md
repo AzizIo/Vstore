@@ -8,21 +8,23 @@
 
 ## 1. What exists today (baseline)
 
-From `backend/app/orders/`, `backend/app/db/models.py` and
-`backend/migrations/versions/0003_orders.py` on `main`:
+Historical reference: the original order schema was introduced by
+`backend/migrations/versions/0003_orders.py`. The current free-MVP schema is defined by
+`backend/app/db/models.py` and the latest migration `0005_free_listings`:
 
 - `OrderStatus` = `pending_payment | cancelled | expired`; the DB check constraint
   rejects any other value. `paid`, `completed`, `failed`, `refunded` are
   intentionally absent.
-- `Order` snapshots `price_amount`, `price_currency` (`TON` or `XTR`), `listing_id`,
-  `buyer_id`, `seller_id`, `idempotency_key`, `expires_at` and a unique partial
-  index `uq_orders_pending_listing` (one open order per listing).
+- Current `Order` rows store `listing_id`, `buyer_id`, `seller_id`, `idempotency_key`,
+  `expires_at`, lifecycle status and timestamps. They do not store a price or currency;
+  migration `0005_free_listings` removed the legacy display-only columns.
 - `OrderEvent` is append-only with `from_status`, `to_status`, `actor_type`
   (`buyer | system`) and `actor_id`.
 - Creating an order atomically reserves the listing (`active -> reserved`);
   cancelling or expiring releases it. An in-process worker expires pending orders
   with `SKIP LOCKED` row locks.
-- `PriceCurrency` already includes `XTR`, but no Stars code exists.
+- Historical payment proposals below discuss hypothetical amount/currency snapshots. They
+  do not describe the current schema or authorize payment implementation.
 - `app/orders/payment.PaymentAdapter` defines `create_intent(order_id)` and
   `verify_notification(payload, signature)` returning `PaymentIntent` /
   `VerifiedPayment` dataclasses. It has no implementation, is not imported by
@@ -362,8 +364,8 @@ code:
 
 1. Is a manual-payout Phase 1 acceptable operationally, or must payout automation
    gate the launch?
-2. Should TON-priced listings be hidden from the purchasable UI entirely, or shown
-   as view-only with a clear label?
+2. What product, provider, platform, legal and security gates must be satisfied before a
+   separately approved paid/guaranteed phase can be designed or implemented?
 3. Preferred dispute window length and whether it is seller- or admin-triggered?
 4. Which jurisdiction's legal review is the primary target before Phase 4?
 
