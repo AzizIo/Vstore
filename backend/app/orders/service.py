@@ -26,8 +26,6 @@ class OrderConflict(Exception):
     """The listing or idempotency key cannot be used for this order."""
 
 
-
-
 async def _enqueue_order_notifications(
     session: AsyncSession,
     *,
