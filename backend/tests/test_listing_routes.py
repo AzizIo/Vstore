@@ -317,6 +317,9 @@ def test_create_listing_returns_503_when_owner_provider_fails(
 @pytest.mark.parametrize(
     "payload",
     [
+        {"asset_id": "not-a-uuid"},
+        {"asset_id": str(uuid4()), "price_amount": "1.25"},
+        {"asset_id": str(uuid4()), "price_currency": "TON"},
     ],
 )
 def test_create_listing_rejects_invalid_payloads(api_client, payload) -> None:
@@ -418,7 +421,10 @@ def test_edit_listing_accepts_only_free_listing_metadata(
         {"status": "active"},
         {"seller_id": str(uuid4())},
         {"owner_id": str(uuid4())},
+        {"price_amount": "1.25"},
+        {"price_currency": "TON"},
         {},
+
     ],
 )
 def test_edit_listing_rejects_unpermitted_or_empty_payloads(api_client, payload) -> None:
