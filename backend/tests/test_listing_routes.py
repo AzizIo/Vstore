@@ -402,6 +402,7 @@ def test_edit_listing_accepts_only_free_listing_metadata(
     try:
         response = api_client.patch(
             f"/api/listings/{listing.id}",
+            json={"title": "Updated", "description": None},
         )
     finally:
         app.dependency_overrides.pop(get_db_session, None)
