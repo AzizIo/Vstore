@@ -1,17 +1,19 @@
 # Listing Creation Flow — Technical Design
 
-**Status:** technical design for the next seller-inventory implementation step. TON Connect wallet proof (Issue #9) is now merged; this document is still a proposal, not implemented functionality.  
+**Status:** implementation contract for seller inventory and private listing drafts.
 **Scope:** seller-owned TON NFT discovery and safe creation of private listing drafts.  
 **Non-goal:** publishing, checkout, escrow, payment collection, NFT transfers, or Telegram Gift custody.
 
 ## 1. Current repository state
 
 - `NFTAsset` already stores asset type, external ID, item address, owner user ID, metadata, verification status, and verification timestamp.
+- NFT asset identity is scoped by asset type, TON network, and external ID so the same address on mainnet and testnet cannot overwrite the other network's asset.
 - `Wallet` stores a user association, network, address, and `is_verified`.
 - `GET /api/listings/me` returns the authenticated user's listings.
 - `POST /api/listings` creates a draft only when the supplied asset exists, belongs to the current user, and has `verification_status=verified`.
 - The existing TON NFT verifier can validate an item address against an expected owner address.
-- There is currently no API endpoint that discovers a user's NFT inventory and no provider method for listing all NFT items by owner.
+- `GET /api/assets/me` discovers candidates from verified wallets owned by the authenticated user and returns only items freshly verified by the TEP-62 verifier.
+- TON Center provider pagination and network-specific configuration are implemented in `backend/app/assets/ton_nft/`.
 
 The existing draft endpoint is not enough for a usable create-listing flow: the frontend has no supported way to discover and select an eligible asset.
 
@@ -19,7 +21,7 @@ The existing draft endpoint is not enough for a usable create-listing flow: the 
 
 Issue #9 is merged. The backend now exposes authenticated `POST /api/wallets/proof/challenge`, `POST /api/wallets/proof/verify`, and `GET /api/wallets/me` endpoints. A wallet is marked verified only after the server validates its TON Connect proof and binds it to the authenticated user.
 
-The inventory endpoint must consume only server-side wallet records associated with the authenticated user and marked verified. It must never accept an arbitrary wallet address as proof that the caller owns that wallet. Read `docs/TON_CONNECT_PROOF.md` and the actual `Wallet` model/API implementation before coding; the exact owner-address format and supported network/workchain limitations must be respected.
+The inventory endpoint consumes only server-side wallet records associated with the authenticated user and marked verified. It never accepts an arbitrary wallet address as proof that the caller owns that wallet. The proof verifier accepts raw workchain-0 addresses; inventory uses the configured `TON_CONNECT_NETWORK` and network-specific TON Center endpoint.
 
 A verified wallet proof is not an NFT ownership proof. The inventory flow must still verify each NFT owner against that wallet, and must re-check ownership before accepting a listing draft.
 
@@ -33,18 +35,19 @@ Query parameters:
 
 | Parameter | Type | Default | Constraints |
 |---|---|---:|---|
-| `wallet_id` | UUID | omitted | Must identify a verified wallet belonging to the current user |
+| `wallet_id` | UUID | omitted | Must identify a verified wallet belonging to the current user and configured network |
 | `limit` | integer | 24 | 1–100 |
 | `offset` | integer | 0 | >= 0 |
 
 Behavior:
 
 1. Resolve the current user from the JWT.
-2. Select only verified wallet records belonging to that user. If `wallet_id` is supplied, reject a wallet that is not theirs; never leak whether another user's wallet exists.
-3. Query TON Center API v3 `GET /nft/items` using the selected wallet's normalized `owner_address`, `limit`, and `offset`. Do not expose the provider API key to the frontend.
-4. Treat indexer results as discovery candidates only. For each candidate, run the existing TEP-62 verifier against the wallet address. Only currently verified items may be offered as eligible for draft creation.
-5. Upsert or reconcile the corresponding `NFTAsset` records with the current user as owner, verified status, and safe display metadata. Do not trust metadata as proof of ownership; do not fetch arbitrary metadata URLs or images server-side.
-6. Return a stable page response. Provider outage must produce a clear service error, not an empty inventory that looks like the user owns nothing.
+2. Select only verified wallet records belonging to that user and configured network. If `wallet_id` is supplied, an unavailable, foreign, unverified, or wrong-network wallet returns the same 404 response. If omitted, choose the primary verified wallet, otherwise the most recently linked verified wallet.
+3. Query TON Center API v3 `GET /nft/items` using the selected wallet's normalized `owner_address`, `limit`, and `offset`. `TON_CENTER_API_KEY` is sent only in the server-side provider header.
+4. Treat indexer results as discovery candidates only. For each candidate, run the existing TEP-62 verifier against the wallet address. Owner-mismatched or otherwise unverified items are excluded.
+5. Upsert the corresponding `NFTAsset` with the current user as owner, verified status, verification timestamp, and bounded display metadata. The `(asset_type, external_id)` unique constraint plus PostgreSQL upsert makes repeated and concurrent syncs idempotent. Assets with active/reserved listings are not reassigned or returned as eligible.
+6. Never trust metadata as proof of ownership and never fetch metadata/image URLs server-side. The provider response is bounded to 2 MB.
+7. Provider outage returns HTTP 503; malformed or oversized provider data returns HTTP 502, never a successful empty inventory.
 
 Proposed response:
 
@@ -63,13 +66,15 @@ Proposed response:
       "eligible_for_listing": true
     }
   ],
-  "total": 1,
+  "wallet_id": "verified-wallet-uuid",
   "limit": 24,
-  "offset": 0
+  "offset": 0,
+  "next_offset": 24,
+  "has_more": false
 }
 ```
 
-The exact provider response and total-count strategy must be validated against the selected TON Center API v3 version before implementation. Do not fabricate `total` if the provider does not return it; use an explicit `has_more`/cursor contract instead if needed.
+TON Center v3 documents `nft_items` and `limit`/`offset`, but does not document a total count for this filter. The provider requests one lookahead row and the API returns `has_more` plus `next_offset`; it deliberately does not fabricate `total`. A response may contain fewer eligible items than `limit` because candidates are independently verified, so clients continue pagination using `next_offset` while `has_more` is true.
 
 ### `POST /api/listings` (existing endpoint)
 
@@ -94,14 +99,14 @@ Server requirements before accepting the draft:
 - ensure there is no conflicting active/reserved listing for the same asset;
 - never accept `seller_id`, `owner_id`, `status`, `is_verified`, or owner address from the client.
 
-The current endpoint checks the stored owner and verification status but does not perform a live ownership re-check. This is a known hardening requirement before the seller flow can be considered robust. It should be implemented as a separately reviewed backend change after the wallet proof work, not by changing Issue #9's files.
+The endpoint now locks the owned asset, rejects unsupported, stale, foreign, or active/reserved assets, then performs a fresh TEP-62 owner check against the user's verified wallets on the configured network before creating the draft. Provider outage returns HTTP 503; failed ownership verification returns HTTP 409. Wallet proof verification code is unchanged.
 
 ## 4. Frontend flow after the API exists
 
 1. User opens **My Listings** and chooses **Create listing**.
 2. If no verified wallet exists, show a connect/verify-wallet state and link to the existing TON Connect UI. A connected wallet alone is not proof of ownership.
 3. Load `GET /api/assets/me` with the current SessionProvider access token.
-4. Show only verified eligible TON NFTs; include loading, empty, error/retry, and pagination states.
+4. Show only verified eligible TON NFTs; include loading, empty, error/retry, and `has_more`/`next_offset` pagination states.
 5. User selects an NFT, enters a price and optional title/description.
 6. Submit the existing draft request.
 7. Show a success state and refresh My Listings. Clearly label the result **Draft — not published**.

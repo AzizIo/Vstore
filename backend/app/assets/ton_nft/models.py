@@ -37,6 +37,13 @@ class NFTItemSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class NFTInventoryPage:
+    items: tuple[NFTItemSnapshot, ...]
+    has_more: bool
+    next_offset: int
+
+
+@dataclass(frozen=True, slots=True)
 class VerificationResult:
     status: VerificationStatus
     item_address: str

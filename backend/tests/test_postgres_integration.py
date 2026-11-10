@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from decimal import Decimal
 from pathlib import Path
@@ -10,8 +11,10 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.api.assets import _upsert_verified_asset
+from app.assets.ton_nft.models import NFTItemSnapshot, NFTMetadata
 from app.core.config import get_settings
 from app.db.models import (
     AssetType,
@@ -109,7 +112,7 @@ def make_listing(owner: User, asset: NFTAsset, status: ListingStatus) -> Listing
 
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0001_initial_marketplace"
+    assert revision == "0002_asset_network_scope"
 
 
 async def test_users_reject_duplicate_telegram_ids(db_session: AsyncSession) -> None:
@@ -234,6 +237,30 @@ async def test_same_external_id_is_allowed_for_different_asset_types(
     assert gift.id is not None
 
 
+async def test_same_ton_item_address_is_scoped_to_network(
+    db_session: AsyncSession,
+) -> None:
+    owner = await make_user(db_session, telegram_id=700000014)
+    mainnet_asset = NFTAsset(
+        asset_type=AssetType.TON_NFT,
+        network="mainnet",
+        external_id="same-ton-item-address",
+        owner_id=owner.id,
+        verification_status=AssetVerificationStatus.VERIFIED,
+    )
+    testnet_asset = NFTAsset(
+        asset_type=AssetType.TON_NFT,
+        network="testnet",
+        external_id="same-ton-item-address",
+        owner_id=owner.id,
+        verification_status=AssetVerificationStatus.VERIFIED,
+    )
+    db_session.add_all([mainnet_asset, testnet_asset])
+    await db_session.flush()
+
+    assert mainnet_asset.id != testnet_asset.id
+
+
 async def test_listing_rejects_non_positive_price(db_session: AsyncSession) -> None:
     owner = await make_user(db_session, telegram_id=700000011)
     asset = await make_asset(db_session, owner, external_id="invalid-price-nft")
@@ -254,3 +281,119 @@ async def test_seller_cannot_be_deleted_while_listing_exists(db_session: AsyncSe
     await db_session.delete(owner)
     with pytest.raises(IntegrityError):
         await db_session.flush()
+
+
+async def test_verified_asset_upsert_is_idempotent_under_concurrent_syncs(
+    test_database_url: str,
+    migrated_database,
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    telegram_id = 799_999_991
+    external_id = f"0:{uuid4().hex}{uuid4().hex}"
+    owner = User(telegram_id=telegram_id, first_name="Inventory integration")
+    try:
+        async with session_factory.begin() as session:
+            session.add(owner)
+        snapshot = NFTItemSnapshot(
+            address=external_id,
+            initialized=True,
+            index=0,
+            collection_address=None,
+            owner_address=f"0:{'22' * 32}",
+            metadata=NFTMetadata(name="Concurrent inventory item"),
+        )
+
+        async def sync_once():
+            async with session_factory.begin() as session:
+                asset = await _upsert_verified_asset(
+                    session,
+                    owner.id,
+                    "mainnet",
+                    snapshot,
+                )
+                assert asset is not None
+                return asset.id
+
+        asset_ids = await asyncio.gather(sync_once(), sync_once())
+        assert asset_ids[0] == asset_ids[1]
+
+        async with session_factory() as session:
+            assets = (
+                await session.scalars(
+                    select(NFTAsset).where(
+                        NFTAsset.asset_type == AssetType.TON_NFT,
+                        NFTAsset.external_id == external_id,
+                    )
+                )
+            ).all()
+            assert len(assets) == 1
+            assert assets[0].owner_id == owner.id
+            assert assets[0].verification_status is AssetVerificationStatus.VERIFIED
+    finally:
+        async with session_factory.begin() as session:
+            await session.execute(
+                NFTAsset.__table__.delete().where(NFTAsset.external_id == external_id)
+            )
+            await session.execute(
+                User.__table__.delete().where(User.telegram_id == telegram_id)
+            )
+        await engine.dispose()
+
+
+async def test_verified_inventory_upsert_is_idempotent_under_concurrent_syncs(
+    test_database_url: str,
+    migrated_database,
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    telegram_id = 799_999_991
+    external_id = f"0:{uuid4().hex}{uuid4().hex}"
+    owner = User(telegram_id=telegram_id, first_name="Inventory integration")
+    try:
+        async with session_factory.begin() as session:
+            session.add(owner)
+        snapshot = NFTItemSnapshot(
+            address=external_id,
+            initialized=True,
+            index=0,
+            collection_address=None,
+            owner_address=f"0:{'22' * 32}",
+            metadata=NFTMetadata(name="Concurrent inventory item"),
+        )
+
+        async def sync_once():
+            async with session_factory.begin() as session:
+                asset = await _upsert_verified_asset(
+                    session,
+                    owner.id,
+                    "mainnet",
+                    snapshot,
+                )
+                assert asset is not None
+                return asset.id
+
+        asset_ids = await asyncio.gather(sync_once(), sync_once())
+        assert asset_ids[0] == asset_ids[1]
+
+        async with session_factory() as session:
+            assets = (
+                await session.scalars(
+                    select(NFTAsset).where(
+                        NFTAsset.asset_type == AssetType.TON_NFT,
+                        NFTAsset.external_id == external_id,
+                    )
+                )
+            ).all()
+            assert len(assets) == 1
+            assert assets[0].owner_id == owner.id
+            assert assets[0].verification_status is AssetVerificationStatus.VERIFIED
+    finally:
+        async with session_factory.begin() as session:
+            await session.execute(
+                NFTAsset.__table__.delete().where(NFTAsset.external_id == external_id)
+            )
+            await session.execute(
+                User.__table__.delete().where(User.telegram_id == telegram_id)
+            )
+        await engine.dispose()

@@ -1,17 +1,21 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.assets.ton_nft.dependencies import get_ton_nft_verifier
+from app.assets.ton_nft.models import VerificationStatus
+from app.assets.ton_nft.verifier import TONNFTVerifier
 from app.auth.dependencies import get_current_user
+from app.core.config import get_settings
 from app.db.models import (
     AssetType,
     AssetVerificationStatus,
@@ -20,6 +24,7 @@ from app.db.models import (
     NFTAsset,
     PriceCurrency,
     User,
+    Wallet,
 )
 from app.db.session import get_db_session
 
@@ -76,7 +81,7 @@ class ListingCreateRequest(BaseModel):
     description: str | None = Field(default=None, max_length=4_000)
 
 
-def _listing_query():
+def _listing_query() -> Select[Listing]:
     return select(Listing).options(
         selectinload(Listing.asset),
         selectinload(Listing.seller),
@@ -116,7 +121,7 @@ async def get_listings(
 
     result = await session.scalars(statement.limit(limit).offset(offset))
     return ListingPageResponse(
-        items=list(result.unique().all()),
+        items=[ListingResponse.model_validate(item) for item in result.unique().all()],
         total=total,
         limit=limit,
         offset=offset,
@@ -132,7 +137,7 @@ async def get_my_listings(
         Listing.created_at.desc()
     )
     result = await session.scalars(statement)
-    return list(result.unique().all())
+    return [ListingResponse.model_validate(item) for item in result.unique().all()]
 
 
 @router.get("/{listing_id}", response_model=ListingResponse)
@@ -156,27 +161,180 @@ async def create_listing_draft(
     payload: ListingCreateRequest,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    verifier: Annotated[TONNFTVerifier, Depends(get_ton_nft_verifier)],
 ) -> Listing:
-    """Create a private draft from an asset already verified and assigned to this user.
+    """Create an unpublished draft only after a fresh owner verification."""
 
-    Publishing is intentionally not exposed until a live ownership re-checker is implemented.
-    """
+    settings = get_settings()
+    user_id = user.id
     asset = await session.scalar(
         select(NFTAsset).where(
             NFTAsset.id == payload.asset_id,
-            NFTAsset.owner_id == user.id,
-            NFTAsset.verification_status == AssetVerificationStatus.VERIFIED,
+            NFTAsset.owner_id == user_id,
+            NFTAsset.network == settings.ton_connect_network,
         )
     )
-    if asset is None:
+    if (
+        asset is None
+        or asset.asset_type is not AssetType.TON_NFT
+        or asset.verification_status is not AssetVerificationStatus.VERIFIED
+        or not asset.item_address
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Only verified assets currently owned by you can be listed",
+            detail="Only verified TON NFTs currently owned by you can be listed",
         )
 
+    conflicting_listing_id = await session.scalar(
+        select(Listing.id).where(
+            Listing.asset_id == asset.id,
+            Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED]),
+        )
+    )
+    if conflicting_listing_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This NFT already has an active or reserved listing",
+        )
+
+    verified_wallets = await session.scalars(
+        select(Wallet).where(
+            Wallet.user_id == user_id,
+            Wallet.is_verified.is_(True),
+            Wallet.network == settings.ton_connect_network,
+        )
+    )
+    wallet_refs = [(wallet.id, wallet.address) for wallet in verified_wallets.all()]
+    if not wallet_refs:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A verified TON wallet is required to create a listing draft",
+        )
+
+    verified_result = None
+    verified_wallet_id = None
+    owner_mismatch = False
+    item_address = asset.item_address
+    asset_id = asset.id
+    await session.rollback()
+    for candidate_wallet_id, wallet_address in wallet_refs:
+        result = await verifier.verify(item_address, wallet_address)
+        if result.status is VerificationStatus.PROVIDER_UNAVAILABLE:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="TON NFT ownership provider is temporarily unavailable",
+            )
+        if result.is_verified:
+            verified_result = result
+            verified_wallet_id = candidate_wallet_id
+            break
+        owner_mismatch = (
+            owner_mismatch or result.status is VerificationStatus.OWNER_MISMATCH
+        )
+
+    if verified_result is None:
+        if owner_mismatch:
+            current_wallets = await session.scalars(
+                select(Wallet)
+                .where(
+                    Wallet.id.in_([wallet_id for wallet_id, _ in wallet_refs]),
+                    Wallet.user_id == user_id,
+                    Wallet.is_verified.is_(True),
+                    Wallet.network == settings.ton_connect_network,
+                )
+                .with_for_update()
+            )
+            if list(current_wallets.all()):
+                stale_asset = await session.scalar(
+                    select(NFTAsset)
+                    .where(
+                        NFTAsset.id == asset_id,
+                        NFTAsset.owner_id == user_id,
+                        NFTAsset.item_address == item_address,
+                    )
+                    .with_for_update()
+                )
+                if stale_asset is not None:
+                    stale_asset.owner_id = None
+                    stale_asset.verification_status = AssetVerificationStatus.STALE
+                    await session.commit()
+                else:
+                    await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="NFT ownership could not be freshly verified; refresh your inventory",
+        )
+
+    current_wallets = await session.scalars(
+        select(Wallet)
+        .where(
+            Wallet.id == verified_wallet_id,
+            Wallet.user_id == user_id,
+            Wallet.is_verified.is_(True),
+            Wallet.network == settings.ton_connect_network,
+        )
+        .with_for_update()
+    )
+    current_wallet_rows = list(current_wallets.all())
+    current_wallet = current_wallet_rows[0] if current_wallet_rows else None
+    if (
+        current_wallet is None
+        or current_wallet.address != verified_result.expected_owner_address
+    ):
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A verified TON wallet is required to create a listing draft",
+        )
+
+    locked_asset = await session.scalar(
+        select(NFTAsset)
+        .where(
+            NFTAsset.id == asset_id,
+            NFTAsset.owner_id == user_id,
+            NFTAsset.network == settings.ton_connect_network,
+            NFTAsset.asset_type == AssetType.TON_NFT,
+            NFTAsset.item_address == item_address,
+            NFTAsset.verification_status == AssetVerificationStatus.VERIFIED,
+        )
+        .with_for_update()
+    )
+    if locked_asset is None:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="NFT inventory changed during verification; refresh your inventory",
+        )
+
+    conflicting_listing_id = await session.scalar(
+        select(Listing.id).where(
+            Listing.asset_id == locked_asset.id,
+            Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED]),
+        )
+    )
+    if conflicting_listing_id is not None:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This NFT already has an active or reserved listing",
+        )
+
+    locked_asset.item_address = verified_result.item_address
+    locked_asset.owner_id = user_id
+    locked_asset.verification_status = AssetVerificationStatus.VERIFIED
+    locked_asset.verified_at = datetime.now(UTC)
+    locked_asset.name = verified_result.metadata.name
+    locked_asset.description = verified_result.metadata.description
+    locked_asset.image_url = verified_result.metadata.image
+    locked_asset.metadata_json = (
+        {"attributes": list(verified_result.metadata.attributes)}
+        if verified_result.metadata.attributes
+        else None
+    )
+
     listing = Listing(
-        asset_id=asset.id,
-        seller_id=user.id,
+        asset_id=locked_asset.id,
+        seller_id=user_id,
         status=ListingStatus.DRAFT,
         price_amount=payload.price_amount,
         price_currency=payload.price_currency,
@@ -185,5 +343,7 @@ async def create_listing_draft(
     )
     session.add(listing)
     await session.commit()
-    result = await session.scalars(_listing_query().where(Listing.id == listing.id))
-    return result.unique().one()
+    listing_result = await session.scalars(
+        _listing_query().where(Listing.id == listing.id)
+    )
+    return listing_result.unique().one()

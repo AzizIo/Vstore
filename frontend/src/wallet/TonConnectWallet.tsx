@@ -30,7 +30,7 @@ function WalletControls() {
 
   if (!wallet) {
     return (
-      <div className="wallet-control">
+      <div id="wallet-connect" className="wallet-control">
         <button className="wallet-button" type="button" onClick={() => tonConnectUI.openModal()}>
           Connect wallet
         </button>
@@ -48,7 +48,7 @@ function WalletControls() {
       : "TON network";
 
   return (
-    <div className="wallet-control">
+    <div id="wallet-connect" className="wallet-control">
       <span className="wallet-account" role="status">
         <span className="wallet-address">{shortAddress}</span>
         <span className="wallet-network">{network}</span>

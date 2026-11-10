@@ -2,19 +2,27 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from urllib.parse import urlparse
 
 import httpx
 
 from app.assets.ton_nft.address import AddressError, normalize_address
 from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable
-from app.assets.ton_nft.models import NFTItemSnapshot, NFTMetadata
+from app.assets.ton_nft.models import NFTInventoryPage, NFTItemSnapshot, NFTMetadata
+
+MAX_PROVIDER_RESPONSE_BYTES = 2_000_000
+MAX_PROVIDER_PAGE_SIZE = 1000
 
 
 class NFTDataProvider(Protocol):
     async def get_item(self, address: str) -> NFTItemSnapshot | None: ...
+
+    async def get_items_by_owner(
+        self, owner_address: str, *, limit: int, offset: int
+    ) -> NFTInventoryPage: ...
 
     async def get_item_address_by_index(
         self, collection_address: str, index: int
@@ -63,29 +71,63 @@ class TONCenterV3Provider:
     async def __aexit__(self, *_: object) -> None:
         await self.aclose()
 
-    async def _get_items(self, **params: str | int) -> list[dict[str, Any]]:
+    async def _get_items(
+        self, *, limit: int = 2, offset: int = 0, **params: str | int
+    ) -> list[dict[str, Any]]:
+        if not 1 <= limit <= MAX_PROVIDER_PAGE_SIZE or offset < 0:
+            raise ValueError("Invalid TON Center NFT pagination values")
+        request_params = {**params, "limit": limit, "offset": offset}
+        request_headers = (
+            {"X-API-Key": self.config.api_key} if self.config.api_key else None
+        )
+        content = bytearray()
         try:
-            response = await self._client.get(
+            async with self._client.stream(
+                "GET",
                 "nft/items",
-                params={**params, "limit": 2},
-                headers={"X-API-Key": self.config.api_key} if self.config.api_key else None,
-            )
-            response.raise_for_status()
+                params=request_params,
+                headers=request_headers,
+            ) as response:
+                response.raise_for_status()
+                content_length = response.headers.get("content-length")
+                if content_length is not None:
+                    try:
+                        declared_length = int(content_length)
+                    except ValueError as exc:
+                        raise InvalidProviderData(
+                            "TON Center returned invalid Content-Length"
+                        ) from exc
+                    if (
+                        declared_length < 0
+                        or declared_length > MAX_PROVIDER_RESPONSE_BYTES
+                    ):
+                        raise InvalidProviderData(
+                            "TON Center response exceeds the allowed size"
+                        )
+                async for chunk in response.aiter_bytes():
+                    if len(content) + len(chunk) > MAX_PROVIDER_RESPONSE_BYTES:
+                        raise InvalidProviderData(
+                            "TON Center response exceeds the allowed size"
+                        )
+                    content.extend(chunk)
         except (httpx.RequestError, httpx.HTTPStatusError) as exc:
             raise ProviderUnavailable("TON Center NFT indexer request failed") from exc
 
         try:
-            payload = response.json()
-        except ValueError as exc:
+            payload: object = json.loads(content)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise InvalidProviderData("TON Center returned non-JSON data") from exc
 
-        if not isinstance(payload, dict) or not isinstance(payload.get("nft_items"), list):
+        if not isinstance(payload, dict):
             raise InvalidProviderData("TON Center response has no nft_items array")
-
-        rows = payload["nft_items"]
-        if len(rows) > 1 or any(not isinstance(row, dict) for row in rows):
-            raise InvalidProviderData("TON Center returned ambiguous or malformed NFT items")
-        return rows
+        raw_rows = payload.get("nft_items")
+        if not isinstance(raw_rows, list):
+            raise InvalidProviderData("TON Center response has no nft_items array")
+        if len(raw_rows) > limit or any(not isinstance(row, dict) for row in raw_rows):
+            raise InvalidProviderData(
+                "TON Center returned too many or malformed NFT items"
+            )
+        return [cast(dict[str, Any], row) for row in raw_rows]
 
     @staticmethod
     def _metadata(raw: dict[str, Any]) -> NFTMetadata:
@@ -146,13 +188,35 @@ class TONCenterV3Provider:
 
     async def get_item(self, address: str) -> NFTItemSnapshot | None:
         normalized = normalize_address(address)
-        rows = await self._get_items(address=normalized)
+        rows = await self._get_items(address=normalized, limit=2)
         if not rows:
             return None
         item = self._parse_item(rows[0])
         if item.address != normalized:
             raise InvalidProviderData("Indexer returned a different NFT item address")
         return item
+
+    async def get_items_by_owner(
+        self, owner_address: str, *, limit: int, offset: int
+    ) -> NFTInventoryPage:
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError(
+                "Inventory page limit must be between 1 and 100 and offset non-negative"
+            )
+        owner = normalize_address(owner_address)
+        rows = await self._get_items(
+            owner_address=owner,
+            limit=limit + 1,
+            offset=offset,
+        )
+        has_more = len(rows) > limit
+        consumed_rows = rows[:limit]
+        snapshots = tuple(self._parse_item(row) for row in consumed_rows)
+        return NFTInventoryPage(
+            items=snapshots,
+            has_more=has_more,
+            next_offset=offset + len(consumed_rows),
+        )
 
     async def get_item_address_by_index(
         self, collection_address: str, index: int
