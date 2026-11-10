@@ -1,3 +1,5 @@
+import { API_BASE_URL } from "./config";
+
 export type AssetType = "ton_nft" | "telegram_gift";
 export type PriceCurrency = "TON" | "XTR";
 export type ListingSort = "newest" | "price_asc" | "price_desc";
@@ -43,8 +45,6 @@ export interface ListingFilters {
   assetType: AssetType | "all";
   sort: ListingSort;
 }
-
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 
 function isListing(value: unknown): value is Listing {
   if (!value || typeof value !== "object") return false;

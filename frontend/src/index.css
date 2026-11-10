@@ -25,6 +25,22 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .brand-mark { width: 34px; aspect-ratio: 1; display: grid; place-items: center; border: 1px solid var(--accent); color: var(--accent); border-radius: 50%; font: 22px var(--serif); }
 .brand-name { font-size: 12px; font-weight: 700; letter-spacing: .18em; }
 .network-label { margin-left: auto; color: var(--muted); font-size: 10px; letter-spacing: .16em; }
+.session-banner {
+  margin: 0;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.session-authenticated {
+  color: var(--accent);
+}
+
+.session-error {
+  color: #e19a8c;
+}
 .catalog-intro { padding: 66px 0 42px; }
 .eyebrow { margin: 0 0 18px; color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: .18em; }
 .catalog-intro h1, .detail-copy h1 { margin: 0; font: 400 clamp(46px, 6vw, 76px)/.98 var(--serif); }
