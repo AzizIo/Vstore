@@ -37,8 +37,6 @@ def _response(order: Order) -> OrderResponse:
         buyer_id=order.buyer_id,
         seller_id=order.seller_id,
         status=order.status,
-        price_amount=order.price_amount,
-        price_currency=order.price_currency,
         title=order.listing.title,
         asset_name=order.listing.asset.name,
         asset_type=order.listing.asset.asset_type,
