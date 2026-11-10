@@ -72,6 +72,31 @@ describe("seller listing management", () => {
     expect(await screen.findByRole("heading", { name: "My NFT draft" })).toBeInTheDocument();
   }
 
+  it("saves an optional expiration date through the listing API", async () => {
+    await openDraft();
+
+    fireEvent.change(screen.getByLabelText("Listing expiration"), {
+      target: { value: "2030-05-02T12:30" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("Listing details saved.")).toBeInTheDocument();
+    expect(mocks.updateListing).toHaveBeenCalledWith(
+      draft.id,
+      "seller-token",
+      expect.objectContaining({
+        expires_at: new Date("2030-05-02T12:30").toISOString(),
+      }),
+    );
+  });
+
+  it("displays the no-expiry state when a listing has no expiration", async () => {
+    render(<MyListings />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /My NFT draft/ }));
+    expect(await screen.findByText("No expiry")).toBeInTheDocument();
+  });
+
   it("requires an explicit confirmation before publication and reports the result", async () => {
     await openDraft();
 

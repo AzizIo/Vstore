@@ -38,6 +38,33 @@ function getCreatedDate(value: string) {
     : new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
 }
 
+function toLocalDateTimeInput(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+}
+
+function localDateTimeMinimum() {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+}
+
+function getExpirationLabel(value: string | null | undefined) {
+  if (!value) return "No expiry";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Date unavailable"
+    : new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(date);
+}
+
 function ListingImage({ listing }: { listing: Listing }) {
   const [failed, setFailed] = useState(false);
   const title = getTitle(listing);
@@ -77,6 +104,8 @@ function MyListingDetail({
   const [priceAmount, setPriceAmount] = useState(listing.price_amount);
   const [title, setTitle] = useState(listing.title ?? "");
   const [description, setDescription] = useState(listing.description ?? "");
+  const [expiresAt, setExpiresAt] = useState(toLocalDateTimeInput(listing.expires_at));
+  const [initialExpiresAt, setInitialExpiresAt] = useState(toLocalDateTimeInput(listing.expires_at));
   const [working, setWorking] = useState<"saving" | "publishing" | "cancelling" | "">("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -96,11 +125,18 @@ function MyListingDetail({
     setError("");
     setSuccess("");
     try {
-      const updated = await updateListing(listing.id, accessToken, {
+      const payload = {
         price_amount: priceAmount,
         title: title.trim() || null,
         description: description.trim() || null,
-      });
+        ...(expiresAt !== initialExpiresAt
+          ? { expires_at: expiresAt ? new Date(expiresAt).toISOString() : null }
+          : {}),
+      };
+      const updated = await updateListing(listing.id, accessToken, payload);
+      const updatedExpiration = toLocalDateTimeInput(updated.expires_at);
+      setExpiresAt(updatedExpiration);
+      setInitialExpiresAt(updatedExpiration);
       onUpdated(updated);
       setSuccess("Listing details saved.");
     } catch (reason) {
@@ -166,6 +202,7 @@ function MyListingDetail({
           {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
           <dl className="detail-facts">
             <div><dt>Created</dt><dd>{getCreatedDate(listing.created_at)}</dd></div>
+            <div><dt>Expires</dt><dd>{getExpirationLabel(listing.expires_at)}</dd></div>
             <div><dt>Asset ID</dt><dd>{listing.asset.external_id}</dd></div>
             <div><dt>Verification</dt><dd>{listing.asset.verification_status}</dd></div>
           </dl>
@@ -206,6 +243,17 @@ function MyListingDetail({
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
               />
+            </label>
+            <label>
+              <span>Expiration <small>Optional</small></span>
+              <input
+                aria-label="Listing expiration"
+                type="datetime-local"
+                min={localDateTimeMinimum()}
+                value={expiresAt}
+                onChange={(event) => setExpiresAt(event.target.value)}
+              />
+              <small>Clear the field to remove automatic expiry.</small>
             </label>
             <div className="listing-management-actions">
               <button className="load-more-button" type="submit" disabled={Boolean(working)}>

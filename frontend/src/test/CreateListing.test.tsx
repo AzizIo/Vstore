@@ -83,6 +83,29 @@ describe("CreateListing seller flow", () => {
     expect(onDraftCreated).toHaveBeenCalledWith(draft);
   });
 
+  it("submits an optional expiry date as an ISO timestamp", async () => {
+    renderCreateListing();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Verified collectible/ }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Price amount" }), { target: { value: "1.5" } });
+    fireEvent.change(screen.getByLabelText("Listing expiration"), {
+      target: { value: "2030-05-02T12:30" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create private draft" }));
+
+    expect(await screen.findByText("Draft — not published")).toBeInTheDocument();
+    expect(apiMocks.createListingDraft).toHaveBeenCalledWith(
+      "memory-session-token",
+      expect.objectContaining({
+        asset_id: "asset-id",
+        price_amount: "1.5",
+        price_currency: "TON",
+        expires_at: new Date("2030-05-02T12:30").toISOString(),
+      }),
+      expect.any(AbortSignal),
+    );
+  });
+
   it("offers wallet navigation when no verified wallet is linked", async () => {
     apiMocks.fetchMyInventory.mockRejectedValue(
       new Error("A verified TON wallet is required to discover NFT inventory"),

@@ -27,6 +27,7 @@ export interface CreateListingDraftRequest {
   price_currency: PriceCurrency;
   title?: string;
   description?: string;
+  expires_at?: string | null;
 }
 
 async function requestJson<T>(url: string, accessToken: string, init?: RequestInit): Promise<T> {

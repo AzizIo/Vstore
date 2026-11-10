@@ -38,6 +38,7 @@ export interface Listing {
   title: string | null;
   description: string | null;
   created_at: string;
+  expires_at?: string | null;
   asset: ListingAsset;
   seller: ListingSeller;
 }
@@ -84,6 +85,7 @@ export function isListing(value: unknown): value is Listing {
     (listing.price_currency === "TON" || listing.price_currency === "XTR") &&
     nullableString(listing.title) && nullableString(listing.description) &&
     typeof listing.created_at === "string" &&
+    (listing.expires_at === undefined || nullableString(listing.expires_at)) &&
     !!asset && typeof asset.id === "string" &&
     (asset.asset_type === "ton_nft" || asset.asset_type === "telegram_gift") &&
     typeof asset.external_id === "string" &&
@@ -169,6 +171,7 @@ export interface ListingUpdate {
   price_amount?: string;
   title?: string | null;
   description?: string | null;
+  expires_at?: string | null;
 }
 
 async function requestSellerListing(

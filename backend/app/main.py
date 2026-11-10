@@ -15,6 +15,7 @@ from app.api.users import router as users_router
 from app.api.wallets import router as wallets_router
 from app.core.config import get_settings
 from app.db.session import async_session_factory, dispose_engine
+from app.listings.service import expire_active_listings
 from app.orders.service import expire_pending_orders
 
 logger = getLogger(__name__)
@@ -27,11 +28,13 @@ async def _expire_orders_periodically() -> None:
             await asyncio.sleep(poll_interval)
             async with async_session_factory() as session:
                 await expire_pending_orders(session)
+            async with async_session_factory() as session:
+                await expire_active_listings(session)
         except asyncio.CancelledError:
             raise
         except Exception:
             # Keep the worker alive after a transient failure; the next poll retries.
-            logger.exception("Could not expire pending orders; the next poll will retry")
+            logger.exception("Could not complete marketplace expiration; the next poll will retry")
 
 
 @asynccontextmanager

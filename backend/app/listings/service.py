@@ -67,6 +67,8 @@ async def publish_listing(
         raise ListingNotFound("Listing not found")
     if listing.status is not ListingStatus.DRAFT:
         raise ListingConflict("Only private drafts can be published")
+    if listing.expires_at is not None and listing.expires_at <= datetime.now(UTC):
+        raise ListingConflict("This listing draft has already expired")
 
     asset_id = listing.asset_id
     asset = await session.scalar(select(NFTAsset).where(NFTAsset.id == asset_id))
@@ -167,6 +169,11 @@ async def publish_listing(
             raise ListingConflict(
                 "Listing changed while ownership was being verified; refresh and try again"
             )
+        if (
+            locked_listing.expires_at is not None
+            and locked_listing.expires_at <= datetime.now(UTC)
+        ):
+            raise ListingConflict("This listing draft has already expired")
 
         selected_wallet = await session.scalar(
             select(Wallet)
@@ -238,6 +245,7 @@ async def update_listing(
     price_amount: Decimal | None = None,
     title: str | None = None,
     description: str | None = None,
+    expires_at: datetime | None = None,
     fields_set: set[str],
 ) -> Listing:
     if not fields_set:
@@ -246,6 +254,11 @@ async def update_listing(
         price_amount is None or price_amount <= 0
     ):
         raise ListingConflict("Price must be greater than zero")
+    if "expires_at" in fields_set and expires_at is not None:
+        if expires_at.tzinfo is None or expires_at.utcoffset() is None:
+            raise ListingConflict("Expiration must include a timezone")
+        if expires_at <= datetime.now(UTC):
+            raise ListingConflict("Expiration must be in the future")
 
     async with session.begin():
         listing = await session.scalar(
@@ -269,6 +282,8 @@ async def update_listing(
             listing.title = title
         if "description" in fields_set:
             listing.description = description
+        if "expires_at" in fields_set:
+            listing.expires_at = expires_at
         await session.flush()
         response_listing = await session.scalar(
             select(Listing)
@@ -316,3 +331,39 @@ async def cancel_listing(
     if response_listing is None:
         raise ListingNotFound("Listing not found")
     return response_listing
+
+
+
+async def expire_active_listings(
+    session: AsyncSession, *, now: datetime | None = None, limit: int = 100
+) -> int:
+    """Close active listings whose optional seller-set expiry has passed.
+
+    Expired rows are locked in a bounded, deterministic batch. SKIP LOCKED lets
+    multiple API workers run the lifecycle poller without blocking each other.
+    Reserved listings are deliberately excluded; order expiry releases them
+    through the reservation lifecycle, which also checks the listing expiry.
+    """
+
+    current_time = now or datetime.now(UTC)
+    if limit < 1:
+        raise ValueError("Expiration batch limit must be positive")
+
+    async with session.begin():
+        expired = (
+            await session.scalars(
+                select(Listing)
+                .where(
+                    Listing.status == ListingStatus.ACTIVE,
+                    Listing.expires_at.is_not(None),
+                    Listing.expires_at <= current_time,
+                )
+                .order_by(Listing.expires_at.asc(), Listing.id.asc())
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            )
+        ).all()
+        for listing in expired:
+            listing.status = ListingStatus.EXPIRED
+        await session.flush()
+        return len(expired)
