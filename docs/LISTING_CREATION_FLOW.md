@@ -1,8 +1,8 @@
 # Listing Creation Flow — Technical Design
 
-**Status:** implementation contract for seller inventory and private listing drafts.
-**Scope:** seller-owned TON NFT discovery and safe creation of private listing drafts.  
-**Non-goal:** publishing, checkout, escrow, payment collection, NFT transfers, or Telegram Gift custody.
+**Status:** implemented seller inventory, private drafts, live-verified publication, and seller listing management.
+**Scope:** seller-owned TON NFT discovery, safe draft creation, verified publication, editing, and unpublishing.  
+**Non-goal:** checkout, escrow, payment collection, NFT transfers, or Telegram Gift custody.
 
 ## 1. Current repository state
 
@@ -12,6 +12,8 @@
 - `GET /api/listings/me` returns the authenticated user's listings.
 - `POST /api/listings` creates a draft only when the supplied asset exists, belongs to the current user, and has `verification_status=verified`.
 - The existing TON NFT verifier can validate an item address against an expected owner address.
+- POST /api/listings/{listing_id}/publish publishes only an owned TON NFT draft after a fresh TEP-62 owner check against a verified seller wallet.
+- Seller-only PATCH /api/listings/{listing_id} and POST /api/listings/{listing_id}/cancel support permitted field edits and cancellation/unpublishing.
 - `GET /api/assets/me` discovers candidates from verified wallets owned by the authenticated user and returns only items freshly verified by the TEP-62 verifier.
 - TON Center provider pagination and network-specific configuration are implemented in `backend/app/assets/ton_nft/`.
 
@@ -101,6 +103,21 @@ Server requirements before accepting the draft:
 
 The endpoint now locks the owned asset, rejects unsupported, stale, foreign, or active/reserved assets, then performs a fresh TEP-62 owner check against the user's verified wallets on the configured network before creating the draft. Provider outage returns HTTP 503; failed ownership verification returns HTTP 409. Wallet proof verification code is unchanged.
 
+### POST /api/listings/{listing_id}/publish
+
+Authentication: Bearer JWT required. The caller must own the listing.
+
+- Only a DRAFT listing backed by a seller-owned, verified TON NFT asset on the configured network is eligible.
+- The server takes an unlocked snapshot of the listing, asset, and the seller's verified wallets, then rolls back the read transaction before contacting TON Center through the TEP-62 verifier.
+- The live owner must match one of the seller's verified wallets on the asset network. Provider outage returns HTTP 503; stale, unsupported, or mismatched ownership returns HTTP 409.
+- After verification the server starts a new transaction, locks and re-reads the listing, asset, and selected wallet, and verifies that the seller, asset identity, draft status, owner, network, verification state, and wallet binding have not changed.
+- The asset row is locked before checking for another ACTIVE/RESERVED listing. This serializes concurrent publication attempts; the PostgreSQL partial unique index uq_listings_open_asset remains the final database-level guard.
+- Only then does the server change DRAFT to ACTIVE. Public catalog, public detail, and order creation continue to query ACTIVE listings only.
+
+### PATCH /api/listings/{listing_id} and POST /api/listings/{listing_id}/cancel
+
+Both endpoints require the authenticated seller. Edits are limited to price_amount, title, and description; seller IDs, asset ownership, currency, and status are never client-editable. Edits are allowed only while DRAFT or ACTIVE. Cancellation is allowed for a private DRAFT or public ACTIVE listing; cancelling an active listing unpublishes it. RESERVED, SOLD, CANCELLED, and EXPIRED listings are not editable or cancellable. These transitions lock and re-read the seller-owned listing inside a transaction.
+
 ## 4. Frontend flow after the API exists
 
 1. User opens **My Listings** and chooses **Create listing**.
@@ -110,6 +127,8 @@ The endpoint now locks the owned asset, rejects unsupported, stale, foreign, or 
 5. User selects an NFT, enters a price and optional title/description.
 6. Submit the existing draft request.
 7. Show a success state and refresh My Listings. Clearly label the result **Draft — not published**.
+8. From a draft detail, the seller can edit price/title/description, request publication (with confirmation), and cancel the draft. Publication displays a verifying/loading state and reports provider/state conflicts accessibly.
+9. From an active listing, the seller can edit permitted fields or confirm unpublishing. Listings reserved by a pending order are read-only until the reservation ends.
 
 Telegram Gifts remain excluded from this first creation flow until a supported, tested ownership and transfer capability is available for the specific account/gift type.
 
@@ -138,7 +157,11 @@ Telegram Gifts remain excluded from this first creation flow until a supported, 
 - asset owned by another user is rejected;
 - unsupported Telegram Gift is not made eligible;
 - concurrent sync does not create duplicate assets;
-- provider metadata is bounded and never fetched as a URL.
+- provider metadata is bounded and never fetched as a URL;
+- publication rejects stale/foreign/unsupported/unverified assets and provider outages;
+- provider calls run without database locks, then listing/asset/wallet state is rechecked under locks;
+- concurrent publication attempts for different drafts of one NFT produce at most one active listing;
+- seller-only edit/cancel transitions reject reserved and terminal listings.
 
 ## 7. Official technical references
 
