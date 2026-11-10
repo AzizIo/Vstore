@@ -9,8 +9,6 @@ const order = {
   buyer_id: "buyer-1",
   seller_id: "seller-1",
   status: "pending_payment" as const,
-  price_amount: "12.5",
-  price_currency: "TON" as const,
   title: "Moon Lantern",
   asset_name: "Lantern",
   asset_type: "ton_nft" as const,
@@ -44,8 +42,8 @@ describe("orders", () => {
 
     resolveRequest?.(jsonResponse({ items: [order] }));
 
-    expect(await screen.findByText("Payment pending")).toBeInTheDocument();
-    expect(screen.getByText(/Payment processing is not enabled/)).toBeInTheDocument();
+    expect(await screen.findByText("Reserved")).toBeInTheDocument();
+    expect(screen.getByText(/No payment is collected in this MVP/)).toBeInTheDocument();
     expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
   });
 
