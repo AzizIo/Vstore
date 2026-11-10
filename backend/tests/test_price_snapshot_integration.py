@@ -9,7 +9,6 @@ instead of passing silently.
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
@@ -20,6 +19,7 @@ from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.assets.ton_nft.models import VerificationResult, VerificationStatus
 from app.core.config import get_settings
 from app.db.models import (
     AssetType,
@@ -33,6 +33,7 @@ from app.db.models import (
     User,
     Wallet,
 )
+from app.orders.service import create_order
 
 pytestmark = pytest.mark.integration
 
@@ -94,7 +95,13 @@ async def test_money_columns_exist_in_both_tables(price_database: str) -> None:
 
 
 async def test_order_snapshots_xtr_price_from_listing(price_database: str) -> None:
-    """An XTR listing produces an XTR order with the exact reserved amount."""
+    """An XTR listing produces an XTR order with the exact reserved amount.
+
+    The order is created through the real `create_order` service — with its
+    ownership verification, idempotency and reservation transition — because
+    the point of this test is what the service actually persists, not what
+    the ORM would accept from a hand-built row.
+    """
 
     engine = create_async_engine(price_database, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -139,38 +146,59 @@ async def test_order_snapshots_xtr_price_from_listing(price_database: str) -> No
         await session.flush()
         ids = (listing.id, asset.id, wallet.id, seller.id, buyer.id)
 
-    try:
-        async with session_factory() as session:
-            listing = await session.get(Listing, ids[0])
-            listing.price_currency = PriceCurrency.XTR
-            await session.commit()
+    class _OwnerVerifier:
+        def __init__(self) -> None:
+            self.network = "mainnet"
+            self.calls: list[tuple[str, str]] = []
 
-        async with session_factory() as session:
-            # Direct order-row insertion mirrors what create_order persists;
-            # the service path is covered by test_postgres_integration.
-            order = Order(
-                listing_id=ids[0],
-                buyer_id=ids[4],
-                seller_id=ids[3],
-                idempotency_key=f"xtr-{suffix}",
-                status=OrderStatus.PENDING_PAYMENT,
-                price_amount=Decimal("250.000000000"),
-                price_currency=PriceCurrency.XTR,
-                expires_at=datetime.now(UTC) + timedelta(minutes=15),
+        async def verify(self, item_address: str, expected_owner_address: str):
+            self.calls.append((item_address, expected_owner_address))
+            return VerificationResult(
+                status=VerificationStatus.VERIFIED,
+                item_address=item_address,
+                owner_address=expected_owner_address,
+                expected_owner_address=expected_owner_address,
             )
-            session.add(order)
-            await session.commit()
-            order_id = order.id
+
+    try:
+        verifier = _OwnerVerifier()
+        async with session_factory() as session:
+            order_id = await create_order(
+                session,
+                buyer_id=ids[4],
+                listing_id=ids[0],
+                idempotency_key=f"xtr-{suffix}",
+                verifier=verifier,
+            )
+
+        assert verifier.calls, "the ownership verifier must have been consulted"
+        assert verifier.calls[0][0] == asset.item_address
+        assert verifier.calls[0][1] == wallet.address
 
         async with session_factory() as session:
             stored = await session.get(Order, order_id)
             assert stored is not None
+            assert stored.status is OrderStatus.PENDING_PAYMENT
+            assert stored.buyer_id == ids[4]
+            assert stored.seller_id == ids[3]
             assert stored.price_amount == Decimal("250.000000000")
             assert stored.price_currency is PriceCurrency.XTR
 
         async with session_factory() as session:
+            # Idempotent replay through the service returns the same order.
+            replayed = await create_order(
+                session,
+                buyer_id=ids[4],
+                listing_id=ids[0],
+                idempotency_key=f"xtr-{suffix}",
+                verifier=_OwnerVerifier(),
+            )
+            assert replayed == order_id
+
+        async with session_factory() as session:
             stored_listing = await session.get(Listing, ids[0])
             assert stored_listing is not None
+            assert stored_listing.status is ListingStatus.RESERVED
             # Changing the listing price later must not touch existing orders.
             stored_listing.price_amount = Decimal("999")
             await session.commit()
@@ -179,6 +207,7 @@ async def test_order_snapshots_xtr_price_from_listing(price_database: str) -> No
             stored = await session.get(Order, order_id)
             assert stored is not None
             assert stored.price_amount == Decimal("250.000000000")
+            assert stored.price_currency is PriceCurrency.XTR
     finally:
         async with session_factory.begin() as session:
             await session.execute(

@@ -53,16 +53,21 @@ The product is **not yet a complete marketplace**. The repository currently cont
 │   │       └── session.py       # Async engine, session factory and dependency
 │   ├── migrations/
 │   │   ├── env.py               # Alembic async migration environment
-│   │   └── versions/             # Versioned DB schema changes
-│   ├── tests/                    # Backend unit/API/model tests
+│   │   └── versions/             # Versioned DB schema changes (0001–0004)
+│   ├── tests/                    # Backend unit/API/PostgreSQL integration tests
 │   ├── alembic.ini
 │   ├── pyproject.toml             # Python dependencies, Ruff, pytest and mypy config
 │   └── Dockerfile
 └── frontend/
     ├── src/
-    │   ├── App.tsx              # Current Mini App shell / entry screen
+    │   ├── App.tsx              # Marketplace app: catalog, listing detail, navigation
     │   ├── main.tsx             # React entrypoint
     │   ├── index.css            # Global styles
+    │   ├── api/                 # Typed API clients (listings, orders, assets, config)
+    │   ├── auth/                # SessionProvider, Telegram initData helpers, auth API
+    │   ├── listings/            # CreateListing, MyListings (create/edit/unpublish)
+    │   ├── orders/              # Orders (buyer/seller order list and cancel)
+    │   ├── wallet/              # TON Connect wallet connection UI
     │   └── test/                # Vitest setup and frontend tests
     ├── package.json             # Frontend scripts and dependencies
     ├── vite.config.ts
@@ -87,7 +92,8 @@ The product is **not yet a complete marketplace**. The repository currently cont
 
 - React 19 + TypeScript + Vite + Tailwind CSS v4.
 - TanStack Query, Zustand and TON Connect UI are dependencies in `frontend/package.json`.
-- **Important reality check:** on the current `main` snapshot the UI is still a small static shell in `frontend/src/App.tsx`. A complete feature/component architecture, API client, session integration and catalog flow are not present yet. Do not assume a planned library is already wired into the app; inspect actual imports and code first.
+- The Mini App implements the full current product surface: public catalog with filters/sorting/pagination, listing detail, Telegram initData authentication with Bearer sessions, listing creation/edit/unpublish from verified inventory, my-listings management, and buyer/seller order lists. API clients are typed wrappers in `frontend/src/api/`.
+- Still absent: payment/checkout UI, NFT delivery confirmation flow, deal chat, admin panel. Do not assume a planned screen exists; inspect `frontend/src/` first.
 
 ### Local infrastructure
 
@@ -102,27 +108,40 @@ Current API routes are registered in `backend/app/main.py`.
 
 | Method | Endpoint | Auth | Current behavior |
 |---|---|---|---|
-| GET | `/api/health/live` and readiness route | No | Health/readiness checks; see `api/health.py` |
+| GET | `/api/health/live` and `/api/health/ready` | No | Health/readiness checks (PostgreSQL, Redis); see `api/health.py` |
 | POST | `/api/auth/telegram` | Telegram initData | Verifies signed, short-lived Mini App initData; upserts user; returns API JWT |
 | GET | `/api/users/me` | Bearer JWT | Returns current user profile |
-| GET | `/api/listings` | No | Active catalog; filters `asset_type`, `currency`, `search`; sort `newest`, `price_asc`, `price_desc`; pagination `limit`/`offset` |
+| POST | `/api/wallets/proof/challenge` | Bearer JWT | Issues a short-lived TON Connect proof challenge |
+| POST | `/api/wallets/proof/verify` | Bearer JWT | Verifies the signed proof and links the wallet |
+| GET | `/api/wallets/me` | Bearer JWT | Current user's linked wallets |
+| GET | `/api/assets/me` | Bearer JWT | Verified NFT inventory from the user's verified wallets (TON Center v3 + TEP-62 re-check) |
+| GET | `/api/listings` | No | Public catalog; filters `asset_type`, `currency`, `search`; sort `newest`, `price_asc`, `price_desc`; pagination `limit`/`offset`; hides stale/unverified/reserved/owner-mismatch listings |
 | GET | `/api/listings/me` | Bearer JWT | Current seller's listings |
-| GET | `/api/listings/{listing_id}` | No | Active listing detail only; otherwise 404 |
-| POST | `/api/listings` | Bearer JWT | Creates a **draft only**, requiring a verified asset owned by the current user |
+| GET | `/api/listings/{listing_id}` | No | Public listing detail under the same visibility guard; otherwise 404 |
+| POST | `/api/listings` | Bearer JWT | Creates a **draft only**, requiring a verified asset currently owned by the user |
+| POST | `/api/listings/{listing_id}/publish` | Bearer JWT | Publishes a draft after a fresh on-chain ownership re-check (503 on provider outage) |
+| PATCH | `/api/listings/{listing_id}` | Bearer JWT | Edits price/title/description of the seller's draft or active listing |
+| POST | `/api/listings/{listing_id}/cancel` | Bearer JWT | Unpublishes an active listing or cancels a draft |
+| POST | `/api/orders` | Bearer JWT | Reserves an active listing; requires `Idempotency-Key` header; snapshots price/currency; fresh ownership re-check before reservation |
+| GET | `/api/orders` | Bearer JWT | Buyer's or seller's orders (`role` query parameter) |
+| GET | `/api/orders/{order_id}` | Bearer JWT | Order detail for the buyer or seller only |
+| POST | `/api/orders/{order_id}/cancel` | Bearer JWT | Buyer cancels a pending order; releases the listing |
 
-For exact request/response fields and validation, read `backend/app/api/listings.py`, `backend/app/api/auth.py`, `backend/app/auth/schemas.py` and the related tests. Do not invent endpoints, query parameters or response fields.
+For exact request/response fields and validation, read `backend/app/api/listings.py`, `backend/app/api/orders.py`, `backend/app/api/wallets.py`, `backend/app/api/assets.py`, `backend/app/api/auth.py`, `backend/app/auth/schemas.py` and the related tests. Do not invent endpoints, query parameters or response fields.
 
 ## 5. Database model quick map
 
-Defined in `backend/app/db/models.py` and initially migrated in `backend/migrations/versions/0001_initial_marketplace.py`:
+Defined in `backend/app/db/models.py`; migrated in `backend/migrations/versions/` (0001 initial, 0002 network scoping, 0003 orders, 0004 notification outbox):
 
 - `User`: Telegram identity and account state.
 - `Wallet`: user wallet address/network and verification flags.
 - `NFTCollection`: collection address/network and metadata.
 - `NFTAsset`: asset type, external ID, optional item address, collection/owner, metadata and verification state.
 - `Listing`: seller, asset, lifecycle status, amount/currency, title/description and expiry.
+- `Order` / `OrderEvent`: reservation with a price/currency snapshot, buyer idempotency, append-only status history.
+- `TelegramNotificationOutbox`: durable notification queue with attempts and leases.
 
-Important constraints already encoded include unique Telegram IDs, unique wallet address per network, unique external asset ID per asset type, positive listing price, foreign keys, and a PostgreSQL partial unique index preventing multiple open (`active`/`reserved`) listings for the same asset. Read the model and migration before changing related behavior.
+Important constraints already encoded include unique Telegram IDs, unique wallet address per network, unique external asset ID per asset type and network, positive listing and order prices, foreign keys, a PostgreSQL partial unique index preventing multiple open (`active`/`reserved`) listings for the same asset, and one pending order per listing. Read the model and migrations before changing related behavior.
 
 ## 6. How to run locally
 
@@ -252,16 +271,16 @@ This is a snapshot, not a promise that every item remains current. Verify the li
 
 ### Open decisions for the maintainer (as of this snapshot)
 
-- **PR #49 `docs/issue-48-mvp-scope` — closed without merge by owner decision.** It removes listing prices across the stack and adds a destructive migration `0005_free_listings`, contradicting the mandatory-price product model. Do not reopen or reuse its branch as-is.
 - Renaming the `pending_payment` order status (mentions a payment that does not exist) — requires a migration; raised as an open question, not done unilaterally.
+
+**Resolved:** PR #49 `docs/issue-48-mvp-scope` (price removal, destructive migration `0005_free_listings`) was closed by the owner on 2026-11-10 without merging. Main never contained the removal and no data was lost. Prices remain a mandatory part of the product model.
 
 ### Recommended next implementation sequence
 
-1. Resolve PR #49 (close or rework without price removal).
-2. Stage B: server-side NFT delivery confirmation and the full order lifecycle after reservation.
-3. Payment integration strictly per ADR-0001/0002 gates (platform classification, funded remedy, settlement rail — see the ADR blocker lists).
-4. Escrow/гарант only after separate design, testnet validation and audit.
-5. Admin, chat, E2E tests, production operations.
+1. Stage B: server-side NFT delivery confirmation and the full order lifecycle after reservation.
+2. Payment integration strictly per ADR-0001/0002 gates (platform classification, funded remedy, settlement rail — see the ADR blocker lists).
+3. Escrow/гарант only after separate design, testnet validation and audit.
+4. Admin, chat, E2E tests, production operations.
 
 ## 11. First 10 minutes for a new agent
 
