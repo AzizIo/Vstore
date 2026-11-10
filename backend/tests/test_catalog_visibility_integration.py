@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
@@ -25,7 +24,6 @@ from app.db.models import (
     Listing,
     ListingStatus,
     NFTAsset,
-    PriceCurrency,
     User,
 )
 
@@ -89,8 +87,6 @@ async def make_listing(
         asset_id=asset.id,
         seller_id=seller.id,
         status=listing_status,
-        price_amount=Decimal("1.25"),
-        price_currency=PriceCurrency.TON,
         title="Visibility listing",
     )
     if created_at is not None:
