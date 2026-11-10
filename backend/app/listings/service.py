@@ -146,8 +146,8 @@ async def publish_listing(
         )
 
     # No external request is made below this point. Acquire locks in the same
-    # listing -> asset order used by order reservation, then re-check the exact
-    # wallet that passed the live ownership verification.
+    # listing -> wallet -> asset order used by the existing draft-creation flow.
+    # The asset lock serializes publications for the same NFT.
     async with session.begin():
         locked_listing = await session.scalar(
             select(Listing)
@@ -162,6 +162,24 @@ async def publish_listing(
         ):
             raise ListingConflict(
                 "Listing changed while ownership was being verified; refresh and try again"
+            )
+
+        selected_wallet = await session.scalar(
+            select(Wallet)
+            .where(
+                Wallet.id == selected_wallet_id,
+                Wallet.user_id == seller_id,
+            )
+            .with_for_update()
+        )
+        if (
+            selected_wallet is None
+            or not selected_wallet.is_verified
+            or selected_wallet.network != asset_network
+            or selected_wallet.address != selected_wallet_address
+        ):
+            raise ListingConflict(
+                "The verified wallet changed during ownership verification"
             )
 
         locked_asset = await session.scalar(
@@ -181,24 +199,6 @@ async def publish_listing(
         ):
             raise ListingConflict(
                 "NFT ownership or verification state changed; refresh your inventory"
-            )
-
-        selected_wallet = await session.scalar(
-            select(Wallet)
-            .where(
-                Wallet.id == selected_wallet_id,
-                Wallet.user_id == seller_id,
-            )
-            .with_for_update()
-        )
-        if (
-            selected_wallet is None
-            or not selected_wallet.is_verified
-            or selected_wallet.network != asset_network
-            or selected_wallet.address != selected_wallet_address
-        ):
-            raise ListingConflict(
-                "The verified wallet changed during ownership verification"
             )
 
         conflicting_listing_id = await session.scalar(
