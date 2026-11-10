@@ -4,7 +4,6 @@ import {
   fetchListings,
   type AssetType,
   type Listing,
-  type ListingSort,
 } from "./api/listings";
 import { createOrder } from "./api/orders";
 import { SessionProvider, useSession } from "./auth/SessionProvider";
@@ -18,14 +17,6 @@ const assetTypeLabels: Record<AssetType, string> = {
   telegram_gift: "Telegram gift",
 };
 const CATALOG_PAGE_SIZE = 24;
-
-function formatPrice(amount: string, currency: string) {
-  const numericAmount = Number(amount);
-  const formattedAmount = Number.isFinite(numericAmount)
-    ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(numericAmount)
-    : amount;
-  return `${formattedAmount} ${currency}`;
-}
 
 function AssetArtwork({ imageUrl, name }: { imageUrl: string | null; name: string }) {
   const [imageFailed, setImageFailed] = useState(false);
@@ -50,7 +41,6 @@ function ListingCard({ listing, onOpen }: { listing: Listing; onOpen: () => void
       <span className="listing-card-content">
         <span className="listing-card-type">{assetTypeLabels[listing.asset.asset_type]}</span>
         <span className="listing-card-title">{title}</span>
-        <span className="listing-card-price">{formatPrice(listing.price_amount, listing.price_currency)}</span>
       </span>
     </button>
   );
@@ -135,7 +125,6 @@ function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () =>
         <div className="detail-copy">
           <p className="eyebrow">{assetTypeLabels[listing.asset.asset_type]}</p>
           <h1 id="detail-title">{title}</h1>
-          <p className="detail-price">{formatPrice(listing.price_amount, listing.price_currency)}</p>
           <section className="seller-profile" aria-label="Seller profile">
             <div className="seller-profile-avatar" aria-hidden="true">
               {(seller.trim().charAt(0) || "S").toUpperCase()}
@@ -220,7 +209,6 @@ function MarketplaceApp() {
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [assetType, setAssetType] = useState<AssetType | "all">("all");
-  const [sort, setSort] = useState<ListingSort>("newest");
   const [listingId, setListingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -255,7 +243,7 @@ function MarketplaceApp() {
     setListings([]);
     setTotal(0);
     setNextOffset(0);
-    fetchListings({ search, assetType, sort, limit: CATALOG_PAGE_SIZE, offset: 0 }, controller.signal)
+    fetchListings({ search, assetType, limit: CATALOG_PAGE_SIZE, offset: 0 }, controller.signal)
       .then((page) => {
         if (controller.signal.aborted || version !== requestVersion.current) return;
         setListings(page.items);
@@ -279,7 +267,7 @@ function MarketplaceApp() {
       loadingMoreRef.current = false;
       if (requestVersion.current === version) requestVersion.current += 1;
     };
-  }, [search, assetType, sort, retry]);
+  }, [search, assetType, retry]);
 
   const hasMore = listings.length < total && nextOffset < total;
 
@@ -295,7 +283,7 @@ function MarketplaceApp() {
 
     try {
       const page = await fetchListings(
-        { search, assetType, sort, limit: CATALOG_PAGE_SIZE, offset: nextOffset },
+        { search, assetType, limit: CATALOG_PAGE_SIZE, offset: nextOffset },
         controller.signal,
       );
       if (controller.signal.aborted || version !== requestVersion.current) return;
@@ -405,14 +393,6 @@ function MarketplaceApp() {
                   <option value="all">All assets</option>
                   <option value="ton_nft">TON NFT</option>
                   <option value="telegram_gift">Telegram gift</option>
-                </select>
-              </label>
-              <label className="select-control">
-                <span className="sr-only">Sort listings</span>
-                <select value={sort} onChange={(event) => setSort(event.target.value as ListingSort)}>
-                  <option value="newest">Newest</option>
-                  <option value="price_asc">Price: low to high</option>
-                  <option value="price_desc">Price: high to low</option>
                 </select>
               </label>
             </form>
