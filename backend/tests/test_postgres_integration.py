@@ -855,3 +855,123 @@ async def test_concurrent_publication_of_two_drafts_for_one_nft_has_one_winner(
             user_ids=[owner.id],
         )
         await engine.dispose()
+
+
+async def test_publish_listing_rejects_stale_foreign_and_unsupported_assets(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        owner, verified_asset, wallet, verified_draft = await _create_publishable_listing(session)
+        other_owner = await make_user(
+            session,
+            telegram_id=700_000_000 + uuid4().int % 1_000_000_000,
+        )
+        stale_asset = NFTAsset(
+            asset_type=AssetType.TON_NFT,
+            network="mainnet",
+            external_id=_publishable_item_address(),
+            item_address=_publishable_item_address(),
+            owner_id=owner.id,
+            verification_status=AssetVerificationStatus.STALE,
+        )
+        foreign_asset = NFTAsset(
+            asset_type=AssetType.TON_NFT,
+            network="mainnet",
+            external_id=_publishable_item_address(),
+            item_address=_publishable_item_address(),
+            owner_id=other_owner.id,
+            verification_status=AssetVerificationStatus.VERIFIED,
+        )
+        unsupported_asset = NFTAsset(
+            asset_type=AssetType.TELEGRAM_GIFT,
+            network="mainnet",
+            external_id=f"gift-{uuid4()}",
+            owner_id=owner.id,
+            verification_status=AssetVerificationStatus.VERIFIED,
+        )
+        session.add_all([stale_asset, foreign_asset, unsupported_asset])
+        await session.flush()
+        stale_draft = make_listing(owner, stale_asset, ListingStatus.DRAFT)
+        foreign_draft = make_listing(owner, foreign_asset, ListingStatus.DRAFT)
+        unsupported_draft = make_listing(owner, unsupported_asset, ListingStatus.DRAFT)
+        session.add_all([stale_draft, foreign_draft, unsupported_draft])
+        await session.flush()
+
+    class _VerifierMustNotRun:
+        async def verify(self, item_address: str, expected_owner_address: str):
+            raise AssertionError("ineligible asset must be rejected before provider access")
+
+    try:
+        for listing_id in (stale_draft.id, foreign_draft.id, unsupported_draft.id):
+            async with session_factory() as session:
+                with pytest.raises(ListingConflict):
+                    await publish_listing(
+                        session,
+                        listing_id=listing_id,
+                        seller_id=owner.id,
+                        verifier=_VerifierMustNotRun(),
+                    )
+        async with session_factory() as session:
+            for listing_id in (stale_draft.id, foreign_draft.id, unsupported_draft.id):
+                listing = await session.get(Listing, listing_id)
+                assert listing is not None
+                assert listing.status is ListingStatus.DRAFT
+    finally:
+        await _cleanup_publishable_data(
+            session_factory,
+            listing_ids=[
+                verified_draft.id,
+                stale_draft.id,
+                foreign_draft.id,
+                unsupported_draft.id,
+            ],
+            asset_ids=[
+                verified_asset.id,
+                stale_asset.id,
+                foreign_asset.id,
+                unsupported_asset.id,
+            ],
+            wallet_ids=[wallet.id],
+            user_ids=[owner.id, other_owner.id],
+        )
+        await engine.dispose()
+
+
+async def test_publish_listing_rejects_provider_owner_mismatch(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        owner, asset, wallet, draft = await _create_publishable_listing(session)
+
+    try:
+        async with session_factory() as session:
+            verifier = _StaticOwnershipVerifier(
+                session=session,
+                status=VerificationStatus.OWNER_MISMATCH,
+            )
+            with pytest.raises(ListingConflict, match="Current NFT ownership"):
+                await publish_listing(
+                    session,
+                    listing_id=draft.id,
+                    seller_id=owner.id,
+                    verifier=verifier,
+                )
+            assert verifier.transaction_states == [False]
+
+        async with session_factory() as session:
+            persisted = await session.get(Listing, draft.id)
+            assert persisted is not None
+            assert persisted.status is ListingStatus.DRAFT
+    finally:
+        await _cleanup_publishable_data(
+            session_factory,
+            listing_ids=[draft.id],
+            asset_ids=[asset.id],
+            wallet_ids=[wallet.id],
+            user_ids=[owner.id],
+        )
+        await engine.dispose()
