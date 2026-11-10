@@ -42,9 +42,10 @@ decision before any real-value code is written.
 Sales of digital goods and services in bots and Mini Apps must be paid with
 Telegram Stars. The Mini App checkout therefore creates a Stars invoice link on the
 server for an existing order snapshot; TON Connect is never used to bypass this
-requirement. Purchasable listings are priced in `XTR` at launch; the `TON` price
-currency remains in the schema but such listings are not purchasable in-app until a
-separately reviewed flow exists (see Alternative B/C).
+requirement. **This is a candidate for a future phase, not the current MVP.** The current
+MVP has free listings and no price/currency fields; the legacy listing/order price columns
+were removed by migration `0005_free_listings`. Any later paid flow requires a new owner
+ decision and fresh product, platform, provider, legal, and security review.
 
 **D2 — The payment boundary is a server-side adapter with verified provider
 notifications.** `app.orders.payment.PaymentAdapter` stays the trusted boundary and
@@ -191,7 +192,7 @@ Negative / accepted:
 - If a later launch is approved, seller settlement would still require a
   separately reviewed operator process, ledger reconciliation and legal/
   compliance clearance; a ledger is not itself custody approval.
-- TON-priced listings are viewable but not purchasable in-app at launch.
+- Current MVP listings are free and contain no price/currency. Any future priced offer is outside this ADR's approval and requires a separate owner decision.
 - Without escrow there is no buyer protection; dispute handling must be manual
   (admin), and product copy must say so.
 
