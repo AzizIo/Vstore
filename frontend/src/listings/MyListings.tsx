@@ -101,7 +101,6 @@ function MyListingDetail({
   onBack: () => void;
   onUpdated: (listing: Listing) => void;
 }) {
-  const [priceAmount, setPriceAmount] = useState(listing.price_amount);
   const [title, setTitle] = useState(listing.title ?? "");
   const [description, setDescription] = useState(listing.description ?? "");
   const [expiresAt, setExpiresAt] = useState(toLocalDateTimeInput(listing.expires_at));
@@ -126,7 +125,6 @@ function MyListingDetail({
     setSuccess("");
     try {
       const payload = {
-        price_amount: priceAmount,
         title: title.trim() || null,
         description: description.trim() || null,
         ...(expiresAt !== initialExpiresAt
@@ -195,9 +193,6 @@ function MyListingDetail({
           <StatusBadge status={listing.status} />
           <p className="eyebrow">{listing.asset.asset_type === "ton_nft" ? "TON NFT" : "Telegram gift"}</p>
           <h1 id="my-listing-detail-title">{getTitle(listing)}</h1>
-          <p className="detail-price">
-            {listing.price_amount} {listing.price_currency}
-          </p>
           {listing.description && <p className="detail-description">{listing.description}</p>}
           {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
           <dl className="detail-facts">
@@ -213,18 +208,6 @@ function MyListingDetail({
         <div className="listing-management">
           <h2>Manage listing</h2>
           <form className="listing-edit-form" onSubmit={saveChanges}>
-            <label>
-              <span>Price ({listing.price_currency})</span>
-              <input
-                aria-label="Listing price"
-                type="number"
-                min="0.000000001"
-                step="0.000000001"
-                required
-                value={priceAmount}
-                onChange={(event) => setPriceAmount(event.target.value)}
-              />
-            </label>
             <label>
               <span>Title <small>Optional</small></span>
               <input
@@ -489,9 +472,6 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
                   <StatusBadge status={listing.status} />
                 </span>
                 <span className="my-listing-card-title">{getTitle(listing)}</span>
-                <span className="my-listing-card-price">
-                  {listing.price_amount} {listing.price_currency}
-                </span>
                 <time className="my-listing-card-date" dateTime={listing.created_at}>
                   {getCreatedDate(listing.created_at)}
                 </time>
