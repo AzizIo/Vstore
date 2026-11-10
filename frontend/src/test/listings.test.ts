@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fetchListing,
   fetchListings,
+  fetchMyListings,
   type Listing,
   type ListingPage,
 } from "../api/listings";
@@ -118,6 +119,25 @@ describe("listing API client", () => {
     await expect(fetchListing("listing/one")).resolves.toEqual(listing);
 
     expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain("/api/listings/listing%2Fone");
+  });
+
+  it("loads the current user's listings with the supplied Bearer token", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse([listing]));
+    const controller = new AbortController();
+
+    await expect(fetchMyListings("current-session-token", controller.signal)).resolves.toEqual([listing]);
+
+    const [url, options] = vi.mocked(fetch).mock.calls[0];
+    expect(new URL(String(url)).pathname).toBe("/api/listings/me");
+    expect(new URL(String(url)).search).toBe("");
+    expect(new Headers(options?.headers).get("Authorization")).toBe("Bearer current-session-token");
+    expect(options?.signal).toBe(controller.signal);
+  });
+
+  it("rejects a private listings response containing an invalid item", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse([{ ...listing, asset: {} }]));
+
+    await expect(fetchMyListings("current-session-token")).rejects.toThrow("invalid listings response");
   });
 
   it("rejects an invalid detail payload", async () => {
