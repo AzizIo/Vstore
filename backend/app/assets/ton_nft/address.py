@@ -6,7 +6,7 @@ import base64
 import binascii
 import re
 
-_RAW_ADDRESS_RE = re.compile(r"^(-?\\d+):([0-9a-fA-F]{64})$")
+_RAW_ADDRESS_RE = re.compile(r"^(-?\d+):([0-9a-fA-F]{64})$")
 
 class AddressError(ValueError):
     """An address is not a valid TON account address."""
