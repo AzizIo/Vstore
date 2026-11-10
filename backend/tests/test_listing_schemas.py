@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 from pydantic import ValidationError
 
@@ -71,3 +73,43 @@ def test_telegram_auth_request_validates_init_data_length(init_data: str) -> Non
 
 def test_telegram_auth_request_accepts_nonempty_payload() -> None:
     assert TelegramAuthRequest(init_data="auth_date=1").init_data == "auth_date=1"
+
+
+
+def test_listing_request_accepts_timezone_aware_future_expiration() -> None:
+    expires_at = datetime(2030, 1, 1, 12, 0, tzinfo=UTC)
+    payload = ListingCreateRequest(
+        asset_id=ASSET_ID,
+        price_amount="1",
+        price_currency=PriceCurrency.TON,
+        expires_at=expires_at,
+    )
+    assert payload.expires_at == expires_at
+
+
+@pytest.mark.parametrize(
+    "expires_at",
+    [
+        datetime(2030, 1, 1, 12, 0),
+        datetime(2020, 1, 1, 12, 0, tzinfo=UTC),
+    ],
+)
+def test_listing_request_rejects_naive_or_past_expiration(expires_at: datetime) -> None:
+    with pytest.raises(ValidationError):
+        ListingCreateRequest(
+            asset_id=ASSET_ID,
+            price_amount="1",
+            price_currency=PriceCurrency.TON,
+            expires_at=expires_at,
+        )
+
+
+def test_listing_request_rejects_client_controlled_owner_fields() -> None:
+    with pytest.raises(ValidationError):
+        ListingCreateRequest(
+            asset_id=ASSET_ID,
+            price_amount="1",
+            price_currency=PriceCurrency.TON,
+            seller_id="attacker",
+            owner_id="attacker",
+        )
