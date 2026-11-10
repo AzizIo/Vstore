@@ -7,6 +7,7 @@ import {
   type ListingSort,
 } from "./api/listings";
 import { SessionProvider, useSession } from "./auth/SessionProvider";
+import { WalletConnection } from "./wallet/WalletConnection";
 
 const assetTypeLabels: Record<AssetType, string> = {
   ton_nft: "TON NFT",
@@ -179,7 +180,10 @@ function MarketplaceApp() {
           <span className="brand-mark" aria-hidden="true">V</span>
           <span className="brand-name">VILTARA</span>
         </a>
-        <span className="network-label">TON MARKET</span>
+        <div className="header-actions">
+          <span className="network-label">TON MARKET</span>
+          <WalletConnection />
+        </div>
       </header>
       <SessionBanner />
 

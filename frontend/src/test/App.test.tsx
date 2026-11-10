@@ -1,7 +1,23 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import { App } from "../App";
+
+const tonConnectMocks = vi.hoisted(() => ({
+  wallet: null as { account: { address: string; chain: string } } | null,
+  openModal: vi.fn(),
+  disconnect: vi.fn(),
+}));
+
+vi.mock("@tonconnect/ui-react", () => ({
+  CHAIN: { MAINNET: "-239", TESTNET: "-3" },
+  TonConnectUIProvider: ({ children, manifestUrl }: { children: ReactNode; manifestUrl: string }) => (
+    <div data-testid="tonconnect-provider" data-manifest-url={manifestUrl}>{children}</div>
+  ),
+  useTonWallet: () => tonConnectMocks.wallet,
+  useTonConnectUI: () => [{ openModal: tonConnectMocks.openModal, disconnect: tonConnectMocks.disconnect }, vi.fn()],
+}));
 
 const listing = {
   id: "listing-1",
@@ -60,6 +76,10 @@ function setSuccessfulTelegramAuth(profileResponse: Response = jsonResponse(prof
 
 describe("marketplace catalog", () => {
   beforeEach(() => {
+    vi.unstubAllEnvs();
+    tonConnectMocks.wallet = null;
+    tonConnectMocks.openModal.mockReset();
+    tonConnectMocks.disconnect.mockReset();
     Reflect.deleteProperty(window, "Telegram");
     localStorage.clear();
     sessionStorage.clear();
@@ -192,5 +212,67 @@ describe("marketplace catalog", () => {
     await waitFor(() => expect(queryClient.getQueryData(["private-profile"])).toBeUndefined());
     expect(queryClient.getQueryData(["public-preview"])).toBe("public");
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
+  });
+});
+
+describe("TON Connect wallet UI", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    tonConnectMocks.wallet = null;
+    tonConnectMocks.openModal.mockReset();
+    tonConnectMocks.disconnect.mockReset();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ items: [], total: 0, limit: 100, offset: 0 })));
+  });
+
+  it("shows a connect action when manifest configuration is available", async () => {
+    vi.stubEnv("VITE_TONCONNECT_MANIFEST_URL", "https://wallet.example/manifest.json");
+    renderMarketplace();
+
+    expect(await screen.findByRole("button", { name: "Connect wallet" })).toBeInTheDocument();
+    expect(screen.getByTestId("tonconnect-provider")).toHaveAttribute(
+      "data-manifest-url",
+      "https://wallet.example/manifest.json",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
+    expect(tonConnectMocks.openModal).toHaveBeenCalledOnce();
+  });
+
+  it("shows the abbreviated wallet address and mainnet after connection", async () => {
+    vi.stubEnv("VITE_TONCONNECT_MANIFEST_URL", "https://wallet.example/manifest.json");
+    tonConnectMocks.wallet = { account: { address: "0:abcdef1234567890", chain: "-239" } };
+    renderMarketplace();
+
+    expect(await screen.findByText("0:abcd…7890")).toBeInTheDocument();
+    expect(screen.getByText("Mainnet")).toBeInTheDocument();
+    expect(screen.getByText("Connection does not verify NFT ownership")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+    expect(screen.queryByText(/verified/i)).not.toBeInTheDocument();
+  });
+
+  it("shows testnet when reported by the connected wallet", async () => {
+    vi.stubEnv("VITE_TONCONNECT_MANIFEST_URL", "https://wallet.example/manifest.json");
+    tonConnectMocks.wallet = { account: { address: "0:abcdef1234567890", chain: "-3" } };
+    renderMarketplace();
+
+    expect(await screen.findByText("Testnet")).toBeInTheDocument();
+  });
+
+  it("calls the SDK disconnect method", async () => {
+    vi.stubEnv("VITE_TONCONNECT_MANIFEST_URL", "https://wallet.example/manifest.json");
+    tonConnectMocks.wallet = { account: { address: "0:abcdef1234567890", chain: "-239" } };
+    tonConnectMocks.disconnect.mockResolvedValue(undefined);
+    renderMarketplace();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect" }));
+    await waitFor(() => expect(tonConnectMocks.disconnect).toHaveBeenCalledOnce());
+  });
+
+  it("explains that wallet connection is unavailable without manifest configuration", async () => {
+    vi.stubEnv("VITE_TONCONNECT_MANIFEST_URL", "");
+    renderMarketplace();
+
+    expect(await screen.findByText("Wallet connection is not configured.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Connect wallet" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("tonconnect-provider")).not.toBeInTheDocument();
   });
 });
