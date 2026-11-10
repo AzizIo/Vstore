@@ -24,7 +24,11 @@ def test_readiness_returns_each_dependency_status(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json() == {
         "status": "ready",
-        "checks": {"database": "ok", "redis": "ok", "authentication": "ok"},
+        "checks": {
+            "database": "ok",
+            "redis": "ok",
+            "authentication": "ok",
+        },
     }
 
 
@@ -62,6 +66,7 @@ def test_readiness_reports_both_dependencies_unavailable(monkeypatch) -> None:
 
     monkeypatch.setattr(health, "_database_ready", database_ready)
     monkeypatch.setattr(health, "_redis_ready", redis_ready)
+    monkeypatch.setattr(health, "_authentication_ready", lambda: True)
 
     with TestClient(app) as client:
         response = client.get("/api/health/ready")
