@@ -195,8 +195,8 @@ npm run build
    - Readiness: http://localhost:8000/api/health/ready
    - Telegram login: `POST /api/auth/telegram` с JSON body `{"init_data":"<Telegram.WebApp.initData>"}`. Передавать нужно именно `Telegram.WebApp.initData`, не `initDataUnsafe`.
    - Current user: `GET /api/users/me` с заголовком `Authorization: Bearer <access_token>`.
-   - Public catalog: `GET /api/listings?limit=24&offset=0&sort=newest`; filters: `asset_type`, `currency`, `search`, `sort=price_asc|price_desc|newest`.
-   - Listing details: `GET /api/listings/{listing_id}` (только активные объявления).
+   - Public catalog: `GET /api/listings?limit=24&offset=0&sort=newest`; filters: `asset_type`, `currency`, `search`, `sort=price_asc|price_desc|newest`. Видимы только `active` объявления, у которых актив `verified` и принадлежит продавцу; `reserved`, `stale`, `pending` и `failed` скрыты.
+   - Listing details: `GET /api/listings/{listing_id}` (действует то же правило видимости, иначе 404).
    - My listings: `GET /api/listings/me` (требуется Bearer token).
    - Create listing draft: `POST /api/listings` (требуется Bearer token; только для уже подтверждённого актива, принадлежащего пользователю).
 

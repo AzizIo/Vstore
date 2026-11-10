@@ -40,6 +40,16 @@ from app.listings.service import (
 router = APIRouter(prefix="/listings", tags=["listings"])
 
 
+class ListingCollectionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    address: str
+    network: str
+    name: str | None
+    marketplace_name: str | None
+
+
 class ListingAssetResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -51,6 +61,7 @@ class ListingAssetResponse(BaseModel):
     description: str | None
     image_url: str | None
     verification_status: AssetVerificationStatus
+    collection: ListingCollectionResponse | None = None
 
 
 class ListingSellerResponse(BaseModel):
@@ -110,9 +121,25 @@ class ListingUpdateRequest(BaseModel):
 
 def _listing_query() -> Select[Listing]:
     return select(Listing).options(
-        selectinload(Listing.asset),
+        selectinload(Listing.asset).selectinload(NFTAsset.collection),
         selectinload(Listing.seller),
     )
+
+
+def _purchasable_conditions() -> list:
+    """Conditions a listing must satisfy before it is offered to a new buyer.
+
+    A listing status alone is not enough: the asset behind it may have been
+    marked stale by an ownership re-check, and the seller association may have
+    changed. Reserved listings are excluded because another buyer already holds
+    the reservation.
+    """
+
+    return [
+        Listing.status == ListingStatus.ACTIVE,
+        NFTAsset.verification_status == AssetVerificationStatus.VERIFIED,
+        NFTAsset.owner_id == Listing.seller_id,
+    ]
 
 
 @router.get("", response_model=ListingPageResponse)
@@ -125,7 +152,7 @@ async def get_listings(
     search: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
     sort: Annotated[str, Query(pattern="^(newest|price_asc|price_desc)$")] = "newest",
 ) -> ListingPageResponse:
-    conditions = [Listing.status == ListingStatus.ACTIVE]
+    conditions = _purchasable_conditions()
     if asset_type is not None:
         conditions.append(NFTAsset.asset_type == asset_type)
     if currency is not None:
@@ -139,12 +166,19 @@ async def get_listings(
     total = await session.scalar(count_statement) or 0
 
     statement = _listing_query().join(NFTAsset).where(*conditions)
+    # Every ordering ends with the primary key so pagination is stable when
+    # timestamps or prices collide; without it, limit/offset can repeat or skip
+    # rows across pages.
     if sort == "price_asc":
-        statement = statement.order_by(Listing.price_amount.asc(), Listing.created_at.desc())
+        statement = statement.order_by(
+            Listing.price_amount.asc(), Listing.created_at.desc(), Listing.id.asc()
+        )
     elif sort == "price_desc":
-        statement = statement.order_by(Listing.price_amount.desc(), Listing.created_at.desc())
+        statement = statement.order_by(
+            Listing.price_amount.desc(), Listing.created_at.desc(), Listing.id.asc()
+        )
     else:
-        statement = statement.order_by(Listing.created_at.desc())
+        statement = statement.order_by(Listing.created_at.desc(), Listing.id.asc())
 
     result = await session.scalars(statement.limit(limit).offset(offset))
     return ListingPageResponse(
@@ -172,9 +206,9 @@ async def get_listing(
     listing_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> Listing:
-    statement = _listing_query().where(
+    statement = _listing_query().join(NFTAsset).where(
         Listing.id == listing_id,
-        Listing.status == ListingStatus.ACTIVE,
+        *_purchasable_conditions(),
     )
     result = await session.scalars(statement)
     listing = result.unique().one_or_none()
