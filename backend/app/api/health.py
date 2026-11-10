@@ -14,6 +14,16 @@ settings = get_settings()
 CHECK_TIMEOUT_SECONDS = 2.0
 
 
+def _authentication_ready() -> bool:
+    secret_key = settings.auth_secret_key
+    return bool(
+        settings.bot_token
+        and settings.bot_token.strip()
+        and secret_key
+        and len(secret_key.strip()) >= 32
+    )
+
+
 async def _database_ready() -> bool:
     try:
         async with asyncio.timeout(CHECK_TIMEOUT_SECONDS):
@@ -50,12 +60,14 @@ async def readiness() -> dict[str, object]:
         _database_ready(),
         _redis_ready(),
     )
+    authentication_ok = _authentication_ready()
     checks = {
         "database": "ok" if database_ok else "error",
         "redis": "ok" if redis_ok else "error",
+        "authentication": "ok" if authentication_ok else "error",
     }
 
-    if not database_ok or not redis_ok:
+    if not database_ok or not redis_ok or not authentication_ok:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"status": "not_ready", "checks": checks},
