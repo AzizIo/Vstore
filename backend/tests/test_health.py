@@ -37,6 +37,7 @@ def test_readiness_returns_503_when_a_dependency_is_unavailable(monkeypatch) -> 
 
     monkeypatch.setattr(health, "_database_ready", database_ready)
     monkeypatch.setattr(health, "_redis_ready", redis_ready)
+    monkeypatch.setattr(health, "_authentication_ready", lambda: True)
 
     with TestClient(app) as client:
         response = client.get("/api/health/ready")
@@ -44,7 +45,11 @@ def test_readiness_returns_503_when_a_dependency_is_unavailable(monkeypatch) -> 
     assert response.status_code == 503
     assert response.json()["detail"] == {
         "status": "not_ready",
-        "checks": {"database": "error", "redis": "ok", "authentication": "ok"},
+        "checks": {
+            "database": "error",
+            "redis": "ok",
+            "authentication": "ok",
+        },
     }
 
 
@@ -67,7 +72,6 @@ def test_readiness_reports_both_dependencies_unavailable(monkeypatch) -> None:
         "redis": "error",
         "authentication": "ok",
     }
-
 
 
 def test_readiness_returns_503_when_authentication_is_not_configured(monkeypatch) -> None:
