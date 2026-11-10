@@ -3,7 +3,6 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -405,8 +404,6 @@ async def _reserve_listing(
                 seller_id=listing.seller_id,
                 idempotency_key=idempotency_key,
                 status=OrderStatus.PENDING_PAYMENT,
-                price_amount=Decimal(listing.price_amount),
-                price_currency=listing.price_currency,
                 expires_at=current_time
                 + timedelta(seconds=get_settings().order_pending_ttl_seconds),
             )
