@@ -72,7 +72,7 @@ def test_listing_catalog_rejects_negative_offset() -> None:
     assert response.status_code == 422
 
 
-@pytest.mark.parametrize("sort", ["newest", "price_asc", "price_desc"])
+@pytest.mark.parametrize("sort", ["newest"])
 def test_listing_catalog_accepts_supported_sort_values(sort: str) -> None:
     class ScalarRows:
         def unique(self):
@@ -98,9 +98,10 @@ def test_listing_catalog_accepts_supported_sort_values(sort: str) -> None:
         app.dependency_overrides.pop(get_db_session, None)
 
 
-def test_listing_catalog_rejects_unknown_sort() -> None:
+@pytest.mark.parametrize("sort", ["price_asc", "price_desc", "random"])
+def test_listing_catalog_rejects_legacy_or_unknown_sort(sort: str) -> None:
     with TestClient(app) as client:
-        response = client.get("/api/listings?sort=random")
+        response = client.get(f"/api/listings?sort={sort}")
     assert response.status_code == 422
 
 
