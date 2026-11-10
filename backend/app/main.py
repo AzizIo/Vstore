@@ -5,7 +5,6 @@ from logging import getLogger
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
@@ -27,7 +26,7 @@ async def _expire_orders_periodically() -> None:
         try:
             async with async_session_factory() as session:
                 await expire_pending_orders(session)
-        except SQLAlchemyError:
+        except Exception:
             logger.exception("Could not expire pending orders")
 
 
