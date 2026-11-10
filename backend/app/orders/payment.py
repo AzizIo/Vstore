@@ -1,10 +1,15 @@
+import enum
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
-from app.db.models import PriceCurrency
+class PriceCurrency(str, enum.Enum):
+    """Currency options reserved for a separately approved future payment phase."""
+
+    TON = "TON"
+    XTR = "XTR"
 
 
 @dataclass(frozen=True)
