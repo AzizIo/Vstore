@@ -1,7 +1,8 @@
 # VILTARA SHOP — Agent Onboarding
 
 > Read this file before changing code. It is a navigation guide and collaboration contract, not a replacement for inspecting the exact files involved in your task.
-> Last checked: 2026-11-09. The repository changes continuously; verify the current branch, open PRs, and file contents before relying on status notes below.
+> Last checked: 2026-11-11. The repository changes continuously; verify the current branch, open PRs, and file contents before relying on status notes below.
+> **Product model and stage boundaries:** read `docs/PRODUCT_MODEL.md` first — prices are a mandatory part of listings; reservation is not payment; payment/escrow must not be imitated.
 
 ## 1. What this project is
 
@@ -219,48 +220,48 @@ These rules are non-negotiable:
 - Publishing listings is intentionally disabled at present: current create endpoint only creates drafts from verified assets owned by the seller. Do not bypass this guard to make the UI look complete.
 - Do not add fake marketplace listings or fake payment/transfer success states to production UI.
 
-## 10. Project status snapshot (2026-11-09)
+## 10. Project status snapshot (2026-11-11)
 
-This is a snapshot, not a promise that every item remains current. Verify the live repository and PR list before starting work.
+This is a snapshot, not a promise that every item remains current. Verify the live repository and PR list before starting work. Product model and roadmap: `docs/PRODUCT_MODEL.md`.
+
+**Stage A — marketplace foundation (current).** Prices are a mandatory part of listings; reservation is not payment; payment/escrow are deliberately not implemented or imitated.
 
 ### Implemented on `main`
 
-- [x] FastAPI app, configuration, CORS and health/readiness endpoints.
-- [x] PostgreSQL async engine/session and Alembic migration setup.
-- [x] Core SQLAlchemy entities: users, wallets, NFT collections/assets and listings.
-- [x] Telegram Mini App initData HMAC validation and API JWT authentication.
-- [x] Current-user endpoint and auth dependencies.
-- [x] Public active-listing catalog with filters, sorting and pagination.
-- [x] Active listing detail, seller's listings and secure draft creation.
-- [x] Docker Compose local infrastructure for PostgreSQL, Redis, API and Mini App.
-- [x] Basic React/TypeScript/Vite/Tailwind Mini App shell.
-- [x] Backend and frontend CI workflows; backend unit/API tests and frontend shell tests/build.
+- [x] FastAPI app, configuration, CORS and health/readiness endpoints (PostgreSQL + Redis probes).
+- [x] PostgreSQL async engine/session and Alembic migrations (0001–0004).
+- [x] Core SQLAlchemy entities: users, wallets, NFT collections/assets, listings, orders, order events, notification outbox.
+- [x] Telegram Mini App initData HMAC validation and API JWT authentication; current-user endpoint.
+- [x] TON Connect wallet proof (server-side verification, wallet binding); `GET/POST /api/wallets/*`.
+- [x] TEP-62 NFT verification adapter (TON Center v3) and verified inventory `GET /api/assets/me`.
+- [x] Secure draft creation from verified owned assets; publication after a live ownership re-check (provider call outside DB locks, revalidation under locks).
+- [x] Listing management: publish, edit price/title/description, unpublish, seller-set expiry.
+- [x] Public catalog with filters, sorting (stable `price_asc`/`price_desc`/`newest`) and pagination; unpurchasable listings (stale/unverified/reserved/owner-mismatch) hidden from catalog and detail.
+- [x] Orders: creation with a **price/currency snapshot at reservation time**, buyer-scoped idempotency, one open order per listing, fresh ownership re-check before reservation (fail-closed 503 on provider outage), cancellation and expiry via a `SKIP LOCKED` worker.
+- [x] Telegram order notifications through a durable outbox (bot profile `bot`).
+- [x] React Mini App: catalog, listing detail (collection + item address), create/edit/unpublish listings, my listings, orders.
+- [x] Backend and frontend CI workflows with a PostgreSQL 16 service.
 
-### In progress / open work at the time this guide was written
+### Do not assume available
 
-- [ ] **Issue #2 — frontend marketplace catalog and listing details.** Scope is frontend only, branch `feat/frontend-marketplace-catalog`; do not edit the same frontend files while this task is active. Track: https://github.com/AzizIo/Vstore/issues/2
-- [ ] **PR #3 — PostgreSQL integration test suite.** Branch `test/postgres-integration`; adds 11 PostgreSQL integration tests, a PostgreSQL 16 CI service and pytest integration marker. Latest observed Backend CI run passed. The PR is still open/draft and its changes are not yet part of `main`. Track: https://github.com/AzizIo/Vstore/pull/3
+- [ ] Payment capture/refunds/payouts — `PaymentAdapter` is a protocol only; no provider.
+- [ ] Escrow/guarantee, disputes, fees, seller settlement (Stage C; ADR-0001/0002).
+- [ ] Server-side confirmation of NFT delivery after reservation (Stage B).
+- [ ] Telegram Gifts adapter (separate asset domain, deliberately out of scope).
+- [ ] Deal chat, admin panel, E2E tests, production hardening.
 
-### Not implemented / do not assume available
+### Open decisions for the maintainer (as of this snapshot)
 
-- [ ] Frontend Telegram session integration and protected-route/role handling.
-- [ ] TON Connect manifest, wallet connection and wallet proof/verification flow.
-- [ ] Production TON NFT ownership verification adapter / blockchain watcher.
-- [ ] Telegram Gifts adapter and validated transfer flow.
-- [ ] Listing publishing after a live ownership re-check.
-- [ ] Orders/deals, escrow ledger, dispute flow, payment capture/refunds/payouts.
-- [ ] Deal chat, notification pipeline and full admin panel.
-- [ ] Production hardening, monitoring, backup/restore and deployment runbook.
-- [ ] End-to-end browser tests.
+- **PR #49 `docs/issue-48-mvp-scope`** — removes listing prices across the stack and adds a destructive migration `0005_free_listings`. It contradicts the product model (prices are mandatory). Not merged; closing vs reworking needs an owner decision. Do not merge as-is.
+- Renaming the `pending_payment` order status (mentions a payment that does not exist) — requires a migration; raised as an open question, not done unilaterally.
 
 ### Recommended next implementation sequence
 
-1. Finish and review the frontend catalog/detail task against the existing API contract.
-2. Merge PostgreSQL integration coverage after review; add real API-level integration tests using a dedicated test DB.
-3. Implement asset verification behind explicit TON NFT / Telegram Gifts adapters; do not enable listing publication until live ownership checks exist.
-4. Build listing management and order/deal domain with state-transition tests and audit trail.
-5. Decide and validate compliant payment/escrow/transfer flows before implementing real-money operations.
-6. Add admin, chat, notifications, E2E tests and production operations.
+1. Resolve PR #49 (close or rework without price removal).
+2. Stage B: server-side NFT delivery confirmation and the full order lifecycle after reservation.
+3. Payment integration strictly per ADR-0001/0002 gates (platform classification, funded remedy, settlement rail — see the ADR blocker lists).
+4. Escrow/гарант only after separate design, testnet validation and audit.
+5. Admin, chat, E2E tests, production operations.
 
 ## 11. First 10 minutes for a new agent
 
