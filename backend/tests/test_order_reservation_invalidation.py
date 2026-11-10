@@ -15,7 +15,6 @@ from __future__ import annotations
 import asyncio
 import os
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
@@ -35,7 +34,6 @@ from app.db.models import (
     NFTAsset,
     Order,
     OrderStatus,
-    PriceCurrency,
     TelegramNotificationOutbox,
     User,
     Wallet,
@@ -145,8 +143,6 @@ async def seed_active_listing(
         asset_id=asset.id,
         seller_id=seller.id,
         status=ListingStatus.ACTIVE,
-        price_amount=Decimal("1.250000000"),
-        price_currency=PriceCurrency.TON,
         title="Invalidation listing",
     )
     session.add(listing)
@@ -518,8 +514,6 @@ async def test_reservation_and_publication_do_not_deadlock(invalidation_database
             asset_id=asset.id,
             seller_id=seller.id,
             status=ListingStatus.DRAFT,
-            price_amount=Decimal("2.5"),
-            price_currency=PriceCurrency.TON,
             title="Second draft",
         )
         session.add(draft)
