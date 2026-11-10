@@ -5,6 +5,13 @@ import type { Listing, PriceCurrency } from "../api/listings";
 
 const PAGE_SIZE = 24;
 
+function localDateTimeMinimum() {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+}
+
 function assetTitle(asset: InventoryAsset) {
   return asset.name || "Untitled TON NFT";
 }
@@ -59,6 +66,7 @@ export function CreateListing({
   const [priceCurrency, setPriceCurrency] = useState<PriceCurrency>("TON");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [createdListing, setCreatedListing] = useState<Listing | null>(null);
@@ -143,6 +151,7 @@ export function CreateListing({
         price_currency: priceCurrency,
         ...(title.trim() ? { title: title.trim() } : {}),
         ...(description.trim() ? { description: description.trim() } : {}),
+        ...(expiresAt ? { expires_at: new Date(expiresAt).toISOString() } : {}),
       }, controller.signal);
       if (controller.signal.aborted) return;
       setCreatedListing(draft);
@@ -214,6 +223,17 @@ export function CreateListing({
           <label>
             <span>Description <small>Optional</small></span>
             <textarea maxLength={4000} rows={4} value={description} onChange={(event) => setDescription(event.target.value)} />
+          </label>
+          <label>
+            <span>Expiration <small>Optional</small></span>
+            <input
+              aria-label="Listing expiration"
+              type="datetime-local"
+              min={localDateTimeMinimum()}
+              value={expiresAt}
+              onChange={(event) => setExpiresAt(event.target.value)}
+            />
+            <small>Leave empty for no automatic expiry.</small>
           </label>
           {submitError && <p className="creation-error" role="alert">{submitError}</p>}
           <button className="load-more-button" type="submit" disabled={submitting}>
