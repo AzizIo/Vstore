@@ -17,10 +17,9 @@ class VerificationStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-
-
 class NFTMetadata:
     """Untrusted, display-only metadata; never proof of ownership."""
+
     name: str | None = None
     description: str | None = None
     image: str | None = None
@@ -28,8 +27,6 @@ class NFTMetadata:
 
 
 @dataclass(frozen=True, slots=True)
-
-
 class NFTItemSnapshot:
     address: str
     initialized: bool
@@ -40,8 +37,6 @@ class NFTItemSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
-
-
 class VerificationResult:
     status: VerificationStatus
     item_address: str
