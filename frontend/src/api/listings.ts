@@ -46,7 +46,7 @@ export interface ListingFilters {
   sort: ListingSort;
 }
 
-function isListing(value: unknown): value is Listing {
+export function isListing(value: unknown): value is Listing {
   if (!value || typeof value !== "object") return false;
   const listing = value as Partial<Listing>;
   const asset = listing.asset;
@@ -70,10 +70,10 @@ function isListing(value: unknown): value is Listing {
   );
 }
 
-async function requestJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+async function requestJson<T>(url: string, signal?: AbortSignal, headers?: HeadersInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(url, { signal });
+    response = await fetch(url, { signal, headers });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new Error("Could not connect to the marketplace. Please try again.");
@@ -121,4 +121,16 @@ export async function fetchListing(id: string, signal?: AbortSignal) {
   const listing = await requestJson<unknown>(`${API_BASE_URL}/api/listings/${encodeURIComponent(id)}`, signal);
   if (!isListing(listing)) throw new Error("The marketplace returned an invalid listing.");
   return listing;
+}
+
+export async function fetchMyListings(accessToken: string, signal?: AbortSignal): Promise<Listing[]> {
+  const listings = await requestJson<unknown>(
+    `${API_BASE_URL}/api/listings/me`,
+    signal,
+    { Authorization: `Bearer ${accessToken}` },
+  );
+  if (!Array.isArray(listings) || !listings.every(isListing)) {
+    throw new Error("The marketplace returned an invalid listings response.");
+  }
+  return listings;
 }

@@ -53,6 +53,44 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .session-error {
   color: #e19a8c;
 }
+.app-navigation { display: flex; gap: 22px; border-bottom: 1px solid var(--line); }
+.navigation-tab { position: relative; min-height: 46px; padding: 0 2px; border: 0; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
+.navigation-tab[aria-pressed="true"] { color: #f3f0e9; }
+.navigation-tab[aria-pressed="true"]::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--accent); content: ""; }
+.my-listings, .my-listings-gate { padding: 42px 0 72px; }
+.my-listings-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.my-listings-heading .eyebrow, .my-listings-gate > .eyebrow { margin-bottom: 12px; }
+.my-listings-heading h1, .my-listings-gate > h1 { margin: 0; font: 400 clamp(36px, 5vw, 54px)/1 var(--serif); }
+.my-listings-count, .my-listings-filter-count { color: var(--muted); font-size: 12px; }
+.my-listings-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.my-listings-toolbar .select-control select { min-width: 190px; }
+.my-listings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.my-listing-card { display: grid; grid-template-columns: minmax(96px, 138px) minmax(0, 1fr); min-width: 0; overflow: hidden; border: 1px solid var(--line); background: var(--surface); color: inherit; text-align: left; cursor: pointer; transition: border-color 150ms ease; }
+.my-listing-card:hover { border-color: #69734a; }
+.my-listing-image { display: grid; aspect-ratio: 1 / 1; place-items: center; overflow: hidden; background: radial-gradient(ellipse at 50% 40%, #424b32 0, #262c25 48%, #202420 100%); color: #d3dc82; font: italic 48px var(--serif); }
+.my-listing-image img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.my-listing-card-copy { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 9px; padding: 13px 15px; }
+.my-listing-card-topline { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px; }
+.listing-type-label { overflow: hidden; color: var(--muted); font-size: 9px; letter-spacing: .1em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.listing-status { display: inline-flex; flex: 0 0 auto; align-items: center; padding: 4px 7px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); font-size: 9px; line-height: 1.2; }
+.listing-status-active { border-color: #4a694f; color: #a4d5a5; }
+.listing-status-draft { border-color: #6b6544; color: #d5c87f; }
+.listing-status-reserved { border-color: #526879; color: #9dc4df; }
+.listing-status-sold { border-color: #50694f; color: #afd29d; }
+.listing-status-cancelled, .listing-status-expired { border-color: #684e4b; color: #d29d95; }
+.listing-status-unknown { border-color: #625776; color: #c3b4df; }
+.my-listing-card-title { max-width: 100%; overflow: hidden; font: 19px/1.2 var(--serif); text-overflow: ellipsis; white-space: nowrap; }
+.my-listing-card-price { color: var(--accent); font-size: 12px; font-weight: 600; }
+.my-listing-card-date { margin-top: auto; color: var(--muted); font-size: 10px; }
+.my-listings-message { padding: 42px 0; color: var(--muted); }
+.my-listings-message h2 { margin: 0 0 8px; color: #f3f0e9; font: 25px var(--serif); }
+.my-listings-message p { max-width: 520px; margin: 0 0 14px; font-size: 13px; line-height: 1.6; }
+.my-listing-detail { padding: 28px 0 72px; }
+.my-listing-detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .9fr); gap: clamp(28px, 6vw, 72px); align-items: start; }
+.my-listing-detail-layout > .my-listing-image { max-height: 640px; aspect-ratio: 1 / 1; }
+.my-listing-detail-copy { padding-top: 20px; }
+.my-listing-detail-copy > .listing-status { margin-bottom: 20px; }
+.my-listing-detail-copy h1 { margin: 0; font: 400 clamp(36px, 5vw, 54px)/1 var(--serif); }
 .catalog-intro { padding: 66px 0 42px; }
 .eyebrow { margin: 0 0 18px; color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: .18em; }
 .catalog-intro h1, .detail-copy h1 { margin: 0; font: 400 clamp(46px, 6vw, 76px)/.98 var(--serif); }
@@ -118,6 +156,17 @@ footer span { padding: 0 6px; color: var(--accent); }
   .wallet-config-message { max-width: 150px; font-size: 9px; }
   .wallet-button { min-height: 34px; padding: 7px 9px; font-size: 10px; }
   .wallet-account { font-size: 9px; }
+  .my-listings, .my-listings-gate { padding: 30px 0 56px; }
+  .my-listings-grid { grid-template-columns: 1fr; gap: 10px; }
+  .my-listing-card { grid-template-columns: 96px minmax(0, 1fr); }
+  .my-listing-card-copy { gap: 7px; padding: 10px; }
+  .my-listing-card-title { font-size: 17px; }
+  .listing-status { padding: 4px 6px; font-size: 8px; }
+  .my-listings-toolbar .select-control { flex: 1; }
+  .my-listings-toolbar .select-control select { min-width: 0; }
+  .my-listing-detail-layout { grid-template-columns: 1fr; gap: 18px; }
+  .my-listing-detail-layout > .my-listing-image { max-height: none; }
+  .my-listing-detail-copy { padding-top: 0; }
   .catalog-intro { padding: 52px 0 34px; }
   .catalog-controls { display: grid; grid-template-columns: 1fr 1fr; }
   .search-control { grid-column: 1 / -1; }

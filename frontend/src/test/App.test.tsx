@@ -35,6 +35,10 @@ const listing = {
   seller: { id: "seller-1", username: "collector", first_name: "Ari" },
 };
 const page = { items: [listing], total: 1, limit: 100, offset: 0 };
+const ownListings = [
+  { ...listing, id: "mine-draft", status: "draft", title: "My draft lantern" },
+  { ...listing, id: "mine-active", status: "active", title: "My active lantern" },
+];
 const profile = {
   id: "user-1", telegram_id: 12345, username: "alex", first_name: "Alex",
   last_name: "Example", language_code: "en",
@@ -70,6 +74,20 @@ function setSuccessfulTelegramAuth(profileResponse: Response = jsonResponse(prof
     const url = String(input);
     if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
     if (url.endsWith("/api/users/me")) return profileResponse;
+    return jsonResponse(page);
+  });
+}
+
+function setAuthenticatedListingsResponse(response: Response | unknown = jsonResponse(ownListings)) {
+  vi.mocked(fetch).mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
+    if (url.endsWith("/api/users/me")) return jsonResponse(profile);
+    if (url.endsWith("/api/listings/me")) {
+      return response && typeof response === "object" && "ok" in response && "json" in response
+        ? response as Response
+        : jsonResponse(response);
+    }
     return jsonResponse(page);
   });
 }
@@ -274,5 +292,196 @@ describe("TON Connect wallet UI", () => {
     expect(await screen.findByText("Wallet connection is not configured.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Connect wallet" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("tonconnect-provider")).not.toBeInTheDocument();
+  });
+});
+
+describe("My Listings dashboard", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    tonConnectMocks.wallet = null;
+    Reflect.deleteProperty(window, "Telegram");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(page)));
+  });
+
+  async function openMyListings() {
+    fireEvent.click(screen.getByRole("button", { name: "My Listings" }));
+  }
+
+  it("requires Telegram authentication and does not request private listings when unauthenticated", async () => {
+    renderMarketplace();
+    await openMyListings();
+
+    expect(await screen.findByText("Open VILTARA in Telegram")).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/listings/me"))).toBe(false);
+  });
+
+  it("does not request private listings while the Telegram session is loading", async () => {
+    setTelegramInitData();
+    vi.mocked(fetch).mockImplementation((input) => {
+      if (String(input).endsWith("/api/auth/telegram")) return new Promise(() => undefined);
+      return Promise.resolve(jsonResponse(page));
+    });
+    renderMarketplace();
+    await openMyListings();
+
+    expect(screen.getByText("Waiting for Telegram session verification...")).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/listings/me"))).toBe(false);
+  });
+
+  it("does not request private listings when Telegram authentication fails", async () => {
+    setTelegramInitData();
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).endsWith("/api/auth/telegram")) return jsonResponse({ detail: "Unavailable" }, 503);
+      return jsonResponse(page);
+    });
+    renderMarketplace();
+    await openMyListings();
+
+    expect(await screen.findByText("Session unavailable")).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/listings/me"))).toBe(false);
+  });
+
+  it("loads only the current-user endpoint with the access token from session", async () => {
+    setTelegramInitData();
+    setAuthenticatedListingsResponse();
+    renderMarketplace();
+    expect(await screen.findByText("Signed in as Alex Example · @alex")).toBeInTheDocument();
+    await openMyListings();
+
+    expect(await screen.findByText("My draft lantern")).toBeInTheDocument();
+    const privateCall = vi.mocked(fetch).mock.calls.find(([input]) => String(input).endsWith("/api/listings/me"));
+    expect(String(privateCall?.[0])).toMatch(/\/api\/listings\/me$/);
+    expect(new Headers(privateCall?.[1]?.headers).get("Authorization")).toBe("Bearer test-access-token");
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      return path.startsWith("/api/listings/") && path !== "/api/listings/me";
+    })).toBe(false);
+  });
+
+  it("shows an empty state for an account with no listings", async () => {
+    setTelegramInitData();
+    setAuthenticatedListingsResponse([]);
+    renderMarketplace();
+    await openMyListings();
+
+    expect(await screen.findByText("No listings yet")).toBeInTheDocument();
+  });
+
+  it("renders all known statuses and a safe fallback for unknown status", async () => {
+    const statusListings = [
+      ...["draft", "active", "reserved", "sold", "cancelled", "expired"].map((status) => ({
+        ...listing, id: `status-${status}`, status, title: `Listing ${status}`,
+      })),
+      { ...listing, id: "status-new", status: "unexpected", title: "Listing unknown" },
+    ];
+    setTelegramInitData();
+    setAuthenticatedListingsResponse(statusListings);
+    renderMarketplace();
+    await openMyListings();
+
+    for (const label of ["Draft", "Active", "Reserved", "Sold", "Cancelled", "Expired", "Unknown status"]) {
+      expect(await screen.findByText(label)).toBeInTheDocument();
+    }
+  });
+
+  it("filters listings by status on the client", async () => {
+    setTelegramInitData();
+    setAuthenticatedListingsResponse();
+    renderMarketplace();
+    await openMyListings();
+    await screen.findByText("My active lantern");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter my listings by status" }), {
+      target: { value: "draft" },
+    });
+
+    expect(screen.getByText("My draft lantern")).toBeInTheDocument();
+    expect(screen.queryByText("My active lantern")).not.toBeInTheDocument();
+    expect(screen.getByText("Showing 1")).toBeInTheDocument();
+  });
+
+  it.each([
+    [401, "Expired session"],
+    [403, "Access denied"],
+  ])("shows API %s errors and retries without leaving My Listings", async (status, detail) => {
+    setTelegramInitData();
+    let privateRequests = 0;
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
+      if (url.endsWith("/api/users/me")) return jsonResponse(profile);
+      if (url.endsWith("/api/listings/me")) {
+        privateRequests += 1;
+        return privateRequests === 1
+          ? jsonResponse({ detail }, status)
+          : jsonResponse(ownListings);
+      }
+      return jsonResponse(page);
+    });
+    renderMarketplace();
+    await openMyListings();
+
+    expect(await screen.findByText(detail)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("My draft lantern")).toBeInTheDocument();
+  });
+
+  it("handles network errors with retry", async () => {
+    setTelegramInitData();
+    let privateRequests = 0;
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
+      if (url.endsWith("/api/users/me")) return jsonResponse(profile);
+      if (url.endsWith("/api/listings/me")) {
+        privateRequests += 1;
+        if (privateRequests === 1) throw new Error("offline");
+        return jsonResponse(ownListings);
+      }
+      return jsonResponse(page);
+    });
+    renderMarketplace();
+    await openMyListings();
+
+    expect(await screen.findByText(/Could not connect to the marketplace/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("My draft lantern")).toBeInTheDocument();
+  });
+
+  it("rejects runtime-invalid private listing responses", async () => {
+    setTelegramInitData();
+    setAuthenticatedListingsResponse([{ ...listing, asset: {} }]);
+    renderMarketplace();
+    await openMyListings();
+
+    expect(await screen.findByText("The marketplace returned an invalid listings response.")).toBeInTheDocument();
+  });
+
+  it("opens a draft from its private response without calling the public detail endpoint", async () => {
+    setTelegramInitData();
+    setAuthenticatedListingsResponse();
+    renderMarketplace();
+    await openMyListings();
+    fireEvent.click(await screen.findByRole("button", { name: /My draft lantern/ }));
+
+    expect(await screen.findByRole("heading", { name: "My draft lantern" })).toBeInTheDocument();
+    expect(screen.getByText("Back to my listings")).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      return path.startsWith("/api/listings/") && path !== "/api/listings/me";
+    })).toBe(false);
+  });
+
+  it("returns from a private listing detail to the public catalog through navigation", async () => {
+    setTelegramInitData();
+    setAuthenticatedListingsResponse();
+    renderMarketplace();
+    await openMyListings();
+    fireEvent.click(await screen.findByRole("button", { name: /My draft lantern/ }));
+    await screen.findByRole("heading", { name: "My draft lantern" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Catalog" }));
+
+    expect(await screen.findByText("Explore listings")).toBeInTheDocument();
   });
 });

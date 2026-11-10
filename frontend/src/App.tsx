@@ -7,6 +7,7 @@ import {
   type ListingSort,
 } from "./api/listings";
 import { SessionProvider, useSession } from "./auth/SessionProvider";
+import { MyListings } from "./listings/MyListings";
 import { WalletConnection } from "./wallet/WalletConnection";
 
 const assetTypeLabels: Record<AssetType, string> = {
@@ -141,6 +142,7 @@ function SessionBanner() {
 }
 
 function MarketplaceApp() {
+  const [section, setSection] = useState<"catalog" | "my-listings">("catalog");
   const [listings, setListings] = useState<Listing[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -186,8 +188,34 @@ function MarketplaceApp() {
         </div>
       </header>
       <SessionBanner />
+      <nav className="app-navigation" aria-label="Marketplace sections">
+        <button
+          className="navigation-tab"
+          type="button"
+          aria-pressed={section === "catalog"}
+          onClick={() => {
+            setListingId(null);
+            setSection("catalog");
+          }}
+        >
+          Catalog
+        </button>
+        <button
+          className="navigation-tab"
+          type="button"
+          aria-pressed={section === "my-listings"}
+          onClick={() => {
+            setListingId(null);
+            setSection("my-listings");
+          }}
+        >
+          My Listings
+        </button>
+      </nav>
 
-      {listingId ? (
+      {section === "my-listings" ? (
+        <MyListings />
+      ) : listingId ? (
         <ListingDetail listingId={listingId} onBack={() => setListingId(null)} />
       ) : (
         <>

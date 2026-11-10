@@ -1,0 +1,241 @@
+import { useEffect, useMemo, useState } from "react";
+
+import { fetchMyListings, type Listing } from "../api/listings";
+import { useSession } from "../auth/SessionProvider";
+
+const listingStatuses = ["draft", "active", "reserved", "sold", "cancelled", "expired"] as const;
+type KnownStatus = (typeof listingStatuses)[number];
+type StatusFilter = "all" | KnownStatus | "other";
+
+const statusLabels: Record<KnownStatus, string> = {
+  draft: "Draft",
+  active: "Active",
+  reserved: "Reserved",
+  sold: "Sold",
+  cancelled: "Cancelled",
+  expired: "Expired",
+};
+
+function isKnownStatus(status: string): status is KnownStatus {
+  return listingStatuses.some((knownStatus) => knownStatus === status);
+}
+
+function getTitle(listing: Listing) {
+  return listing.title || listing.asset.name || "Untitled asset";
+}
+
+function getCreatedDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Date unavailable"
+    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
+}
+
+function ListingImage({ listing }: { listing: Listing }) {
+  const [failed, setFailed] = useState(false);
+  const title = getTitle(listing);
+  useEffect(() => setFailed(false), [listing.asset.image_url]);
+
+  return (
+    <div className="my-listing-image">
+      {listing.asset.image_url && !failed ? (
+        <img src={listing.asset.image_url} alt={title} loading="lazy" onError={() => setFailed(true)} />
+      ) : (
+        <span aria-label="Image unavailable">V</span>
+      )}
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const known = isKnownStatus(status);
+  return (
+    <span className={`listing-status ${known ? `listing-status-${status}` : "listing-status-unknown"}`}>
+      {known ? statusLabels[status] : "Unknown status"}
+    </span>
+  );
+}
+
+function MyListingDetail({ listing, onBack }: { listing: Listing; onBack: () => void }) {
+  return (
+    <section className="my-listing-detail" aria-labelledby="my-listing-detail-title">
+      <button className="text-button back-button" type="button" onClick={onBack}>
+        <span aria-hidden="true">←</span> Back to my listings
+      </button>
+      <div className="my-listing-detail-layout">
+        <ListingImage listing={listing} />
+        <div className="my-listing-detail-copy">
+          <StatusBadge status={listing.status} />
+          <p className="eyebrow">{listing.asset.asset_type === "ton_nft" ? "TON NFT" : "Telegram gift"}</p>
+          <h1 id="my-listing-detail-title">{getTitle(listing)}</h1>
+          <p className="detail-price">
+            {listing.price_amount} {listing.price_currency}
+          </p>
+          {listing.description && <p className="detail-description">{listing.description}</p>}
+          {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
+          <dl className="detail-facts">
+            <div><dt>Created</dt><dd>{getCreatedDate(listing.created_at)}</dd></div>
+            <div><dt>Asset ID</dt><dd>{listing.asset.external_id}</dd></div>
+            <div><dt>Verification</dt><dd>{listing.asset.verification_status}</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError("");
+    fetchMyListings(accessToken, controller.signal)
+      .then(setListings)
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(reason instanceof Error ? reason.message : "Unable to load your listings.");
+          setListings([]);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [accessToken, retry]);
+
+  const availableStatuses = useMemo(
+    () => listingStatuses.filter((status) => listings.some((listing) => listing.status === status)),
+    [listings],
+  );
+  const hasUnknownStatus = listings.some((listing) => !isKnownStatus(listing.status));
+  const filteredListings = listings.filter((listing) => {
+    if (statusFilter === "all") return true;
+    if (statusFilter === "other") return !isKnownStatus(listing.status);
+    return listing.status === statusFilter;
+  });
+
+  if (selectedListing) {
+    return <MyListingDetail listing={selectedListing} onBack={() => setSelectedListing(null)} />;
+  }
+
+  return (
+    <section className="my-listings" aria-labelledby="my-listings-title">
+      <div className="my-listings-heading">
+        <div>
+          <p className="eyebrow">SELLER SPACE</p>
+          <h1 id="my-listings-title">My Listings</h1>
+        </div>
+        {!loading && !error && <span className="my-listings-count">{listings.length} total</span>}
+      </div>
+
+      {!loading && !error && listings.length > 0 && (
+        <div className="my-listings-toolbar">
+          <label className="select-control">
+            <span className="sr-only">Filter my listings by status</span>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
+              <option value="all">All statuses ({listings.length})</option>
+              {availableStatuses.map((status) => (
+                <option key={status} value={status}>
+                  {statusLabels[status]} ({listings.filter((listing) => listing.status === status).length})
+                </option>
+              ))}
+              {hasUnknownStatus && (
+                <option value="other">
+                  Other status ({listings.filter((listing) => !isKnownStatus(listing.status)).length})
+                </option>
+              )}
+            </select>
+          </label>
+          <span className="my-listings-filter-count">Showing {filteredListings.length}</span>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="my-listings-message" role="status">Loading your listings...</div>
+      ) : error ? (
+        <div className="my-listings-message" role="alert">
+          <h2>Listings unavailable</h2>
+          <p>{error}</p>
+          <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button>
+        </div>
+      ) : listings.length === 0 ? (
+        <div className="my-listings-message" role="status">
+          <h2>No listings yet</h2>
+          <p>Your own listings will appear here.</p>
+        </div>
+      ) : filteredListings.length === 0 ? (
+        <div className="my-listings-message" role="status">
+          <h2>No listings with this status</h2>
+          <p>Choose another status to see more listings.</p>
+        </div>
+      ) : (
+        <div className="my-listings-grid">
+          {filteredListings.map((listing) => (
+            <button
+              className="my-listing-card"
+              type="button"
+              key={listing.id}
+              onClick={() => setSelectedListing(listing)}
+            >
+              <ListingImage listing={listing} />
+              <span className="my-listing-card-copy">
+                <span className="my-listing-card-topline">
+                  <span className="listing-type-label">
+                    {listing.asset.asset_type === "ton_nft" ? "TON NFT" : "Telegram gift"}
+                  </span>
+                  <StatusBadge status={listing.status} />
+                </span>
+                <span className="my-listing-card-title">{getTitle(listing)}</span>
+                <span className="my-listing-card-price">
+                  {listing.price_amount} {listing.price_currency}
+                </span>
+                <time className="my-listing-card-date" dateTime={listing.created_at}>
+                  {getCreatedDate(listing.created_at)}
+                </time>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function MyListings() {
+  const session = useSession();
+  if (session.status === "loading") {
+    return <section className="my-listings-message" role="status">Waiting for Telegram session verification...</section>;
+  }
+  if (session.status === "unauthenticated") {
+    return (
+      <section className="my-listings-gate" aria-labelledby="my-listings-title">
+        <p className="eyebrow">SELLER SPACE</p>
+        <h1 id="my-listings-title">My Listings</h1>
+        <div className="my-listings-message" role="status">
+          <h2>Open VILTARA in Telegram</h2>
+          <p>Sign in through the Telegram Mini App to view your listings.</p>
+        </div>
+      </section>
+    );
+  }
+  if (session.status === "error") {
+    return (
+      <section className="my-listings-gate" aria-labelledby="my-listings-title">
+        <p className="eyebrow">SELLER SPACE</p>
+        <h1 id="my-listings-title">My Listings</h1>
+        <div className="my-listings-message" role="alert">
+          <h2>Session unavailable</h2>
+          <p>{session.message}</p>
+        </div>
+      </section>
+    );
+  }
+  return <AuthenticatedMyListings accessToken={session.accessToken} />;
+}
