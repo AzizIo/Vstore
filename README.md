@@ -67,7 +67,7 @@ All protected endpoints below require `Authorization: Bearer <access_token>` fro
 - `GET /api/wallets/me` — wallets linked to the current user.
 - `POST /api/wallets/proof/challenge` and `POST /api/wallets/proof/verify` — backend wallet-proof challenge and verification endpoints. Frontend integration is tracked by #43.
 - `GET /api/assets/me?limit=24&offset=0` — inventory page for the user's verified wallet; provider errors are not returned as an empty inventory.
-- `GET /api/listings?limit=24&offset=0&sort=newest` — public catalog; filters include `asset_type`, `currency`, `search`, and `sort=price_asc|price_desc|newest`. Only currently purchasable active listings are visible.
+- `GET /api/listings?limit=24&offset=0` — public catalog; optional filters include `asset_type` and `search`. Results use newest-first ordering with stable pagination. Listings are free and the endpoint has no price or currency filters.
 - `GET /api/listings/{listing_id}` — public detail for a currently visible listing.
 - `GET /api/listings/me` — private listings belonging to the current user.
 - `POST /api/listings` — create a private draft from an eligible inventory asset.
@@ -75,9 +75,9 @@ All protected endpoints below require `Authorization: Bearer <access_token>` fro
 
 See [Buyer order lifecycle](docs/ORDER_LIFECYCLE.md) for reservation, cancellation, expiry, ownership checks, and notification semantics.
 
-## Current pricing-field caveat
+## Free listings in the current MVP
 
-The existing listing model and Mini App still require/store `price_amount` and `price_currency`, display those values, and support price sorting. They are **not connected to payment collection**: there is no checkout, payment confirmation, commission, refund, or seller payout in the MVP. This is a legacy product-scope mismatch to resolve before public launch; do not interpret the displayed value or an order reservation as money changing hands.
+All current MVP listings are free. Listing and order records do not contain price or currency fields; the API, Mini App, catalog filters, and seller forms do not accept or display a price. Creating an order only reserves a listing. There is no checkout, payment confirmation, commission, refund, seller payout, or transfer guarantee in this phase. Do not interpret an order reservation or a wallet connection as money changing hands or an NFT being transferred.
 
 ## Local development
 
