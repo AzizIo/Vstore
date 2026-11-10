@@ -7,6 +7,7 @@ from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable, 
 from app.assets.ton_nft.models import NFTItemSnapshot, VerificationResult, VerificationStatus
 from app.assets.ton_nft.provider import NFTDataProvider
 
+
 class TONNFTVerifier:
     """Verify an NFT item against an expected seller wallet, without writes."""
 
