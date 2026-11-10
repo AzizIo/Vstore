@@ -43,11 +43,14 @@ class FakeProvider:
 
 
 def test_normalizes_raw_address() -> None:
-    assert normalize_address(ITEM.upper().replace("0:", "0:")) == ITEM
+    raw_upper = "0:" + ("11" * 32).upper()
+    assert normalize_address(raw_upper) == ITEM
 
 
 def test_normalizes_checksum_valid_friendly_address() -> None:
-    friendly = "EQD3LzasMd4GAmhIEkCQ4k6LnziTqNZ6VPtRfeZKHu0Fmkho"
+    friendly = (
+        "EQD3LzasMd4GAmhIEkCQ4k6LnziTqNZ6VPtRfeZKHu0Fmkho"
+    )
     assert normalize_address(friendly) == "0:f72f36ac31de06026848124090e24e8b9f3893a8d67a54fb517de64a1eed059a"
 
 
@@ -171,5 +174,6 @@ async def test_malformed_provider_item_maps_to_invalid_data() -> None:
 
 @pytest.mark.asyncio
 async def test_unsupported_asset_has_distinct_status() -> None:
-    result = await TONNFTVerifier(FakeProvider(error=UnsupportedAsset("unsupported"))).verify(ITEM, OWNER)
+    provider = FakeProvider(error=UnsupportedAsset("unsupported"))
+    result = await TONNFTVerifier(provider).verify(ITEM, OWNER)
     assert result.status is VerificationStatus.UNSUPPORTED
