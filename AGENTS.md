@@ -236,7 +236,7 @@ These rules are non-negotiable:
 - TON NFT and Telegram Gifts are different asset types with different verification/transfer capabilities. Keep them behind separate adapters.
 - Do not claim escrow, automatic NFT transfer, buyer protection or seller payout is implemented until the full lifecycle is implemented and tested.
 - Telegram's in-app digital goods payment rules and Telegram Gifts API permissions constrain implementation. Read `README.md` and `docs/ASSET_INTEGRATION_AUDIT.md` before implementing checkout or transfer.
-- Publishing listings is intentionally disabled at present: current create endpoint only creates drafts from verified assets owned by the seller. Do not bypass this guard to make the UI look complete.
+- Listing creation starts as a **draft** from a verified asset owned by the seller; publication is allowed only through `POST /api/listings/{id}/publish` after a fresh server-side TEP-62 ownership re-check (provider call outside DB locks, revalidation under locks). Do not add any other publication path or bypass this check.
 - Do not add fake marketplace listings or fake payment/transfer success states to production UI.
 
 ## 10. Project status snapshot (2026-11-10)
