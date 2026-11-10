@@ -81,6 +81,7 @@ function MyListingDetail({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmPublish, setConfirmPublish] = useState(false);
   const isEditable = listing.status === "draft" || listing.status === "active";
   const canPublish =
     listing.status === "draft" &&
@@ -117,6 +118,7 @@ function MyListingDetail({
     try {
       const updated = await publishListing(listing.id, accessToken);
       onUpdated(updated);
+      setConfirmPublish(false);
       setSuccess("Listing published and is now visible in the marketplace.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to publish this listing.");
@@ -214,9 +216,13 @@ function MyListingDetail({
                   className="primary-button"
                   type="button"
                   disabled={Boolean(working)}
-                  onClick={() => void publish()}
+                  onClick={() => {
+                    setError("");
+                    setSuccess("");
+                    setConfirmPublish(true);
+                  }}
                 >
-                  {working === "publishing" ? "Verifying NFT ownership..." : "Publish listing"}
+                  Publish listing
                 </button>
               )}
               <button
@@ -233,6 +239,34 @@ function MyListingDetail({
               </button>
             </div>
           </form>
+          {confirmPublish && (
+            <div className="listing-confirmation" role="group" aria-label="Confirm listing publication">
+              <p>
+                Publish this NFT? The server will re-check its current on-chain owner before making it public.
+              </p>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={Boolean(working)}
+                onClick={() => void publish()}
+              >
+                {working === "publishing" ? "Verifying NFT ownership..." : "Confirm publish"}
+              </button>
+              <button
+                className="text-button"
+                type="button"
+                disabled={Boolean(working)}
+                onClick={() => setConfirmPublish(false)}
+              >
+                Not now
+              </button>
+            </div>
+          )}
+          {listing.status === "draft" && !canPublish && (
+            <p className="listing-management-note" role="status">
+              This draft cannot be published because its TON NFT record is not currently eligible for publication.
+            </p>
+          )}
           {confirmCancel && (
             <div className="listing-confirmation" role="group" aria-label="Confirm listing cancellation">
               <p>
