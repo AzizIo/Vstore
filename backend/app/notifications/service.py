@@ -3,14 +3,13 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from typing import Protocol
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.db.models import Order, TelegramNotificationOutbox
+from app.db.models import TelegramNotificationOutbox
 
 
 class NotificationSender(Protocol):
@@ -39,8 +38,6 @@ class NotificationDelivery:
     recipient_role: str
     event_type: str
     order_id: uuid.UUID
-    price_amount: Decimal
-    price_currency: str
     attempt_count: int
 
 
@@ -65,12 +62,7 @@ async def claim_due_notifications(
 
     async with session.begin():
         result = await session.execute(
-            select(
-                TelegramNotificationOutbox,
-                Order.price_amount,
-                Order.price_currency,
-            )
-            .join(Order, Order.id == TelegramNotificationOutbox.order_id)
+            select(TelegramNotificationOutbox)
             .where(
                 or_(
                     (
@@ -90,7 +82,7 @@ async def claim_due_notifications(
             .limit(batch_limit)
             .with_for_update(skip_locked=True, of=TelegramNotificationOutbox)
         )
-        for notification, price_amount, price_currency in result:
+        for notification in result:
             claim_token = uuid.uuid4()
             notification.status = "processing"
             notification.claim_token = claim_token
@@ -106,12 +98,6 @@ async def claim_due_notifications(
                     recipient_role=notification.recipient_role,
                     event_type=notification.event_type,
                     order_id=notification.order_id,
-                    price_amount=Decimal(price_amount),
-                    price_currency=(
-                        price_currency.value
-                        if hasattr(price_currency, "value")
-                        else str(price_currency)
-                    ),
                     attempt_count=notification.attempt_count,
                 )
             )
@@ -184,7 +170,6 @@ async def _mark_failed_or_retry(
 
 def build_notification_message(delivery: NotificationDelivery) -> str:
     order_reference = str(delivery.order_id).replace("-", "")[:8].upper()
-    amount = format(delivery.price_amount.normalize(), "f")
 
     if delivery.event_type == "order_created":
         description = (
@@ -192,7 +177,7 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
             if delivery.recipient_role == "buyer"
             else "A buyer reserved your listing."
         )
-        status = "Pending payment"
+        status = "Reserved"
     elif delivery.event_type == "order_cancelled":
         description = (
             "You cancelled the order."
@@ -208,7 +193,6 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
         f"VILTARA SHOP · Order #{order_reference}",
         description,
         f"Status: {status}",
-        f"Amount: {amount} {delivery.price_currency}",
     ]
     settings = get_settings()
     app_url = settings.telegram_mini_app_url
@@ -224,7 +208,7 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
             )
             lines.append(f"Open in Mini App: {order_url}")
 
-    lines.append("Payment is not enabled. No payment has been received.")
+    lines.append("This MVP does not collect payments.")
     return "\n".join(lines)
 
 
