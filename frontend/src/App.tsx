@@ -215,16 +215,14 @@ function MarketplaceApp() {
   const loadMoreController = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    const controller = new AbortController();
-    getTelegramStartOrderId(controller.signal).then((orderId) => {
-      if (!controller.signal.aborted && orderId) {
-        setInitialOrderId(orderId);
-        setListingId(null);
-        setSection("orders");
-      }
-    });
-    return () => controller.abort();
-  }, []);
+    if (session.status === "loading") return;
+    const orderId = getTelegramStartOrderId();
+    if (orderId) {
+      setInitialOrderId(orderId);
+      setListingId(null);
+      setSection("orders");
+    }
+  }, [session.status]);
 
   useEffect(() => {
     const version = ++requestVersion.current;

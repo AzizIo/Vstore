@@ -55,10 +55,7 @@ export function getTelegramInitData(signal?: AbortSignal): Promise<string | null
   });
 }
 
-export async function getTelegramStartOrderId(signal?: AbortSignal): Promise<string | null> {
-  await getTelegramInitData(signal);
-  if (signal?.aborted) return null;
-
+export function getTelegramStartOrderId(): string | null {
   const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
   if (typeof startParam !== "string") return null;
 
