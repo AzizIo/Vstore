@@ -18,7 +18,7 @@ const inventory = {
   items: [asset], wallet_id: "wallet-id", limit: 24, offset: 0, next_offset: 1, has_more: false,
 };
 const listing: Listing = {
-  id: "listing-id", status: "draft", price_amount: "1.25", price_currency: "TON",
+  id: "listing-id", status: "draft",
   title: "My NFT", description: null, created_at: "2026-01-01T00:00:00Z",
   asset: {
     id: asset.id, asset_type: "ton_nft", external_id: asset.external_id,
@@ -74,8 +74,6 @@ describe("seller asset API", () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse(listing, 201));
     const payload = {
       asset_id: asset.id,
-      price_amount: "1.25",
-      price_currency: "TON" as const,
       title: "My NFT",
       description: "Optional details",
     };
@@ -92,7 +90,7 @@ describe("seller asset API", () => {
   it("rejects a response that is not a private draft", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...listing, status: "active" }, 201));
     await expect(createListingDraft("session-token", {
-      asset_id: asset.id, price_amount: "1", price_currency: "TON",
+      asset_id: asset.id,
     })).rejects.toThrow("invalid draft response");
   });
 });
