@@ -137,7 +137,7 @@ function MyListingDetail({
       onUpdated(updated);
       setConfirmCancel(false);
       setSuccess(
-        updated.status === "cancelled"
+        listing.status === "active"
           ? "Listing unpublished. It is no longer visible in the marketplace."
           : "Draft cancelled.",
       );
