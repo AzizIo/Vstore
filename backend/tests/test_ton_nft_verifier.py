@@ -145,7 +145,9 @@ async def test_provider_timeout_maps_to_unavailable() -> None:
         raise httpx.ReadTimeout("timed out")
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://mock.test/api/v3")
-    provider = TONCenterV3Provider(client=client)
+    provider = TONCenterV3Provider(
+        TONCenterV3Config(base_url="https://mock.test/api/v3"), client=client
+    )
     with pytest.raises(ProviderUnavailable):
         await provider.get_item(ITEM)
     await client.aclose()
@@ -159,7 +161,9 @@ async def test_malformed_provider_item_maps_to_invalid_data() -> None:
         ),
         base_url="https://mock.test/api/v3",
     )
-    provider = TONCenterV3Provider(client=client)
+    provider = TONCenterV3Provider(
+        TONCenterV3Config(base_url="https://mock.test/api/v3"), client=client
+    )
     with pytest.raises(InvalidProviderData):
         await provider.get_item(ITEM)
     await client.aclose()
