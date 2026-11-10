@@ -6,8 +6,9 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import Select, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -27,6 +28,14 @@ from app.db.models import (
     Wallet,
 )
 from app.db.session import get_db_session
+from app.listings.service import (
+    ListingConflict,
+    ListingNotFound,
+    ListingVerificationUnavailable,
+    cancel_listing,
+    publish_listing,
+    update_listing,
+)
 
 router = APIRouter(prefix="/listings", tags=["listings"])
 
@@ -79,6 +88,24 @@ class ListingCreateRequest(BaseModel):
     price_currency: PriceCurrency
     title: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=4_000)
+
+
+class ListingUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    price_amount: Decimal | None = Field(
+        default=None, gt=0, max_digits=24, decimal_places=9
+    )
+    title: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=4_000)
+
+    @model_validator(mode="after")
+    def validate_update_fields(self) -> ListingUpdateRequest:
+        if not self.model_fields_set:
+            raise ValueError("Provide at least one field to update")
+        if "price_amount" in self.model_fields_set and self.price_amount is None:
+            raise ValueError("Price cannot be null")
+        return self
 
 
 def _listing_query() -> Select[Listing]:
@@ -347,3 +374,69 @@ async def create_listing_draft(
         _listing_query().where(Listing.id == listing.id)
     )
     return listing_result.unique().one()
+
+
+@router.post("/{listing_id}/publish", response_model=ListingResponse)
+async def publish_my_listing(
+    listing_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    verifier: Annotated[TONNFTVerifier, Depends(get_ton_nft_verifier)],
+) -> Listing:
+    try:
+        return await publish_listing(
+            session,
+            listing_id=listing_id,
+            seller_id=user.id,
+            verifier=verifier,
+        )
+    except ListingNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ListingVerificationUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+    except (ListingConflict, IntegrityError) as exc:
+        await session.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.patch("/{listing_id}", response_model=ListingResponse)
+async def edit_my_listing(
+    listing_id: UUID,
+    payload: ListingUpdateRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Listing:
+    try:
+        return await update_listing(
+            session,
+            listing_id=listing_id,
+            seller_id=user.id,
+            price_amount=payload.price_amount,
+            title=payload.title,
+            description=payload.description,
+            fields_set=set(payload.model_fields_set),
+        )
+    except ListingNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ListingConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.post("/{listing_id}/cancel", response_model=ListingResponse)
+async def cancel_my_listing(
+    listing_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Listing:
+    try:
+        return await cancel_listing(
+            session,
+            listing_id=listing_id,
+            seller_id=user.id,
+        )
+    except ListingNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ListingConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

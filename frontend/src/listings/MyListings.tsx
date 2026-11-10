@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { fetchMyListings, type Listing } from "../api/listings";
+import {
+  cancelListing,
+  fetchMyListings,
+  publishListing,
+  updateListing,
+  type Listing,
+} from "../api/listings";
 import { useSession } from "../auth/SessionProvider";
 import { CreateListing } from "./CreateListing";
 
@@ -57,7 +63,91 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function MyListingDetail({ listing, onBack }: { listing: Listing; onBack: () => void }) {
+function MyListingDetail({
+  listing,
+  accessToken,
+  onBack,
+  onUpdated,
+}: {
+  listing: Listing;
+  accessToken: string;
+  onBack: () => void;
+  onUpdated: (listing: Listing) => void;
+}) {
+  const [priceAmount, setPriceAmount] = useState(listing.price_amount);
+  const [title, setTitle] = useState(listing.title ?? "");
+  const [description, setDescription] = useState(listing.description ?? "");
+  const [working, setWorking] = useState<"saving" | "publishing" | "cancelling" | "">("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmPublish, setConfirmPublish] = useState(false);
+  const isEditable = listing.status === "draft" || listing.status === "active";
+  const canPublish =
+    listing.status === "draft" &&
+    listing.asset.asset_type === "ton_nft" &&
+    listing.asset.verification_status === "verified" &&
+    Boolean(listing.asset.item_address);
+
+  async function saveChanges(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!isEditable || working) return;
+    setWorking("saving");
+    setError("");
+    setSuccess("");
+    try {
+      const updated = await updateListing(listing.id, accessToken, {
+        price_amount: priceAmount,
+        title: title.trim() || null,
+        description: description.trim() || null,
+      });
+      onUpdated(updated);
+      setSuccess("Listing details saved.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to save listing details.");
+    } finally {
+      setWorking("");
+    }
+  }
+
+  async function publish() {
+    if (!canPublish || working) return;
+    setWorking("publishing");
+    setError("");
+    setSuccess("");
+    try {
+      const updated = await publishListing(listing.id, accessToken);
+      onUpdated(updated);
+      setConfirmPublish(false);
+      setSuccess("Listing published and is now visible in the marketplace.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to publish this listing.");
+    } finally {
+      setWorking("");
+    }
+  }
+
+  async function confirmAndCancel() {
+    if (!isEditable || working) return;
+    setWorking("cancelling");
+    setError("");
+    setSuccess("");
+    try {
+      const updated = await cancelListing(listing.id, accessToken);
+      onUpdated(updated);
+      setConfirmCancel(false);
+      setSuccess(
+        listing.status === "active"
+          ? "Listing unpublished. It is no longer visible in the marketplace."
+          : "Draft cancelled.",
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to cancel this listing.");
+    } finally {
+      setWorking("");
+    }
+  }
+
   return (
     <section className="my-listing-detail" aria-labelledby="my-listing-detail-title">
       <button className="text-button back-button" type="button" onClick={onBack}>
@@ -81,6 +171,137 @@ function MyListingDetail({ listing, onBack }: { listing: Listing; onBack: () => 
           </dl>
         </div>
       </div>
+
+      {isEditable ? (
+        <div className="listing-management">
+          <h2>Manage listing</h2>
+          <form className="listing-edit-form" onSubmit={saveChanges}>
+            <label>
+              <span>Price ({listing.price_currency})</span>
+              <input
+                aria-label="Listing price"
+                type="number"
+                min="0.000000001"
+                step="0.000000001"
+                required
+                value={priceAmount}
+                onChange={(event) => setPriceAmount(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Title <small>Optional</small></span>
+              <input
+                aria-label="Listing title"
+                maxLength={200}
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Description <small>Optional</small></span>
+              <textarea
+                aria-label="Listing description"
+                maxLength={4000}
+                rows={4}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+              />
+            </label>
+            <div className="listing-management-actions">
+              <button className="load-more-button" type="submit" disabled={Boolean(working)}>
+                {working === "saving" ? "Saving..." : "Save changes"}
+              </button>
+              {canPublish && (
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={Boolean(working)}
+                  onClick={() => {
+                    setError("");
+                    setSuccess("");
+                    setConfirmPublish(true);
+                  }}
+                >
+                  Publish listing
+                </button>
+              )}
+              <button
+                className="text-button listing-cancel-action"
+                type="button"
+                disabled={Boolean(working)}
+                onClick={() => {
+                  setError("");
+                  setSuccess("");
+                  setConfirmCancel(true);
+                }}
+              >
+                {listing.status === "active" ? "Unpublish listing" : "Cancel draft"}
+              </button>
+            </div>
+          </form>
+          {confirmPublish && (
+            <div className="listing-confirmation" role="group" aria-label="Confirm listing publication">
+              <p>
+                Publish this NFT? The server will re-check its current on-chain owner before making it public.
+              </p>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={Boolean(working)}
+                onClick={() => void publish()}
+              >
+                {working === "publishing" ? "Verifying NFT ownership..." : "Confirm publish"}
+              </button>
+              <button
+                className="text-button"
+                type="button"
+                disabled={Boolean(working)}
+                onClick={() => setConfirmPublish(false)}
+              >
+                Not now
+              </button>
+            </div>
+          )}
+          {listing.status === "draft" && !canPublish && (
+            <p className="listing-management-note" role="status">
+              This draft cannot be published because its TON NFT record is not currently eligible for publication.
+            </p>
+          )}
+          {confirmCancel && (
+            <div className="listing-confirmation" role="group" aria-label="Confirm listing cancellation">
+              <p>
+                {listing.status === "active"
+                  ? "Unpublish this listing? Buyers will no longer see it in the marketplace."
+                  : "Cancel this private draft? This action cannot be undone."}
+              </p>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={Boolean(working)}
+                onClick={() => void confirmAndCancel()}
+              >
+                {working === "cancelling" ? "Cancelling..." : "Confirm"}
+              </button>
+              <button
+                className="text-button"
+                type="button"
+                disabled={Boolean(working)}
+                onClick={() => setConfirmCancel(false)}
+              >
+                Keep listing
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="listing-management-note" role="status">
+          {listing.status === "reserved"
+            ? "This listing is reserved by a pending order. Editing and unpublishing are disabled until the reservation ends."
+            : "This listing is closed and can no longer be edited or published."}
+        </p>
+      )}
+      {error && <p className="listing-management-error" role="alert">{error}</p>}
+      {success && <p className="listing-management-success" role="status">{success}</p>}
     </section>
   );
 }
@@ -134,7 +355,19 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
   }
 
   if (selectedListing) {
-    return <MyListingDetail listing={selectedListing} onBack={() => setSelectedListing(null)} />;
+    return (
+      <MyListingDetail
+        listing={selectedListing}
+        accessToken={accessToken}
+        onBack={() => setSelectedListing(null)}
+        onUpdated={(updated) => {
+          setListings((current) =>
+            current.map((item) => item.id === updated.id ? updated : item),
+          );
+          setSelectedListing(updated);
+        }}
+      />
+    );
   }
 
   return (

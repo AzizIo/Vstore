@@ -140,3 +140,95 @@ export async function fetchMyListings(accessToken: string, signal?: AbortSignal)
   }
   return listings;
 }
+
+export interface ListingUpdate {
+  price_amount?: string;
+  title?: string | null;
+  description?: string | null;
+}
+
+async function requestSellerListing(
+  path: string,
+  accessToken: string,
+  init: RequestInit,
+): Promise<Listing> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/listings/${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...(init.headers ?? {}),
+      },
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new Error("Could not connect to the marketplace. Please try again.");
+  }
+
+  if (!response.ok) {
+    let message = `Request failed (${response.status}).`;
+    try {
+      const body: unknown = await response.json();
+      if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
+        message = body.detail;
+      }
+    } catch {
+      // Keep the HTTP status message when the server does not return JSON.
+    }
+    throw new Error(message);
+  }
+
+  let result: unknown;
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error("The marketplace returned an invalid listing response.");
+  }
+  if (!isListing(result)) {
+    throw new Error("The marketplace returned an invalid listing response.");
+  }
+  return result;
+}
+
+export async function publishListing(
+  listingId: string,
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<Listing> {
+  return requestSellerListing(
+    `${encodeURIComponent(listingId)}/publish`,
+    accessToken,
+    { method: "POST", signal },
+  );
+}
+
+export async function updateListing(
+  listingId: string,
+  accessToken: string,
+  payload: ListingUpdate,
+  signal?: AbortSignal,
+): Promise<Listing> {
+  return requestSellerListing(
+    encodeURIComponent(listingId),
+    accessToken,
+    {
+      method: "PATCH",
+      signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function cancelListing(
+  listingId: string,
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<Listing> {
+  return requestSellerListing(
+    `${encodeURIComponent(listingId)}/cancel`,
+    accessToken,
+    { method: "POST", signal },
+  );
+}
