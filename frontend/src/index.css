@@ -25,6 +25,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .brand-mark { width: 34px; aspect-ratio: 1; display: grid; place-items: center; border: 1px solid var(--accent); color: var(--accent); border-radius: 50%; font: 22px var(--serif); }
 .brand-name { font-size: 12px; font-weight: 700; letter-spacing: .18em; }
 .network-label { margin-left: auto; color: var(--muted); font-size: 10px; letter-spacing: .16em; }
+.header-actions { display: flex; align-items: center; gap: 16px; }
+.wallet-control { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.wallet-config-message { max-width: 200px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.4; text-align: right; }
+.wallet-button { min-height: 36px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: 6px; background: transparent; color: var(--accent); font-size: 11px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.wallet-button:hover { background: rgb(200 211 106 / 10%); }
+.wallet-disconnect { border-color: var(--line); color: var(--muted); }
+.wallet-disconnect:hover { border-color: var(--muted); background: transparent; color: #f3f0e9; }
+.wallet-account { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 10px; }
+.wallet-address { color: #f3f0e9; font-variant-numeric: tabular-nums; }
+.wallet-network { color: var(--muted); }
+.wallet-disclaimer { color: var(--muted); font-size: 9px; }
+.wallet-error { flex-basis: 100%; color: #e19a8c; font-size: 10px; text-align: right; }
 .session-banner {
   margin: 0;
   padding: 11px 0;
@@ -100,6 +112,12 @@ footer span { padding: 0 6px; color: var(--accent); }
 @media (max-width: 640px) {
   .app-shell { width: min(100% - 32px, 1280px); }
   .topbar { height: 66px; }
+  .header-actions { gap: 8px; }
+  .network-label { display: none; }
+  .wallet-control { gap: 7px; }
+  .wallet-config-message { max-width: 150px; font-size: 9px; }
+  .wallet-button { min-height: 34px; padding: 7px 9px; font-size: 10px; }
+  .wallet-account { font-size: 9px; }
   .catalog-intro { padding: 52px 0 34px; }
   .catalog-controls { display: grid; grid-template-columns: 1fr 1fr; }
   .search-control { grid-column: 1 / -1; }
