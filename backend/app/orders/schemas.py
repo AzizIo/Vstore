@@ -1,10 +1,9 @@
 from datetime import datetime
-from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from app.db.models import AssetType, OrderStatus, PriceCurrency
+from app.db.models import AssetType, OrderStatus
 
 
 class OrderEventResponse(BaseModel):
@@ -26,8 +25,6 @@ class OrderResponse(BaseModel):
     buyer_id: UUID
     seller_id: UUID
     status: OrderStatus
-    price_amount: Decimal
-    price_currency: PriceCurrency
     title: str | None
     asset_name: str | None
     asset_type: AssetType
