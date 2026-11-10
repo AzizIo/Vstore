@@ -7,7 +7,7 @@ database actually returns for hidden states. They skip without TEST_DATABASE_URL
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
@@ -275,6 +275,74 @@ async def test_detail_returns_hidden_listing_only_when_purchasable(
         await cleanup(
             session_factory,
             listing_ids=[good_id, bad_id],
+            asset_ids=asset_ids,
+            user_ids=[seller_id],
+        )
+        await engine.dispose()
+
+
+async def test_expired_active_listings_are_hidden_and_transitioned(
+    catalog_database: str,
+) -> None:
+    """Expired active listings are immediately hidden and later closed by the worker."""
+
+    from app.api.listings import _purchasable_conditions
+    from app.listings.service import expire_active_listings
+
+    engine = create_async_engine(catalog_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    now = datetime(2026, 11, 10, 12, 0, tzinfo=UTC)
+    listing_ids: list = []
+    asset_ids: list = []
+
+    async with session_factory.begin() as session:
+        seller = await make_user(session, offset=640_000_000)
+        seller_id = seller.id
+
+        expired_asset, expired_listing = await make_listing(session, seller)
+        expired_listing.expires_at = now - timedelta(minutes=1)
+
+        future_asset, future_listing = await make_listing(session, seller)
+        future_listing.expires_at = now + timedelta(days=1)
+
+        reserved_asset, reserved_listing = await make_listing(
+            session, seller, listing_status=ListingStatus.RESERVED
+        )
+        reserved_listing.expires_at = now - timedelta(minutes=1)
+
+        listing_ids = [expired_listing.id, future_listing.id, reserved_listing.id]
+        asset_ids = [expired_asset.id, future_asset.id, reserved_asset.id]
+
+    try:
+        async with session_factory() as session:
+            visible_before_worker = (
+                await session.scalars(
+                    select(Listing.id)
+                    .join(NFTAsset, NFTAsset.id == Listing.asset_id)
+                    .where(Listing.id.in_(listing_ids), *_purchasable_conditions())
+                    .order_by(Listing.id.asc())
+                )
+            ).all()
+        assert expired_listing.id not in visible_before_worker
+        assert future_listing.id in visible_before_worker
+        assert reserved_listing.id not in visible_before_worker
+
+        async with session_factory() as session:
+            changed = await expire_active_listings(session, now=now, limit=10)
+        assert changed == 1
+
+        async with session_factory() as session:
+            persisted = (
+                await session.scalars(select(Listing).where(Listing.id.in_(listing_ids)))
+            ).all()
+        states = {listing.id: listing.status for listing in persisted}
+        assert states[expired_listing.id] is ListingStatus.EXPIRED
+        assert states[future_listing.id] is ListingStatus.ACTIVE
+        assert states[reserved_listing.id] is ListingStatus.RESERVED
+    finally:
+        await cleanup(
+            session_factory,
+            listing_ids=listing_ids,
             asset_ids=asset_ids,
             user_ids=[seller_id],
         )
