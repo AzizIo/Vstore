@@ -44,6 +44,8 @@ export interface ListingFilters {
   search: string;
   assetType: AssetType | "all";
   sort: ListingSort;
+  limit?: number;
+  offset?: number;
 }
 
 export function isListing(value: unknown): value is Listing {
@@ -100,16 +102,20 @@ async function requestJson<T>(url: string, signal?: AbortSignal, headers?: Heade
 }
 
 export async function fetchListings(filters: ListingFilters, signal?: AbortSignal) {
-  const params = new URLSearchParams({ limit: "100", offset: "0", sort: filters.sort });
+  const limit = filters.limit ?? 24;
+  const offset = filters.offset ?? 0;
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset), sort: filters.sort });
   const search = filters.search.trim();
   if (search) params.set("search", search);
   if (filters.assetType !== "all") params.set("asset_type", filters.assetType);
   const page = await requestJson<unknown>(`${API_BASE_URL}/api/listings?${params}`, signal);
   if (
     !page || typeof page !== "object" || !Array.isArray((page as Partial<ListingPage>).items) ||
-    typeof (page as Partial<ListingPage>).total !== "number" ||
-    typeof (page as Partial<ListingPage>).limit !== "number" ||
-    typeof (page as Partial<ListingPage>).offset !== "number" ||
+    !Number.isInteger((page as Partial<ListingPage>).total) ||
+    (page as ListingPage).total < 0 ||
+    (page as ListingPage).limit !== limit ||
+    (page as ListingPage).offset !== offset ||
+    (page as ListingPage).items.length > limit ||
     !(page as ListingPage).items.every(isListing)
   ) {
     throw new Error("The marketplace returned an invalid catalog response.");
