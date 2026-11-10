@@ -110,8 +110,8 @@ Authentication: Bearer JWT required. The caller must own the listing.
 - Only a DRAFT listing backed by a seller-owned, verified TON NFT asset on the configured network is eligible.
 - The server takes an unlocked snapshot of the listing, asset, and the seller's verified wallets, then rolls back the read transaction before contacting TON Center through the TEP-62 verifier.
 - The live owner must match one of the seller's verified wallets on the asset network. Provider outage returns HTTP 503; stale, unsupported, or mismatched ownership returns HTTP 409.
-- After verification the server starts a new transaction, locks and re-reads the listing, asset, and selected wallet, and verifies that the seller, asset identity, draft status, owner, network, verification state, and wallet binding have not changed.
-- The asset row is locked before checking for another ACTIVE/RESERVED listing. This serializes concurrent publication attempts; the PostgreSQL partial unique index uq_listings_open_asset remains the final database-level guard.
+- After verification the server starts a new transaction, locks and re-reads the listing, selected wallet, and asset, and verifies that the seller, asset identity, draft status, owner, network, verification state, and wallet binding have not changed.
+- The wallet is locked before the asset (matching the existing draft-creation lock order), then the asset row is locked before checking for another ACTIVE/RESERVED listing. This serializes concurrent publication attempts; the PostgreSQL partial unique index uq_listings_open_asset remains the final database-level guard.
 - Only then does the server change DRAFT to ACTIVE. Public catalog, public detail, and order creation continue to query ACTIVE listings only.
 
 ### PATCH /api/listings/{listing_id} and POST /api/listings/{listing_id}/cancel
