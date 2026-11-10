@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
@@ -21,7 +20,6 @@ from app.db.models import (
     ListingStatus,
     NFTAsset,
     Order,
-    PriceCurrency,
     TelegramNotificationOutbox,
     User,
     Wallet,
@@ -129,8 +127,6 @@ async def _seed_active_listing(
         asset_id=asset.id,
         seller_id=seller.id,
         status=ListingStatus.ACTIVE,
-        price_amount=Decimal("1.250000000"),
-        price_currency=PriceCurrency.TON,
         title="Notification test listing",
     )
     session.add(listing)
@@ -257,8 +253,8 @@ async def test_worker_delivers_and_does_not_claim_delivered_rows_again(
     assert (first.claimed, first.delivered, first.retried, first.failed) == (2, 2, 0, 0)
     assert second.claimed == 0
     assert len(sender.sent) == 2
-    assert all("Amount: 1.25 TON" in message for _, message in sender.sent)
-    assert all("Payment is not enabled" in message for _, message in sender.sent)
+    assert all("Amount:" not in message for _, message in sender.sent)
+    assert all("This MVP does not collect payments." in message for _, message in sender.sent)
     rows = await _outbox_rows(notification_session)
     assert {row.status for row in rows} == {"delivered"}
     assert all(row.delivered_at is not None for row in rows)
