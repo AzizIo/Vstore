@@ -88,7 +88,7 @@ describe("CreateListing seller flow", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /Verified collectible/ }));
     fireEvent.change(screen.getByRole("spinbutton", { name: "Price amount" }), { target: { value: "1.5" } });
-    fireEvent.change(screen.getByRole("textbox", { name: "Listing expiration" }), {
+    fireEvent.change(screen.getByLabelText("Listing expiration"), {
       target: { value: "2030-05-02T12:30" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create private draft" }));
