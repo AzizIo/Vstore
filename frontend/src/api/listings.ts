@@ -1,8 +1,6 @@
 import { API_BASE_URL } from "./config";
 
 export type AssetType = "ton_nft" | "telegram_gift";
-export type PriceCurrency = "TON" | "XTR";
-export type ListingSort = "newest" | "price_asc" | "price_desc";
 
 export interface ListingCollection {
   id: string;
@@ -33,8 +31,6 @@ export interface ListingSeller {
 export interface Listing {
   id: string;
   status: string;
-  price_amount: string;
-  price_currency: PriceCurrency;
   title: string | null;
   description: string | null;
   created_at: string;
@@ -53,7 +49,6 @@ export interface ListingPage {
 export interface ListingFilters {
   search: string;
   assetType: AssetType | "all";
-  sort: ListingSort;
   limit?: number;
   offset?: number;
 }
@@ -81,8 +76,6 @@ export function isListing(value: unknown): value is Listing {
   return (
     typeof listing.id === "string" &&
     typeof listing.status === "string" &&
-    typeof listing.price_amount === "string" &&
-    (listing.price_currency === "TON" || listing.price_currency === "XTR") &&
     nullableString(listing.title) && nullableString(listing.description) &&
     typeof listing.created_at === "string" &&
     (listing.expires_at === undefined || nullableString(listing.expires_at)) &&
@@ -130,7 +123,7 @@ async function requestJson<T>(url: string, signal?: AbortSignal, headers?: Heade
 export async function fetchListings(filters: ListingFilters, signal?: AbortSignal) {
   const limit = filters.limit ?? 24;
   const offset = filters.offset ?? 0;
-  const params = new URLSearchParams({ limit: String(limit), offset: String(offset), sort: filters.sort });
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   const search = filters.search.trim();
   if (search) params.set("search", search);
   if (filters.assetType !== "all") params.set("asset_type", filters.assetType);
@@ -168,7 +161,6 @@ export async function fetchMyListings(accessToken: string, signal?: AbortSignal)
 }
 
 export interface ListingUpdate {
-  price_amount?: string;
   title?: string | null;
   description?: string | null;
   expires_at?: string | null;
