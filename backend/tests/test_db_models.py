@@ -3,6 +3,7 @@ from app.db.models import (
     AssetVerificationStatus,
     Base,
     ListingStatus,
+    OrderStatus,
     PriceCurrency,
 )
 
@@ -14,6 +15,8 @@ def test_marketplace_tables_are_registered() -> None:
         "nft_collections",
         "nft_assets",
         "listings",
+        "orders",
+        "order_events",
     }
 
 
@@ -59,3 +62,11 @@ def test_nft_asset_external_identity_is_scoped_by_network() -> None:
         "network",
         "external_id",
     ]
+
+
+def test_order_lifecycle_has_only_server_supported_initial_terminal_states() -> None:
+    assert {item.value for item in OrderStatus} == {
+        "pending_payment",
+        "cancelled",
+        "expired",
+    }
