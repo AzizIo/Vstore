@@ -70,6 +70,7 @@ describe("listing API client", () => {
   it("omits blank search and the all-assets filter", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...page, items: [] }));
 
+    await fetchListings({ search: "   ", assetType: "all" });
 
     const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]));
     expect(parsed.searchParams.has("search")).toBe(false);
@@ -81,6 +82,7 @@ describe("listing API client", () => {
     const controller = new AbortController();
 
     await fetchListings(
+      { search: "", assetType: "all" },
       controller.signal,
     );
 
@@ -90,6 +92,7 @@ describe("listing API client", () => {
   it("requests an explicitly selected page limit and offset", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...page, limit: 3, offset: 3 }));
 
+    await fetchListings({ search: "", assetType: "all", limit: 3, offset: 3 });
 
     const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]));
     expect(parsed.searchParams.get("limit")).toBe("3");
