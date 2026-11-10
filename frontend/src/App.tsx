@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchListing,
   fetchListings,
@@ -14,6 +14,7 @@ const assetTypeLabels: Record<AssetType, string> = {
   ton_nft: "TON NFT",
   telegram_gift: "Telegram gift",
 };
+const CATALOG_PAGE_SIZE = 24;
 
 function formatPrice(amount: string, currency: string) {
   const numericAmount = Number(amount);
@@ -50,6 +51,18 @@ function ListingCard({ listing, onOpen }: { listing: Listing; onOpen: () => void
       </span>
     </button>
   );
+}
+
+function appendUniqueListings(current: Listing[], nextPage: Listing[]) {
+  const seenIds = new Set(current.map((listing) => listing.id));
+  const merged = [...current];
+  for (const listing of nextPage) {
+    if (!seenIds.has(listing.id)) {
+      seenIds.add(listing.id);
+      merged.push(listing);
+    }
+  }
+  return merged;
 }
 
 function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () => void }) {
@@ -150,30 +163,91 @@ function MarketplaceApp() {
   const [sort, setSort] = useState<ListingSort>("newest");
   const [listingId, setListingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const [loadMoreError, setLoadMoreError] = useState("");
+  const [nextOffset, setNextOffset] = useState(0);
   const [retry, setRetry] = useState(0);
+  const requestVersion = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const loadMoreController = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    const version = ++requestVersion.current;
     const controller = new AbortController();
     setLoading(true);
     setError("");
-    fetchListings({ search, assetType, sort }, controller.signal)
+    setLoadMoreError("");
+    setLoadingMore(false);
+    loadingMoreRef.current = false;
+    loadMoreController.current?.abort();
+    loadMoreController.current = null;
+    setListings([]);
+    setTotal(0);
+    setNextOffset(0);
+    fetchListings({ search, assetType, sort, limit: CATALOG_PAGE_SIZE, offset: 0 }, controller.signal)
       .then((page) => {
+        if (controller.signal.aborted || version !== requestVersion.current) return;
         setListings(page.items);
         setTotal(page.total);
+        setNextOffset(page.offset + page.items.length);
       })
       .catch((reason: unknown) => {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && version === requestVersion.current) {
           setError(reason instanceof Error ? reason.message : "Unable to load the catalog.");
           setListings([]);
           setTotal(0);
         }
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted && version === requestVersion.current) setLoading(false);
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      loadMoreController.current?.abort();
+      loadMoreController.current = null;
+      loadingMoreRef.current = false;
+      if (requestVersion.current === version) requestVersion.current += 1;
+    };
   }, [search, assetType, sort, retry]);
+
+  const hasMore = listings.length < total && nextOffset < total;
+
+  async function loadMore() {
+    if (!hasMore || loading || error || loadingMoreRef.current) return;
+
+    const version = requestVersion.current;
+    const controller = new AbortController();
+    loadingMoreRef.current = true;
+    loadMoreController.current = controller;
+    setLoadingMore(true);
+    setLoadMoreError("");
+
+    try {
+      const page = await fetchListings(
+        { search, assetType, sort, limit: CATALOG_PAGE_SIZE, offset: nextOffset },
+        controller.signal,
+      );
+      if (controller.signal.aborted || version !== requestVersion.current) return;
+      if (page.items.length === 0 && page.offset < page.total) {
+        setLoadMoreError("No new listings were returned. Please try again.");
+        return;
+      }
+      setListings((current) => appendUniqueListings(current, page.items));
+      setTotal(page.total);
+      setNextOffset(page.offset + page.items.length);
+    } catch (reason) {
+      if (!controller.signal.aborted && version === requestVersion.current) {
+        setLoadMoreError(reason instanceof Error ? reason.message : "Unable to load more listings.");
+      }
+    } finally {
+      if (version === requestVersion.current && !controller.signal.aborted) {
+        loadingMoreRef.current = false;
+        loadMoreController.current = null;
+        setLoadingMore(false);
+      }
+    }
+  }
 
   return (
     <main className="app-shell">
@@ -269,11 +343,22 @@ function MarketplaceApp() {
                 <h3>No listings found</h3><p>Try changing your search or asset type.</p>
               </div>
             ) : (
-              <div className="listing-grid">
-                {listings.map((listing) => (
-                  <ListingCard key={listing.id} listing={listing} onOpen={() => setListingId(listing.id)} />
-                ))}
-              </div>
+              <>
+                <div className="listing-grid">
+                  {listings.map((listing) => (
+                    <ListingCard key={listing.id} listing={listing} onOpen={() => setListingId(listing.id)} />
+                  ))}
+                </div>
+                {(hasMore || loadingMore || loadMoreError) && (
+                  <div className="catalog-pagination">
+                    <p className="pagination-count" role="status">Showing {listings.length} of {total}</p>
+                    {loadMoreError && <p className="pagination-error" role="alert">{loadMoreError}</p>}
+                    <button className="load-more-button" type="button" onClick={loadMore} disabled={loadingMore || !hasMore}>
+                      {loadingMore ? "Loading more..." : loadMoreError ? "Retry loading more" : "Load more"}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </section>
         </>

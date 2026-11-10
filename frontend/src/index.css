@@ -120,6 +120,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .listing-card-type { color: var(--muted); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
 .listing-card-title { max-width: 100%; overflow: hidden; font-family: var(--serif); font-size: 18px; text-overflow: ellipsis; white-space: nowrap; }
 .listing-card-price { color: var(--accent); font-size: 12px; font-weight: 600; }
+.catalog-pagination { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 28px 0 8px; }
+.pagination-count { margin: 0; color: var(--muted); font-size: 11px; }
+.pagination-error { margin: 0; color: #e19a8c; font-size: 12px; text-align: center; }
+.load-more-button { min-width: 150px; min-height: 42px; padding: 10px 18px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: #f3f0e9; font-size: 12px; cursor: pointer; }
+.load-more-button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.load-more-button:disabled { color: var(--muted); cursor: wait; }
 .listing-skeleton { display: flex; flex-direction: column; gap: 11px; }
 .listing-skeleton span { aspect-ratio: 1 / 1.04; background: linear-gradient(110deg, #1d211d 8%, #292e28 18%, #1d211d 33%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
 .listing-skeleton i { width: 66%; height: 11px; background: #252a25; }

@@ -34,7 +34,7 @@ const listing = {
   },
   seller: { id: "seller-1", username: "collector", first_name: "Ari" },
 };
-const page = { items: [listing], total: 1, limit: 100, offset: 0 };
+const page = { items: [listing], total: 1, limit: 24, offset: 0 };
 const ownListings = [
   { ...listing, id: "mine-draft", status: "draft", title: "My draft lantern" },
   { ...listing, id: "mine-active", status: "active", title: "My active lantern" },
@@ -53,6 +53,14 @@ const authResponse = {
 
 function jsonResponse(body: unknown, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response;
+}
+
+function makeListings(count: number, prefix: string) {
+  return Array.from({ length: count }, (_, index) => ({
+    ...listing,
+    id: `${prefix}-${index + 1}`,
+    title: `${prefix} listing ${index + 1}`,
+  }));
 }
 
 function renderMarketplace(queryClient = new QueryClient()) {
@@ -156,6 +164,128 @@ describe("marketplace catalog", () => {
     });
   });
 
+  it("loads successive server pages, removes duplicate IDs, and hides Load more at total", async () => {
+    const firstPage = makeListings(24, "first");
+    const finalListing = { ...listing, id: "last-listing", title: "Last server listing" };
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const requestUrl = new URL(String(input));
+      const offset = Number(requestUrl.searchParams.get("offset"));
+      if (offset === 0) return jsonResponse({ items: firstPage, total: 25, limit: 24, offset: 0 });
+      return jsonResponse({ items: [firstPage[0], finalListing], total: 25, limit: 24, offset: 24 });
+    });
+    renderMarketplace();
+
+    expect(await screen.findByText("first listing 24")).toBeInTheDocument();
+    expect(screen.getByText("Showing 24 of 25")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    expect(await screen.findByText("Last server listing")).toBeInTheDocument();
+    expect(screen.getAllByText("first listing 1")).toHaveLength(1);
+    expect(screen.getByText("25 items")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+    const pageRequests = vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input)));
+    expect(pageRequests.map((url) => url.searchParams.get("offset"))).toEqual(["0", "24"]);
+  });
+
+  it("resets catalog results and offset to zero when search, type, or sort changes", async () => {
+    const initialListings = makeListings(24, "initial");
+    const filteredListing = { ...listing, id: "filtered", title: "Filtered result" };
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const requestUrl = new URL(String(input));
+      if (requestUrl.searchParams.has("search") || requestUrl.searchParams.has("asset_type") || requestUrl.searchParams.get("sort") !== "newest") {
+        return jsonResponse({ items: [filteredListing], total: 1, limit: 24, offset: 0 });
+      }
+      if (requestUrl.searchParams.get("offset") === "24") {
+        return jsonResponse({ items: makeListings(24, "next-page"), total: 48, limit: 24, offset: 24 });
+      }
+      return jsonResponse({ items: initialListings, total: 48, limit: 24, offset: Number(requestUrl.searchParams.get("offset")) });
+    });
+    renderMarketplace();
+
+    expect(await screen.findByText("initial listing 24")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    expect(await screen.findByText("next-page listing 1")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search listings" }), { target: { value: "rare" } });
+    expect(await screen.findByText("Filtered result")).toBeInTheDocument();
+    expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).searchParams.get("offset")).toBe("0");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Asset type" }), { target: { value: "telegram_gift" } });
+    await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).searchParams.get("offset")).toBe("0"));
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort listings" }), { target: { value: "price_desc" } });
+    await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).searchParams.get("offset")).toBe("0"));
+
+    expect(screen.getByText("Filtered result")).toBeInTheDocument();
+    expect(screen.queryByText("initial listing 1")).not.toBeInTheDocument();
+  });
+
+  it("retries a failed next-page request without discarding loaded listings", async () => {
+    const initialListings = makeListings(24, "loaded");
+    let nextPageRequests = 0;
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const requestUrl = new URL(String(input));
+      if (requestUrl.searchParams.get("offset") === "0") {
+        return jsonResponse({ items: initialListings, total: 25, limit: 24, offset: 0 });
+      }
+      nextPageRequests += 1;
+      return nextPageRequests === 1
+        ? jsonResponse({ detail: "Temporary failure" }, 503)
+        : jsonResponse({ items: [{ ...listing, id: "retry-result", title: "Loaded after retry" }], total: 25, limit: 24, offset: 24 });
+    });
+    renderMarketplace();
+
+    expect(await screen.findByText("loaded listing 24")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    expect(await screen.findByText("Temporary failure")).toBeInTheDocument();
+    expect(screen.getByText("loaded listing 1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry loading more" }));
+
+    expect(await screen.findByText("Loaded after retry")).toBeInTheDocument();
+    expect(nextPageRequests).toBe(2);
+  });
+
+  it("prevents duplicate in-flight page requests", async () => {
+    const initialListings = makeListings(24, "loaded");
+    let resolveNextPage: ((response: Response) => void) | undefined;
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const requestUrl = new URL(String(input));
+      if (requestUrl.searchParams.get("offset") === "0") {
+        return jsonResponse({ items: initialListings, total: 25, limit: 24, offset: 0 });
+      }
+      return new Promise<Response>((resolve) => { resolveNextPage = resolve; });
+    });
+    renderMarketplace();
+
+    await screen.findByText("loaded listing 24");
+    const loadMore = screen.getByRole("button", { name: "Load more" });
+    fireEvent.click(loadMore);
+    fireEvent.click(loadMore);
+
+    expect(vi.mocked(fetch).mock.calls.filter(([input]) => new URL(String(input)).searchParams.get("offset") === "24")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Loading more..." })).toBeDisabled();
+    resolveNextPage?.(jsonResponse({ items: [{ ...listing, id: "last", title: "Last listing" }], total: 25, limit: 24, offset: 24 }));
+    expect(await screen.findByText("Last listing")).toBeInTheDocument();
+  });
+
+  it("aborts an in-flight next-page request on unmount", async () => {
+    const initialListings = makeListings(24, "loaded");
+    let pageSignal: AbortSignal | undefined;
+    vi.mocked(fetch).mockImplementation(async (input, options) => {
+      const requestUrl = new URL(String(input));
+      if (requestUrl.searchParams.get("offset") === "0") {
+        return jsonResponse({ items: initialListings, total: 25, limit: 24, offset: 0 });
+      }
+      pageSignal = options?.signal ?? undefined;
+      return new Promise<Response>(() => undefined);
+    });
+    const { unmount } = renderMarketplace();
+
+    await screen.findByText("loaded listing 24");
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    unmount();
+
+    expect(pageSignal?.aborted).toBe(true);
+  });
+
   it("loads and displays the listing detail view", async () => {
     vi.mocked(fetch).mockImplementation(async (input) =>
       String(input).endsWith("/api/listings/listing-1") ? jsonResponse(listing) : jsonResponse(page),
@@ -239,7 +369,7 @@ describe("TON Connect wallet UI", () => {
     tonConnectMocks.wallet = null;
     tonConnectMocks.openModal.mockReset();
     tonConnectMocks.disconnect.mockReset();
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ items: [], total: 0, limit: 100, offset: 0 })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ items: [], total: 0, limit: 24, offset: 0 })));
   });
 
   it("shows a connect action when manifest configuration is available", async () => {

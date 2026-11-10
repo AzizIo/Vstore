@@ -59,7 +59,7 @@ describe("listing API client", () => {
     const [url, options] = vi.mocked(fetch).mock.calls[0];
     const parsed = new URL(String(url));
     expect(parsed.pathname).toBe("/api/listings");
-    expect(parsed.searchParams.get("limit")).toBe("100");
+    expect(parsed.searchParams.get("limit")).toBe("24");
     expect(parsed.searchParams.get("offset")).toBe("0");
     expect(parsed.searchParams.get("search")).toBe("lantern");
     expect(parsed.searchParams.get("asset_type")).toBe("telegram_gift");
@@ -90,6 +90,16 @@ describe("listing API client", () => {
     expect(vi.mocked(fetch).mock.calls[0][1]?.signal).toBe(controller.signal);
   });
 
+  it("requests an explicitly selected page limit and offset", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...page, limit: 3, offset: 3 }));
+
+    await fetchListings({ search: "", assetType: "all", sort: "newest", limit: 3, offset: 3 });
+
+    const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]));
+    expect(parsed.searchParams.get("limit")).toBe("3");
+    expect(parsed.searchParams.get("offset")).toBe("3");
+  });
+
   it("rejects a catalog with invalid pagination metadata", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...page, total: "1" }));
 
@@ -97,6 +107,18 @@ describe("listing API client", () => {
       search: "",
       assetType: "all",
       sort: "newest",
+    })).rejects.toThrow("invalid catalog response");
+  });
+
+  it("rejects pagination metadata that does not match the requested page", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...page, offset: 24 }));
+
+    await expect(fetchListings({
+      search: "",
+      assetType: "all",
+      sort: "newest",
+      limit: 24,
+      offset: 48,
     })).rejects.toThrow("invalid catalog response");
   });
 
