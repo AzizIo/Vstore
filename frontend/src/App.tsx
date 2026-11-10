@@ -141,7 +141,7 @@ function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () =>
               </button>
               {orderError && <p role="alert">{orderError}</p>}
               {orderCreated && (
-                <p role="status">Order created. Payment is not enabled; check its status in Orders.</p>
+                <p role="status">Order created. The listing is reserved; check its status in Orders.</p>
               )}
             </div>
           ) : session.status === "authenticated" ? (
