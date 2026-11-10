@@ -473,7 +473,7 @@ describe("Buyer orders", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Place order" }));
 
-    expect(await screen.findByText(/Order created\. The listing is reserved/).toBeInTheDocument();
+    expect(await screen.findByText(/Order created\. The listing is reserved/)).toBeInTheDocument();
     const orderRequest = vi.mocked(fetch).mock.calls.find(([input, init]) =>
       String(input).endsWith("/api/orders") && init?.method === "POST"
     );
