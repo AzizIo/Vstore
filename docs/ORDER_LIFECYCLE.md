@@ -33,6 +33,10 @@ introduced. The order and its listing reservation must be reconciled atomically.
 contract deployment, on-chain payment collection, NFT transfer, refunds, and Telegram Stars
 are out of scope until separately designed, security-reviewed, and validated on testnet.
 
+The payment/escrow decision and its state machine are recorded in
+[`docs/adr/0001-compliant-payments-and-escrow.md`](adr/0001-compliant-payments-and-escrow.md)
+and [`docs/PAYMENTS_ESCROW_DESIGN.md`](PAYMENTS_ESCROW_DESIGN.md).
+
 
 ## Telegram notifications and delivery guarantees
 
