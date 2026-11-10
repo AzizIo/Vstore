@@ -189,7 +189,7 @@ async def test_cancel_and_expiry_enqueue_both_parties_atomically(
 
     assert expired_count == 1
     rows = await _outbox_rows(notification_session)
-    assert len(rows) == 6
+    assert len(rows) == 8
     assert sum(row.event_type == "order_created" for row in rows) == 4
     assert sum(row.event_type == "order_cancelled" for row in rows) == 2
     assert sum(row.event_type == "order_expired" for row in rows) == 2
