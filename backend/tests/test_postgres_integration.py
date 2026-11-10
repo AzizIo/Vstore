@@ -35,12 +35,12 @@ from app.db.models import (
     User,
     Wallet,
 )
-from app.orders.service import OrderConflict, cancel_order, create_order, expire_pending_orders
 from app.listings.service import (
     ListingConflict,
     ListingVerificationUnavailable,
     publish_listing,
 )
+from app.orders.service import OrderConflict, cancel_order, create_order, expire_pending_orders
 
 pytestmark = pytest.mark.integration
 
