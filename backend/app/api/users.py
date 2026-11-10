@@ -1,10 +1,9 @@
-from typing import Annotated, Literal
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
@@ -21,11 +20,6 @@ class UserProfileResponse(BaseModel):
     first_name: str
     last_name: str | None
     language_code: str | None
-
-
-class WalletCreateRequest(BaseModel):
-    address: str = Field(min_length=3, max_length=128)
-    network: Literal["mainnet", "testnet"] = "mainnet"
 
 
 class WalletResponse(BaseModel):
@@ -63,41 +57,6 @@ async def get_my_wallets(
         .order_by(Wallet.is_primary.desc(), Wallet.created_at.desc())
     )
     return list(result.all())
-
-
-@router.post(
-    "/me/wallets",
-    response_model=WalletResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def add_wallet(
-    payload: WalletCreateRequest,
-    user: Annotated[User, Depends(get_current_user)],
-    session: Annotated[AsyncSession, Depends(get_db_session)],
-) -> Wallet:
-    address = payload.address.strip()
-    if not address:
-        raise HTTPException(status_code=422, detail="Wallet address cannot be empty")
-
-    wallet = Wallet(
-        user_id=user.id,
-        address=address,
-        network=payload.network,
-        is_primary=False,
-        is_verified=False,
-    )
-    session.add(wallet)
-    try:
-        await session.commit()
-    except IntegrityError as exc:
-        await session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="This wallet is already connected",
-        ) from exc
-
-    await session.refresh(wallet)
-    return wallet
 
 
 @router.delete("/me/wallets/{wallet_id}", status_code=status.HTTP_204_NO_CONTENT)
