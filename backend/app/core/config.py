@@ -1,5 +1,7 @@
 from functools import lru_cache
+from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +13,8 @@ class Settings(BaseSettings):
     bot_token: str | None = None
     auth_secret_key: str | None = None
     auth_token_ttl_seconds: int = 3600
+    ton_connect_allowed_domains: list[str] = Field(default_factory=list)
+    ton_connect_network: Literal["mainnet", "testnet"] = "mainnet"
     cors_allowed_origins: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

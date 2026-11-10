@@ -122,10 +122,11 @@ async def test_users_reject_duplicate_telegram_ids(db_session: AsyncSession) -> 
 
 async def test_wallet_address_is_unique_per_network(db_session: AsyncSession) -> None:
     owner = await make_user(db_session, telegram_id=700000003)
+    other_owner = await make_user(db_session, telegram_id=700000013)
     db_session.add_all(
         [
             Wallet(user_id=owner.id, address="same-wallet-address", network="mainnet"),
-            Wallet(user_id=owner.id, address="same-wallet-address", network="mainnet"),
+            Wallet(user_id=other_owner.id, address="same-wallet-address", network="mainnet"),
         ]
     )
 
