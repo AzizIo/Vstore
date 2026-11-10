@@ -61,7 +61,7 @@ async def claim_due_notifications(
     deliveries: list[NotificationDelivery] = []
 
     async with session.begin():
-        result = await session.execute(
+        result = await session.scalars(
             select(TelegramNotificationOutbox)
             .where(
                 or_(
