@@ -1,5 +1,7 @@
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from logging import getLogger
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,16 +10,43 @@ from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.api.listings import router as listings_router
+from app.api.orders import router as orders_router
 from app.api.users import router as users_router
 from app.api.wallets import router as wallets_router
 from app.core.config import get_settings
-from app.db.session import dispose_engine
+from app.db.session import async_session_factory, dispose_engine
+from app.orders.service import expire_pending_orders
+
+
+logger = getLogger(__name__)
+
+
+async def _expire_orders_periodically() -> None:
+    poll_interval = get_settings().order_expiration_poll_seconds
+    while True:
+        try:
+            await asyncio.sleep(poll_interval)
+            async with async_session_factory() as session:
+                await expire_pending_orders(session)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Keep the worker alive after a transient failure; the next poll retries.
+            logger.exception("Could not expire pending orders; the next poll will retry")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    yield
-    await dispose_engine()
+    expiration_task = asyncio.create_task(_expire_orders_periodically())
+    try:
+        yield
+    finally:
+        expiration_task.cancel()
+        try:
+            await expiration_task
+        except asyncio.CancelledError:
+            pass
+        await dispose_engine()
 
 
 settings = get_settings()
@@ -43,6 +72,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(listings_router, prefix="/api")
 app.include_router(wallets_router, prefix="/api")
+app.include_router(orders_router, prefix="/api")
 
 
 @app.get("/", tags=["meta"])
