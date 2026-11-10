@@ -12,6 +12,7 @@ from alembic.config import Config
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from app.assets.ton_nft.models import VerificationResult, VerificationStatus
 from app.core.config import get_settings
 from app.db.models import (
     AssetType,
@@ -23,6 +24,7 @@ from app.db.models import (
     PriceCurrency,
     TelegramNotificationOutbox,
     User,
+    Wallet,
 )
 from app.notifications.service import (
     PermanentNotificationError,
@@ -74,7 +76,31 @@ async def notification_session(migrated_notifications_database: str):
     await engine.dispose()
 
 
-async def _seed_active_listing(session: AsyncSession) -> tuple[User, User, Listing]:
+class VerifiedOwnerStub:
+    """Stand-in for TONNFTVerifier that reports the expected owner as current."""
+
+    def __init__(self, session: AsyncSession | None = None) -> None:
+        self.session = session
+        self.calls: list[tuple[str, str]] = []
+        self.status = VerificationStatus.VERIFIED
+
+    async def verify(self, item_address: str, expected_owner_address: str):
+        if self.session is not None:
+            assert not self.session.in_transaction(), (
+                "provider checks must run outside database transactions"
+            )
+        self.calls.append((item_address, expected_owner_address))
+        return VerificationResult(
+            status=self.status,
+            item_address=item_address,
+            owner_address=expected_owner_address,
+            expected_owner_address=expected_owner_address,
+        )
+
+
+async def _seed_active_listing(
+    session: AsyncSession,
+) -> tuple[User, User, Listing, Wallet]:
     suffix = uuid4().int % 1_000_000_000
     buyer = User(telegram_id=700_000_000 + suffix, first_name="Buyer")
     seller = User(telegram_id=800_000_000 + suffix, first_name="Seller")
@@ -84,12 +110,19 @@ async def _seed_active_listing(session: AsyncSession) -> tuple[User, User, Listi
     asset = NFTAsset(
         asset_type=AssetType.TON_NFT,
         external_id=f"notification-{uuid4()}",
-        item_address=f"EQ{uuid4().hex}",
+        item_address=f"0:{uuid4().hex}{uuid4().hex}",
         owner_id=seller.id,
         name="Notification test NFT",
         verification_status=AssetVerificationStatus.VERIFIED,
     )
-    session.add(asset)
+    wallet = Wallet(
+        user_id=seller.id,
+        address=f"0:{uuid4().hex}{uuid4().hex}",
+        network="mainnet",
+        is_verified=True,
+        is_primary=True,
+    )
+    session.add_all([asset, wallet])
     await session.flush()
 
     listing = Listing(
@@ -103,7 +136,7 @@ async def _seed_active_listing(session: AsyncSession) -> tuple[User, User, Listi
     session.add(listing)
     await session.flush()
     await session.commit()
-    return buyer, seller, listing
+    return buyer, seller, listing, wallet
 
 
 class _FakeSender:
@@ -129,13 +162,14 @@ async def _outbox_rows(session: AsyncSession) -> list[TelegramNotificationOutbox
 async def test_order_creation_enqueues_both_recipients_once(
     notification_session: AsyncSession,
 ) -> None:
-    buyer, seller, listing = await _seed_active_listing(notification_session)
+    buyer, seller, listing, wallet = await _seed_active_listing(notification_session)
 
     order_id = await create_order(
         notification_session,
         buyer_id=buyer.id,
         listing_id=listing.id,
         idempotency_key="notification-create-once",
+        verifier=VerifiedOwnerStub(notification_session),
     )
     await notification_session.commit()
     replayed_id = await create_order(
@@ -143,6 +177,7 @@ async def test_order_creation_enqueues_both_recipients_once(
         buyer_id=buyer.id,
         listing_id=listing.id,
         idempotency_key="notification-create-once",
+        verifier=VerifiedOwnerStub(notification_session),
     )
 
     assert replayed_id == order_id
@@ -159,13 +194,14 @@ async def test_order_creation_enqueues_both_recipients_once(
 async def test_cancel_and_expiry_enqueue_both_parties_atomically(
     notification_session: AsyncSession,
 ) -> None:
-    buyer, _, listing = await _seed_active_listing(notification_session)
+    buyer, _, listing, wallet = await _seed_active_listing(notification_session)
 
     cancelled_id = await create_order(
         notification_session,
         buyer_id=buyer.id,
         listing_id=listing.id,
         idempotency_key="notification-cancel",
+        verifier=VerifiedOwnerStub(notification_session),
     )
     await notification_session.commit()
     await cancel_order(
@@ -178,6 +214,7 @@ async def test_cancel_and_expiry_enqueue_both_parties_atomically(
         buyer_id=buyer.id,
         listing_id=listing.id,
         idempotency_key="notification-expire",
+        verifier=VerifiedOwnerStub(notification_session),
     )
     order = await notification_session.get(Order, expired_id)
     assert order is not None
@@ -203,12 +240,13 @@ async def test_cancel_and_expiry_enqueue_both_parties_atomically(
 async def test_worker_delivers_and_does_not_claim_delivered_rows_again(
     notification_session: AsyncSession,
 ) -> None:
-    buyer, _, listing = await _seed_active_listing(notification_session)
+    buyer, _, listing, wallet = await _seed_active_listing(notification_session)
     await create_order(
         notification_session,
         buyer_id=buyer.id,
         listing_id=listing.id,
         idempotency_key="notification-delivery-success",
+        verifier=VerifiedOwnerStub(notification_session),
     )
     await notification_session.commit()
 
@@ -229,12 +267,13 @@ async def test_worker_delivers_and_does_not_claim_delivered_rows_again(
 async def test_worker_retries_transient_errors_with_bounded_backoff(
     notification_session: AsyncSession,
 ) -> None:
-    buyer, _, listing = await _seed_active_listing(notification_session)
+    buyer, _, listing, wallet = await _seed_active_listing(notification_session)
     await create_order(
         notification_session,
         buyer_id=buyer.id,
         listing_id=listing.id,
         idempotency_key="notification-delivery-retry",
+        verifier=VerifiedOwnerStub(notification_session),
     )
     await notification_session.commit()
 
@@ -266,12 +305,13 @@ async def test_worker_retries_transient_errors_with_bounded_backoff(
 async def test_worker_records_permanent_failures_without_retry(
     notification_session: AsyncSession,
 ) -> None:
-    buyer, _, listing = await _seed_active_listing(notification_session)
+    buyer, _, listing, wallet = await _seed_active_listing(notification_session)
     await create_order(
         notification_session,
         buyer_id=buyer.id,
         listing_id=listing.id,
         idempotency_key="notification-permanent-failure",
+        verifier=VerifiedOwnerStub(notification_session),
     )
     await notification_session.commit()
 
@@ -289,12 +329,13 @@ async def test_worker_records_permanent_failures_without_retry(
 async def test_worker_respects_claim_leases_for_duplicate_processing(
     notification_session: AsyncSession,
 ) -> None:
-    buyer, _, listing = await _seed_active_listing(notification_session)
+    buyer, _, listing, wallet = await _seed_active_listing(notification_session)
     await create_order(
         notification_session,
         buyer_id=buyer.id,
         listing_id=listing.id,
         idempotency_key="notification-claim-lease",
+        verifier=VerifiedOwnerStub(notification_session),
     )
     await notification_session.commit()
 
@@ -317,12 +358,13 @@ async def test_transient_retries_stop_at_configured_max_attempts(
 
     import app.notifications.service as notification_service
 
-    buyer, _, listing = await _seed_active_listing(notification_session)
+    buyer, _, listing, wallet = await _seed_active_listing(notification_session)
     await create_order(
         notification_session,
         buyer_id=buyer.id,
         listing_id=listing.id,
         idempotency_key="notification-max-attempts",
+        verifier=VerifiedOwnerStub(notification_session),
     )
     await notification_session.commit()
 

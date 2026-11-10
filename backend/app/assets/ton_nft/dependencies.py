@@ -5,11 +5,18 @@ from app.assets.ton_nft.verifier import TONNFTVerifier
 from app.core.config import get_settings
 
 
-async def get_ton_nft_verifier() -> AsyncIterator[TONNFTVerifier]:
+def build_ton_nft_verifier() -> TONNFTVerifier:
+    """Build a verifier for the configured TON network.
+
+    The caller owns the returned verifier's provider and must close it when the
+    verifier is used outside a FastAPI dependency scope.
+    """
+
     settings = get_settings()
+    network = settings.ton_connect_network
     base_url = (
         settings.ton_center_mainnet_base_url
-        if settings.ton_connect_network == "mainnet"
+        if network == "mainnet"
         else settings.ton_center_testnet_base_url
     )
     api_key = (
@@ -17,14 +24,21 @@ async def get_ton_nft_verifier() -> AsyncIterator[TONNFTVerifier]:
         if settings.ton_center_api_key is not None
         else None
     )
-    provider = TONCenterV3Provider(
-        TONCenterV3Config(
-            base_url=base_url,
-            api_key=api_key,
-            timeout_seconds=settings.ton_center_timeout_seconds,
-        )
+    return TONNFTVerifier(
+        TONCenterV3Provider(
+            TONCenterV3Config(
+                base_url=base_url,
+                api_key=api_key,
+                timeout_seconds=settings.ton_center_timeout_seconds,
+            )
+        ),
+        network=network,
     )
+
+
+async def get_ton_nft_verifier() -> AsyncIterator[TONNFTVerifier]:
+    verifier = build_ton_nft_verifier()
     try:
-        yield TONNFTVerifier(provider)
+        yield verifier
     finally:
-        await provider.aclose()
+        await verifier.provider.aclose()

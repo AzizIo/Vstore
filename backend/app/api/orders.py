@@ -4,6 +4,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.assets.ton_nft.dependencies import get_ton_nft_verifier
+from app.assets.ton_nft.verifier import TONNFTVerifier
 from app.auth.dependencies import get_current_user
 from app.db.models import Order, User
 from app.db.session import get_db_session
@@ -15,6 +17,7 @@ from app.orders.schemas import (
 )
 from app.orders.service import (
     OrderConflict,
+    OrderVerificationUnavailable,
     cancel_order,
     create_order,
     get_order,
@@ -24,6 +27,7 @@ from app.orders.service import (
 router = APIRouter(prefix="/orders", tags=["orders"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+Verifier = Annotated[TONNFTVerifier, Depends(get_ton_nft_verifier)]
 
 
 def _response(order: Order) -> OrderResponse:
@@ -50,6 +54,7 @@ async def create_order_route(
     payload: OrderCreateRequest,
     session: DbSession,
     user: CurrentUser,
+    verifier: Verifier,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
 ) -> OrderResponse:
     try:
@@ -58,7 +63,12 @@ async def create_order_route(
             buyer_id=user.id,
             listing_id=payload.listing_id,
             idempotency_key=idempotency_key,
+            verifier=verifier,
         )
+    except OrderVerificationUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
     except OrderConflict as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     order = await get_order(session, order_id=order_id, user_id=user.id)

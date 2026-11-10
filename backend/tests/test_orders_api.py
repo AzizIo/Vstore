@@ -5,11 +5,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import orders as orders_api
+from app.assets.ton_nft.dependencies import get_ton_nft_verifier
 from app.auth.dependencies import get_current_user
 from app.db.models import User
 from app.db.session import get_db_session
 from app.main import app
-from app.orders.service import OrderConflict
+from app.orders.service import OrderConflict, OrderVerificationUnavailable
 
 
 @pytest.fixture
@@ -21,6 +22,7 @@ def buyer() -> User:
 def api_client(buyer: User):
     app.dependency_overrides[get_current_user] = lambda: buyer
     app.dependency_overrides[get_db_session] = lambda: None
+    app.dependency_overrides[get_ton_nft_verifier] = lambda: AsyncMock()
     try:
         with TestClient(app) as client:
             yield client
@@ -79,3 +81,34 @@ def test_create_order_rejects_unavailable_listing(api_client, monkeypatch) -> No
 def test_create_order_requires_idempotency_key(api_client) -> None:
     response = api_client.post("/api/orders", json={"listing_id": str(uuid4())})
     assert response.status_code == 422
+
+
+def test_create_order_reports_a_retryable_provider_outage(api_client, monkeypatch) -> None:
+    create = AsyncMock(
+        side_effect=OrderVerificationUnavailable(
+            "TON NFT ownership provider is temporarily unavailable"
+        )
+    )
+    monkeypatch.setattr(orders_api, "create_order", create)
+
+    response = api_client.post(
+        "/api/orders",
+        json={"listing_id": str(uuid4())},
+        headers={"Idempotency-Key": "order-provider-outage"},
+    )
+
+    assert response.status_code == 503
+    assert "temporarily unavailable" in response.json()["detail"]
+
+
+def test_create_order_passes_the_server_side_verifier(api_client, monkeypatch) -> None:
+    create = AsyncMock(side_effect=OrderConflict("Listing is not available"))
+    monkeypatch.setattr(orders_api, "create_order", create)
+
+    api_client.post(
+        "/api/orders",
+        json={"listing_id": str(uuid4())},
+        headers={"Idempotency-Key": "order-verifier-wiring"},
+    )
+
+    assert create.await_args.kwargs["verifier"] is not None
