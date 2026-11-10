@@ -28,9 +28,9 @@ Each outbox row snapshots the recipient Telegram ID and role. The unique dedupli
 based on order, lifecycle event, and recipient. The order transition, order event, and outbox
 rows are committed atomically.
 
-Messages contain an order reference, status, amount/currency, and an optional deep link with
-`startapp=order_<id>`. The message explicitly says checkout is not enabled and payment has not
-been received. It does not include wallet addresses, initData, JWTs, signatures, or private data.
+Messages contain an order reference, reservation status, and an optional deep link with
+`startapp=order_<id>`. The message explicitly says the MVP does not collect payments. It does not
+include price/amount/currency, wallet addresses, initData, JWTs, signatures, or private data.
 
 ## Retry and operations
 
