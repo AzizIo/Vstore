@@ -82,7 +82,7 @@ class ListingResponse(BaseModel):
     title: str | None
     description: str | None
     created_at: datetime
-    expires_at: datetime | None
+    expires_at: datetime | None = None
     asset: ListingAssetResponse
     seller: ListingSellerResponse
 
