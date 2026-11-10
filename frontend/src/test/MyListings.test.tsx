@@ -34,8 +34,6 @@ vi.mock("../listings/CreateListing", () => ({
 const draft: Listing = {
   id: "listing-draft",
   status: "draft",
-  price_amount: "1.25",
-  price_currency: "TON",
   title: "My NFT draft",
   description: "Private draft description",
   created_at: "2026-01-01T00:00:00Z",
@@ -60,7 +58,6 @@ describe("seller listing management", () => {
     mocks.updateListing.mockReset().mockResolvedValue({
       ...draft,
       title: "Edited NFT",
-      price_amount: "2.5",
       description: null,
     });
     mocks.cancelListing.mockReset().mockResolvedValue({ ...draft, status: "cancelled" });
@@ -114,9 +111,6 @@ describe("seller listing management", () => {
   it("saves only the permitted editable listing fields", async () => {
     await openDraft();
 
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Listing price" }), {
-      target: { value: "2.5" },
-    });
     fireEvent.change(screen.getByRole("textbox", { name: "Listing title" }), {
       target: { value: "Edited NFT" },
     });
@@ -127,7 +121,6 @@ describe("seller listing management", () => {
 
     expect(await screen.findByText("Listing details saved.")).toBeInTheDocument();
     expect(mocks.updateListing).toHaveBeenCalledWith(draft.id, "seller-token", {
-      price_amount: "2.5",
       title: "Edited NFT",
       description: null,
     });
