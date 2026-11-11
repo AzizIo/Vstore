@@ -81,6 +81,8 @@ def test_readiness_reports_both_dependencies_unavailable(monkeypatch) -> None:
         "database": "error",
         "redis": "error",
         "authentication": "ok",
+        "ton_connect_proof": "ok",
+        "ton_connect_proof_domains": ["shop.example.test"],
     }
 
 
@@ -103,6 +105,7 @@ def test_readiness_returns_503_when_authentication_is_not_configured(monkeypatch
             "redis": "ok",
             "authentication": "error",
             "ton_connect_proof": "ok",
+            "ton_connect_proof_domains": ["shop.example.test"],
         },
     }
 
@@ -156,6 +159,7 @@ def test_readiness_exposes_disabled_ton_connect_without_breaking_catalogue_healt
             "redis": "ok",
             "authentication": "ok",
             "ton_connect_proof": "error",
+            "ton_connect_proof_domains": [],
         },
     }
 
