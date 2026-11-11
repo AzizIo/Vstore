@@ -8,7 +8,7 @@ import {
 } from "./api/listings";
 import { createOrder } from "./api/orders";
 import { SessionProvider, useSession } from "./auth/SessionProvider";
-import { getTelegramStartOrderId } from "./auth/telegram";
+import { getTelegramStartParam } from "./auth/telegram";
 import { MyListings } from "./listings/MyListings";
 import { MyInventory } from "./inventory/MyInventory";
 import { Orders } from "./orders/Orders";
@@ -215,6 +215,7 @@ function SessionBanner() {
 
 function MarketplaceApp() {
   const session = useSession();
+  const startParam = useRef(getTelegramStartParam()).current;
   const [initialOrderId, setInitialOrderId] = useState<string | null>(null);
   const [section, setSection] = useState<"catalog" | "my-listings" | "my-nft" | "orders">("catalog");
   const [listings, setListings] = useState<Listing[]>([]);
@@ -234,14 +235,20 @@ function MarketplaceApp() {
   const loadMoreController = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (session.status === "loading") return;
-    const orderId = getTelegramStartOrderId();
-    if (orderId) {
-      setInitialOrderId(orderId);
-      setListingId(null);
-      setSection("orders");
+    if (!startParam) return;
+
+    if (startParam.type === "listing") {
+      setInitialOrderId(null);
+      setListingId(startParam.id);
+      setSection("catalog");
+      return;
     }
-  }, [session.status]);
+
+    if (session.status === "loading") return;
+    setInitialOrderId(startParam.id);
+    setListingId(null);
+    setSection("orders");
+  }, [session.status, startParam]);
 
   useEffect(() => {
     const version = ++requestVersion.current;
