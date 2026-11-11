@@ -799,3 +799,51 @@ def test_inventory_sync_cancels_reserved_order_when_transfer_away_is_confirmed(
     assert {item.recipient_user_id for item in outbox} == {buyer.id, owner.id}
     assert {item.recipient_role for item in outbox} == {"buyer", "seller"}
     session.commit.assert_awaited_once()
+
+def test_inventory_sync_provider_outage_during_stale_recheck_keeps_existing_state(
+    api_client, owner, verified_wallet
+) -> None:
+    """A successful empty scan is not enough to mark old assets as transferred."""
+    provider = PaginatedInventoryProvider({
+        0: NFTInventoryPage(items=(), has_more=False, next_offset=0)
+    })
+    unavailable = VerificationResult(
+        VerificationStatus.PROVIDER_UNAVAILABLE,
+        ITEM,
+        expected_owner_address=OWNER,
+    )
+    verifier = SyncVerifier(provider, {(ITEM, OWNER): unavailable})
+    redis = FakeSyncRedis()
+    asset = NFTAsset(
+        id=uuid4(),
+        asset_type=AssetType.TON_NFT,
+        network="mainnet",
+        external_id=ITEM,
+        item_address=ITEM,
+        owner_id=owner.id,
+        name="Existing NFT",
+        verification_status=AssetVerificationStatus.VERIFIED,
+    )
+    session = SimpleNamespace(
+        scalars=AsyncMock(side_effect=[
+            _rows([verified_wallet]),
+            _rows([asset]),
+        ]),
+        scalar=AsyncMock(),
+        rollback=AsyncMock(),
+        commit=AsyncMock(),
+        flush=AsyncMock(),
+        add=Mock(),
+    )
+    _install_sync_overrides(session, verifier, redis)
+    try:
+        response = api_client.post("/api/assets/me/sync")
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_ton_nft_verifier, None)
+        app.dependency_overrides.pop(get_redis_client, None)
+
+    assert response.status_code == 503
+    assert asset.verification_status is AssetVerificationStatus.VERIFIED
+    session.commit.assert_not_awaited()
+    assert redis.values == {}
