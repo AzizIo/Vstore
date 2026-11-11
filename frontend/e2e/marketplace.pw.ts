@@ -134,7 +134,7 @@ test.describe("order workspace", () => {
     await page.getByRole("button", { name: "Cancel order" }).click();
     await expect(page.getByText("Cancel this reservation?")).toBeVisible();
     await page.getByRole("button", { name: "Confirm cancellation" }).click();
-    await expect(page.getByText("Cancelled")).toBeVisible();
+    await expect(page.getByText("Cancelled").first()).toBeVisible();
     expect(requests).toContain(`POST /api/orders/${orderId}/cancel`);
   });
 });
