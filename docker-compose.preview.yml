@@ -1,0 +1,97 @@
+name: viltara-preview
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: viltara_preview
+      POSTGRES_USER: viltara_preview
+      POSTGRES_PASSWORD: ${PREVIEW_DB_PASSWORD:?Set PREVIEW_DB_PASSWORD in .env}
+    volumes:
+      - preview_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U viltara_preview -d viltara_preview"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+asyncpg://viltara_preview:${PREVIEW_DB_PASSWORD:?Set PREVIEW_DB_PASSWORD in .env}@db:5432/viltara_preview
+      REDIS_URL: redis://redis:6379/0
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/ready', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  miniapp:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.preview
+      args:
+        VITE_TONCONNECT_APP_URL: ${VITE_TONCONNECT_APP_URL:?Set VITE_TONCONNECT_APP_URL in .env}
+        VITE_TONCONNECT_MANIFEST_URL: ${VITE_TONCONNECT_MANIFEST_URL:?Set VITE_TONCONNECT_MANIFEST_URL in .env}
+    ports:
+      - "127.0.0.1:${PREVIEW_HTTP_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+asyncpg://viltara_preview:${PREVIEW_DB_PASSWORD:?Set PREVIEW_DB_PASSWORD in .env}@db:5432/viltara_preview
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    command: python -m app.bot
+    profiles: ["bot"]
+    restart: unless-stopped
+
+volumes:
+  preview_postgres_data:
+    name: viltara_preview_postgres_data

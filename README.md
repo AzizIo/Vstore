@@ -80,7 +80,7 @@ From the repository root, copy the environment template, configure the required 
     docker compose up --build
     docker compose exec api alembic upgrade head
 
-The PostgreSQL and Redis credentials in the Compose file are development-only. Never use them as production secrets. Never commit .env, bot tokens, JWT secrets, API keys, private keys or real user data.
+The root `docker-compose.yml` is the local-development stack: it runs Vite and Uvicorn reload mode with source bind mounts and development-only database credentials. Do not expose it as a hardened public deployment. For a separate static preview behind an HTTPS reverse proxy/tunnel, use the isolated [preview deployment stack](docs/PREVIEW_DEPLOYMENT.md). Never commit `.env`, bot tokens, JWT secrets, API keys, private keys or real user data.
 
 Local endpoints:
 
