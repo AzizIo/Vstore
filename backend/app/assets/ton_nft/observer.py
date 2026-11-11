@@ -341,7 +341,9 @@ async def _apply_verified_evidence(
             and asset.asset_type is AssetType.TON_NFT
             and asset.network == claim.network
             and asset.item_address is not None
+            and normalize_address(asset.item_address) == normalize_address(claim.item_address)
             and asset.owner_id == order.seller_id
+            and listing.seller_id == order.seller_id
             and asset.verification_status is AssetVerificationStatus.VERIFIED
         )
         if not evidence_matches or not state_matches:
@@ -453,8 +455,9 @@ async def run_delivery_observer_pass(
     verified = retried = manual_review = lease_lost = 0
     make_provider = provider_factory or _build_provider
     for claim in claims:
-        provider = make_provider(claim.network)
+        provider: DeliveryEvidenceProvider | None = None
         try:
+            provider = make_provider(claim.network)
             evidence = await provider.verify_transfer(
                 TEP62TransferIntent(
                     item_address=claim.item_address,
@@ -497,7 +500,15 @@ async def run_delivery_observer_pass(
                     session, claim, evidence, now=current_time
                 )
         finally:
-            await provider.aclose()
+            if provider is not None:
+                try:
+                    await provider.aclose()
+                except Exception:
+                    logger.warning(
+                        "Could not close delivery evidence provider for attempt %s",
+                        claim.attempt_id,
+                        exc_info=True,
+                    )
 
         if outcome == "verified":
             verified += 1
