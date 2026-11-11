@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.assets.ton_nft.address import AddressError, normalize_address
+from app.assets.ton_nft.delivery import normalize_transaction_hash
 from app.assets.ton_nft.models import VerificationResult, VerificationStatus
 from app.assets.ton_nft.verifier import TONNFTVerifier
 from app.core.config import get_settings
@@ -20,6 +22,8 @@ from app.db.models import (
     ListingStatus,
     NFTAsset,
     Order,
+    OrderDeliveryAttempt,
+    OrderDeliveryAttemptStatus,
     OrderEvent,
     OrderStatus,
     TelegramNotificationOutbox,
@@ -51,6 +55,21 @@ class _ReservationSnapshot:
     item_address: str
     network: str
     wallets: tuple[tuple[uuid.UUID, str], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _DeliveryPreparationSnapshot:
+    order_id: uuid.UUID
+    listing_id: uuid.UUID
+    asset_id: uuid.UUID
+    seller_id: uuid.UUID
+    buyer_id: uuid.UUID
+    seller_wallet_id: uuid.UUID
+    seller_address: str
+    buyer_wallet_id: uuid.UUID
+    buyer_address: str
+    item_address: str
+    network: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -668,6 +687,432 @@ async def expire_pending_orders(
             expired_count += 1
 
     return expired_count
+
+
+async def _load_delivery_preparation_snapshot(
+    session: AsyncSession,
+    *,
+    order_id: uuid.UUID,
+    seller_id: uuid.UUID,
+    idempotency_key: str,
+    now: datetime,
+) -> tuple[uuid.UUID | None, _DeliveryPreparationSnapshot | None]:
+    order = await session.scalar(select(Order).where(Order.id == order_id))
+    if order is None or order.seller_id != seller_id:
+        raise OrderConflict("Order not found")
+
+    existing = await session.scalar(
+        select(OrderDeliveryAttempt).where(
+            OrderDeliveryAttempt.order_id == order_id,
+            OrderDeliveryAttempt.prepare_idempotency_key == idempotency_key,
+        )
+    )
+    if existing is not None:
+        return existing.id, None
+
+    previous_attempt = await session.scalar(
+        select(OrderDeliveryAttempt)
+        .where(OrderDeliveryAttempt.order_id == order_id)
+        .order_by(OrderDeliveryAttempt.attempt_number.desc())
+    )
+    if previous_attempt is not None:
+        raise OrderConflict("Delivery has already been prepared for this order")
+    if order.status is not OrderStatus.RESERVED or order.expires_at <= now:
+        raise OrderConflict("Order is not available for delivery preparation")
+
+    listing = await session.scalar(select(Listing).where(Listing.id == order.listing_id))
+    if (
+        listing is None
+        or listing.seller_id != order.seller_id
+        or listing.status is not ListingStatus.RESERVED
+        or (listing.expires_at is not None and listing.expires_at <= now)
+    ):
+        raise OrderConflict("Reserved listing is not available")
+
+    asset = await session.scalar(select(NFTAsset).where(NFTAsset.id == listing.asset_id))
+    configured_network = get_settings().ton_connect_network
+    if (
+        asset is None
+        or asset.owner_id != order.seller_id
+        or asset.asset_type is not AssetType.TON_NFT
+        or asset.verification_status is not AssetVerificationStatus.VERIFIED
+        or not asset.item_address
+        or asset.network != configured_network
+    ):
+        raise OrderConflict("NFT is not eligible for delivery preparation")
+
+    seller_wallet = await session.scalar(
+        select(Wallet).where(
+            Wallet.id == (await session.scalar(
+                select(Wallet.id)
+                .where(
+                    Wallet.user_id == order.seller_id,
+                    Wallet.is_verified.is_(True),
+                    Wallet.network == asset.network,
+                )
+                .order_by(Wallet.is_primary.desc(), Wallet.created_at.desc())
+                .limit(1)
+            )),
+            Wallet.user_id == order.seller_id,
+            Wallet.is_verified.is_(True),
+            Wallet.network == asset.network,
+        )
+    )
+    if seller_wallet is None:
+        raise OrderConflict("Choose a verified seller wallet on the NFT network")
+
+    buyer_wallets = (
+        await session.scalars(
+            select(Wallet).where(
+                Wallet.user_id == order.buyer_id,
+                Wallet.is_verified.is_(True),
+                Wallet.is_primary.is_(True),
+                Wallet.network == asset.network,
+            )
+        )
+    ).all()
+    if len(buyer_wallets) != 1:
+        raise OrderConflict("Buyer must have one verified primary wallet on the NFT network")
+    buyer_wallet = buyer_wallets[0]
+
+    try:
+        item_address = normalize_address(asset.item_address)
+        seller_address = normalize_address(seller_wallet.address)
+        buyer_address = normalize_address(buyer_wallet.address)
+    except AddressError as exc:
+        raise OrderConflict("A delivery wallet or NFT address is invalid") from exc
+    if seller_address == buyer_address:
+        raise OrderConflict("Seller and buyer delivery wallets must be different")
+
+    return None, _DeliveryPreparationSnapshot(
+        order_id=order.id,
+        listing_id=listing.id,
+        asset_id=asset.id,
+        seller_id=order.seller_id,
+        buyer_id=order.buyer_id,
+        seller_wallet_id=seller_wallet.id,
+        seller_address=seller_address,
+        buyer_wallet_id=buyer_wallet.id,
+        buyer_address=buyer_address,
+        item_address=item_address,
+        network=asset.network,
+    )
+
+
+async def prepare_delivery(
+    session: AsyncSession,
+    *,
+    order_id: uuid.UUID,
+    seller_id: uuid.UUID,
+    seller_wallet_id: uuid.UUID,
+    idempotency_key: str,
+    verifier: TONNFTVerifier,
+) -> uuid.UUID:
+    """Create a non-custodial seller delivery intent after fresh owner verification."""
+
+    if not 1 <= len(idempotency_key) <= 128:
+        raise OrderConflict("Invalid delivery preparation idempotency key")
+
+    # First read is deliberately unlocked; provider I/O must not run under DB locks.
+    current_time = datetime.now(UTC)
+    existing_id, snapshot = await _load_delivery_preparation_snapshot(
+        session,
+        order_id=order_id,
+        seller_id=seller_id,
+        idempotency_key=idempotency_key,
+        now=current_time,
+    )
+    if existing_id is not None:
+        return existing_id
+    if snapshot is None:  # pragma: no cover - guarded by the loader
+        raise OrderConflict("Delivery is not available")
+
+    if snapshot.seller_wallet_id != seller_wallet_id:
+        raise OrderConflict("Selected seller wallet is not eligible for this order")
+    if verifier.network is not None and verifier.network != snapshot.network:
+        raise OrderVerificationUnavailable(
+            "The TON ownership provider is not configured for this asset's network"
+        )
+
+    # Do not keep the read transaction or any DB connection while querying TON.
+    await session.rollback()
+    verification = await verifier.verify(snapshot.item_address, snapshot.seller_address)
+    if verification.status is VerificationStatus.PROVIDER_UNAVAILABLE:
+        raise OrderVerificationUnavailable(
+            "TON NFT ownership provider is temporarily unavailable"
+        )
+    try:
+        verified_item = normalize_address(verification.item_address)
+        verified_expected_owner = normalize_address(verification.expected_owner_address or "")
+        verified_owner = normalize_address(verification.owner_address or "")
+    except AddressError as exc:
+        raise OrderConflict("Current NFT ownership could not be verified") from exc
+    if (
+        verified_item != snapshot.item_address
+        or verified_expected_owner != snapshot.seller_address
+    ):
+        raise OrderConflict("TON provider returned ownership data for a different NFT or wallet")
+
+    ownership_lost = (
+        verification.status is VerificationStatus.OWNER_MISMATCH
+        and verified_owner != snapshot.seller_address
+    )
+    if not ownership_lost and (
+        verification.status is not VerificationStatus.VERIFIED
+        or verified_owner != snapshot.seller_address
+    ):
+        raise OrderConflict("Seller ownership of this NFT could not be verified")
+
+    committed_at = datetime.now(UTC)
+    settings = get_settings()
+    query_id = secrets.randbits(64)
+    rejection: str | None = None
+    attempt_id: uuid.UUID | None = None
+
+    await session.rollback()
+    async with session.begin():
+        listing = await session.scalar(
+            select(Listing).where(Listing.id == snapshot.listing_id).with_for_update()
+        )
+        wallet_ids = sorted(
+            (snapshot.seller_wallet_id, snapshot.buyer_wallet_id), key=str
+        )
+        locked_wallets = (
+            await session.scalars(
+                select(Wallet)
+                .where(Wallet.id.in_(wallet_ids))
+                .order_by(Wallet.id)
+                .with_for_update()
+            )
+        ).all()
+        wallets_by_id = {wallet.id: wallet for wallet in locked_wallets}
+        asset = await session.scalar(
+            select(NFTAsset).where(NFTAsset.id == snapshot.asset_id).with_for_update()
+        )
+        order = await session.scalar(
+            select(Order).where(Order.id == snapshot.order_id).with_for_update()
+        )
+        if order is None or order.seller_id != seller_id:
+            rejection = "Order not found"
+        else:
+            same_key_attempt = await session.scalar(
+                select(OrderDeliveryAttempt)
+                .where(
+                    OrderDeliveryAttempt.order_id == order.id,
+                    OrderDeliveryAttempt.prepare_idempotency_key == idempotency_key,
+                )
+                .with_for_update()
+            )
+            if same_key_attempt is not None:
+                attempt_id = same_key_attempt.id
+            else:
+                previous_attempt = await session.scalar(
+                    select(OrderDeliveryAttempt)
+                    .where(OrderDeliveryAttempt.order_id == order.id)
+                    .order_by(OrderDeliveryAttempt.attempt_number.desc())
+                    .with_for_update()
+                )
+                seller_wallet = wallets_by_id.get(snapshot.seller_wallet_id)
+                buyer_wallet = wallets_by_id.get(snapshot.buyer_wallet_id)
+                identity_matches = (
+                    listing is not None
+                    and asset is not None
+                    and listing.id == order.listing_id
+                    and listing.asset_id == asset.id
+                    and listing.seller_id == order.seller_id
+                    and asset.owner_id == order.seller_id
+                    and asset.asset_type is AssetType.TON_NFT
+                    and asset.verification_status is AssetVerificationStatus.VERIFIED
+                    and asset.network == snapshot.network
+                    and asset.item_address is not None
+                    and normalize_address(asset.item_address) == snapshot.item_address
+                )
+                wallets_match = (
+                    seller_wallet is not None
+                    and seller_wallet.user_id == order.seller_id
+                    and seller_wallet.is_verified
+                    and seller_wallet.network == snapshot.network
+                    and normalize_address(seller_wallet.address) == snapshot.seller_address
+                    and buyer_wallet is not None
+                    and buyer_wallet.user_id == order.buyer_id
+                    and buyer_wallet.is_verified
+                    and buyer_wallet.is_primary
+                    and buyer_wallet.network == snapshot.network
+                    and normalize_address(buyer_wallet.address) == snapshot.buyer_address
+                )
+                if previous_attempt is not None:
+                    rejection = "Delivery has already been prepared for this order"
+                elif ownership_lost and identity_matches:
+                    await _invalidate_lost_ownership(
+                        session,
+                        listing=listing,
+                        asset=asset,
+                        current_time=committed_at,
+                    )
+                    rejection = "Seller no longer owns this NFT; the listing was invalidated"
+                elif not identity_matches or not wallets_match:
+                    rejection = "Order, listing, asset, or verified wallet changed during preparation"
+                elif (
+                    order.status is not OrderStatus.RESERVED
+                    or order.expires_at <= committed_at
+                    or listing.status is not ListingStatus.RESERVED
+                    or (
+                        listing.expires_at is not None
+                        and listing.expires_at <= committed_at
+                    )
+                ):
+                    rejection = "Order is no longer available for delivery preparation"
+                else:
+                    attempt = OrderDeliveryAttempt(
+                        order_id=order.id,
+                        attempt_number=1,
+                        status=OrderDeliveryAttemptStatus.PREPARED,
+                        network=snapshot.network,
+                        item_address=snapshot.item_address,
+                        seller_wallet_id=seller_wallet.id,
+                        seller_address_snapshot=snapshot.seller_address,
+                        buyer_wallet_id=buyer_wallet.id,
+                        buyer_address_snapshot=snapshot.buyer_address,
+                        query_id=Decimal(query_id),
+                        prepare_idempotency_key=idempotency_key,
+                        prepared_at=committed_at,
+                        deadline=committed_at + timedelta(
+                            seconds=settings.delivery_preparation_ttl_seconds
+                        ),
+                        next_check_at=committed_at,
+                    )
+                    order.status = OrderStatus.AWAITING_TRANSFER
+                    session.add(attempt)
+                    session.add(
+                        OrderEvent(
+                            order_id=order.id,
+                            from_status=OrderStatus.RESERVED,
+                            to_status=OrderStatus.AWAITING_TRANSFER,
+                            actor_id=seller_id,
+                            actor_type="seller",
+                        )
+                    )
+                    await session.flush()
+                    attempt_id = attempt.id
+
+    if rejection is not None:
+        raise OrderConflict(rejection)
+    if attempt_id is None:  # pragma: no cover - guarded by transaction branches
+        raise OrderConflict("Delivery preparation could not be persisted")
+    return attempt_id
+
+
+async def submit_delivery_candidate(
+    session: AsyncSession,
+    *,
+    order_id: uuid.UUID,
+    seller_id: uuid.UUID,
+    transaction_hash: str,
+    now: datetime | None = None,
+) -> uuid.UUID:
+    """Persist a seller-supplied transaction hash as an untrusted lookup hint."""
+
+    normalized_hash = normalize_transaction_hash(transaction_hash, "transaction_hash")
+    order_header = await session.execute(
+        select(Order.listing_id, Listing.asset_id)
+        .join(Listing, Listing.id == Order.listing_id)
+        .where(Order.id == order_id, Order.seller_id == seller_id)
+    )
+    header = order_header.first()
+    if header is None:
+        raise OrderConflict("Order not found")
+    listing_id, asset_id = header
+    await session.rollback()
+
+    current_time = now or datetime.now(UTC)
+    attempt_id: uuid.UUID | None = None
+    rejection: str | None = None
+    async with session.begin():
+        listing = await session.scalar(
+            select(Listing).where(Listing.id == listing_id).with_for_update()
+        )
+        asset = await session.scalar(
+            select(NFTAsset).where(NFTAsset.id == asset_id).with_for_update()
+        )
+        order = await session.scalar(
+            select(Order)
+            .where(Order.id == order_id, Order.seller_id == seller_id)
+            .with_for_update()
+        )
+        if order is None:
+            rejection = "Order not found"
+        else:
+            attempt = await session.scalar(
+                select(OrderDeliveryAttempt)
+                .where(OrderDeliveryAttempt.order_id == order.id)
+                .order_by(OrderDeliveryAttempt.attempt_number.desc())
+                .with_for_update()
+            )
+            if attempt is None:
+                rejection = "Delivery has not been prepared"
+            elif attempt.candidate_transaction_hash is not None:
+                if attempt.candidate_transaction_hash == normalized_hash:
+                    attempt_id = attempt.id
+                else:
+                    rejection = "A different transaction hash was already submitted"
+            elif (
+                order.status not in (
+                    OrderStatus.AWAITING_TRANSFER,
+                    OrderStatus.OBSERVING_TRANSFER,
+                )
+                or attempt.status not in (
+                    OrderDeliveryAttemptStatus.PREPARED,
+                    OrderDeliveryAttemptStatus.OBSERVING,
+                )
+                or listing is None
+                or asset is None
+                or listing.status is not ListingStatus.RESERVED
+                or listing.asset_id != asset.id
+            ):
+                rejection = "Order is not accepting a delivery submission"
+            else:
+                attempt.candidate_transaction_hash = normalized_hash
+                attempt.submitted_at = current_time
+                attempt.next_check_at = current_time
+                attempt.status = OrderDeliveryAttemptStatus.OBSERVING
+                if order.status is OrderStatus.AWAITING_TRANSFER:
+                    order.status = OrderStatus.OBSERVING_TRANSFER
+                    session.add(
+                        OrderEvent(
+                            order_id=order.id,
+                            from_status=OrderStatus.AWAITING_TRANSFER,
+                            to_status=OrderStatus.OBSERVING_TRANSFER,
+                            actor_id=seller_id,
+                            actor_type="seller",
+                        )
+                    )
+                attempt_id = attempt.id
+
+    if rejection is not None:
+        raise OrderConflict(rejection)
+    if attempt_id is None:  # pragma: no cover - guarded by transaction branches
+        raise OrderConflict("Delivery submission could not be persisted")
+    return attempt_id
+
+
+async def get_order_delivery_state(
+    session: AsyncSession,
+    *,
+    order_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> tuple[Order, OrderDeliveryAttempt | None] | None:
+    """Return the latest delivery attempt only to a buyer or seller of the order."""
+
+    order = await get_order(session, order_id=order_id, user_id=user_id)
+    if order is None:
+        return None
+    attempt = await session.scalar(
+        select(OrderDeliveryAttempt)
+        .where(OrderDeliveryAttempt.order_id == order_id)
+        .order_by(OrderDeliveryAttempt.attempt_number.desc())
+        .limit(1)
+    )
+    return order, attempt
 
 
 async def get_order(
