@@ -3,6 +3,7 @@ import { isListing, type Listing, type ListingAsset, type PriceCurrency } from "
 
 export interface InventoryAsset extends ListingAsset {
   item_address: string;
+  collection_address: string | null;
   eligible_for_listing: boolean;
 }
 
@@ -19,6 +20,17 @@ export interface InventoryPageRequest {
   limit?: number;
   offset?: number;
   walletId?: string;
+}
+
+export interface InventorySyncResponse {
+  wallet_id: string;
+  synced_at: string;
+  discovered_count: number;
+  verified_count: number;
+  stale_count: number;
+  invalid_count: number;
+  unsupported_count: number;
+  cancelled_listing_count: number;
 }
 
 export interface CreateListingDraftRequest {
@@ -73,6 +85,7 @@ function isInventoryAsset(value: unknown): value is InventoryAsset {
     asset.asset_type === "ton_nft" &&
     typeof asset.external_id === "string" &&
     typeof asset.item_address === "string" &&
+    (asset.collection_address === null || typeof asset.collection_address === "string") &&
     (asset.name === null || typeof asset.name === "string") &&
     (asset.description === null || typeof asset.description === "string") &&
     (asset.image_url === null || typeof asset.image_url === "string") &&
@@ -125,4 +138,41 @@ export async function createListingDraft(
     throw new Error("The seller service returned an invalid draft response.");
   }
   return listing;
+}
+
+
+export async function syncMyInventory(
+  accessToken: string,
+  walletId?: string,
+  signal?: AbortSignal,
+): Promise<InventorySyncResponse> {
+  const params = new URLSearchParams();
+  if (walletId) params.set("wallet_id", walletId);
+  const suffix = params.size ? `?${params.toString()}` : "";
+  const response = await requestJson<unknown>(
+    `${API_BASE_URL}/api/assets/me/sync${suffix}`,
+    accessToken,
+    { method: "POST", signal },
+  );
+  if (!response || typeof response !== "object") {
+    throw new Error("The seller service returned an invalid inventory sync response.");
+  }
+  const result = response as Partial<InventorySyncResponse>;
+  const countKeys = [
+    "discovered_count",
+    "verified_count",
+    "stale_count",
+    "invalid_count",
+    "unsupported_count",
+    "cancelled_listing_count",
+  ] as const;
+  if (
+    typeof result.wallet_id !== "string" ||
+    typeof result.synced_at !== "string" ||
+    !Number.isFinite(Date.parse(result.synced_at)) ||
+    countKeys.some((key) => !Number.isInteger(result[key]) || (result[key] ?? -1) < 0)
+  ) {
+    throw new Error("The seller service returned an invalid inventory sync response.");
+  }
+  return result as InventorySyncResponse;
 }
