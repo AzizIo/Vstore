@@ -6,23 +6,27 @@ This document covers wallet linking for the Telegram Mini App. A connected accou
 
 Configure the same real public HTTPS origin in frontend and backend. Do not guess a production hostname.
 
-In `frontend/.env` (start from `frontend/.env.example`):
+In the root `.env` (start from `.env.example`), configure the frontend's public origin and the backend proof allowlist together:
 
 ```dotenv
+TELEGRAM_MINI_APP_URL=https://<your-public-miniapp-host>
 VITE_TONCONNECT_APP_URL=https://<your-public-miniapp-host>
 VITE_TONCONNECT_MANIFEST_URL=https://<your-public-miniapp-host>/tonconnect-manifest.json
-```
-
-In the root `.env` (start from `.env.example`):
-
-```dotenv
 TON_CONNECT_ALLOWED_DOMAINS=["<your-public-miniapp-host>"]
 TON_CONNECT_NETWORK=mainnet
 ```
 
+Docker Compose passes the two `VITE_TONCONNECT_*` values into the `miniapp` container. After changing them on the server, recreate only that service so Vite reads the new values:
+
+```bash
+docker compose up -d --force-recreate miniapp
+```
+
+For running Vite directly outside Compose, copy `frontend/.env.example` to `frontend/.env` instead. Do not commit either real `.env` file.
+
 Use the hostname only for `TON_CONNECT_ALLOWED_DOMAINS`: no `https://`, port, path, or trailing slash. It must exactly match the TON Connect Proof domain sent by the wallet. Use `TON_CONNECT_NETWORK=testnet` and the corresponding testnet wallet/network only when explicitly testing testnet. The backend fails closed when this allowlist is empty or invalid.
 
-The app URL must be an origin without a path. For development, a public HTTPS tunnel can be used; set both frontend URLs to that tunnel's origin and temporarily allow the exact hostname in the backend list. Do not keep a temporary tunnel host as production configuration.
+The app URL must be an origin without a path. For development, a public HTTPS tunnel can be used; set both frontend URLs and the backend allowlist to that exact tunnel host. Do not keep a temporary tunnel host as production configuration.
 
 ## Manifest and icon
 
