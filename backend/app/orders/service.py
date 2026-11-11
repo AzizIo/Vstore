@@ -1060,6 +1060,8 @@ async def submit_delivery_candidate(
                     attempt_id = attempt.id
                 else:
                     rejection = "A different transaction hash was already submitted"
+            elif attempt.deadline <= current_time:
+                rejection = "Delivery preparation window has expired"
             elif (
                 order.status not in (
                     OrderStatus.AWAITING_TRANSFER,
