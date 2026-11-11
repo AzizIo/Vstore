@@ -1,6 +1,6 @@
 # VILTARA SHOP
 
-VILTARA SHOP is a Telegram Mini App and optional bot for a peer-to-peer marketplace of **TON NFTs that implement TEP-62**. Sellers can create priced listings for assets whose current ownership has been checked by the backend. Buyers can reserve a listing and view the resulting order.
+VILTARA SHOP is a Telegram Mini App and optional bot for a peer-to-peer marketplace foundation built around **TON NFTs that implement TEP-62**. Sellers can create priced listings for assets whose current ownership has been checked by the backend. Buyers can reserve a listing and view the resulting order; direct-transfer coordination and independent delivery confirmation are planned, not yet available.
 
 **Reservation is not payment.** The current product stage does not collect funds, provide escrow, transfer NFTs on behalf of users, or verify post-reservation delivery. A reservation records the buyer, seller, listing, price/currency snapshot, expiry and lifecycle events; it does not mean that the seller has transferred the NFT or that the buyer has paid.
 
