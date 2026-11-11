@@ -6,8 +6,8 @@ import httpx
 import pytest
 
 from app.assets.ton_nft.delivery import (
-    normalize_transaction_hash,
     DeliveryEvidenceStatus,
+    normalize_transaction_hash,
     TEP62TransferIntent,
     TONCenterDeliveryConfig,
     TONCenterDeliveryEvidenceProvider,
