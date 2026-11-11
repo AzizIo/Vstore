@@ -71,6 +71,7 @@ class DeliveryObservationClaim:
     query_id: int
     candidate_transaction_hash: str | None
     deadline: datetime
+    lease_until: datetime
     lease_token: uuid.UUID
     observer_attempt_count: int
 
@@ -266,6 +267,7 @@ async def claim_due_delivery_attempts(
                     query_id=int(attempt.query_id),
                     candidate_transaction_hash=attempt.candidate_transaction_hash,
                     deadline=attempt.deadline,
+                    lease_until=lease_until,
                     lease_token=lease_token,
                     observer_attempt_count=attempt.observer_attempt_count,
                 )
