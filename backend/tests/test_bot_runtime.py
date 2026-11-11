@@ -190,7 +190,9 @@ async def test_notification_worker_keeps_running_after_temporary_processing_erro
         lambda: _SessionContext(),
     )
     monkeypatch.setattr(bot_runtime, "process_due_notifications", process)
-    task = asyncio.create_task(bot_runtime._run_notification_worker(_FakeBot()))  # type: ignore[arg-type]
+    task = asyncio.create_task(
+        bot_runtime._run_notification_worker(_FakeBot())  # type: ignore[arg-type]
+    )
 
     try:
         await asyncio.wait_for(recovered.wait(), timeout=1)
