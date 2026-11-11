@@ -10,9 +10,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
-from sqlalchemy import select
+from sqlalchemy import literal_column, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.selectable import Exists
 
 from app.assets.ton_nft.address import AddressError, normalize_address
 from app.assets.ton_nft.dependencies import get_ton_nft_verifier
@@ -116,6 +117,23 @@ async def _upsert_collection(
     )
 
 
+def _open_listing_exists() -> Exists:
+    """Keep the conflict target out of the subquery FROM clause."""
+    target_asset_id = literal_column(
+        f"{NFTAsset.__tablename__}.id",
+        type_=NFTAsset.id.type,
+    )
+    return (
+        select(Listing.id)
+        .select_from(Listing)
+        .where(
+            Listing.asset_id == target_asset_id,
+            Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED]),
+        )
+        .exists()
+    )
+
+
 async def _upsert_verified_asset(
     session: AsyncSession,
     user_id: UUID,
@@ -124,14 +142,7 @@ async def _upsert_verified_asset(
 ) -> NFTAsset | None:
     collection_id = await _upsert_collection(session, network, snapshot.collection_address)
     now = datetime.now(UTC)
-    open_listing_exists = (
-        select(Listing.id)
-        .where(
-            Listing.asset_id == NFTAsset.id,
-            Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED]),
-        )
-        .exists()
-    )
+    open_listing_exists = _open_listing_exists()
     statement = (
         pg_insert(NFTAsset)
         .values(
