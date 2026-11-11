@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
@@ -28,8 +28,8 @@ from app.db.models import (
     Wallet,
 )
 from app.db.session import get_db_session
-from app.wallets.redis import get_redis_client
 from app.main import app
+from app.wallets.redis import get_redis_client
 
 ITEM = "0:" + "11" * 32
 OTHER_ITEM = "0:" + "33" * 32
@@ -438,7 +438,9 @@ def _inventory_item(address: str, owner: str = OWNER) -> NFTItemSnapshot:
     )
 
 
-def test_inventory_sync_scans_all_pages_and_deduplicates_addresses(api_client, owner, verified_wallet) -> None:
+def test_inventory_sync_scans_all_pages_and_deduplicates_addresses(
+    api_client, owner, verified_wallet
+) -> None:
     third_item = "0:" + "55" * 32
     first = _inventory_item(ITEM)
     second = _inventory_item(OTHER_ITEM)
@@ -481,7 +483,9 @@ def test_inventory_sync_scans_all_pages_and_deduplicates_addresses(api_client, o
     assert redis.values == {}
 
 
-def test_inventory_sync_provider_outage_does_not_mutate_assets(api_client, verified_wallet, owner) -> None:
+def test_inventory_sync_provider_outage_does_not_mutate_assets(
+    api_client, verified_wallet, owner
+) -> None:
     provider = PaginatedInventoryProvider({}, error=ProviderUnavailable("timeout"))
     verifier = SyncVerifier(provider)
     redis = FakeSyncRedis()
@@ -589,7 +593,9 @@ def test_inventory_sync_lock_prevents_concurrent_sync(api_client, owner, verifie
     session.commit.assert_not_awaited()
 
 
-def test_inventory_sync_is_idempotent_for_the_same_owned_item(api_client, owner, verified_wallet) -> None:
+def test_inventory_sync_is_idempotent_for_the_same_owned_item(
+    api_client, owner, verified_wallet
+) -> None:
     candidate = _inventory_item(ITEM)
     provider = PaginatedInventoryProvider({
         0: NFTInventoryPage(items=(candidate,), has_more=False, next_offset=1)

@@ -404,7 +404,12 @@ async def sync_my_verified_inventory(
         )
 
     try:
-        discovered, discovered_count, invalid_count, unsupported_count = await _scan_wallet_inventory(
+        (
+            discovered,
+            discovered_count,
+            invalid_count,
+            unsupported_count,
+        ) = await _scan_wallet_inventory(
             verifier,
             selected_owner_address,
             redis=redis,
@@ -527,7 +532,11 @@ async def sync_my_verified_inventory(
                     await _renew_sync_lock(redis, lock_key, lock_token)
                 await _upsert_verified_asset(session, user_id, network, snapshot)
 
-            for stale_index, (asset_id, _item_address, conclusive_loss) in enumerate(stale_candidates):
+            for stale_index, (
+                asset_id,
+                _item_address,
+                conclusive_loss,
+            ) in enumerate(stale_candidates):
                 if stale_index % 25 == 0:
                     await _renew_sync_lock(redis, lock_key, lock_token)
                 open_listings = list(
