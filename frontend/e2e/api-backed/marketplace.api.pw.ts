@@ -32,7 +32,7 @@ function signedTelegramInitData(user: TelegramTestUser): string {
 async function installTelegramBridge(
   page: import("@playwright/test").Page,
   user: TelegramTestUser,
-): Promise<void> {
+): Promise<string> {
   const initData = signedTelegramInitData(user);
   await page.addInitScript((signedData) => {
     const webApp = {
@@ -45,6 +45,7 @@ async function installTelegramBridge(
       WebApp: webApp,
     };
   }, initData);
+  return initData;
 }
 
 const seller: TelegramTestUser = {
@@ -81,7 +82,20 @@ test("real seller publishes a verified NFT and buyer reserves it through FastAPI
   });
 
   try {
-    await installTelegramBridge(sellerPage, seller);
+    const sellerInitData = await installTelegramBridge(sellerPage, seller);
+    const bootstrapAuth = await sellerContext.request.post(
+      "http://127.0.0.1:5173/api/auth/telegram",
+      { data: { init_data: sellerInitData } },
+    );
+    expect(bootstrapAuth.status()).toBe(200);
+    const bootstrapSession = await bootstrapAuth.json() as { access_token: string };
+    const redisChallenge = await sellerContext.request.post(
+      "http://127.0.0.1:5173/api/wallets/proof/challenge",
+      { headers: { Authorization: `Bearer ${bootstrapSession.access_token}` } },
+    );
+    expect(redisChallenge.status()).toBe(200);
+    expect(typeof (await redisChallenge.json()).payload).toBe("string");
+
     await sellerPage.goto("/");
     await expect(sellerPage.getByText(/Signed in as E2E Seller/)).toBeVisible();
 
