@@ -2,8 +2,10 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.assets.ton_nft.delivery import normalize_transaction_hash
+from app.assets.ton_nft.errors import InvalidProviderData
 from app.db.models import (
     AssetType,
     OrderDeliveryAttemptStatus,
@@ -56,6 +58,14 @@ class DeliverySubmissionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     transaction_hash: str = Field(min_length=1, max_length=128)
+
+    @field_validator("transaction_hash")
+    @classmethod
+    def validate_transaction_hash(cls, value: str) -> str:
+        try:
+            return normalize_transaction_hash(value)
+        except InvalidProviderData as exc:
+            raise ValueError("Invalid TON transaction hash") from exc
 
 
 class DeliveryAttemptResponse(BaseModel):
