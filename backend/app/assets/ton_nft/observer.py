@@ -112,7 +112,12 @@ async def claim_due_delivery_attempts(
     now: datetime | None = None,
     limit: int | None = None,
 ) -> list[DeliveryObservationClaim]:
-    """Claim a bounded batch with SKIP LOCKED and a reclaimable per-attempt lease."""
+    """Claim a bounded batch with SKIP LOCKED and a reclaimable per-attempt lease.
+
+    Lock order is listing -> asset -> order -> attempt, matching cancellation,
+    expiry and finalization paths. Candidate discovery itself is unlocked; each
+    candidate is re-read and revalidated after the ordered locks are acquired.
+    """
 
     settings = get_settings()
     current_time = now or datetime.now(UTC)
@@ -122,39 +127,100 @@ async def claim_due_delivery_attempts(
 
     claims: list[DeliveryObservationClaim] = []
     async with session.begin():
-        rows = await session.execute(
-            select(OrderDeliveryAttempt, Order, Listing)
-            .join(Order, Order.id == OrderDeliveryAttempt.order_id)
-            .join(Listing, Listing.id == Order.listing_id)
-            .where(
-                OrderDeliveryAttempt.status.in_(
-                    (
-                        OrderDeliveryAttemptStatus.PREPARED,
-                        OrderDeliveryAttemptStatus.OBSERVING,
-                    )
-                ),
-                Order.status.in_(
-                    (OrderStatus.AWAITING_TRANSFER, OrderStatus.OBSERVING_TRANSFER)
-                ),
-                or_(
-                    OrderDeliveryAttempt.next_check_at.is_(None),
-                    OrderDeliveryAttempt.next_check_at <= current_time,
-                ),
-                or_(
-                    OrderDeliveryAttempt.observer_lease_until.is_(None),
-                    OrderDeliveryAttempt.observer_lease_until <= current_time,
-                ),
+        candidates = (
+            await session.execute(
+                select(
+                    OrderDeliveryAttempt.id,
+                    Order.id,
+                    Order.listing_id,
+                    Listing.asset_id,
+                )
+                .join(Order, Order.id == OrderDeliveryAttempt.order_id)
+                .join(Listing, Listing.id == Order.listing_id)
+                .where(
+                    OrderDeliveryAttempt.status.in_(
+                        (
+                            OrderDeliveryAttemptStatus.PREPARED,
+                            OrderDeliveryAttemptStatus.OBSERVING,
+                        )
+                    ),
+                    Order.status.in_(
+                        (OrderStatus.AWAITING_TRANSFER, OrderStatus.OBSERVING_TRANSFER)
+                    ),
+                    or_(
+                        OrderDeliveryAttempt.next_check_at.is_(None),
+                        OrderDeliveryAttempt.next_check_at <= current_time,
+                    ),
+                    or_(
+                        OrderDeliveryAttempt.observer_lease_until.is_(None),
+                        OrderDeliveryAttempt.observer_lease_until <= current_time,
+                    ),
+                )
+                .order_by(
+                    OrderDeliveryAttempt.next_check_at.asc().nullsfirst(),
+                    OrderDeliveryAttempt.created_at.asc(),
+                    OrderDeliveryAttempt.id.asc(),
+                )
+                .limit(batch_limit * 4)
             )
-            .order_by(
-                OrderDeliveryAttempt.next_check_at.asc().nullsfirst(),
-                OrderDeliveryAttempt.created_at.asc(),
-                OrderDeliveryAttempt.id.asc(),
-            )
-            .limit(batch_limit)
-            .with_for_update(skip_locked=True, of=OrderDeliveryAttempt)
-        )
+        ).all()
 
-        for attempt, order, listing in rows:
+        for attempt_id, order_id, listing_id, asset_id in candidates:
+            # Match the marketplace lock order. SKIP LOCKED keeps concurrent
+            # observers from waiting behind cancellation/finalization work.
+            listing = await session.scalar(
+                select(Listing)
+                .where(Listing.id == listing_id)
+                .with_for_update(skip_locked=True)
+            )
+            if listing is None:
+                continue
+            asset = await session.scalar(
+                select(NFTAsset)
+                .where(NFTAsset.id == asset_id)
+                .with_for_update(skip_locked=True)
+            )
+            if asset is None:
+                continue
+            order = await session.scalar(
+                select(Order)
+                .where(Order.id == order_id)
+                .with_for_update(skip_locked=True)
+            )
+            if (
+                order is None
+                or order.listing_id != listing.id
+                or listing.asset_id != asset.id
+                or order.status
+                not in (OrderStatus.AWAITING_TRANSFER, OrderStatus.OBSERVING_TRANSFER)
+            ):
+                continue
+            attempt = await session.scalar(
+                select(OrderDeliveryAttempt)
+                .where(
+                    OrderDeliveryAttempt.id == attempt_id,
+                    OrderDeliveryAttempt.order_id == order.id,
+                )
+                .with_for_update(skip_locked=True)
+            )
+            if (
+                attempt is None
+                or attempt.status
+                not in (
+                    OrderDeliveryAttemptStatus.PREPARED,
+                    OrderDeliveryAttemptStatus.OBSERVING,
+                )
+                or (
+                    attempt.next_check_at is not None
+                    and attempt.next_check_at > current_time
+                )
+                or (
+                    attempt.observer_lease_until is not None
+                    and attempt.observer_lease_until > current_time
+                )
+            ):
+                continue
+
             lease_token = uuid.uuid4()
             lease_until = current_time + timedelta(
                 seconds=settings.delivery_observer_lease_seconds
@@ -183,7 +249,7 @@ async def claim_due_delivery_attempts(
                     attempt_id=attempt.id,
                     order_id=order.id,
                     listing_id=listing.id,
-                    asset_id=listing.asset_id,
+                    asset_id=asset.id,
                     seller_id=order.seller_id,
                     buyer_id=order.buyer_id,
                     network=attempt.network,
@@ -197,8 +263,9 @@ async def claim_due_delivery_attempts(
                     observer_attempt_count=attempt.observer_attempt_count,
                 )
             )
+            if len(claims) >= batch_limit:
+                break
     return claims
-
 
 async def _mark_manual_review(
     session: AsyncSession,
