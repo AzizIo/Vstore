@@ -1876,6 +1876,58 @@ async def test_delivery_observer_lease_fences_stale_worker_and_retries_inconclus
         await engine.dispose()
 
 
+async def test_delivery_observer_retry_schedule_uses_fresh_post_lock_time(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        seller, buyer, asset, listing, order, attempt, now = await _create_observer_fixture(session)
+    try:
+        async with session_factory() as session:
+            claims = await claim_due_delivery_attempts(session, now=now)
+            assert len(claims) == 1
+            claim = claims[0]
+
+        inconclusive = DeliveryEvidenceResult(
+            status=DeliveryEvidenceStatus.INCONCLUSIVE,
+            item_address=claim.item_address,
+            network=claim.network,
+            seller_wallet_address=claim.seller_address,
+            buyer_wallet_address=claim.buyer_address,
+            query_id=claim.query_id,
+            reason="trace not indexed yet",
+        )
+        # The observer pass timestamp can become stale while waiting for a DB lock.
+        stale_pass_time = now - timedelta(minutes=5)
+        async with session_factory() as session:
+            outcome = await apply_delivery_observation(
+                session, claim, inconclusive, now=stale_pass_time
+            )
+        assert outcome == "retried"
+
+        async with session_factory() as session:
+            persisted_attempt = await session.get(OrderDeliveryAttempt, attempt.id)
+            assert persisted_attempt is not None
+            assert persisted_attempt.last_checked_at is not None
+            assert persisted_attempt.last_checked_at >= now
+            assert persisted_attempt.next_check_at is not None
+            assert persisted_attempt.next_check_at > datetime.now(UTC)
+            assert persisted_attempt.next_check_at > persisted_attempt.last_checked_at
+            assert persisted_attempt.observer_lease_token is None
+    finally:
+        await _cleanup_observer_fixture(
+            session_factory,
+            seller_id=seller.id,
+            buyer_id=buyer.id,
+            asset_id=asset.id,
+            listing_id=listing.id,
+            order_id=order.id,
+            attempt_id=attempt.id,
+        )
+        await engine.dispose()
+
+
 async def test_delivery_observer_rejects_expired_lease_before_another_worker_reclaims_it(
     test_database_url: str, migrated_database
 ) -> None:
