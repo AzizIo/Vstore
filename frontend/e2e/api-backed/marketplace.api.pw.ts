@@ -122,10 +122,8 @@ test(
     await sellerPage.getByRole("button", { name: "Confirm publish", exact: true }).click();
     await expect(sellerPage.locator(".listing-status-active")).toHaveText("Active");
 
-    await sellerPage.getByRole("button", { name: "Catalog", exact: true }).click();
-    const publishedCard = sellerPage.getByRole("button", { name: /E2E Published NFT/ });
-    await expect(publishedCard).toBeVisible();
-    await expect(publishedCard).toContainText("15.75 TON");
+    // The buyer's separate browser context will prove public catalog visibility
+    // from a fresh API request after the seller has published the listing.
 
     await installTelegramBridge(buyerPage, buyer);
     await buyerPage.goto("/");
