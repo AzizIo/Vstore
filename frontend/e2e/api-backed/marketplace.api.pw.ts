@@ -139,7 +139,7 @@ test(
 
     await buyerPage.getByRole("button", { name: "Orders", exact: true }).click();
     await expect(buyerPage.getByRole("heading", { name: "My Orders" })).toBeVisible();
-    await expect(buyerPage.getByText("Payment pending")).toBeVisible();
+    await expect(buyerPage.getByText("Payment pending", { exact: true })).toBeVisible();
     await expect(buyerPage.getByText("15.75 TON")).toBeVisible();
     await expect(buyerPage.getByText(/Payment processing is not enabled/)).toBeVisible();
 
