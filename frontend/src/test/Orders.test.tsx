@@ -44,9 +44,10 @@ describe("orders", () => {
 
     resolveRequest?.(jsonResponse({ items: [order] }));
 
-    expect(await screen.findByText("Reservation pending")).toBeInTheDocument();
+    expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Open order Moon Lantern/ }));
+    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
     expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
-    expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
   });
 
   it("cancels a pending buyer order and updates its displayed state", async () => {
@@ -115,7 +116,7 @@ describe("orders", () => {
       />,
     );
 
-    expect(await screen.findByText("OPENED FROM TELEGRAM NOTIFICATION")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Sales/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
     await waitFor(() => {
