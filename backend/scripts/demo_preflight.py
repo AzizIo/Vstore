@@ -11,7 +11,7 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from typing import Any
+from email.message import Message
 from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
@@ -47,11 +47,8 @@ def _origin(value: str, label: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
-def _content_type(headers: Any) -> str:
-    getter = getattr(headers, "get_content_type", None)
-    if callable(getter):
-        return str(getter()).lower()
-    return str(headers.get("Content-Type", "")).split(";", 1)[0].strip().lower()
+def _content_type(headers: Message) -> str:
+    return headers.get_content_type().lower()
 
 
 def _get(url: str, timeout: float) -> HttpResult:
