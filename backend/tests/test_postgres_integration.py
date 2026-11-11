@@ -16,11 +16,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.api.assets import _upsert_verified_asset
 from app.assets.ton_nft.address import AddressError, normalize_address
+from app.assets.ton_nft.delivery import DeliveryEvidenceResult, DeliveryEvidenceStatus
 from app.assets.ton_nft.models import (
     NFTItemSnapshot,
     NFTMetadata,
     VerificationResult,
     VerificationStatus,
+)
+from app.assets.ton_nft.observer import (
+    apply_delivery_observation,
+    claim_due_delivery_attempts,
+    run_delivery_observer_pass,
 )
 from app.core.config import get_settings
 from app.db.models import (
@@ -143,7 +149,7 @@ ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0005_order_delivery_attempts"
+    assert revision == "0006_delivery_observer_leases"
 
 
 async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
@@ -199,7 +205,7 @@ async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
         engine = create_async_engine(test_database_url, pool_pre_ping=True)
         async with engine.connect() as connection:
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0005_order_delivery_attempts"
+            assert revision == "0006_delivery_observer_leases"
 
         async with engine.begin() as connection:
             await connection.execute(
@@ -608,7 +614,7 @@ async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
                 )
             ).one()
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0005_order_delivery_attempts"
+            assert revision == "0006_delivery_observer_leases"
             assert order.status == "reserved"
             assert order.price_amount == Decimal("12.500000000")
             assert order.price_currency == "TON"
@@ -1627,3 +1633,298 @@ async def test_upsert_verified_asset_listing_guard_is_scoped_to_conflicting_asse
     assert asset_b.description == "B updated while A is listed"
     assert asset_b.image_url == "https://example.test/b-refreshed.png"
 
+
+
+async def _create_observer_fixture(session: AsyncSession):
+    seller = await make_user(session, telegram_id=730_000_000 + uuid4().int % 100_000_000)
+    buyer = await make_user(session, telegram_id=740_000_000 + uuid4().int % 100_000_000)
+    item_address = "0:" + "a1" * 32
+    seller_address = "0:" + "b2" * 32
+    buyer_address = "0:" + "c3" * 32
+    asset = await make_asset(
+        session,
+        seller,
+        external_id=item_address,
+        item_address=item_address,
+    )
+    listing = make_listing(seller, asset, ListingStatus.RESERVED)
+    session.add(listing)
+    await session.flush()
+    now = datetime.now(UTC)
+    order = Order(
+        listing_id=listing.id,
+        buyer_id=buyer.id,
+        seller_id=seller.id,
+        idempotency_key=f"observer-{uuid4()}",
+        status=OrderStatus.AWAITING_TRANSFER,
+        price_amount=Decimal("1.25"),
+        price_currency=PriceCurrency.TON,
+        expires_at=now + timedelta(minutes=30),
+    )
+    session.add(order)
+    await session.flush()
+    attempt = OrderDeliveryAttempt(
+        order_id=order.id,
+        attempt_number=1,
+        status=OrderDeliveryAttemptStatus.PREPARED,
+        network="mainnet",
+        item_address=item_address,
+        seller_address_snapshot=seller_address,
+        buyer_address_snapshot=buyer_address,
+        query_id=Decimal("123456"),
+        prepared_at=now,
+        deadline=now + timedelta(minutes=15),
+    )
+    session.add(attempt)
+    await session.flush()
+    return seller, buyer, asset, listing, order, attempt, now
+
+
+async def _cleanup_observer_fixture(
+    session_factory,
+    *,
+    seller_id,
+    buyer_id,
+    asset_id,
+    listing_id,
+    order_id,
+    attempt_id,
+) -> None:
+    async with session_factory.begin() as session:
+        await session.execute(
+            OrderEvent.__table__.delete().where(OrderEvent.order_id == order_id)
+        )
+        await session.execute(
+            OrderDeliveryAttempt.__table__.delete().where(
+                OrderDeliveryAttempt.id == attempt_id
+            )
+        )
+        await session.execute(Order.__table__.delete().where(Order.id == order_id))
+        await session.execute(Listing.__table__.delete().where(Listing.id == listing_id))
+        await session.execute(NFTAsset.__table__.delete().where(NFTAsset.id == asset_id))
+        await session.execute(User.__table__.delete().where(User.id.in_([seller_id, buyer_id])))
+
+
+async def test_delivery_observer_verifies_and_completes_only_exact_finalized_evidence(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        seller, buyer, asset, listing, order, attempt, now = await _create_observer_fixture(session)
+    try:
+        class _FinalizedProvider:
+            async def verify_transfer(self, intent):
+                assert intent.item_address == asset.item_address
+                assert intent.network == "mainnet"
+                assert intent.seller_wallet_address == "0:" + "b2" * 32
+                assert intent.buyer_wallet_address == "0:" + "c3" * 32
+                assert intent.query_id == 123456
+                return DeliveryEvidenceResult(
+                    status=DeliveryEvidenceStatus.VERIFIED_FINALIZED,
+                    item_address=intent.item_address,
+                    network=intent.network,
+                    seller_wallet_address=intent.seller_wallet_address,
+                    buyer_wallet_address=intent.buyer_wallet_address,
+                    query_id=intent.query_id,
+                    transaction_hash="ab" * 32,
+                    trace_id="cd" * 32,
+                    masterchain_seqno=123456,
+                )
+
+            async def aclose(self):
+                return None
+
+        result = await run_delivery_observer_pass(
+            session_factory,
+            now=now,
+            provider_factory=lambda _network: _FinalizedProvider(),
+        )
+        assert result.claimed == 1
+        assert result.verified == 1
+        assert result.retried == 0
+        assert result.manual_review == 0
+
+        async with session_factory() as session:
+            persisted_order = await session.get(Order, order.id)
+            persisted_listing = await session.get(Listing, listing.id)
+            persisted_asset = await session.get(NFTAsset, asset.id)
+            persisted_attempt = await session.get(OrderDeliveryAttempt, attempt.id)
+            assert persisted_order is not None
+            assert persisted_order.status is OrderStatus.COMPLETED
+            assert persisted_listing is not None
+            assert persisted_listing.status is ListingStatus.SOLD
+            assert persisted_asset is not None
+            assert persisted_asset.owner_id == buyer.id
+            assert persisted_attempt is not None
+            assert persisted_attempt.status is OrderDeliveryAttemptStatus.VERIFIED
+            assert persisted_attempt.transaction_hash == "ab" * 32
+            assert persisted_attempt.masterchain_seqno == 123456
+            completed_events = (
+                await session.scalars(
+                    select(OrderEvent).where(
+                        OrderEvent.order_id == order.id,
+                        OrderEvent.to_status == OrderStatus.COMPLETED,
+                    )
+                )
+            ).all()
+            assert len(completed_events) == 1
+    finally:
+        await _cleanup_observer_fixture(
+            session_factory,
+            seller_id=seller.id,
+            buyer_id=buyer.id,
+            asset_id=asset.id,
+            listing_id=listing.id,
+            order_id=order.id,
+            attempt_id=attempt.id,
+        )
+        await engine.dispose()
+
+
+async def test_delivery_observer_lease_fences_stale_worker_and_retries_inconclusive_evidence(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        seller, buyer, asset, listing, order, attempt, now = await _create_observer_fixture(session)
+    try:
+        async with session_factory() as session:
+            first_claims = await claim_due_delivery_attempts(session, now=now)
+            assert len(first_claims) == 1
+            first_claim = first_claims[0]
+            settings = get_settings()
+            waves = (
+                settings.delivery_observer_batch_size
+                + settings.delivery_observer_concurrency
+                - 1
+            ) // settings.delivery_observer_concurrency
+            expected_lease = max(
+                settings.delivery_observer_lease_seconds,
+                int(settings.ton_center_timeout_seconds * 6 * waves) + 30,
+            )
+            assert first_claim.lease_until == now + timedelta(seconds=expected_lease)
+            assert await claim_due_delivery_attempts(session, now=now) == []
+
+        reclaimed_at = first_claim.lease_until + timedelta(seconds=1)
+        async with session_factory() as session:
+            second_claims = await claim_due_delivery_attempts(
+                session, now=reclaimed_at
+            )
+            assert len(second_claims) == 1
+            second_claim = second_claims[0]
+            assert second_claim.lease_token != first_claim.lease_token
+            assert second_claim.observer_attempt_count == 2
+
+        stale_evidence = DeliveryEvidenceResult(
+            status=DeliveryEvidenceStatus.VERIFIED_FINALIZED,
+            item_address=first_claim.item_address,
+            network=first_claim.network,
+            seller_wallet_address=first_claim.seller_address,
+            buyer_wallet_address=first_claim.buyer_address,
+            query_id=first_claim.query_id,
+            transaction_hash="ab" * 32,
+            trace_id="cd" * 32,
+            masterchain_seqno=123456,
+        )
+        async with session_factory() as session:
+            stale_outcome = await apply_delivery_observation(
+                session, first_claim, stale_evidence, now=reclaimed_at
+            )
+        assert stale_outcome == "lease_lost"
+
+        inconclusive = DeliveryEvidenceResult(
+            status=DeliveryEvidenceStatus.INCONCLUSIVE,
+            item_address=second_claim.item_address,
+            network=second_claim.network,
+            seller_wallet_address=second_claim.seller_address,
+            buyer_wallet_address=second_claim.buyer_address,
+            query_id=second_claim.query_id,
+            reason="trace not indexed yet",
+        )
+        async with session_factory() as session:
+            retry_outcome = await apply_delivery_observation(
+                session, second_claim, inconclusive, now=reclaimed_at
+            )
+        assert retry_outcome == "retried"
+
+        async with session_factory() as session:
+            persisted_order = await session.get(Order, order.id)
+            persisted_listing = await session.get(Listing, listing.id)
+            persisted_attempt = await session.get(OrderDeliveryAttempt, attempt.id)
+            assert persisted_order is not None
+            assert persisted_order.status is OrderStatus.OBSERVING_TRANSFER
+            assert persisted_listing is not None
+            assert persisted_listing.status is ListingStatus.RESERVED
+            assert persisted_attempt is not None
+            assert persisted_attempt.status is OrderDeliveryAttemptStatus.OBSERVING
+            assert persisted_attempt.transaction_hash is None
+            assert persisted_attempt.next_check_at is not None
+            assert persisted_attempt.next_check_at > reclaimed_at
+            assert persisted_attempt.observer_lease_token is None
+    finally:
+        await _cleanup_observer_fixture(
+            session_factory,
+            seller_id=seller.id,
+            buyer_id=buyer.id,
+            asset_id=asset.id,
+            listing_id=listing.id,
+            order_id=order.id,
+            attempt_id=attempt.id,
+        )
+        await engine.dispose()
+
+
+async def test_delivery_observer_quarantines_failed_transfer_without_releasing_listing(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        seller, buyer, asset, listing, order, attempt, now = await _create_observer_fixture(session)
+    try:
+        async with session_factory() as session:
+            claims = await claim_due_delivery_attempts(session, now=now)
+            assert len(claims) == 1
+            claim = claims[0]
+        failed = DeliveryEvidenceResult(
+            status=DeliveryEvidenceStatus.FAILED,
+            item_address=claim.item_address,
+            network=claim.network,
+            seller_wallet_address=claim.seller_address,
+            buyer_wallet_address="0:" + "d4" * 32,
+            query_id=claim.query_id,
+            reason="recipient mismatch",
+        )
+        async with session_factory() as session:
+            outcome = await apply_delivery_observation(
+                session, claim, failed, now=now + timedelta(seconds=1)
+            )
+        assert outcome == "manual_review"
+
+        async with session_factory() as session:
+            persisted_order = await session.get(Order, order.id)
+            persisted_listing = await session.get(Listing, listing.id)
+            persisted_asset = await session.get(NFTAsset, asset.id)
+            persisted_attempt = await session.get(OrderDeliveryAttempt, attempt.id)
+            assert persisted_order is not None
+            assert persisted_order.status is OrderStatus.OBSERVING_TRANSFER
+            assert persisted_listing is not None
+            assert persisted_listing.status is ListingStatus.RESERVED
+            assert persisted_asset is not None
+            assert persisted_asset.owner_id == seller.id
+            assert persisted_attempt is not None
+            assert persisted_attempt.status is OrderDeliveryAttemptStatus.MANUAL_REVIEW
+            assert persisted_attempt.reason_code == "transfer_mismatch_or_failed"
+    finally:
+        await _cleanup_observer_fixture(
+            session_factory,
+            seller_id=seller.id,
+            buyer_id=buyer.id,
+            asset_id=asset.id,
+            listing_id=listing.id,
+            order_id=order.id,
+            attempt_id=attempt.id,
+        )
+        await engine.dispose()

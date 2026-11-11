@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     auth_token_ttl_seconds: int = 3600
     order_pending_ttl_seconds: int = Field(default=900, gt=0)
     order_expiration_poll_seconds: int = Field(default=30, gt=0)
+    delivery_observer_poll_seconds: int = Field(default=5, gt=0)
+    delivery_observer_batch_size: int = Field(default=10, gt=0, le=100)
+    delivery_observer_lease_seconds: int = Field(default=300, gt=0)
+    delivery_observer_concurrency: int = Field(default=5, gt=0, le=10)
+    delivery_observer_retry_base_seconds: int = Field(default=5, gt=0)
+    delivery_observer_retry_max_seconds: int = Field(default=300, gt=0)
+    delivery_observer_max_attempts: int = Field(default=20, gt=0)
     notification_poll_seconds: int = Field(default=5, gt=0)
     notification_batch_size: int = Field(default=10, gt=0, le=100)
     notification_claim_lease_seconds: int = Field(default=300, gt=0)
