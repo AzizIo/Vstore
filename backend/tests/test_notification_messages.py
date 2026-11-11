@@ -4,12 +4,12 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
+
 from app.notifications.service import (
     NotificationDelivery,
     UnsupportedNotificationEvent,
     build_notification_message,
 )
-
 
 ORDER_ID = UUID("12345678-1234-5678-1234-567812345678")
 
