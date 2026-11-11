@@ -360,3 +360,17 @@ async def test_case_sensitive_base64_hashes_are_preserved_for_transfer_and_trace
     assert result.status is DeliveryEvidenceStatus.VERIFIED_FINALIZED
     assert result.transaction_hash == transaction_hash
     assert result.trace_id == trace_id
+
+@pytest.mark.asyncio
+async def test_malformed_base64_transfer_hash_is_rejected() -> None:
+    provider, client = provider_for(
+        lambda _: httpx.Response(
+            200,
+            json={"nft_transfers": [transfer_row(transaction_hash="not-a-valid-ton-hash")]},
+        )
+    )
+    try:
+        with pytest.raises(InvalidProviderData, match="transaction_hash"):
+            await provider.verify_transfer(intent())
+    finally:
+        await client.aclose()
