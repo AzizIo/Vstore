@@ -10,6 +10,9 @@ on:
       - "frontend/**"
       - ".github/workflows/frontend.yml"
 
+permissions:
+  contents: read
+
 jobs:
   frontend:
     runs-on: ubuntu-latest
