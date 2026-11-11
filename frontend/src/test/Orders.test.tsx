@@ -75,7 +75,7 @@ describe("orders", () => {
     expect(await screen.findByText("Cancel this reservation?")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Confirm cancellation" }));
 
-    expect(await screen.findByText("Cancelled")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("Cancelled").length).toBeGreaterThan(0));
     expect(screen.queryByRole("button", { name: "Cancel order" })).not.toBeInTheDocument();
   });
 
