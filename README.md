@@ -93,13 +93,15 @@ To run the optional Telegram bot/outbox worker, set `BOT_TOKEN` and `TELEGRAM_MI
 
     docker compose --profile bot up --build
 
-`TELEGRAM_MINI_APP_URL` must be the configured Telegram Mini App direct link, not the frontend website origin:
+`TELEGRAM_MINI_APP_URL` must be the public HTTPS URL of the Mini App (normally the site origin). The bot uses it for the inline `WebAppInfo` launch button in `/start`, `/app` and `/help`.
+
+For order notification deep links, optionally set a **separate** `TELEGRAM_MINI_APP_DIRECT_LINK`:
 
 ```text
 https://t.me/<bot_username>/<app_short_name>
 ```
 
-Create/configure the named Mini App via [@BotFather](https://t.me/BotFather) and use the exact bot username and app short name from that setup. The bot validates this format before showing a launch button; notification links use the same validator and append an `order_<32-hex-id>` `startapp` value. Telegram Mini App direct links can also use `startapp=listing_<32-hex-id>`. These parameters are navigation hints only; the frontend's existing parser handles order/listing IDs, and authentication still uses verified Telegram `initData`.
+Create/configure the named Mini App via [@BotFather](https://t.me/BotFather) and use the exact bot username and app short name. The notification worker appends an `order_<32-hex-id>` `startapp` value to this direct link. A Telegram direct link is not a valid `WebAppInfo` URL, and the public website URL is not a Telegram direct link; keep the two settings separate. These parameters are navigation hints only; authentication still uses verified Telegram `initData`.
 
 See [Telegram Mini Apps direct links](https://core.telegram.org/bots/webapps#direct-link-mini-apps) for details.
 
@@ -126,7 +128,7 @@ Example current API routes (authenticate with a backend Bearer token where indic
 
 For the exact contract, inspect routes, schemas and tests under backend/app/api/ and backend/tests/; do not infer additional endpoints from the roadmap.
 
-Before a customer or investor walkthrough, run the read-only [live demo preflight](docs/DEMO_PREFLIGHT.md) against the public API and Mini App origins. It checks API readiness, the Mini App HTML, and the TON Connect manifest/icon without changing the deployment.
+Before a customer or investor walkthrough, run the read-only [live demo preflight](docs/DEMO_PREFLIGHT.md) against the public API and Mini App origins. It checks API readiness, TON Connect proof configuration and exact hostname allowlisting, the Mini App HTML, and the TON Connect manifest/icon without changing the deployment. For the isolated Preview stack and a safe seller-to-buyer demo sequence, follow the [Preview demo runbook](docs/PREVIEW_DEMO_RUNBOOK.md).
 
 ## Quality checks
 
