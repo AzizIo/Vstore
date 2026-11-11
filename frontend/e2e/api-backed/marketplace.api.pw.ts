@@ -64,7 +64,9 @@ const buyer: TelegramTestUser = {
   language_code: "en",
 };
 
-test("real seller publishes a verified NFT and buyer reserves it through FastAPI", async ({ browser }) => {
+test(
+  "real seller publishes a verified NFT and buyer reserves it through FastAPI",
+  async ({ browser }) => {
   const sellerContext = await browser.newContext();
   const buyerContext = await browser.newContext();
   const sellerPage = await sellerContext.newPage();
@@ -146,7 +148,11 @@ test("real seller publishes a verified NFT and buyer reserves it through FastAPI
     expect(sellerApiRequests).toContain("POST /api/auth/telegram");
     expect(sellerApiRequests).toContain("GET /api/assets/me");
     expect(sellerApiRequests).toContain("POST /api/listings");
-    expect(sellerApiRequests.some((item) => item.startsWith("POST /api/listings/") && item.endsWith("/publish"))).toBe(true);
+    expect(
+      sellerApiRequests.some(
+        (item) => item.startsWith("POST /api/listings/") && item.endsWith("/publish"),
+      ),
+    ).toBe(true);
     expect(buyerApiRequests).toContain("POST /api/auth/telegram");
     expect(buyerApiRequests).toContain("POST /api/orders");
     expect(buyerApiRequests.some((item) => item.startsWith("GET /api/orders"))).toBe(true);
@@ -156,7 +162,9 @@ test("real seller publishes a verified NFT and buyer reserves it through FastAPI
   }
 });
 
-test("anonymous browser can read the public catalog but cannot call protected write endpoints", async ({ page }) => {
+test(
+  "anonymous browser can read the public catalog but cannot call protected write endpoints",
+  async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "My Listings", exact: true })).toBeVisible();
