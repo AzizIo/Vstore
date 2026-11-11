@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from urllib.parse import urlparse
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -18,6 +17,7 @@ from app.db.models import (
     Wallet,
 )
 from app.db.session import async_session_factory, dispose_engine
+from scripts.e2e_safety import assert_e2e_environment
 from scripts.e2e_ton_provider import (
     E2E_NFT_ITEM_ADDRESS,
     E2E_NFT_NAME,
@@ -26,22 +26,8 @@ from scripts.e2e_ton_provider import (
 )
 
 
-def _assert_isolated_e2e_database() -> None:
-    settings = get_settings()
-    database = urlparse(settings.database_url)
-    if (
-        settings.environment != "test"
-        or database.hostname not in {"127.0.0.1", "localhost"}
-        or database.path != "/viltara_e2e"
-    ):
-        raise SystemExit(
-            "Refusing to seed: this script requires ENVIRONMENT=test and the "
-            "loopback viltara_e2e database."
-        )
-
-
 async def seed() -> None:
-    _assert_isolated_e2e_database()
+    await assert_e2e_environment()
     now = datetime.now(UTC)
 
     async with async_session_factory() as session:
