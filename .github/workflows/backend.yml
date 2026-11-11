@@ -72,8 +72,8 @@ jobs:
           PREVIEW_VITE_TONCONNECT_APP_URL: https://viltara-ci.example
           PREVIEW_VITE_TONCONNECT_MANIFEST_URL: https://viltara-ci.example/tonconnect-manifest.json
         run: |
-          docker compose -f docker-compose.preview.yml config --quiet
-          docker compose -f docker-compose.preview.yml config --format json | python -c '
+          docker compose --profile bot -f docker-compose.preview.yml config --quiet
+          docker compose --profile bot -f docker-compose.preview.yml config --format json | python -c '
           import json, sys
           config = json.load(sys.stdin)
           services = config["services"]
