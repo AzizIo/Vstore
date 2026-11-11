@@ -389,6 +389,10 @@ class OrderDeliveryAttempt(TimestampMixin, Base):
             "status != 'verified' OR (transaction_hash IS NOT NULL AND verified_at IS NOT NULL)",
             name="ck_order_delivery_attempt_verified_evidence",
         ),
+        CheckConstraint(
+            "observer_attempt_count >= 0",
+            name="ck_order_delivery_attempt_observer_attempt_count",
+        ),
         UniqueConstraint(
             "order_id", "attempt_number", name="uq_order_delivery_attempt_order_number"
         ),
@@ -450,6 +454,11 @@ class OrderDeliveryAttempt(TimestampMixin, Base):
     next_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    observer_attempt_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    observer_lease_token: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    observer_lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     order: Mapped[Order] = relationship(back_populates="delivery_attempts")
 
