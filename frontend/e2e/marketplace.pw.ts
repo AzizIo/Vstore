@@ -64,7 +64,7 @@ test.describe("public catalog", () => {
   });
 
   test("shows an API error and recovers after the user retries", async ({ page }) => {
-    await mockMarketplaceApi(page, { catalogFailures: 1 });
+    await mockMarketplaceApi(page, { catalogFailures: 2 });
     await page.goto("/");
 
     await expect(page.getByRole("heading", { name: "Catalog unavailable" })).toBeVisible();
@@ -115,7 +115,7 @@ test.describe("Telegram deep links", () => {
     await expect(page.getByRole("heading", { name: moonLantern.title })).toBeVisible();
     await expect(page.getByText("Open this Mini App in Telegram to sign in and place an order.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Place order" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Catalog" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Catalog", exact: true })).toHaveAttribute("aria-pressed", "true");
     expect(requests).toContain(`GET /api/listings/${listingIds.moon}`);
     expect(requests.some((request) => request === "POST /api/auth/telegram")).toBe(false);
     expect(requests.some((request) => request.startsWith("POST /api/orders"))).toBe(false);
