@@ -34,7 +34,20 @@ The internal order status name pending_payment is a legacy name for the current 
 4. A buyer reserves an active listing. The backend checks seller/asset state, takes a snapshot of price and currency, and uses idempotency/concurrency protections. The order expires or can be cancelled; the reservation does not lock the NFT on-chain.
 5. The current product has **no automated NFT delivery confirmation**. The service must not display a reservation as paid, completed, or delivered.
 
-The planned Stage B work is to design and then implement a trusted server-side delivery observer: it must verify the exact NFT item, network, seller, and recipient/buyer wallet snapshot from on-chain state. A transaction hash, screenshot, or client event alone is not sufficient. See [Issue #56](https://github.com/AzizIo/Vstore/issues/56); do not start dependent delivery implementation before that design is reviewed.
+The Stage B architecture is now documented in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md) (design merged through [PR #60](https://github.com/AzizIo/Vstore/pull/60)). It remains a proposal: the maintainer decisions in its final section must be approved before implementation begins under [Issue #46](https://github.com/AzizIo/Vstore/issues/46). A transaction hash, screenshot, client callback, or current-owner read alone is not sufficient proof of delivery.
+
+## Planned direct NFT transfer flow (Stage B — not implemented)
+
+The following describes the intended non-custodial flow. It is **not available in the current application** and must not be represented as a completed transaction feature:
+
+1. The buyer connects and proves control of a TON wallet through the backend-verified TON Connect Proof flow.
+2. The buyer reserves an active listing. Reservation records the order and price/currency snapshot; it does not transfer or lock the NFT.
+3. Before the seller is asked to transfer, the delivery-preparation flow is intended to snapshot the verified seller wallet, buyer destination wallet, exact NFT item and network for that order.
+4. The seller initiates and signs the TEP-62 NFT transfer directly from the seller's own wallet to the snapshotted buyer address. The marketplace never receives private keys or takes custody of the NFT.
+5. A backend observer independently retrieves and validates chain evidence for the exact item, network, source and destination under an approved finality policy. A transaction hash supplied by a user is only a lookup hint.
+6. Only after server-side verification may the order be marked completed. Provider outages, incomplete evidence, wrong recipients or ambiguous transfers must remain non-success states and require reconciliation.
+
+The state machine, proposed API/database contracts, failure handling and decisions required before implementation are described in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md). See [Issue #46](https://github.com/AzizIo/Vstore) for the implementation work. No payment, escrow, refund or seller-payout behavior is part of this flow.
 
 ## Supported assets and wallet security
 
@@ -125,10 +138,9 @@ Frontend CI runs Vitest, TypeScript checks and a production Vite build. Use the 
 
 ## Roadmap
 
-1. **Stage A — marketplace foundation (current):** priced listings, server-side ownership checks, reservations, order lifecycle through cancellation/expiry and informational Telegram notifications.
-2. **Stage B — delivery and post-reservation lifecycle (design first):** define order state machine, delivery proof, event/database/API contracts, failure recovery and tests in Issue #56. Dependent implementation must wait for review of this design.
-3. **Future — guaranteed transactions (not implemented):** separate product phase requiring its own architecture, security, platform-policy and legal review. Do not assume a custody model, refund policy, payment method or seller settlement has been approved.
-4. **Other planned work:** Telegram Gifts (only if a supported transfer path is established), deal chat, admin and production operations.
+1. **MVP — non-custodial NFT listing and direct-transfer verification (Issues #42–#47):** Stage A currently provides listings, ownership checks, reservations and expiry/cancellation. Stage B adds the post-reservation transfer lifecycle and complete Telegram user journey; these parts are still in progress and must not be presented as shipped.
+2. **Future — guaranteed transactions (not implemented):** a separate product phase requiring its own architecture, security, platform-policy and legal review. Do not assume a custody model, refund policy, payment method or seller settlement has been approved.
+3. **Other planned work:** Telegram Gifts (only if a supported transfer path is established), deal chat, admin and production operations.
 
 Prices are part of the Listing model and must not be removed to make the no-payment MVP appear “free”. A reservation is not a payment, and the future guarantee is not available in the current product.
 

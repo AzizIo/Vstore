@@ -139,7 +139,7 @@ Treat this as a dated snapshot and check live GitHub before acting.
 - **Issue #43 / Draft PR #51:** complete TON Connect Proof frontend lifecycle, manifest and real Tonkeeper validation. Server proof verification exists, but the full frontend integration is not yet in main.
 - **Issue #44 / Draft PR #58:** full NFT inventory sync/reconciliation and dedicated inventory UI. Current main has the paginated GET inventory endpoint; do not assume proposed sync/reconciliation code is merged.
 - **Issue #48:** keep docs aligned with approved product model (this document + README.md); do not remove listing prices.
-- **Issue #56:** Stage B architecture/design only. Specify post-reservation NFT delivery confirmation and order lifecycle before any dependent implementation. Do not start the dependent #46 task before this design is reviewed.
+- **Issue #56:** Stage B architecture is documented and merged in `docs/STAGE_B_ORDER_LIFECYCLE.md`. Its final section contains maintainer decisions that remain open. Issue #46 implementation must wait until those decisions are explicitly approved; a merged design proposal is not approval of the proposed API/DB contract or migration.
 - **Future guaranteed transactions:** a separate later phase. No payments, checkout, escrow/custody, refunds, commissions or seller payout should be implemented under current Stage A.
 
 ## 8. First 10 minutes for a new contributor
