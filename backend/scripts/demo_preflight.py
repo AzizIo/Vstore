@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+CORS_PROBE_ORIGIN = "https://tonconnect-preflight.invalid"
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,7 @@ class HttpResult:
     content_type: str
     body: bytes
     final_url: str
+    access_control_allow_origin: str
 
 
 def _origin(value: str, label: str) -> str:
@@ -51,8 +53,11 @@ def _content_type(headers: Message) -> str:
     return headers.get_content_type().lower()
 
 
-def _get(url: str, timeout: float) -> HttpResult:
-    request = Request(url, headers={"User-Agent": "VILTARA-Demo-Preflight/1.0"})
+def _get(url: str, timeout: float, *, origin: str | None = None) -> HttpResult:
+    headers = {"User-Agent": "VILTARA-Demo-Preflight/1.0"}
+    if origin is not None:
+        headers["Origin"] = origin
+    request = Request(url, headers=headers)
     try:
         with urlopen(request, timeout=timeout) as response:
             body = response.read(MAX_RESPONSE_BYTES + 1)
@@ -63,6 +68,9 @@ def _get(url: str, timeout: float) -> HttpResult:
                 content_type=_content_type(response.headers),
                 body=body,
                 final_url=str(response.geturl()),
+                access_control_allow_origin=(
+                    response.headers.get("Access-Control-Allow-Origin", "").strip()
+                ),
             )
     except HTTPError as error:
         body = error.read(MAX_RESPONSE_BYTES + 1)
@@ -73,6 +81,9 @@ def _get(url: str, timeout: float) -> HttpResult:
             content_type=_content_type(error.headers),
             body=body,
             final_url=str(error.geturl()),
+            access_control_allow_origin=(
+                error.headers.get("Access-Control-Allow-Origin", "").strip()
+            ),
         )
     except OSError as error:
         raise RuntimeError("The endpoint could not be reached.") from error
@@ -185,11 +196,11 @@ def run_preflight(
     except (RuntimeError, ValueError) as error:
         checks.append(CheckResult("Mini App page", False, str(error)))
 
-    # Manifest and icon must be the public build artifacts expected by TON Connect.
-    manifest_ok = False
+    # The manifest must be valid JSON, same-origin, and readable cross-origin.
+    manifest_valid = False
     icon_url = f"{app_origin}/tonconnect-icon.png"
     try:
-        manifest = _get(manifest_target, timeout)
+        manifest = _get(manifest_target, timeout, origin=CORS_PROBE_ORIGIN)
         if manifest.status != 200 or manifest.content_type != "application/json":
             detail = (
                 f"Expected HTTP 200 JSON; got HTTP {manifest.status} "
@@ -204,22 +215,31 @@ def run_preflight(
                 payload = {}
             if not isinstance(payload, dict):
                 payload = {}
-            manifest_ok = (
+            manifest_valid = (
                 payload.get("url") == app_origin
                 and payload.get("iconUrl") == icon_url
             )
-            detail = (
-                "Manifest origin and icon URL match the deployed Mini App."
-                if manifest_ok
-                else "Manifest URL/iconUrl do not match the deployed Mini App origin."
-            )
-            if manifest_ok:
-                icon_url = str(payload["iconUrl"])
-        checks.append(CheckResult("TON Connect manifest", manifest_ok, detail))
+            cors_ok = manifest.access_control_allow_origin in {
+                "*",
+                CORS_PROBE_ORIGIN,
+            }
+            if not manifest_valid:
+                detail = "Manifest url/iconUrl do not match the deployed Mini App origin."
+            elif not cors_ok:
+                actual = manifest.access_control_allow_origin or "missing"
+                detail = (
+                    "Manifest JSON is valid, but cross-origin GET is not allowed: "
+                    f"Access-Control-Allow-Origin is {actual!r}."
+                )
+            else:
+                detail = "Manifest origin, icon URL and cross-origin GET access are valid."
+        checks.append(
+            CheckResult("TON Connect manifest", manifest_valid and cors_ok, detail)
+        )
     except (RuntimeError, ValueError) as error:
         checks.append(CheckResult("TON Connect manifest", False, str(error)))
 
-    if manifest_ok:
+    if manifest_valid:
         try:
             icon = _get(icon_url, timeout)
             ok = (
