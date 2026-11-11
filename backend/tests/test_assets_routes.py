@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
@@ -24,6 +26,11 @@ from app.db.models import (
     AssetVerificationStatus,
     ListingStatus,
     NFTAsset,
+    Order,
+    OrderEvent,
+    OrderStatus,
+    PriceCurrency,
+    TelegramNotificationOutbox,
     User,
     Wallet,
 )
@@ -707,4 +714,88 @@ def test_inventory_sync_preserves_asset_verified_in_another_user_wallet(
     assert body["cancelled_listing_count"] == 0
     assert asset.verification_status is AssetVerificationStatus.VERIFIED
     assert verifier.calls == [(ITEM, OWNER), (ITEM, OTHER_OWNER)]
+    session.commit.assert_awaited_once()
+
+def test_inventory_sync_cancels_reserved_order_when_transfer_away_is_confirmed(
+    api_client, owner, verified_wallet
+) -> None:
+    """A transferred NFT must not become available after a buyer reserved it."""
+    provider = PaginatedInventoryProvider({
+        0: NFTInventoryPage(items=(), has_more=False, next_offset=0)
+    })
+    mismatch = VerificationResult(
+        VerificationStatus.OWNER_MISMATCH,
+        ITEM,
+        owner_address=OTHER_OWNER,
+        expected_owner_address=OWNER,
+    )
+    verifier = SyncVerifier(provider, {(ITEM, OWNER): mismatch})
+    redis = FakeSyncRedis()
+    asset = NFTAsset(
+        id=uuid4(),
+        asset_type=AssetType.TON_NFT,
+        network="mainnet",
+        external_id=ITEM,
+        item_address=ITEM,
+        owner_id=owner.id,
+        name="Reserved NFT",
+        verification_status=AssetVerificationStatus.VERIFIED,
+    )
+    listing = SimpleNamespace(
+        id=uuid4(),
+        asset_id=asset.id,
+        status=ListingStatus.RESERVED,
+    )
+    buyer = User(
+        id=uuid4(),
+        telegram_id=987654321,
+        username="buyer",
+        first_name="Buyer",
+        is_blocked=False,
+    )
+    order = Order(
+        id=uuid4(),
+        listing_id=listing.id,
+        buyer_id=buyer.id,
+        seller_id=owner.id,
+        idempotency_key="reserved-order-test",
+        status=OrderStatus.PENDING_PAYMENT,
+        price_amount=Decimal("2.5"),
+        price_currency=PriceCurrency.TON,
+        expires_at=datetime.now(UTC) + timedelta(minutes=10),
+    )
+    session = SimpleNamespace(
+        scalars=AsyncMock(side_effect=[
+            _rows([verified_wallet]),
+            _rows([asset]),
+            _rows([verified_wallet]),
+            _rows([listing]),
+            _rows([order]),
+            _rows([buyer, owner]),
+        ]),
+        scalar=AsyncMock(return_value=asset),
+        rollback=AsyncMock(),
+        commit=AsyncMock(),
+        flush=AsyncMock(),
+        add=Mock(),
+    )
+    _install_sync_overrides(session, verifier, redis)
+    try:
+        response = api_client.post("/api/assets/me/sync")
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_ton_nft_verifier, None)
+        app.dependency_overrides.pop(get_redis_client, None)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["stale_count"] == 1
+    assert response.json()["cancelled_listing_count"] == 1
+    assert asset.verification_status is AssetVerificationStatus.STALE
+    assert listing.status is ListingStatus.EXPIRED
+    assert order.status is OrderStatus.CANCELLED
+    added = [call.args[0] for call in session.add.call_args_list]
+    assert any(isinstance(item, OrderEvent) for item in added)
+    outbox = [item for item in added if isinstance(item, TelegramNotificationOutbox)]
+    assert {item.recipient_user_id for item in outbox} == {buyer.id, owner.id}
+    assert {item.recipient_role for item in outbox} == {"buyer", "seller"}
     session.commit.assert_awaited_once()
