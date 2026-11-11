@@ -86,15 +86,15 @@ async def remove_wallet(
         )
         .limit(1)
     )
-    pending_order_id = await session.scalar(
+    live_order_id = await session.scalar(
         select(Order.id)
         .where(
             or_(Order.buyer_id == user.id, Order.seller_id == user.id),
-            Order.status == OrderStatus.PENDING_PAYMENT,
+            Order.status.in_(OrderStatus.LIVE_STATUSES),
         )
         .limit(1)
     )
-    if active_listing_id is not None or pending_order_id is not None:
+    if active_listing_id is not None or live_order_id is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Close active listings and pending orders before unlinking a wallet.",

@@ -421,6 +421,33 @@ async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
             assert event.from_status is None
             assert event.to_status == "reserved"
             assert event.actor_type == "buyer"
+        # Remove the committed fixture rows: they hold an open listing, which
+        # must not leak into subsequent integration tests sharing the database.
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM order_events WHERE order_id = :order_id"),
+                {"order_id": order_id},
+            )
+            await connection.execute(
+                text("DELETE FROM telegram_notification_outbox WHERE order_id = :order_id"),
+                {"order_id": order_id},
+            )
+            await connection.execute(
+                text("DELETE FROM orders WHERE id = :order_id"),
+                {"order_id": order_id},
+            )
+            await connection.execute(
+                text("DELETE FROM listings WHERE id = :listing_id"),
+                {"listing_id": listing_id},
+            )
+            await connection.execute(
+                text("DELETE FROM nft_assets WHERE id = :asset_id"),
+                {"asset_id": asset_id},
+            )
+            await connection.execute(
+                text("DELETE FROM users WHERE id IN (:seller_id, :buyer_id)"),
+                {"seller_id": user_seller, "buyer_id": user_buyer},
+            )
     finally:
         await engine.dispose()
         await asyncio.to_thread(command.upgrade, config, "head")

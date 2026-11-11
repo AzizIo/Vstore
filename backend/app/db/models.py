@@ -77,6 +77,18 @@ class OrderStatus(str, enum.Enum):
     EXPIRED = "expired"
 
 
+# Statuses that still hold the listing reservation; a wallet involved in any of
+# them must not be unlinked. Defined outside the enum body: a member inside the
+# class becomes an enum value, which breaks enum_column's member iteration.
+OrderStatus.LIVE_STATUSES = frozenset(  # type: ignore[attr-defined]
+    {
+        OrderStatus.RESERVED,
+        OrderStatus.AWAITING_TRANSFER,
+        OrderStatus.OBSERVING_TRANSFER,
+    }
+)
+
+
 class OrderDeliveryAttemptStatus(str, enum.Enum):
     PREPARED = "prepared"
     OBSERVING = "observing"
