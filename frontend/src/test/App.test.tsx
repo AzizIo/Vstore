@@ -173,7 +173,7 @@ describe("marketplace catalog", () => {
     const firstPage = makeListings(24, "first");
     const finalListing = { ...listing, id: "last-listing", title: "Last server listing" };
     vi.mocked(fetch).mockImplementation(async (input) => {
-      const requestUrl = new URL(String(input));
+      const requestUrl = new URL(String(input), "http://localhost");
       const offset = Number(requestUrl.searchParams.get("offset"));
       if (offset === 0) return jsonResponse({ items: firstPage, total: 25, limit: 24, offset: 0 });
       return jsonResponse({ items: [firstPage[0], finalListing], total: 25, limit: 24, offset: 24 });
@@ -188,7 +188,7 @@ describe("marketplace catalog", () => {
     expect(screen.getAllByText("first listing 1")).toHaveLength(1);
     expect(screen.getByText("25 items")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
-    const pageRequests = vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input)));
+    const pageRequests = vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input), "http://localhost"));
     expect(pageRequests.map((url) => url.searchParams.get("offset"))).toEqual(["0", "24"]);
   });
 
@@ -196,7 +196,7 @@ describe("marketplace catalog", () => {
     const initialListings = makeListings(24, "initial");
     const filteredListing = { ...listing, id: "filtered", title: "Filtered result" };
     vi.mocked(fetch).mockImplementation(async (input) => {
-      const requestUrl = new URL(String(input));
+      const requestUrl = new URL(String(input), "http://localhost");
       if (requestUrl.searchParams.has("search") || requestUrl.searchParams.has("asset_type") || requestUrl.searchParams.get("sort") !== "newest") {
         return jsonResponse({ items: [filteredListing], total: 1, limit: 24, offset: 0 });
       }
@@ -212,12 +212,12 @@ describe("marketplace catalog", () => {
     expect(await screen.findByText("next-page listing 1")).toBeInTheDocument();
     fireEvent.change(screen.getByRole("searchbox", { name: "Search listings" }), { target: { value: "rare" } });
     expect(await screen.findByText("Filtered result")).toBeInTheDocument();
-    expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).searchParams.get("offset")).toBe("0");
+    expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0");
 
     fireEvent.change(screen.getByRole("combobox", { name: "Asset type" }), { target: { value: "telegram_gift" } });
-    await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).searchParams.get("offset")).toBe("0"));
+    await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0"));
     fireEvent.change(screen.getByRole("combobox", { name: "Sort listings" }), { target: { value: "price_desc" } });
-    await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).searchParams.get("offset")).toBe("0"));
+    await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0"));
 
     expect(screen.getByText("Filtered result")).toBeInTheDocument();
     expect(screen.queryByText("initial listing 1")).not.toBeInTheDocument();
@@ -227,7 +227,7 @@ describe("marketplace catalog", () => {
     const initialListings = makeListings(24, "loaded");
     let nextPageRequests = 0;
     vi.mocked(fetch).mockImplementation(async (input) => {
-      const requestUrl = new URL(String(input));
+      const requestUrl = new URL(String(input), "http://localhost");
       if (requestUrl.searchParams.get("offset") === "0") {
         return jsonResponse({ items: initialListings, total: 25, limit: 24, offset: 0 });
       }
@@ -252,7 +252,7 @@ describe("marketplace catalog", () => {
     const initialListings = makeListings(24, "loaded");
     let resolveNextPage: ((response: Response) => void) | undefined;
     vi.mocked(fetch).mockImplementation(async (input) => {
-      const requestUrl = new URL(String(input));
+      const requestUrl = new URL(String(input), "http://localhost");
       if (requestUrl.searchParams.get("offset") === "0") {
         return jsonResponse({ items: initialListings, total: 25, limit: 24, offset: 0 });
       }
@@ -265,7 +265,7 @@ describe("marketplace catalog", () => {
     fireEvent.click(loadMore);
     fireEvent.click(loadMore);
 
-    expect(vi.mocked(fetch).mock.calls.filter(([input]) => new URL(String(input)).searchParams.get("offset") === "24")).toHaveLength(1);
+    expect(vi.mocked(fetch).mock.calls.filter(([input]) => new URL(String(input), "http://localhost").searchParams.get("offset") === "24")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Loading more..." })).toBeDisabled();
     resolveNextPage?.(jsonResponse({ items: [{ ...listing, id: "last", title: "Last listing" }], total: 25, limit: 24, offset: 24 }));
     expect(await screen.findByText("Last listing")).toBeInTheDocument();
@@ -275,7 +275,7 @@ describe("marketplace catalog", () => {
     const initialListings = makeListings(24, "loaded");
     let pageSignal: AbortSignal | undefined;
     vi.mocked(fetch).mockImplementation(async (input, options) => {
-      const requestUrl = new URL(String(input));
+      const requestUrl = new URL(String(input), "http://localhost");
       if (requestUrl.searchParams.get("offset") === "0") {
         return jsonResponse({ items: initialListings, total: 25, limit: 24, offset: 0 });
       }

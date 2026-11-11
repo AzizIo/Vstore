@@ -19,8 +19,16 @@ from app.assets.ton_nft.models import (
     VerificationStatus,
 )
 from app.auth.dependencies import get_current_user
-from app.db.models import AssetType, AssetVerificationStatus, NFTAsset, User, Wallet
+from app.db.models import (
+    AssetType,
+    AssetVerificationStatus,
+    ListingStatus,
+    NFTAsset,
+    User,
+    Wallet,
+)
 from app.db.session import get_db_session
+from app.wallets.redis import get_redis_client
 from app.main import app
 
 ITEM = "0:" + "11" * 32
@@ -332,3 +340,300 @@ def test_inventory_rejects_malformed_provider_data(api_client, verified_wallet) 
     assert response.status_code == 502
     assert "invalid data" in response.json()["detail"]
     session.commit.assert_not_awaited()
+
+
+class FakeSyncRedis:
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+
+    async def set(self, key: str, value: str, *, ex: int, nx: bool) -> bool:
+        if nx and key in self.values:
+            return False
+        self.values[key] = value
+        return True
+
+    async def eval(self, script: str, _numkeys: int, key: str, token: str, *args) -> int:
+        if self.values.get(key) != token:
+            return 0
+        if "EXPIRE" in script:
+            return 1
+        del self.values[key]
+        return 1
+
+
+class PaginatedInventoryProvider:
+    def __init__(self, pages: dict[int, NFTInventoryPage], error: Exception | None = None):
+        self.pages = pages
+        self.error = error
+        self.calls: list[tuple[str, int, int]] = []
+
+    async def get_items_by_owner(self, owner_address: str, *, limit: int, offset: int):
+        self.calls.append((owner_address, limit, offset))
+        if self.error is not None:
+            raise self.error
+        return self.pages[offset]
+
+
+class SyncVerifier:
+    def __init__(
+        self,
+        provider: PaginatedInventoryProvider,
+        explicit_results: dict[tuple[str, str], VerificationResult] | None = None,
+    ) -> None:
+        self.provider = provider
+        self.items = {
+            item.address: item
+            for page in provider.pages.values()
+            for item in page.items
+        }
+        self.explicit_results = explicit_results or {}
+        self.calls: list[tuple[str, str]] = []
+
+    async def verify(self, item_address: str, expected_owner_address: str):
+        self.calls.append((item_address, expected_owner_address))
+        explicit = self.explicit_results.get((item_address, expected_owner_address))
+        if explicit is not None:
+            return explicit
+        candidate = self.items[item_address]
+        if candidate.owner_address != expected_owner_address:
+            return VerificationResult(
+                VerificationStatus.OWNER_MISMATCH,
+                item_address,
+                owner_address=candidate.owner_address,
+                expected_owner_address=expected_owner_address,
+            )
+        return VerificationResult(
+            VerificationStatus.VERIFIED,
+            item_address,
+            owner_address=candidate.owner_address,
+            collection_address=candidate.collection_address,
+            item_index=candidate.index,
+            expected_owner_address=expected_owner_address,
+            metadata=candidate.metadata,
+        )
+
+
+def _rows(values):
+    return SimpleNamespace(all=lambda: values)
+
+
+def _install_sync_overrides(session, verifier, redis) -> None:
+    install_session_override(session)
+    app.dependency_overrides[get_ton_nft_verifier] = lambda: verifier
+
+    async def override_redis():
+        yield redis
+
+    app.dependency_overrides[get_redis_client] = override_redis
+
+
+def _inventory_item(address: str, owner: str = OWNER) -> NFTItemSnapshot:
+    return NFTItemSnapshot(
+        address=address,
+        initialized=True,
+        index=0,
+        collection_address=None,
+        owner_address=owner,
+        metadata=NFTMetadata(name="Verified collectible"),
+    )
+
+
+def test_inventory_sync_scans_all_pages_and_deduplicates_addresses(api_client, owner, verified_wallet) -> None:
+    third_item = "0:" + "55" * 32
+    first = _inventory_item(ITEM)
+    second = _inventory_item(OTHER_ITEM)
+    third = _inventory_item(third_item)
+    provider = PaginatedInventoryProvider({
+        0: NFTInventoryPage(items=(first, second), has_more=True, next_offset=2),
+        2: NFTInventoryPage(items=(first, third), has_more=False, next_offset=4),
+    })
+    verifier = SyncVerifier(provider)
+    redis = FakeSyncRedis()
+    persisted = make_asset(owner.id, first)
+    persisted.network = "mainnet"
+    session = SimpleNamespace(
+        scalars=AsyncMock(side_effect=[
+            _rows([verified_wallet]),
+            _rows([]),
+            _rows([verified_wallet]),
+        ]),
+        scalar=AsyncMock(return_value=persisted),
+        rollback=AsyncMock(),
+        commit=AsyncMock(),
+    )
+    _install_sync_overrides(session, verifier, redis)
+    try:
+        response = api_client.post("/api/assets/me/sync")
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_ton_nft_verifier, None)
+        app.dependency_overrides.pop(get_redis_client, None)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["discovered_count"] == 3
+    assert body["verified_count"] == 3
+    assert body["stale_count"] == 0
+    assert body["synced_at"]
+    assert [call[2] for call in provider.calls] == [0, 2]
+    assert len(verifier.calls) == 3
+    session.commit.assert_awaited_once()
+    assert redis.values == {}
+
+
+def test_inventory_sync_provider_outage_does_not_mutate_assets(api_client, verified_wallet, owner) -> None:
+    provider = PaginatedInventoryProvider({}, error=ProviderUnavailable("timeout"))
+    verifier = SyncVerifier(provider)
+    redis = FakeSyncRedis()
+    session = SimpleNamespace(
+        scalars=AsyncMock(side_effect=[_rows([verified_wallet]), _rows([])]),
+        scalar=AsyncMock(),
+        rollback=AsyncMock(),
+        commit=AsyncMock(),
+    )
+    _install_sync_overrides(session, verifier, redis)
+    try:
+        response = api_client.post("/api/assets/me/sync")
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_ton_nft_verifier, None)
+        app.dependency_overrides.pop(get_redis_client, None)
+
+    assert response.status_code == 503
+    session.commit.assert_not_awaited()
+    assert redis.values == {}
+
+
+def test_inventory_sync_marks_confirmed_transferred_away_asset_stale_and_closes_listing(
+    api_client, owner, verified_wallet
+) -> None:
+    provider = PaginatedInventoryProvider({
+        0: NFTInventoryPage(items=(), has_more=False, next_offset=0)
+    })
+    mismatch = VerificationResult(
+        VerificationStatus.OWNER_MISMATCH,
+        ITEM,
+        owner_address=OTHER_OWNER,
+        expected_owner_address=OWNER,
+    )
+    verifier = SyncVerifier(provider, {(ITEM, OWNER): mismatch})
+    redis = FakeSyncRedis()
+    asset = NFTAsset(
+        id=uuid4(),
+        asset_type=AssetType.TON_NFT,
+        network="mainnet",
+        external_id=ITEM,
+        item_address=ITEM,
+        owner_id=owner.id,
+        name="Old name",
+        verification_status=AssetVerificationStatus.VERIFIED,
+    )
+    listing = SimpleNamespace(
+        id=uuid4(),
+        asset_id=asset.id,
+        status=ListingStatus.ACTIVE,
+    )
+    session = SimpleNamespace(
+        scalars=AsyncMock(side_effect=[
+            _rows([verified_wallet]),
+            _rows([asset]),
+            _rows([verified_wallet]),
+            _rows([listing]),
+            _rows([]),
+        ]),
+        scalar=AsyncMock(return_value=asset),
+        rollback=AsyncMock(),
+        commit=AsyncMock(),
+        flush=AsyncMock(),
+        add=Mock(),
+    )
+    _install_sync_overrides(session, verifier, redis)
+    try:
+        response = api_client.post("/api/assets/me/sync")
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_ton_nft_verifier, None)
+        app.dependency_overrides.pop(get_redis_client, None)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["stale_count"] == 1
+    assert response.json()["cancelled_listing_count"] == 1
+    assert asset.verification_status is AssetVerificationStatus.STALE
+    assert listing.status is ListingStatus.EXPIRED
+    session.commit.assert_awaited_once()
+
+
+def test_inventory_sync_lock_prevents_concurrent_sync(api_client, owner, verified_wallet) -> None:
+    provider = PaginatedInventoryProvider({
+        0: NFTInventoryPage(items=(), has_more=False, next_offset=0)
+    })
+    verifier = SyncVerifier(provider)
+    redis = FakeSyncRedis()
+    redis.values[f"nft-inventory:sync:{owner.id}:mainnet"] = "another-request"
+    session = SimpleNamespace(
+        scalars=AsyncMock(side_effect=[_rows([verified_wallet]), _rows([])]),
+        scalar=AsyncMock(),
+        rollback=AsyncMock(),
+        commit=AsyncMock(),
+    )
+    _install_sync_overrides(session, verifier, redis)
+    try:
+        response = api_client.post("/api/assets/me/sync")
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_ton_nft_verifier, None)
+        app.dependency_overrides.pop(get_redis_client, None)
+
+    assert response.status_code == 409
+    assert provider.calls == []
+    session.commit.assert_not_awaited()
+
+
+def test_inventory_sync_is_idempotent_for_the_same_owned_item(api_client, owner, verified_wallet) -> None:
+    candidate = _inventory_item(ITEM)
+    provider = PaginatedInventoryProvider({
+        0: NFTInventoryPage(items=(candidate,), has_more=False, next_offset=1)
+    })
+    verifier = SyncVerifier(provider)
+    redis = FakeSyncRedis()
+    persisted = make_asset(owner.id, candidate)
+    persisted.network = "mainnet"
+
+    first_session = SimpleNamespace(
+        scalars=AsyncMock(side_effect=[
+            _rows([verified_wallet]),
+            _rows([]),
+            _rows([verified_wallet]),
+        ]),
+        scalar=AsyncMock(return_value=persisted),
+        rollback=AsyncMock(),
+        commit=AsyncMock(),
+    )
+    _install_sync_overrides(first_session, verifier, redis)
+    try:
+        first = api_client.post("/api/assets/me/sync")
+        assert first.status_code == 200, first.text
+
+        second_session = SimpleNamespace(
+            scalars=AsyncMock(side_effect=[
+                _rows([verified_wallet]),
+                _rows([persisted]),
+                _rows([verified_wallet]),
+            ]),
+            scalar=AsyncMock(return_value=persisted),
+            rollback=AsyncMock(),
+            commit=AsyncMock(),
+        )
+        install_session_override(second_session)
+        second = api_client.post("/api/assets/me/sync")
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_ton_nft_verifier, None)
+        app.dependency_overrides.pop(get_redis_client, None)
+
+    assert second.status_code == 200, second.text
+    assert first.json()["verified_count"] == 1
+    assert second.json()["verified_count"] == 1
+    assert second.json()["stale_count"] == 0
+    assert len(verifier.calls) == 2
+    second_session.commit.assert_awaited_once()

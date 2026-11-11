@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createListingDraft, fetchMyInventory, type InventoryAsset } from "../api/assets";
+import { createListingDraft, fetchMyInventory, syncMyInventory, type InventoryAsset } from "../api/assets";
 import type { Listing } from "../api/listings";
 
 const asset: InventoryAsset = {
@@ -8,6 +8,7 @@ const asset: InventoryAsset = {
   asset_type: "ton_nft",
   external_id: "0:" + "11".repeat(32),
   item_address: "0:" + "11".repeat(32),
+  collection_address: "0:" + "22".repeat(32),
   name: "TEP-62 Collectible",
   description: "Display text",
   image_url: "https://example.test/nft.png",
@@ -43,7 +44,7 @@ describe("seller asset API", () => {
     await expect(fetchMyInventory("session-token", { limit: 24, offset: 0 }, controller.signal)).resolves.toEqual(inventory);
 
     const [url, options] = vi.mocked(fetch).mock.calls[0];
-    const parsed = new URL(String(url));
+    const parsed = new URL(String(url), "http://localhost");
     expect(parsed.pathname).toBe("/api/assets/me");
     expect(parsed.searchParams.get("limit")).toBe("24");
     expect(parsed.searchParams.get("offset")).toBe("0");
@@ -55,7 +56,7 @@ describe("seller asset API", () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...inventory, offset: 24, next_offset: 25 }));
     await fetchMyInventory("session-token", { walletId: "wallet-id", limit: 24, offset: 24 });
 
-    const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]));
+    const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]), "http://localhost");
     expect(parsed.searchParams.get("wallet_id")).toBe("wallet-id");
     expect(parsed.searchParams.has("owner_address")).toBe(false);
   });
@@ -95,4 +96,36 @@ describe("seller asset API", () => {
       asset_id: asset.id, price_amount: "1", price_currency: "TON",
     })).rejects.toThrow("invalid draft response");
   });
+  it("requests a server-side full inventory sync and validates the result", async () => {
+    const synced = {
+      wallet_id: "wallet-id",
+      synced_at: "2026-11-11T10:00:00Z",
+      discovered_count: 28,
+      verified_count: 27,
+      stale_count: 1,
+      invalid_count: 0,
+      unsupported_count: 0,
+      cancelled_listing_count: 1,
+    };
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(synced));
+
+    await expect(syncMyInventory("session-token", "wallet-id")).resolves.toEqual(synced);
+
+    const [url, options] = vi.mocked(fetch).mock.calls[0];
+    expect(String(url)).toBe("/api/assets/me/sync?wallet_id=wallet-id");
+    expect(options?.method).toBe("POST");
+    expect(new Headers(options?.headers).get("Authorization")).toBe("Bearer session-token");
+  });
+
+  it("rejects malformed inventory sync results", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({
+      wallet_id: "wallet-id",
+      synced_at: "not-a-date",
+      discovered_count: -1,
+      verified_count: 0,
+    }));
+
+    await expect(syncMyInventory("session-token")).rejects.toThrow("invalid inventory sync response");
+  });
+
 });
