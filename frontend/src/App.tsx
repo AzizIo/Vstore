@@ -406,7 +406,7 @@ function MarketplaceApp() {
 
       {section === "orders" ? (
         session.status === "authenticated" ? (
-          <Orders accessToken={session.accessToken} userId={session.user.id} initialOrderId={initialOrderId} />
+          <Orders accessToken={session.accessToken} userId={session.user.id} initialOrderId={initialOrderId} onCatalog={() => { setInitialOrderId(null); setSection("catalog"); }} />
         ) : (
           <div className="orders-message" role="status">
             <h2>Sign in to view orders</h2>
