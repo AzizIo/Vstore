@@ -244,7 +244,7 @@ def test_demo_preflight_fails_when_backend_wallet_proof_is_not_configured(
                     "database": "ok",
                     "redis": "ok",
                     "authentication": "ok",
-                    "ton_connect_proof": "ok",
+                    "ton_connect_proof": "error",
                     "ton_connect_proof_domains": [],
                 },
             }).encode(),
