@@ -2,8 +2,6 @@ import { defineConfig, devices } from "@playwright/test";
 
 const isCI = Boolean(process.env.CI);
 const appUrl = process.env.VITE_TONCONNECT_APP_URL ?? "https://viltara-e2e.example";
-const manifestUrl = process.env.VITE_TONCONNECT_MANIFEST_URL
-  ?? "https://viltara-e2e.example/tonconnect-manifest.json";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -41,7 +39,8 @@ export default defineConfig({
     timeout: 60_000,
     env: {
       VITE_TONCONNECT_APP_URL: appUrl,
-      VITE_TONCONNECT_MANIFEST_URL: manifestUrl,
+      // Keep TonConnect disabled in browser tests; no wallet SDK or wallet API is needed.
+      VITE_TONCONNECT_MANIFEST_URL: "",
     },
   },
 });
