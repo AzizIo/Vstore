@@ -86,4 +86,7 @@ def test_delivery_attempt_model_has_immutable_wallet_snapshots_and_retry_states(
     table = Base.metadata.tables["order_delivery_attempts"]
     assert {"seller_address_snapshot", "buyer_address_snapshot", "query_id"} <= set(table.c.keys())
     assert any(index.name == "uq_order_delivery_attempt_active_order" for index in table.indexes)
-    assert any(index.name == "uq_order_delivery_attempt_verified_transfer" for index in table.indexes)
+    assert any(
+        index.name == "uq_order_delivery_attempt_verified_transfer"
+        for index in table.indexes
+    )
