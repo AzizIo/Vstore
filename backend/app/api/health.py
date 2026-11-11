@@ -73,13 +73,18 @@ async def readiness() -> dict[str, object]:
         _redis_ready(),
     )
     authentication_ok = _authentication_ready()
+    ton_connect_proof_ok = _ton_connect_proof_ready()
     checks = {
         "database": "ok" if database_ok else "error",
         "redis": "ok" if redis_ok else "error",
         "authentication": "ok" if authentication_ok else "error",
-        # Wallet proof is a separately gated feature: keep catalogue/API health
-        # available when it is intentionally disabled, but expose its state to preflight.
-        "ton_connect_proof": "ok" if _ton_connect_proof_ready() else "error",
+        # Wallet proof is separately gated: it does not take the public catalogue offline.
+        "ton_connect_proof": "ok" if ton_connect_proof_ok else "error",
+        # Domains are public origins, not secrets. Preflight uses this to verify that
+        # the API allowlist includes the exact Mini App host in the public manifest.
+        "ton_connect_proof_domains": (
+            list(settings.ton_connect_allowed_domains) if ton_connect_proof_ok else []
+        ),
     }
 
     if not database_ok or not redis_ok or not authentication_ok:
