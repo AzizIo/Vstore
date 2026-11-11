@@ -21,7 +21,10 @@ function getDate(value: string) {
 
 function statusLabel(status: MarketplaceOrder["status"]) {
   switch (status) {
-    case "pending_payment": return "Payment pending";
+    case "reserved": return "Reserved";
+    case "awaiting_transfer": return "Awaiting transfer";
+    case "observing_transfer": return "Verifying transfer";
+    case "completed": return "Completed";
     case "cancelled": return "Cancelled";
     case "expired": return "Expired";
   }
@@ -49,9 +52,15 @@ function OrderCard({
       </div>
       <p className="order-card-price">{order.price_amount} {order.price_currency}</p>
       <p className="order-card-note">
-        {order.status === "pending_payment"
-          ? "Payment processing is not enabled. The listing remains reserved until this order is cancelled or expires."
-          : `Order ${order.status} on ${getDate(order.updated_at)}.`}
+        {order.status === "reserved"
+          ? "The listing is reserved. NFT transfer has not started. Payments are not enabled."
+          : order.status === "awaiting_transfer"
+            ? "The seller is preparing the direct NFT transfer to the verified buyer wallet."
+            : order.status === "observing_transfer"
+              ? "The transfer is being independently checked on TON. Do not treat it as delivered yet."
+              : order.status === "completed"
+                ? "The exact NFT transfer to the buyer was confirmed by the server."
+                : `Order ${order.status} on ${getDate(order.updated_at)}.`}
       </p>
       <p className="order-card-date">Created {getDate(order.created_at)}</p>
       <ol className="order-history" aria-label="Order history">
@@ -61,7 +70,7 @@ function OrderCard({
           </li>
         ))}
       </ol>
-      {role === "buyer" && order.status === "pending_payment" && (
+      {role === "buyer" && order.status === "reserved" && (
         <button
           className="text-button"
           type="button"
