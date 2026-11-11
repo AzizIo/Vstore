@@ -45,9 +45,10 @@ PREVIEW_VITE_TONCONNECT_APP_URL=https://<stable-public-mini-app-host>
 PREVIEW_VITE_TONCONNECT_MANIFEST_URL=https://<stable-public-mini-app-host>/tonconnect-manifest.json
 PREVIEW_TON_CONNECT_ALLOWED_DOMAINS=["<stable-public-mini-app-host>"]
 PREVIEW_TON_CONNECT_NETWORK=testnet
+PREVIEW_TON_CENTER_API_KEY=<optional-preview-provider-api-key>
 ```
 
-Use a stable hostname that will remain the same across rebuilds. Configure that exact hostname for the preview bot's Mini App in @BotFather. The hostname in `PREVIEW_TON_CONNECT_ALLOWED_DOMAINS` must be exact: no scheme, port, path, or trailing slash. The preview stack maps these preview-specific values to the API's `TON_CONNECT_ALLOWED_DOMAINS`, `TON_CONNECT_NETWORK`, and TON Center provider URLs; it does not inherit the existing dev stack's TON domain/network. `PREVIEW_TON_CONNECT_NETWORK` defaults to `testnet`; use a disposable test wallet and testnet provider for the preview. Only switch the preview to mainnet deliberately and with a separately reviewed plan. The two `VITE_TONCONNECT_*` values are build-time inputs for the static frontend, so changing them requires rebuilding the `miniapp` image.
+Use a stable hostname that will remain the same across rebuilds. Configure that exact hostname for the preview bot's Mini App in @BotFather. The hostname in `PREVIEW_TON_CONNECT_ALLOWED_DOMAINS` must be exact: no scheme, port, path, or trailing slash. The preview stack maps these preview-specific values to the API's `TON_CONNECT_ALLOWED_DOMAINS`, `TON_CONNECT_NETWORK`, `TON_CENTER_API_KEY`, and TON Center provider URLs; it does not inherit the existing dev stack's TON domain/network or provider API key. If no preview API key is supplied, the preview uses the provider's unauthenticated rate limits. `PREVIEW_TON_CONNECT_NETWORK` defaults to `testnet`; use a disposable test wallet and testnet provider for the preview. Only switch the preview to mainnet deliberately and with a separately reviewed plan. The two `VITE_TONCONNECT_*` values are build-time inputs for the static frontend, so changing them requires rebuilding the `miniapp` image.
 
 The Mini App URL above is the HTTPS website origin used by TON Connect. `PREVIEW_TELEGRAM_MINI_APP_URL` is a different value: the Telegram direct link for the preview bot configured in @BotFather.
 
@@ -78,19 +79,19 @@ docker compose -f docker-compose.preview.yml up -d db redis
 Apply migrations to the **preview database only** by using the API image as a one-off migration container:
 
 ```bash
-docker compose -f docker-compose.preview.yml run --rm api alembic upgrade head
+docker compose -f docker-compose.preview.yml run --rm --build api alembic upgrade head
 ```
 
 Then start the API and static Mini App:
 
 ```bash
-docker compose -f docker-compose.preview.yml up -d api miniapp
+docker compose -f docker-compose.preview.yml up -d --build api miniapp
 ```
 
 Start the optional bot/outbox worker only after configuring the BotFather values:
 
 ```bash
-docker compose -f docker-compose.preview.yml --profile bot up -d bot
+docker compose -f docker-compose.preview.yml --profile bot up -d --build bot
 ```
 
 Inspect status:
