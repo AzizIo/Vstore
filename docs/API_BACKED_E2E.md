@@ -38,6 +38,7 @@ export REDIS_URL=redis://127.0.0.1:6379/0
 export BOT_TOKEN=e2e-only-not-a-real-telegram-bot-token
 export AUTH_SECRET_KEY=e2e-only-secret-never-use-outside-disposable-ci-database-123456789
 export TON_CONNECT_NETWORK=mainnet
+export TON_CONNECT_ALLOWED_DOMAINS='["viltara-e2e.example"]'
 export TON_CENTER_MAINNET_BASE_URL=http://127.0.0.1:8999/api/v3
 export VITE_API_PROXY_TARGET=http://127.0.0.1:8000
 ```
