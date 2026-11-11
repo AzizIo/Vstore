@@ -215,6 +215,49 @@ async def test_delivery_attempt_keeps_wallet_address_snapshots_after_unlink(
     assert attempt.status is OrderDeliveryAttemptStatus.PREPARED
 
 
+async def test_delivery_attempt_snapshot_columns_cannot_be_rewritten(
+    db_session: AsyncSession,
+) -> None:
+    seller = await make_user(db_session, telegram_id=710000005)
+    buyer = await make_user(db_session, telegram_id=710000006)
+    asset = await make_asset(db_session, seller)
+    now = datetime.now(UTC)
+    listing = make_listing(seller, asset, ListingStatus.RESERVED)
+    db_session.add(listing)
+    await db_session.flush()
+    order = Order(
+        listing_id=listing.id,
+        buyer_id=buyer.id,
+        seller_id=seller.id,
+        idempotency_key=f"delivery-immutable-{uuid4()}",
+        status=OrderStatus.AWAITING_TRANSFER,
+        price_amount=Decimal("1.250000000"),
+        price_currency=PriceCurrency.TON,
+        expires_at=now + timedelta(minutes=15),
+    )
+    db_session.add(order)
+    await db_session.flush()
+    attempt = OrderDeliveryAttempt(
+        order_id=order.id,
+        attempt_number=1,
+        status=OrderDeliveryAttemptStatus.PREPARED,
+        network="mainnet",
+        item_address=asset.item_address or asset.external_id,
+        seller_address_snapshot=f"0:{uuid4().hex}{uuid4().hex}",
+        buyer_address_snapshot=f"0:{uuid4().hex}{uuid4().hex}",
+        query_id=Decimal("7"),
+        prepared_at=now,
+        deadline=now + timedelta(minutes=15),
+    )
+    db_session.add(attempt)
+    await db_session.flush()
+
+    attempt.buyer_address_snapshot = f"0:{uuid4().hex}{uuid4().hex}"
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await db_session.rollback()
+
+
 async def test_delivery_attempt_active_and_verified_transfer_indexes_are_enforced(
     db_session: AsyncSession,
 ) -> None:
