@@ -327,6 +327,16 @@ async def _apply_verified_evidence(
             and evidence.masterchain_seqno is not None
             and evidence.masterchain_seqno > 0
         )
+        try:
+            asset_item_matches = (
+                asset is not None
+                and asset.item_address is not None
+                and normalize_address(asset.item_address)
+                == normalize_address(claim.item_address)
+            )
+        except AddressError:
+            asset_item_matches = False
+
         state_matches = (
             listing is not None
             and asset is not None
@@ -340,8 +350,7 @@ async def _apply_verified_evidence(
             and listing.status is ListingStatus.RESERVED
             and asset.asset_type is AssetType.TON_NFT
             and asset.network == claim.network
-            and asset.item_address is not None
-            and normalize_address(asset.item_address) == normalize_address(claim.item_address)
+            and asset_item_matches
             and asset.owner_id == order.seller_id
             and listing.seller_id == order.seller_id
             and asset.verification_status is AssetVerificationStatus.VERIFIED
