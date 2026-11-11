@@ -154,7 +154,12 @@ async def prepare_order_delivery(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
         ) from exc
     except OrderConflict as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        error_status = (
+            status.HTTP_404_NOT_FOUND
+            if str(exc) == "Order not found"
+            else status.HTTP_409_CONFLICT
+        )
+        raise HTTPException(status_code=error_status, detail=str(exc)) from exc
 
     state = await get_order_delivery_state(
         session, order_id=order_id, user_id=user.id
@@ -183,7 +188,12 @@ async def submit_order_delivery(
             transaction_hash=payload.transaction_hash,
         )
     except OrderConflict as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        error_status = (
+            status.HTTP_404_NOT_FOUND
+            if str(exc) == "Order not found"
+            else status.HTTP_409_CONFLICT
+        )
+        raise HTTPException(status_code=error_status, detail=str(exc)) from exc
 
     state = await get_order_delivery_state(
         session, order_id=order_id, user_id=user.id
