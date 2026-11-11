@@ -6,24 +6,24 @@ This runbook is for a **separate, disposable Preview environment**. It does not 
 
 Run commands from the repository root. Create .env only when it does not already exist:
 
-\`\`\`bash
+```bash
 test -f .env || cp .env.example .env
-\`\`\`
+```
 
 If .env already exists, keep it intact and add the Preview variables below. Never overwrite it with cp .env.example .env.
 
 Generate two different URL-safe secrets locally:
 
-\`\`\`bash
+```bash
 openssl rand -hex 32
 openssl rand -hex 32
-\`\`\`
+```
 
 Put the values into PREVIEW_AUTH_SECRET_KEY and PREVIEW_DB_PASSWORD. Do not paste them into chat, commit them, or print the contents of .env.
 
 Configure these Preview-only values in .env:
 
-\`\`\`dotenv
+```dotenv
 PREVIEW_AUTH_SECRET_KEY=<fresh-64-character-hex-secret>
 PREVIEW_DB_PASSWORD=<different-fresh-64-character-hex-password>
 PREVIEW_HTTP_PORT=8080
@@ -36,13 +36,14 @@ PREVIEW_VITE_TONCONNECT_APP_URL=https://<stable-public-mini-app-host>
 PREVIEW_VITE_TONCONNECT_MANIFEST_URL=https://<stable-public-mini-app-host>/tonconnect-manifest.json
 PREVIEW_TON_CONNECT_ALLOWED_DOMAINS=["<stable-public-mini-app-host>"]
 PREVIEW_TON_CONNECT_NETWORK=testnet
-\`\`\`
+```
 
-The host in all three URL settings must be the same stable public HTTPS Mini App host:
+The two HTTPS website URL settings must use the same stable public Mini App host:
 
 - PREVIEW_VITE_TONCONNECT_APP_URL is baked into the frontend TON Connect manifest.
 - PREVIEW_TELEGRAM_MINI_APP_URL is used by the bot's inline Web App launch button.
-- PREVIEW_TELEGRAM_MINI_APP_DIRECT_LINK is an optional Telegram t.me/<bot>/<app> link used for order-specific notification links. It is not a website URL.
+
+PREVIEW_TELEGRAM_MINI_APP_DIRECT_LINK is a separate optional Telegram t.me/<bot>/<app> link used for order-specific notification links; it is not a website URL.
 
 The TON proof allowlist is a JSON array containing the hostname only: no scheme, port, path, or trailing slash. Keep PREVIEW_TON_CONNECT_NETWORK=testnet and use a disposable testnet wallet and TEP-62 test NFT. Do not switch to mainnet for a Preview walkthrough.
 
@@ -54,27 +55,27 @@ The PREVIEW_* values are deliberately separate from the development stack's norm
 
 Start only the Preview database and cache:
 
-\`\`\`bash
+```bash
 docker compose -f docker-compose.preview.yml up -d db redis
-\`\`\`
+```
 
 Apply migrations through a one-off container that uses the Preview service configuration:
 
-\`\`\`bash
+```bash
 docker compose -f docker-compose.preview.yml run --rm --build api alembic upgrade head
-\`\`\`
+```
 
 Start the API and static Mini App:
 
-\`\`\`bash
+```bash
 docker compose -f docker-compose.preview.yml up -d --build api miniapp
-\`\`\`
+```
 
 Start the optional bot/outbox worker only after checking the token and Mini App settings:
 
-\`\`\`bash
+```bash
 docker compose -f docker-compose.preview.yml --profile bot up -d --build bot
-\`\`\`
+```
 
 The Mini App is published only on 127.0.0.1:8080 by default. Configure the existing HTTPS reverse proxy or tunnel to forward to that loopback listener. Do not publish the API, PostgreSQL, or Redis ports and do not expose port 8080 directly to the internet.
 
@@ -82,25 +83,25 @@ The Mini App is published only on 127.0.0.1:8080 by default. Configure the exist
 
 On the host, inspect the Preview services and application logs:
 
-\`\`\`bash
+```bash
 docker compose -f docker-compose.preview.yml ps
 docker compose -f docker-compose.preview.yml logs --tail=100 api miniapp
 curl -fsS http://127.0.0.1:8080/api/health/ready
-\`\`\`
+```
 
 When the optional bot is enabled:
 
-\`\`\`bash
+```bash
 docker compose -f docker-compose.preview.yml logs --tail=100 bot
-\`\`\`
+```
 
 From a separate laptop or workstation with access to the public HTTPS hostname, run the read-only preflight:
 
-\`\`\`bash
+```bash
 python backend/scripts/demo_preflight.py \
   --api-url https://<stable-public-mini-app-host> \
   --mini-app-url https://<stable-public-mini-app-host>
-\`\`\`
+```
 
 The API and Mini App URLs are the same origin for this Preview stack because Nginx proxies /api/* to FastAPI. Require **5/5 checks to pass** before demonstrating wallet linking:
 
@@ -110,7 +111,7 @@ The API and Mini App URLs are the same origin for this Preview stack because Ngi
 4. TON Connect manifest: HTTP 200 JSON, correct app/icon URLs and cross-origin GET access.
 5. TON Connect icon: HTTP 200 PNG with a valid PNG signature.
 
-A successful preflight verifies public reachability and configuration only. It does not prove that Telegram opened the Mini App, a real Tonkeeper proof succeeded, listing/order actions worked, bot notifications were delivered, or an NFT was transferred. Complete the live wallet acceptance steps in TON_CONNECT_SETUP.md.
+A successful preflight verifies public reachability and configuration only. It does not prove that Telegram opened the Mini App, a real Tonkeeper proof succeeded, listing/order actions worked, bot notifications were delivered, or an NFT was transferred. Complete the live wallet acceptance steps in [TON Connect setup](TON_CONNECT_SETUP.md).
 
 ## 4. Rehearse the supported marketplace journey
 
@@ -147,8 +148,8 @@ Never request or store a seed phrase or private key. Wallet proof is a signature
 
 Stop the Preview containers without deleting the named PostgreSQL volume:
 
-\`\`\`bash
+```bash
 docker compose -f docker-compose.preview.yml --profile bot stop
-\`\`\`
+```
 
 The database volume is retained. Do not run docker compose down -v; it deletes named volumes. The normal development Compose project remains separate.
