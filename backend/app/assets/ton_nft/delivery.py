@@ -234,14 +234,22 @@ class TONCenterDeliveryEvidenceProvider:
     def _normalize_hash(value: object, field_name: str) -> str:
         if not isinstance(value, str) or not value.strip():
             raise InvalidProviderData(f"TON Center data is missing {field_name}")
-        normalized = value.strip().lower()
-        if normalized.startswith("0x"):
-            normalized = normalized[2:]
-        if len(normalized) > 128 or any(
-            ord(character) < 33 or character.isspace() for character in normalized
+        raw = value.strip()
+        if raw.startswith("0x"):
+            hexadecimal = raw[2:]
+            if not hexadecimal or any(character not in "0123456789abcdefABCDEF" for character in hexadecimal):
+                raise InvalidProviderData(f"TON Center data has an invalid {field_name}")
+            return hexadecimal.lower()
+        if len(raw) == 64 and all(
+            character in "0123456789abcdefABCDEF" for character in raw
         ):
+            return raw.lower()
+        # Current TON Center API v3 encodes hashes in case-sensitive Base64.
+        # Preserve the exact string; lowercasing Base64 changes the hash.
+        alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=_-"
+        if len(raw) > 128 or any(character not in alphabet for character in raw):
             raise InvalidProviderData(f"TON Center data has an invalid {field_name}")
-        return normalized
+        return raw
 
     @staticmethod
     def _parse_opcode(value: object) -> int | None:
