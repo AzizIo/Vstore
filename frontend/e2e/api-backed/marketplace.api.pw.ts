@@ -141,7 +141,7 @@ test(
     await expect(buyerPage.getByRole("heading", { name: "My Orders" })).toBeVisible();
     await expect(buyerPage.getByText("Reservation pending", { exact: true })).toBeVisible();
     await expect(buyerPage.getByText(/^15\.75(?:0+)? TON$/)).toBeVisible();
-    await expect(buyerPage.getByText(/Payment processing is not enabled/)).toBeVisible();
+    await expect(buyerPage.getByText(/Payments are not enabled/)).toBeVisible();
 
     expect(sellerApiRequests).toContain("POST /api/auth/telegram");
     expect(sellerApiRequests).toContain("GET /api/assets/me");
