@@ -133,13 +133,15 @@ def run_preflight(
                 payload = json.loads(health.body)
             except (UnicodeDecodeError, json.JSONDecodeError):
                 payload = {}
-            components = payload.get("checks", {}) if isinstance(payload, dict) else {}
+            health_payload = payload.get("detail", payload) if isinstance(payload, dict) else {}
+            if not isinstance(health_payload, dict):
+                health_payload = {}
+            components = health_payload.get("checks", {})
             required = ("database", "redis", "authentication")
             missing_or_failed = [name for name in required if components.get(name) != "ok"]
             ready = (
                 health.status == 200
-                and isinstance(payload, dict)
-                and payload.get("status") == "ready"
+                and health_payload.get("status") == "ready"
                 and not missing_or_failed
             )
             if ready:
