@@ -259,9 +259,12 @@ class TONCenterDeliveryEvidenceProvider:
             return value
         if isinstance(value, str):
             try:
-                return int(value, 16) if value.lower().startswith("0x") else int(value)
+                return int(value, 0)
             except ValueError:
-                return None
+                try:
+                    return int(value, 16)
+                except ValueError:
+                    return None
         return None
 
     @classmethod
@@ -523,10 +526,14 @@ class TONCenterDeliveryEvidenceProvider:
         if trace.get("trace_id") != trace_id:
             raise InvalidProviderData("TON Center returned a mismatched trace id")
         raw_mc_seqno = trace.get("mc_seqno_end")
-        try:
+        if isinstance(raw_mc_seqno, bool):
+            raise InvalidProviderData("TON Center trace has no valid mc_seqno_end")
+        if isinstance(raw_mc_seqno, int):
+            mc_seqno = raw_mc_seqno
+        elif isinstance(raw_mc_seqno, str) and raw_mc_seqno.isascii() and raw_mc_seqno.isdecimal():
             mc_seqno = int(raw_mc_seqno)
-        except (TypeError, ValueError) as exc:
-            raise InvalidProviderData("TON Center trace has no valid mc_seqno_end") from exc
+        else:
+            raise InvalidProviderData("TON Center trace has no valid mc_seqno_end")
         if mc_seqno <= 0:
             return self._result(
                 normalized_intent,
