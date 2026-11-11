@@ -46,6 +46,9 @@ jobs:
             --build-arg VITE_TONCONNECT_MANIFEST_URL="$VITE_TONCONNECT_MANIFEST_URL" \
             --tag viltara-miniapp-preview-ci .
 
+      - name: Validate Nginx configuration
+        run: docker run --rm --add-host=api:127.0.0.1 --entrypoint nginx viltara-miniapp-preview-ci -t
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
