@@ -7,11 +7,11 @@
 
 ## 1. Executive summary
 
-The current application can reserve an active listing, snapshot its price and currency, cancel or expire the reservation, and verify that the seller still owns the NFT at reservation time. It cannot independently confirm that the seller later transferred the exact NFT to the buyer. The current Order statuses are reserved, awaiting_transfer, observing_transfer, completed, cancelled and expired. The legacy pending_payment label is migrated to reserved; it never represented a payment event.
+The current application can reserve an active listing, snapshot its price and currency, cancel or expire the reservation, and verify that the seller still owns the NFT at reservation time. B1 adds a read-only transfer evidence adapter; B2 adds the order-state vocabulary and delivery-attempt persistence. There is still no prepare/submit API or observer that independently confirms a transfer. The current Order statuses are reserved, awaiting_transfer, observing_transfer, completed, cancelled and expired. The legacy pending_payment label is migrated to reserved; it never represented a payment event.
 
 Stage B should add a server-observed delivery lifecycle for a direct, non-custodial TON NFT transfer. The seller authorizes any transfer in their own wallet. The backend stores a buyer-wallet snapshot and checks chain/provider evidence independently. A submitted transaction hash is only a lookup hint, and a client callback, screenshot, Tonkeeper screen, wallet connection, or current-owner response without transaction correlation is not sufficient proof of delivery.
 
-**Recommendation:** keep the current reservation lifecycle intact until the owner approves the proposed status vocabulary, delivery deadline semantics, finality policy, and buyer-wallet snapshot rule. Then implement the server observer and persistence contracts behind feature flags or a controlled rollout. Do not add payment/escrow behavior to Stage B.
+**Implementation boundary:** B2 introduces the durable schema and explicit status vocabulary, but existing reservation, cancellation and expiry behavior remains the only active order workflow. B3/B4 must add the seller/buyer preparation API and observer before any order can enter delivery states. Keep payment/escrow out of Stage B.
 
 ## 2. Current baseline and gaps
 
@@ -21,9 +21,9 @@ Stage B should add a server-observed delivery lifecycle for a direct, non-custod
 |---|---|
 | Listing | A Listing stores a mandatory positive price and currency; active listings are unique per NFT across active/reserved states. |
 | Reservation | POST /api/orders accepts listing_id and Idempotency-Key; the service reads an identity snapshot, checks the seller's verified wallet(s) through the TEP-62 verifier, then locks and revalidates listing → wallet → asset before creating the order. |
-| Reservation snapshot | Order stores buyer, seller, listing, price/currency, idempotency key and expires_at. It does not store an immutable buyer destination wallet or delivery attempt. |
+| Reservation snapshot | Order stores buyer, seller, listing, price/currency, idempotency key and expires_at. B2 adds a separate `OrderDeliveryAttempt` table for immutable seller/buyer address snapshots; no API creates an attempt yet. |
 | Existing states | Order: reserved, awaiting_transfer, observing_transfer, completed, cancelled, expired. Listing: draft, active, reserved, sold, cancelled, expired. |
-| Events | OrderEvent records from/to status and actor; its database checks allow only the current Order status values. |
+| Events | OrderEvent records from/to status and actor; B2 expands constraints for reservation, delivery and terminal states, including seller as a future actor. |
 | Expiry/cancel | Cancellation and the expiry worker lock listing → asset → order; the release helper will not republish an asset that is locally stale/unverified. |
 | Ownership loss | A fresh affirmative owner mismatch invalidates the listing and pending order; provider outage/inconclusive data is not treated as proof that the NFT was transferred. |
 | Notifications | Order events enqueue Telegram outbox entries within the database transaction; a separate worker retries sends. |
@@ -31,9 +31,9 @@ Stage B should add a server-observed delivery lifecycle for a direct, non-custod
 
 ### Missing for Stage B
 
-- A verified, immutable buyer destination address associated with this specific order and network.
-- A delivery deadline distinct from the initial reservation expiry, plus rules for when seller transfer intent locks cancellation/relisting.
-- Persistence for transfer observation attempts, provider cursor/transaction identity, failure reason and final proof.
+- API logic that requires a verified buyer destination and creates the B2 immutable snapshot for a specific order/network.
+- A delivery deadline distinct from the initial reservation expiry enforced by an observer, plus rules for when seller transfer intent locks cancellation/relisting.
+- Persistence for observer cursor/check scheduling and the final evidence lifecycle beyond the B2 attempt snapshot.
 - A server-side observer that correlates an on-chain TEP-62 transfer with the exact order, seller, buyer destination, NFT item and configured network.
 - Deduplication, confirmation/finality policy, recovery after provider downtime, reorg/incomplete-index behavior and safe/manual reconciliation.
 - Order state transitions for transfer started, observed, completed and uncertain outcomes.
@@ -41,7 +41,7 @@ Stage B should add a server-observed delivery lifecycle for a direct, non-custod
 
 ## 3. Proposed state machine
 
-The order status vocabulary and forward migration are implemented in B2 (PR #64). The transfer transitions remain staged: B2 adds the allowed state values and durable attempt snapshots, but no API or worker yet moves an order into awaiting_transfer, observing_transfer or completed.
+The order status vocabulary and forward migration are implemented in B2 (PR #64). The transfer transitions remain staged: B2 adds allowed values, immutable snapshots and database constraints, but no API or worker yet moves an order into awaiting_transfer, observing_transfer or completed.
 
 ### Proposed order states
 
