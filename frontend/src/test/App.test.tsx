@@ -529,7 +529,7 @@ describe("TON Connect wallet UI", () => {
       const url = String(input);
       if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
       if (url.endsWith("/api/users/me")) return jsonResponse(profile);
-      if (url.endsWith("/api/wallets/me")) return jsonResponse([]);
+      if (url.endsWith("/api/wallets/me")) return jsonResponse([linkedWallet]);
       if (url.endsWith("/api/wallets/proof/challenge")) {
         return jsonResponse({ payload: "fresh-wallet-proof-nonce", expires_at: "2099-01-01T00:00:00Z" });
       }
@@ -619,6 +619,25 @@ describe("TON Connect wallet UI", () => {
     expect(body.network).toBe("-239");
     expect(body.address).toBe(address);
     expect(body.proof.state_init).toBe("state-init-boc");
+    expect(vi.mocked(fetch).mock.calls.some(([input]) =>
+      String(input).endsWith("/api/wallets/me") &&
+      input !== verificationCall?.[0],
+    )).toBe(true);
+
+    // A subsequent account switch cannot inherit the previous wallet's verified UI state.
+    tonConnectMocks.wallet = {
+      account: { address: `0:${"b".repeat(64)}`, chain: "-239" },
+    };
+    view.rerender(<QueryClientProvider client={view.queryClient}><App /></QueryClientProvider>);
+    expect(await screen.findByText("Connected only · proof verification required")).toBeInTheDocument();
+
+    // The same address on a different chain also is not the verified mainnet wallet.
+    tonConnectMocks.wallet = {
+      account: { address, chain: "-3" },
+    };
+    view.rerender(<QueryClientProvider client={view.queryClient}><App /></QueryClientProvider>);
+    expect(await screen.findByText("Testnet")).toBeInTheDocument();
+    expect(screen.getByText("Connected only · proof verification required")).toBeInTheDocument();
   });
 
   it("keeps a connected wallet unverified when backend proof verification fails", async () => {

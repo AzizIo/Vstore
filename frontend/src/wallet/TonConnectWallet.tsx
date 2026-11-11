@@ -33,6 +33,10 @@ function WalletControls({ accessToken }: { accessToken: string }) {
   const wallet = useTonWallet();
   const [tonConnectUI] = useTonConnectUI();
   const challengeRef = useRef<string | null>(null);
+  const connectedAccountRef = useRef<{ address: string; chain: string } | null>(null);
+  connectedAccountRef.current = wallet
+    ? { address: wallet.account.address, chain: wallet.account.chain }
+    : null;
   const [wallets, setWallets] = useState<WalletRecord[]>([]);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -79,21 +83,46 @@ function WalletControls({ accessToken }: { accessToken: string }) {
       : wallet.account.chain === CHAIN.TESTNET
         ? "testnet"
         : null;
+    const expectedAccount = {
+      address: wallet.account.address,
+      chain: wallet.account.chain,
+    };
     void verifyConnectedWallet(accessToken, wallet.account, proofReply.proof)
-      .then((record) => {
+      .then(async (record) => {
         if (
-          expectedNetwork &&
-          record.is_verified &&
-          record.address === wallet.account.address &&
-          record.network === expectedNetwork
+          !expectedNetwork ||
+          !record.is_verified ||
+          record.address !== expectedAccount.address ||
+          record.network !== expectedNetwork
         ) {
-          setWallets((current) => [
-            ...current.filter((item) => item.id !== record.id),
-            record,
-          ]);
-        } else {
-          setError("The backend did not confirm this wallet.");
+          throw new Error("The backend did not confirm this wallet.");
         }
+
+        // Re-fetch the persisted record after proof verification. The POST response
+        // alone is not the UI's durable source of truth.
+        const records = await fetchMyWallets(accessToken);
+        const activeAccount = connectedAccountRef.current;
+        if (
+          !activeAccount ||
+          activeAccount.address !== expectedAccount.address ||
+          activeAccount.chain !== expectedAccount.chain
+        ) {
+          return;
+        }
+        const confirmed = records.find(
+          (item) =>
+            item.id === record.id &&
+            item.is_verified &&
+            item.address === expectedAccount.address &&
+            item.network === expectedNetwork,
+        );
+        if (!confirmed) {
+          throw new Error("The backend did not confirm this wallet in the linked-wallet list.");
+        }
+        setWallets((current) => [
+          ...current.filter((item) => item.id !== confirmed.id),
+          confirmed,
+        ]);
       })
       .catch((reason: unknown) => {
         setError(reason instanceof Error ? reason.message : "Wallet proof verification failed.");
