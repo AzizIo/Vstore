@@ -85,8 +85,8 @@ Seed-фразы и приватные ключи никогда не запра�
 |---|---|
 | README | PR #59 merged; this status-refresh PR updates the capability table and wallet/inventory flow to the current main implementation while keeping manual live acceptance explicit |
 | AGENTS.md | PR #59 merged; this status-refresh PR updates TON Connect, inventory sync and API route status against current main |
-| Order `pending_payment` | имя статуса упоминает платёж, которого нет. Переименование требует миграции — предложено как отдельный вопрос владельцу, не сделано самовольно |
-| Подтверждение передачи NFT | Stage B design document `docs/STAGE_B_ORDER_LIFECYCLE.md` добавлен в `main` через PR #60; это проектное предложение, а не реализация. Решения владельца из раздела 12 документа остаются открытыми; Issue #46 не следует реализовывать до их согласования |
+| Order status `pending_payment` | B2 migration in PR #64 renames legacy reservation rows/events to `reserved` in place. Delivery statuses and attempt snapshots are schema groundwork only; no API/observer transitions an order into delivery or `completed`. |
+| Подтверждение передачи NFT | B1 read-only TON transfer evidence adapter merged via PR #63. B2 order-state migration and immutable delivery-attempt snapshots are implemented in draft PR #64; there is still no prepare/submit API, observer, or order-completion path. Follow the maintainer baseline recorded in Issue #46. |
 
 ### Противоречит продукту / остановлено
 
