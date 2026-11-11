@@ -19,14 +19,12 @@ from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.assets.ton_nft.models import VerificationResult, VerificationStatus
-
 from app.api.listings import (
     ListingCreateRequest,
     create_listing_draft,
     get_listings,
 )
-from app.listings.service import publish_listing
+from app.assets.ton_nft.models import VerificationResult, VerificationStatus
 from app.core.config import get_settings
 from app.db.models import (
     AssetType,
@@ -40,6 +38,7 @@ from app.db.models import (
     User,
     Wallet,
 )
+from app.listings.service import publish_listing
 from app.orders.service import create_order
 
 pytestmark = pytest.mark.integration
