@@ -1,12 +1,10 @@
 import { expect, test } from "@playwright/test";
 
 import {
-  dragonEgg,
   listingIds,
   mockMarketplaceApi,
   moonLantern,
   orderId,
-  roseGift,
 } from "./fixtures/marketplace";
 
 test.describe("public catalog", () => {
