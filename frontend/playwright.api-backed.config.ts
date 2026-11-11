@@ -20,7 +20,9 @@ export default defineConfig({
   outputDir: "test-results-api-backed",
   use: {
     baseURL: "http://127.0.0.1:5173",
-    trace: "retain-on-failure",
+    // Traces may capture Authorization headers and signed Telegram initData.
+    // This suite uses dummy fixtures; keep browser traces disabled by default.
+    trace: "off",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     actionTimeout: 15_000,
@@ -29,7 +31,8 @@ export default defineConfig({
   webServer: {
     command: "npm run dev -- --host 127.0.0.1 --port 5173",
     url: "http://127.0.0.1:5173",
-    reuseExistingServer: !isCI,
+    // Never attach to a stale local Vite process with an unknown API proxy.
+    reuseExistingServer: false,
     timeout: 60_000,
     env: {
       VITE_API_PROXY_TARGET: process.env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:8000",
