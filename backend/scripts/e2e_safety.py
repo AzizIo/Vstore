@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from redis.asyncio import Redis
 
 from app.core.config import get_settings
+
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
