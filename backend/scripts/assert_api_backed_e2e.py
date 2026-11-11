@@ -68,7 +68,7 @@ async def assert_journey() -> None:
         assert len(orders) == 1, f"Expected one buyer order, got {len(orders)}."
         order = orders[0]
         assert order.listing_id == listing.id
-        assert order.status is OrderStatus.PENDING_PAYMENT
+        assert order.status is OrderStatus.RESERVED
         assert order.price_amount == Decimal("15.75")
         assert order.price_currency.value == "TON"
 
@@ -81,7 +81,7 @@ async def assert_journey() -> None:
         )
         assert len(events) == 1, f"Expected one reservation event, got {len(events)}."
         assert events[0].from_status is None
-        assert events[0].to_status is OrderStatus.PENDING_PAYMENT
+        assert events[0].to_status is OrderStatus.RESERVED
         assert events[0].actor_id == buyer.id
         assert events[0].actor_type == "buyer"
 
