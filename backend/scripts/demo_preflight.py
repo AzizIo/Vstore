@@ -77,7 +77,7 @@ def _get(url: str, timeout: float) -> HttpResult:
             body=body,
             final_url=str(error.geturl()),
         )
-    except URLError as error:
+    except OSError as error:
         raise RuntimeError("The endpoint could not be reached.") from error
 
 
