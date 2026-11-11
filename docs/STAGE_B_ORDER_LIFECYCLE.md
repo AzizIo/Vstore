@@ -7,11 +7,11 @@
 
 ## 1. Executive summary
 
-The current application can reserve an active listing, snapshot its price and currency, cancel or expire the reservation, and verify that the seller still owns the NFT at reservation time. It cannot independently confirm that the seller later transferred the exact NFT to the buyer. The current Order statuses are pending_payment, cancelled and expired; pending_payment is a legacy reservation label, not a payment event.
+The current application can reserve an active listing, snapshot its price and currency, cancel or expire the reservation, and verify that the seller still owns the NFT at reservation time. B1 adds read-only, fail-closed TON transfer evidence. B2 (implemented in draft PR #64) adds the forward migration from `pending_payment` to `reserved`, delivery-attempt snapshots and database constraints. There is still no prepare/submit API, observer, or active order transition into delivery states. No delivery is currently completed by the application.
 
 Stage B should add a server-observed delivery lifecycle for a direct, non-custodial TON NFT transfer. The seller authorizes any transfer in their own wallet. The backend stores a buyer-wallet snapshot and checks chain/provider evidence independently. A submitted transaction hash is only a lookup hint, and a client callback, screenshot, Tonkeeper screen, wallet connection, or current-owner response without transaction correlation is not sufficient proof of delivery.
 
-**Recommendation:** keep the current reservation lifecycle intact until the owner approves the proposed status vocabulary, delivery deadline semantics, finality policy, and buyer-wallet snapshot rule. Then implement the server observer and persistence contracts behind feature flags or a controlled rollout. Do not add payment/escrow behavior to Stage B.
+**Implementation baseline:** the maintainer recorded the Stage B technical decisions in the 2026-11-11 comment on Issue #46. Use those fail-closed defaults: buyer wallet snapshot at delivery preparation (not reservation), fresh seller ownership recheck, a separate 15-minute preparation window, finalized masterchain evidence, and audited manual reconciliation for ambiguous outcomes. Keep payments/escrow out of Stage B.
 
 ## 2. Current baseline and gaps
 
@@ -21,9 +21,9 @@ Stage B should add a server-observed delivery lifecycle for a direct, non-custod
 |---|---|
 | Listing | A Listing stores a mandatory positive price and currency; active listings are unique per NFT across active/reserved states. |
 | Reservation | POST /api/orders accepts listing_id and Idempotency-Key; the service reads an identity snapshot, checks the seller's verified wallet(s) through the TEP-62 verifier, then locks and revalidates listing → wallet → asset before creating the order. |
-| Reservation snapshot | Order stores buyer, seller, listing, price/currency, idempotency key and expires_at. It does not store an immutable buyer destination wallet or delivery attempt. |
-| Existing states | Order: pending_payment, cancelled, expired. Listing: draft, active, reserved, sold, cancelled, expired. |
-| Events | OrderEvent records from/to status and actor; its database checks allow only the current Order status values. |
+| Reservation snapshot | Order stores buyer, seller, listing, price/currency, idempotency key and expires_at. B2 adds a separate `OrderDeliveryAttempt` with immutable seller/buyer address, item/network, query_id and deadline snapshots; no endpoint creates an attempt yet. |
+| Order schema states (B2) | `reserved`, `awaiting_transfer`, `observing_transfer`, `completed`, `cancelled`, `expired`. Runtime order service still creates/cancels/expires only `reserved` orders; delivery states are not yet entered. Listing: draft, active, reserved, sold, cancelled, expired. |
+| Events | OrderEvent records from/to status and actor; B2 widens constraints to the delivery vocabulary and permits a future seller actor. The current service still writes reservation/cancel/expiry events only. |
 | Expiry/cancel | Cancellation and the expiry worker lock listing → asset → order; the release helper will not republish an asset that is locally stale/unverified. |
 | Ownership loss | A fresh affirmative owner mismatch invalidates the listing and pending order; provider outage/inconclusive data is not treated as proof that the NFT was transferred. |
 | Notifications | Order events enqueue Telegram outbox entries within the database transaction; a separate worker retries sends. |
@@ -31,31 +31,30 @@ Stage B should add a server-observed delivery lifecycle for a direct, non-custod
 
 ### Missing for Stage B
 
-- A verified, immutable buyer destination address associated with this specific order and network.
-- A delivery deadline distinct from the initial reservation expiry, plus rules for when seller transfer intent locks cancellation/relisting.
-- Persistence for transfer observation attempts, provider cursor/transaction identity, failure reason and final proof.
-- A server-side observer that correlates an on-chain TEP-62 transfer with the exact order, seller, buyer destination, NFT item and configured network.
-- Deduplication, confirmation/finality policy, recovery after provider downtime, reorg/incomplete-index behavior and safe/manual reconciliation.
-- Order state transitions for transfer started, observed, completed and uncertain outcomes.
+- API logic that requires a verified buyer destination and creates a B2 immutable snapshot for the exact order/network at delivery preparation.
+- The seller prepare/submit/read API and lock/idempotency rules.
+- A server-side observer/reconciliation worker that correlates finalized TEP-62 evidence with the exact order, seller, buyer snapshot, item and network.
+- Provider polling/recovery after downtime, duplicate/replayed evidence handling, and safe retry/manual-review transitions.
+- Transactional completion of order/listing/event/outbox only after finalized evidence.
 - Tests for simultaneous buyer cancellation, seller transfer, expiry, duplicated events, and provider disagreement.
 
 ## 3. Proposed state machine
 
-These names are a proposal, not an approved schema change. Prefer replacing the misleading pending_payment label with reserved during the Stage B migration, but only after the owner approves the API compatibility and data-migration plan.
+B2 in draft PR #64 adds these values to the database/API type vocabulary and migrates legacy rows in place. They are schema states, not a claim that the current services already execute delivery transitions.
 
-### Proposed order states
+### Order states and target transitions
 
 | Proposed state | Meaning | Allowed next states |
 |---|---|---|
 | reserved | Current listing reservation exists; seller has not obtained a delivery intent | awaiting_transfer, cancelled, expired |
 | awaiting_transfer | Buyer destination and seller source are snapshotted; seller can request/sign a transfer using their own wallet | observing_transfer, cancelled only if the system proves no transfer could have been submitted, expired only after reconciliation |
-| observing_transfer | A candidate transfer is being checked or the transfer intent could have reached the chain; the listing must not be reopened | completed, awaiting_transfer after a proven safe retry, manual_review |
+| observing_transfer | A candidate transfer is being checked or the transfer intent could have reached the chain; the listing must not be reopened | completed, awaiting_transfer after a proven safe retry; otherwise remains observing_transfer while the attempt may be manual_review |
 | completed | Server has verified delivery to the snapshotted buyer destination and has atomically finalized the order/listing | terminal |
 | cancelled | Reservation was cancelled before transfer could occur, or the system conclusively reconciled a non-transfer state | terminal |
 | expired | Reservation/delivery deadline elapsed and the system conclusively established that this order cannot still complete | terminal |
-| manual_review | Available evidence is conflicting, incomplete for longer than the operational threshold, or cannot safely determine whether delivery occurred | completed or cancelled/expired only after a reviewed, audited reconciliation; no automatic listing release |
 
-The existing cancelled and expired states can remain terminal. Whether a separate manual_review state is needed, or whether it should be represented by a delivery-attempt status while the order stays observing_transfer, is an owner decision. The important invariant is that an ambiguous delivery must not automatically reopen the NFT listing.
+
+`manual_review` is a delivery-attempt status, not an Order status. The Order remains `observing_transfer` while an attempt needs operator review. An ambiguous delivery must never automatically reopen the NFT listing.
 
 ### Transition table
 
@@ -67,8 +66,8 @@ The existing cancelled and expired states can remain terminal. Whether a separat
 | awaiting_transfer → observing_transfer | Delivery deadline reached while a submission might exist | Do not return listing to the catalogue until the observer reconciles chain state. |
 | observing_transfer → completed | Backend observer confirms the exact transfer at the required finality | All chain/order correlation checks pass; persist proof, order event, Listing SOLD and completed state in one transaction; enqueue notifications in the outbox. |
 | observing_transfer → awaiting_transfer | Observer definitively proves no transfer occurred and the policy permits retry | Preserve attempt history; issue a new attempt identifier; do not reuse an old candidate hash as proof. |
-| observing_transfer → manual_review | Provider disagreement, ambiguous transfer/recipient, repeated outage, possible reorg, or deadline without conclusive result | Keep listing unavailable and preserve observation evidence; alert operators through an auditable path. |
-| manual_review → completed / cancelled / expired | Explicit audited reconciliation | Requires authoritative chain evidence or a documented resolution rule; never an unaudited admin toggle or client-only decision. |
+| observing_transfer → observing_transfer | Provider disagreement, ambiguous transfer/recipient, repeated outage, possible reorg, or deadline without conclusive result | Keep the order in observing state; mark the delivery attempt `manual_review`; keep the listing unavailable and preserve evidence. |
+| Attempt `manual_review` → verified/failed/cancelled | Explicit audited reconciliation | Requires authoritative chain evidence or a documented resolution rule; the order transition remains server-controlled and never follows an unaudited admin toggle or client-only decision. |
 
 Suggested state flow (illustrative):
 
@@ -171,9 +170,9 @@ Do not add a public endpoint accepting arbitrary status or arbitrary buyer addre
 - Record old/new state, actor, attempt_id/correlation_id, event time and reason code. Keep this append-only and transactional with state transition/outbox changes.
 
 **Migration and compatibility:**
-- The current schema explicitly constrains Order and OrderEvent to pending_payment/cancelled/expired, and the pending-order partial unique index keys off pending_payment. New status names cannot be introduced by editing only the Python Enum.
-- If owner approves a rename, write a forward data migration for existing rows and update constraints, indexes, API schemas, frontend types, test fixtures and any notification/event queries in the same PR. Do not run a destructive or ad-hoc production migration.
-- The existing pending_payment label is not an authorization decision. Until the owner approves a rename, keep it unchanged and keep documentation/UI wording neutral.
+- B2 in draft PR #64 adds a forward migration from `pending_payment` to `reserved`, preserving order/event IDs and all price, currency, idempotency and timestamp data. It updates Order/OrderEvent constraints, the partial unique index, backend/frontend types and fixtures together.
+- The migration adds `order_delivery_attempts` with immutable seller/buyer address snapshots and database uniqueness/check constraints. Its downgrade refuses to remove recorded attempts or newer delivery states.
+- Do not run this migration against production/VPS until the PR is merged, reviewed, and a separate deployment/backup plan is approved.
 
 ## 7. Concurrency and idempotency invariants
 
@@ -278,28 +277,36 @@ These are proposed tasks to create or map onto existing Issues after maintainer 
 
 | Order | Work item | Owner area | Depends on | Acceptance |
 |---|---|---|---|---|
-| B0 | Approve state vocabulary, deadline rules, finality policy, buyer wallet snapshot point and API compatibility | Maintainer + Backend | This design | Written decisions resolve the open questions below |
-| B1 | Design and implement transaction/trace provider adapter for TEP-62 delivery evidence | Backend | B0 | Draft implementation in [PR #63](https://github.com/AzizIo/Vstore/pull/63): read-only TON Center v3 transfer/trace correlation, bounded pagination, typed outcomes, fail-closed checks and fixtures; see [TON_NFT_DELIVERY_EVIDENCE.md](TON_NFT_DELIVERY_EVIDENCE.md). No order state or DB changes are part of B1 |
-| B2 | Add delivery intent/snapshot/attempt persistence, state migration and constraints | Backend + DB | B0, B1 contract | Migration preserves old reservations and enforces idempotency/uniqueness |
-| B3 | Implement delivery preparation/submission/read API with auth, locks and idempotency | Backend | B2 | Client-supplied hashes/addresses never establish completion |
-| B4 | Implement leased observer/reconciliation worker and transactional completion/outbox | Backend | B1, B2, B3 | Duplicate/out-of-order provider events are idempotent; failure cases fail closed |
-| B5 | Add testnet contract/provider fixtures, PostgreSQL concurrency suite and fault injection | QA + Backend | B1–B4 | Full matrix above passes |
-| B6 | Add buyer destination confirmation, seller TON Connect transaction request and status UI | Frontend | B0, B3 API contract | UI shows delivered only from backend persisted verification; no payments UI |
-| B7 | Run manual testnet pilot, confirm operational alerts/reconciliation and review security | QA + Maintainer | B1–B6 | Checklist signed off before mainnet rollout |
+| B1 | Read-only transaction/trace evidence adapter for TEP-62 transfer correlation | Backend | Maintainer baseline | Implemented in [PR #63](https://github.com/AzizIo/Vstore/pull/63): bounded TON Center v3 correlation, typed outcomes and fail-closed checks. Indexed-provider trust assumptions are documented. |
+| B2 | Delivery-attempt persistence, state migration and immutable snapshots | Backend + DB | B1 | Implemented in draft [PR #64](https://github.com/AzizIo/Vstore/pull/64): preserves historical reservations/events, adds database constraints and uniqueness. No endpoint/worker uses it yet. |
+| B3 | Leased observer/reconciliation worker and deterministic provider polling | Backend | B1, B2 | Correlates exact item/source/destination/network/query_id; only finalized masterchain evidence can verify; ambiguous outcomes remain observing/manual_review. |
+| B4 | Delivery preparation/submission/read APIs with auth, locks and idempotency | Backend | B2, B3 | Snapshot verified buyer destination and freshly verified seller source; client-supplied hashes/addresses never establish completion. |
+| B5 | Transactional transfer outbox events/notifications and PostgreSQL concurrency/fault-injection tests | Backend + QA | B3, B4 | Duplicate/out-of-order events are idempotent; failure cases fail closed. |
+| B6 | Buyer destination confirmation, seller TON Connect transaction request and status UI | Frontend | B4 API contract | UI shows delivered only from backend persisted verification; no payments UI. |
+| B7 | Manual testnet pilot, operational alerts/reconciliation and security review | QA + Maintainer | B1–B6 | Checklist signed off before any mainnet rollout. |
 
-Issue #46 should remain blocked until the Stage B design and contracts are approved. Do not start full #47 frontend work until the backend contract and implementation are ready. Map these suggested tasks onto existing issues before opening new ones to avoid duplicates.
+The maintainer has recorded the Stage B technical baseline in Issue #46. Continue with the staged sequence above; do not expose transfer actions in the UI until the B3/B4 backend contract exists. Map work onto existing issues before opening duplicates.
 
-## 12. Open decisions for the maintainer
+## 12. Maintainer decision baseline (2026-11-11)
 
-1. **Status naming:** approve migration from pending_payment to reserved, or retain legacy status until a broader order-state migration?
-2. **Buyer wallet snapshot:** must the buyer have a verified wallet at reservation time or only before seller delivery preparation? Recommendation: verify/snapshot before preparing the seller transfer.
-3. **Delivery timeout:** separate duration from reservation TTL? What should happen when a transaction may be submitted but provider indexing is delayed?
-4. **Finality:** which TON Center/other provider fields represent acceptable inclusion/finality, and is a second provider needed?
-5. **Manual review:** should manual_review be an Order status or a delivery-attempt status with order kept observing?
-6. **Cancellation policy:** can the buyer cancel after the seller's delivery intent is created? Recommendation: not until the observer proves no transfer could have been submitted.
-7. **Unsupported NFT contracts:** which code/collection profiles are supported, and what user-facing fallback is acceptable?
-8. **Operational controls:** lag thresholds, retry/backoff, alerts and operator authority for audited reconciliation.
-9. **Historical retention:** retention period for transaction evidence and provider diagnostics without storing unnecessary raw payloads.
+The following conservative defaults were explicitly recorded by the maintainer in the Issue #46 technical baseline comment and are the implementation contract for Stage B:
+
+1. **Status naming:** migrate legacy `pending_payment` rows/events to `reserved` in one forward migration; preserve IDs, timestamps, prices, currencies, idempotency keys and event history.
+2. **Buyer wallet snapshot:** browsing and reservation do not require a buyer wallet. At seller delivery preparation, require the buyer's verified primary wallet on the configured network and snapshot its normalized address/network plus wallet row ID. The snapshot is immutable for that attempt.
+3. **Seller source snapshot:** before preparation, recheck current on-chain ownership and require the selected verified seller wallet to match the actual owner. Snapshot seller address, NFT item, network and a random per-attempt TEP-62 `query_id`.
+4. **Timeouts:** keep the reservation TTL at 900 seconds. Add a separate 900-second seller delivery-initiation window after preparation. Expire/release only after reconciliation proves no transfer could have been submitted; possible submission or provider outage remains observing/manual review.
+5. **Finality:** Streaming API must report `finality=finalized`; pending/confirmed never complete. The v3 fallback must correlate the exact item-account transaction/trace and finalized masterchain inclusion, successful transaction/action and non-aborted execution. The v3 indexer is a trusted indexed data layer, not a cryptographic proof; fail closed on missing/inconsistent fields and use historical polling for gap recovery.
+6. **Transfer evidence:** match the exact TEP-62 item, snapshotted seller source, snapshotted buyer destination, network and finalized successful item transaction. `query_id` and user-supplied transaction hashes are correlation/lookup hints only. A later onward transfer by the buyer does not undo a correctly finalized receipt.
+7. **Ambiguous outcomes:** keep the Order in `observing_transfer`; mark the specific delivery attempt `manual_review`. Never auto-complete, auto-relist or use current-owner-only reads as proof. Manual reconciliation is audited and evidence-based.
+8. **Cancellation:** buyer cancellation is allowed only while the Order is `reserved`. After delivery preparation, cancellation remains blocked until the observer conclusively proves no transfer could have been submitted.
+
+### Remaining operational decisions
+
+- Exact supported item/collection contract profiles and user-facing fallback for unsupported NFTs.
+- Provider lag thresholds, retry/backoff, alert routing and operator permissions for audited reconciliation.
+- Retention period and minimization policy for chain evidence/provider diagnostics.
+
+These defaults authorize the staged B1–B7 technical work only. They do not authorize payments, escrow, production migrations, or a live transfer/completion feature before its own review and testnet acceptance.
 
 ## 13. Completion criteria for Stage B
 
