@@ -4,12 +4,20 @@ from contextlib import suppress
 
 from aiogram import Bot, Dispatcher
 
+from app.bot_handlers import router as user_router
 from app.core.config import get_settings
 from app.db.session import async_session_factory
 from app.notifications.service import process_due_notifications
 from app.notifications.telegram import TelegramNotificationSender
 
 logger = logging.getLogger(__name__)
+
+
+def create_dispatcher() -> Dispatcher:
+    """Build the dispatcher and register all user-facing bot handlers."""
+    dispatcher = Dispatcher()
+    dispatcher.include_router(user_router)
+    return dispatcher
 
 
 async def _run_notification_worker(bot: Bot) -> None:
@@ -40,7 +48,7 @@ async def main() -> None:
 
     logging.basicConfig(level=logging.INFO)
     bot = Bot(token=settings.bot_token)
-    dispatcher = Dispatcher()
+    dispatcher = create_dispatcher()
     notification_task = asyncio.create_task(_run_notification_worker(bot))
 
     try:
