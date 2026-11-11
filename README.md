@@ -20,7 +20,7 @@ Product boundaries and decisions approved for the current MVP are recorded in [d
 | Telegram order notifications using a durable outbox | Implemented; optional bot container |
 | TON Connect frontend challenge → proof → backend verification and manifest | Implemented in main via [PR #51](https://github.com/AzizIo/Vstore/pull/51); live Telegram/Tonkeeper acceptance remains open in [Issue #43](https://github.com/AzizIo/Vstore/issues/43) |
 | Full inventory reconciliation/sync and dedicated My NFT screen | Implemented in main via [PR #58](https://github.com/AzizIo/Vstore/pull/58); live testnet/provider acceptance remains open in [Issue #44](https://github.com/AzizIo/Vstore/issues/44) |
-| Server-side verification that a reserved NFT was delivered to the buyer | Not implemented. B1 read-only TON evidence adapter is merged; B2 status migration and immutable delivery-attempt persistence are in draft [PR #85](https://github.com/AzizIo/Vstore/pull/85). No prepare/submit API, observer, or completion transition exists yet; see [Issue #46](https://github.com/AzizIo/Vstore/issues/46). |
+| Server-side verification that a reserved NFT was delivered to the buyer | Not implemented. B1 read-only TON evidence adapter is merged; B2 status migration and immutable delivery-attempt persistence are in [PR #85](https://github.com/AzizIo/Vstore/pull/85). No prepare/submit API, observer, or completion transition exists yet; see [Issue #46](https://github.com/AzizIo/Vstore/issues/46). |
 | Telegram Gifts adapter, deal chat, admin panel | Not implemented |
 | Payments, checkout, escrow/guarantee, refunds, commissions and seller payouts | Not implemented |
 
@@ -34,7 +34,7 @@ The B2 migration in PR #85 renames historical `pending_payment` order/event rows
 4. A buyer reserves an active listing. The backend checks seller/asset state, takes a snapshot of price and currency, and uses idempotency/concurrency protections. The order expires or can be cancelled; the reservation does not lock the NFT on-chain.
 5. The current product has **no automated NFT delivery confirmation**. The service must not display a reservation as paid, completed, or delivered.
 
-The Stage B architecture is documented in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md). The maintainer's technical baseline is recorded in [Issue #46](https://github.com/AzizIo/Vstore/issues/46). B1 read-only transfer evidence is merged; B2 persistence/state migration is in draft [PR #85](https://github.com/AzizIo/Vstore/pull/85). A transaction hash, screenshot, client callback, or current-owner read alone is not sufficient proof of delivery.
+The Stage B architecture is documented in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md). The maintainer's technical baseline is recorded in [Issue #46](https://github.com/AzizIo/Vstore/issues/46). B1 read-only transfer evidence is merged; B2 persistence/state migration is in [PR #85](https://github.com/AzizIo/Vstore/pull/85). A transaction hash, screenshot, client callback, or current-owner read alone is not sufficient proof of delivery.
 
 ## Planned direct NFT transfer flow (Stage B — not implemented)
 
