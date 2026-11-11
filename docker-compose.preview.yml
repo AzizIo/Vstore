@@ -28,8 +28,6 @@ services:
   api:
     build:
       context: ./backend
-    env_file:
-      - .env
     environment:
       ENVIRONMENT: production
       AUTH_SECRET_KEY: ${PREVIEW_AUTH_SECRET_KEY:?Set PREVIEW_AUTH_SECRET_KEY in .env}
@@ -83,8 +81,6 @@ services:
   bot:
     build:
       context: ./backend
-    env_file:
-      - .env
     environment:
       ENVIRONMENT: production
       AUTH_SECRET_KEY: ${PREVIEW_AUTH_SECRET_KEY:?Set PREVIEW_AUTH_SECRET_KEY in .env}
