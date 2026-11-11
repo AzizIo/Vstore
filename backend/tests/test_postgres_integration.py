@@ -17,16 +17,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.api.assets import _upsert_verified_asset
 from app.assets.ton_nft.address import AddressError, normalize_address
 from app.assets.ton_nft.delivery import DeliveryEvidenceResult, DeliveryEvidenceStatus
-from app.assets.ton_nft.observer import (
-    apply_delivery_observation,
-    claim_due_delivery_attempts,
-    run_delivery_observer_pass,
-)
 from app.assets.ton_nft.models import (
     NFTItemSnapshot,
     NFTMetadata,
     VerificationResult,
     VerificationStatus,
+)
+from app.assets.ton_nft.observer import (
+    apply_delivery_observation,
+    claim_due_delivery_attempts,
+    run_delivery_observer_pass,
 )
 from app.core.config import get_settings
 from app.db.models import (
