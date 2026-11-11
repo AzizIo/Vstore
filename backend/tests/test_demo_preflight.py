@@ -92,11 +92,13 @@ def test_demo_preflight_fails_readiness_when_one_dependency_is_unavailable(
             super().__init__(
                 f"{api_origin}/api/health/ready",
                 json.dumps({
-                    "status": "not_ready",
-                    "checks": {
-                        "database": "ok",
-                        "redis": "error",
-                        "authentication": "ok",
+                    "detail": {
+                        "status": "not_ready",
+                        "checks": {
+                            "database": "ok",
+                            "redis": "error",
+                            "authentication": "ok",
+                        },
                     },
                 }).encode(),
                 "application/json",
