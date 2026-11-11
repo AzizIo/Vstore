@@ -1,294 +1,153 @@
 # VILTARA SHOP — Agent Onboarding
 
-> Read this file before changing code. It is a navigation guide and collaboration contract, not a replacement for inspecting the exact files involved in your task.
-> Last checked: 2026-11-10. The repository changes continuously; verify the current branch, open PRs, and file contents before relying on status notes below.
-> **Product model and stage boundaries:** read `docs/PRODUCT_MODEL.md` first — prices are a mandatory part of listings; reservation is not payment; payment/escrow must not be imitated.
+> Read before changing code. This guide documents the repository and collaboration rules; inspect the exact code and live issues/PRs before relying on a status snapshot.
+> Product decisions: [docs/PRODUCT_MODEL.md](docs/PRODUCT_MODEL.md) is authoritative for product boundaries — listing prices are mandatory, reservation is not payment, and payment/escrow must not be imitated.
 
-## 1. What this project is
+## 1. Product and current status
 
-**VILTARA SHOP** is a Telegram bot + Telegram Mini App marketplace for buying and selling verifiable Telegram digital gifts and TON NFTs.
+VILTARA SHOP is a Telegram Mini App and optional bot for a peer-to-peer marketplace of **TEP-62 TON NFTs**. Telegram Gifts are a separate asset domain and are not integrated as transferable assets on main.
 
-The intended product includes:
-- a public NFT/gift catalog and listing details;
-- seller profiles and listing management;
-- asset verification and ownership checks;
-- purchase orders and deal lifecycle;
-- buyer/seller communication and notifications;
-- admin tools, disputes, fees and audit history;
-- payment and escrow flows, but only after the technical and policy constraints are solved.
+This is a marketplace foundation, not a completed buying/selling/guarantee system. Current shipped features are the public listing catalogue, priced seller listings, server-side NFT ownership checks, order reservation/cancellation/expiry, Telegram authentication and informational order notifications.
 
-The product is **not yet a complete marketplace**. The repository currently contains an early modular-monolith backend, a functional Telegram Mini App frontend with a public catalog (filters, sorting and pagination), listing details and seller listing management, Telegram authentication, wallet connection, and buyer/seller order views, alongside database migrations/models, authentication and listing/order endpoints, and automated tests. Payment/checkout, NFT delivery confirmation, deal chat and admin tools are not implemented. Do not describe planned features as implemented.
+**Reservation is not payment.** Orders snapshot listing price/currency but no payment provider is wired to the lifecycle. Server-side NFT delivery confirmation after reservation, payment/checkout, escrow/guarantee, refunds, seller payouts, deal chat and admin panel are not implemented. Do not describe roadmap work as shipped.
 
-## 2. Repository map — where to look first
+TON Connect nuance:
+- Backend endpoints and cryptographic verification for TON Connect Proof exist on main.
+- The current frontend wallet component on main supports connection and disconnection but does not yet run the complete challenge → proof → verify flow. A connected address alone does not prove control.
+- Draft PR #51 contains the full frontend proof lifecycle and manifest work; verify its live status/CI and merge state before assuming that it is part of main.
+- Draft PR #58 contains a full inventory reconciliation/screen proposal; verify the live status/CI before assuming that it is part of main.
 
-```text
-/
-├── README.md                    # Product brief, stack, architecture decisions, runbook
-├── AGENTS.md                    # This onboarding guide
-├── .env.example                 # Local environment variable template (no real secrets)
-├── docker-compose.yml           # PostgreSQL, Redis, API, Mini App, optional bot
-├── .github/workflows/
-│   ├── backend.yml              # Backend lint + tests; PostgreSQL service in CI
-│   └── frontend.yml             # Frontend tests/build
-├── docs/
-│   └── ASSET_INTEGRATION_AUDIT.md # Telegram Gifts / TON NFT / transfer constraints audit
-├── backend/
-│   ├── app/
-│   │   ├── main.py              # FastAPI app, middleware and router registration
-│   │   ├── bot.py               # aiogram bot entrypoint (currently minimal)
-│   │   ├── api/
-│   │   │   ├── auth.py          # POST /api/auth/telegram
-│   │   │   ├── health.py        # Health/readiness endpoints
-│   │   │   ├── users.py         # Current-user endpoint
-│   │   │   └── listings.py      # Public catalog, details, seller listings, draft creation
-│   │   ├── auth/
-│   │   │   ├── telegram.py      # Telegram Mini App initData HMAC verification
-│   │   │   ├── tokens.py        # API JWT creation/verification helpers
-│   │   │   ├── dependencies.py  # Bearer auth/current-user dependencies
-│   │   │   └── schemas.py       # Auth request/response schemas
-│   │   ├── core/
-│   │   │   └── config.py        # pydantic-settings configuration
-│   │   └── db/
-│   │       ├── models.py        # SQLAlchemy models, enums and constraints
-│   │       └── session.py       # Async engine, session factory and dependency
-│   ├── migrations/
-│   │   ├── env.py               # Alembic async migration environment
-│   │   └── versions/             # Versioned DB schema changes (0001–0004)
-│   ├── tests/                    # Backend unit/API/PostgreSQL integration tests
-│   ├── alembic.ini
-│   ├── pyproject.toml             # Python dependencies, Ruff, pytest and mypy config
-│   └── Dockerfile
-└── frontend/
-    ├── src/
-    │   ├── App.tsx              # Marketplace app: catalog, listing detail, navigation
-    │   ├── main.tsx             # React entrypoint
-    │   ├── index.css            # Global styles
-    │   ├── api/                 # Typed API clients (listings, orders, assets, config)
-    │   ├── auth/                # SessionProvider, Telegram initData helpers, auth API
-    │   ├── listings/            # CreateListing, MyListings (create/edit/unpublish)
-    │   ├── orders/              # Orders (buyer/seller order list and cancel)
-    │   ├── wallet/              # TON Connect wallet connection UI
-    │   └── test/                # Vitest setup and frontend tests
-    ├── package.json             # Frontend scripts and dependencies
-    ├── vite.config.ts
-    └── Dockerfile
-```
+## 2. Repository map
 
-**Navigation rule:** start in the relevant router/component, then follow imports into schemas, models, dependencies and tests. Do not scan the whole repository when the task points to one feature.
+    /
+    ├── README.md
+    ├── AGENTS.md
+    ├── .env.example
+    ├── docker-compose.yml
+    ├── .github/workflows/{backend,frontend}.yml
+    ├── docs/
+    │   ├── PRODUCT_MODEL.md
+    │   ├── ASSET_INTEGRATION_AUDIT.md
+    │   ├── TELEGRAM_NOTIFICATIONS.md
+    │   ├── PAYMENTS_ESCROW_DESIGN.md
+    │   └── adr/
+    ├── backend/
+    │   ├── app/main.py                 # FastAPI setup/router registration/lifespan
+    │   ├── app/api/                    # auth, users, wallets, assets, listings, orders
+    │   ├── app/auth/                   # Telegram initData, JWT sessions and dependencies
+    │   ├── app/assets/ton_nft/         # TON Center provider, TEP-62 verifier and contracts
+    │   ├── app/orders/                 # reservation lifecycle, status/event rules, payment protocol
+    │   ├── app/notifications/          # durable outbox and Telegram delivery worker
+    │   ├── app/db/models.py            # SQLAlchemy models, enums and constraints
+    │   └── migrations/versions/        # Alembic migrations; DB schema changes must be migrated
+    └── frontend/
+        ├── src/App.tsx
+        ├── src/api/
+        ├── src/auth/                   # Telegram initData and session provider
+        ├── src/wallet/                 # TON Connect UI
+        ├── src/listings/
+        ├── src/orders/
+        └── src/test/
 
-## 3. Current architecture and data flow
+Architecture is a **modular monolith**. Keep domain boundaries explicit; do not add microservices without a reviewed architectural decision.
 
-### Backend
+## 3. Backend and frontend contracts
 
-- Python 3.13+, FastAPI, Pydantic v2, SQLAlchemy 2 async, Alembic and PostgreSQL.
-- aiogram 3 is included for the Telegram bot. Redis is provisioned in Compose.
-- Architecture is a **modular monolith**. Keep domain boundaries clear; do not introduce microservices without an explicit architectural decision.
-- API routers are mounted under `/api` in `backend/app/main.py`.
-- Configuration is loaded by `backend/app/core/config.py` from environment variables / root `.env`.
-- Database sessions are created by `backend/app/db/session.py`. Use the existing async session dependency in route handlers unless a strong reason requires otherwise.
-- SQLAlchemy models and enums are in `backend/app/db/models.py`. Schema changes must be represented by Alembic migrations in `backend/migrations/versions/`; do not edit the database schema by hand.
+- Backend: Python 3.13+, FastAPI, Pydantic v2, SQLAlchemy async, PostgreSQL and Alembic. Router prefixes are /api; configuration loads through backend/app/core/config.py from environment and root .env.
+- Frontend: React 19, TypeScript, Vite, Tailwind CSS; API clients are under frontend/src/api/.
+- Runtime: Compose runs PostgreSQL, Redis, API and Mini App. The bot/outbox worker is optional under Compose profile bot.
+- Database changes go through Alembic revisions in backend/migrations/versions/; never hand-edit production schema.
+- Read the existing route, schema, service/model and tests before changing a contract.
 
-### Frontend
+Important current API routes:
 
-- React 19 + TypeScript + Vite + Tailwind CSS v4.
-- TanStack Query, Zustand and TON Connect UI are dependencies in `frontend/package.json`.
-- The Mini App implements the full current product surface: public catalog with filters/sorting/pagination, listing detail, Telegram initData authentication with Bearer sessions, listing creation/edit/unpublish from verified inventory, my-listings management, and buyer/seller order lists. API clients are typed wrappers in `frontend/src/api/`.
-- Still absent: payment/checkout UI, NFT delivery confirmation flow, deal chat, admin panel. Do not assume a planned screen exists; inspect `frontend/src/` first.
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | /api/auth/telegram | Verify raw Telegram Mini App initData; issue API JWT |
+| GET | /api/users/me | Current user |
+| POST | /api/wallets/proof/challenge | Short-lived user-bound TON proof challenge |
+| POST | /api/wallets/proof/verify | Cryptographically verify proof and link wallet |
+| GET | /api/wallets/me | Current user's wallet records |
+| GET | /api/assets/me | Paginated verified inventory with server-side ownership recheck |
+| GET | /api/listings | Public filter/sort/page catalogue |
+| POST | /api/listings | Draft from verified eligible asset |
+| POST | /api/listings/{listing_id}/publish | Publish after fresh ownership verification |
+| POST | /api/orders | Idempotent reservation; snapshots price/currency; not payment |
+| GET | /api/orders | Buyer/seller order list |
+| POST | /api/orders/{order_id}/cancel | Cancel eligible pending reservation |
 
-### Local infrastructure
+Do not invent route fields/query parameters: use API schemas and tests as source of truth. Current order status pending_payment is a legacy name and must not be treated as a real payment event or presented to users as “paid”.
 
-- `docker-compose.yml` starts PostgreSQL 17, Redis 7, FastAPI API and the Mini App.
-- The Telegram bot is behind the Compose profile `bot`; it is not started by the default `docker compose up`.
-- Local service ports: API `8000`, Mini App `5173`; Swagger at `/docs`.
-- Use root `.env.example` to create `.env`. Never commit `.env`, tokens, signing secrets, private keys or real user data.
+## 4. Safety and product invariants
 
-## 4. Existing API contract — inspect before extending
+1. **Telegram auth:** verify raw Telegram.WebApp.initData server-side; never trust initDataUnsafe or client-supplied Telegram user fields.
+2. **Wallet security:** never request/store seed phrases or private keys. Connected status is not verified proof; trust only server cryptographic verification and persisted wallet record.
+3. **NFT authenticity/ownership:** verify TEP-62 item, expected network, current owner and collection consistency via trusted provider/on-chain source. Names, images, links and client-supplied metadata are untrusted.
+4. **Listings:** draft creation requires a verified eligible asset. Publishing must keep its fresh server-side ownership check and race-safe database revalidation.
+5. **Orders:** reservations snapshot price and currency but do not deduct funds or lock an NFT on-chain. Current worker handles expiry; do not add fake payment/delivery success states.
+6. **Product domains:** TON NFT and Telegram Gifts need separate adapters. Telegram Business API rights constrain gift operations.
+7. **Payment/escrow:** no checkout, custody, refund, commission, seller payout or buyer-protection feature is approved for the current MVP. ADRs/design docs are proposals unless expressly approved.
+8. **Fail closed:** provider outage, ambiguous ownership, invalid proof or incomplete chain data must never be represented as success.
+9. **Concurrency/idempotency:** preserve existing unique constraints, idempotency keys, lock order, SKIP LOCKED workers, order events and outbox guarantees.
+10. **Secrets:** never commit .env, tokens, signing secrets, API keys, private keys or real user data.
 
-Current API routes are registered in `backend/app/main.py`.
-
-| Method | Endpoint | Auth | Current behavior |
-|---|---|---|---|
-| GET | `/api/health/live` and `/api/health/ready` | No | Health/readiness checks (PostgreSQL, Redis); see `api/health.py` |
-| POST | `/api/auth/telegram` | Telegram initData | Verifies signed, short-lived Mini App initData; upserts user; returns API JWT |
-| GET | `/api/users/me` | Bearer JWT | Returns current user profile |
-| POST | `/api/wallets/proof/challenge` | Bearer JWT | Issues a short-lived TON Connect proof challenge |
-| POST | `/api/wallets/proof/verify` | Bearer JWT | Verifies the signed proof and links the wallet |
-| GET | `/api/wallets/me` | Bearer JWT | Current user's linked wallets |
-| GET | `/api/assets/me` | Bearer JWT | Verified NFT inventory from the user's verified wallets (TON Center v3 + TEP-62 re-check) |
-| GET | `/api/listings` | No | Public catalog; filters `asset_type`, `currency`, `search`; sort `newest`, `price_asc`, `price_desc`; pagination `limit`/`offset`; hides stale/unverified/reserved/owner-mismatch listings |
-| GET | `/api/listings/me` | Bearer JWT | Current seller's listings |
-| GET | `/api/listings/{listing_id}` | No | Public listing detail under the same visibility guard; otherwise 404 |
-| POST | `/api/listings` | Bearer JWT | Creates a **draft only**, requiring a verified asset currently owned by the user |
-| POST | `/api/listings/{listing_id}/publish` | Bearer JWT | Publishes a draft after a fresh on-chain ownership re-check (503 on provider outage) |
-| PATCH | `/api/listings/{listing_id}` | Bearer JWT | Edits price/title/description of the seller's draft or active listing |
-| POST | `/api/listings/{listing_id}/cancel` | Bearer JWT | Unpublishes an active listing or cancels a draft |
-| POST | `/api/orders` | Bearer JWT | Reserves an active listing; requires `Idempotency-Key` header; snapshots price/currency; fresh ownership re-check before reservation |
-| GET | `/api/orders` | Bearer JWT | Buyer's or seller's orders (`role` query parameter) |
-| GET | `/api/orders/{order_id}` | Bearer JWT | Order detail for the buyer or seller only |
-| POST | `/api/orders/{order_id}/cancel` | Bearer JWT | Buyer cancels a pending order; releases the listing |
-
-For exact request/response fields and validation, read `backend/app/api/listings.py`, `backend/app/api/orders.py`, `backend/app/api/wallets.py`, `backend/app/api/assets.py`, `backend/app/api/auth.py`, `backend/app/auth/schemas.py` and the related tests. Do not invent endpoints, query parameters or response fields.
-
-## 5. Database model quick map
-
-Defined in `backend/app/db/models.py`; migrated in `backend/migrations/versions/` (0001 initial, 0002 network scoping, 0003 orders, 0004 notification outbox):
-
-- `User`: Telegram identity and account state.
-- `Wallet`: user wallet address/network and verification flags.
-- `NFTCollection`: collection address/network and metadata.
-- `NFTAsset`: asset type, external ID, optional item address, collection/owner, metadata and verification state.
-- `Listing`: seller, asset, lifecycle status, amount/currency, title/description and expiry.
-- `Order` / `OrderEvent`: reservation with a price/currency snapshot, buyer idempotency, append-only status history.
-- `TelegramNotificationOutbox`: durable notification queue with attempts and leases.
-
-Important constraints already encoded include unique Telegram IDs, unique wallet address per network, unique external asset ID per asset type and network, positive listing and order prices, foreign keys, a PostgreSQL partial unique index preventing multiple open (`active`/`reserved`) listings for the same asset, and one pending order per listing. Read the model and migrations before changing related behavior.
-
-## 6. How to run locally
-
-### Full stack (recommended)
+## 5. Development commands
 
 From repository root:
 
-```bash
-cp .env.example .env
-# Put a Telegram bot token in BOT_TOKEN when testing Telegram auth.
-# Generate AUTH_SECRET_KEY with: openssl rand -hex 32
-docker compose up --build
-docker compose exec api alembic upgrade head
-```
+    cp .env.example .env
+    # Generate AUTH_SECRET_KEY with: openssl rand -hex 32
+    docker compose up --build
+    docker compose exec api alembic upgrade head
 
-Services:
-- Mini App: http://localhost:5173
-- API: http://localhost:8000
-- Swagger: http://localhost:8000/docs
-- Readiness: http://localhost:8000/api/health/ready
+Optional bot:
 
-To start the Telegram bot as well:
+    # Set BOT_TOKEN and TELEGRAM_MINI_APP_URL in .env first
+    docker compose --profile bot up --build
 
-```bash
-docker compose --profile bot up --build
-```
+Backend checks:
 
-### Backend checks
+    cd backend
+    python -m pip install -e ".[dev]"
+    ruff check app tests migrations
+    pytest --cov=app --cov-report=term-missing -q
 
-From repository root:
+Frontend checks:
 
-```bash
-cd backend
-python -m pip install -e ".[dev]"
-ruff check app tests migrations
-pytest --cov=app --cov-report=term-missing -q
-```
+    cd frontend
+    npm install
+    npm run test:coverage
+    npm run build
 
-Some PostgreSQL integration tests require a **dedicated disposable** `TEST_DATABASE_URL` and are skipped when it is absent. Never point integration tests or migration fixtures at a production/shared database. In CI, the backend workflow provisions an isolated PostgreSQL service.
+Some PostgreSQL integration tests require a dedicated disposable TEST_DATABASE_URL; never point tests/migrations at a production or shared database.
 
-### Frontend checks
+## 6. Collaboration and branch rules (mandatory)
 
-```bash
-cd frontend
-npm install
-npm run test:coverage
-npm run build
-```
+- Never commit directly to main; use a focused task branch and PR.
+- Before editing, inspect the latest main, existing branches, open issues and open PRs.
+- Do not create duplicate issues, overwrite another branch, force-push another person's work, or merge someone else's PR without authorization.
+- Keep unrelated domains separate. In particular, do not mix UI features, order lifecycle changes and payment/escrow work.
+- For contract changes, update request/response schemas and tests in the same PR; use migrations for every DB schema change.
+- Run applicable CI/lint/tests/build, inspect the diff and report the exact SHA, tests and blockers.
+- Do not close an issue merely because a PR exists. Live/manual acceptance criteria must be verified before calling a task complete.
 
-## 7. Tests — where to add coverage
+## 7. Roadmap/status snapshot — 2026-11-11
 
-Backend tests live in `backend/tests/`:
-- `test_telegram_init_data.py`: Telegram initData signature/expiry validation.
-- `test_auth_tokens.py`, `test_auth_dependencies.py`, `test_auth_route.py`: JWT and auth behavior.
-- `test_api_routes.py`: general API routes.
-- `test_db_models.py`: model-level behavior.
-- `test_listing_schemas.py`, `test_listing_routes.py`: listing validation and route behavior.
-- PostgreSQL-specific integration tests may exist on an open feature/PR branch before they are merged into `main`; check PRs and current branch before assuming they are present locally.
+Treat this as a dated snapshot and check live GitHub before acting.
 
-Frontend tests are under `frontend/src/test/`; use Vitest and Testing Library.
+- **Current Stage A:** priced listings, TEP-62 ownership checks, listing lifecycle, order reservation with price/currency snapshot, cancellation/expiry and durable informational Telegram notifications.
+- **Issue #43 / Draft PR #51:** complete TON Connect Proof frontend lifecycle, manifest and real Tonkeeper validation. Server proof verification exists, but the full frontend integration is not yet in main.
+- **Issue #44 / Draft PR #58:** full NFT inventory sync/reconciliation and dedicated inventory UI. Current main has the paginated GET inventory endpoint; do not assume proposed sync/reconciliation code is merged.
+- **Issue #48:** keep docs aligned with approved product model (this document + README.md); do not remove listing prices.
+- **Issue #56:** Stage B architecture is documented and merged in `docs/STAGE_B_ORDER_LIFECYCLE.md`. Its final section contains maintainer decisions that remain open. Issue #46 implementation must wait until those decisions are explicitly approved; a merged design proposal is not approval of the proposed API/DB contract or migration.
+- **Future guaranteed transactions:** a separate later phase. No payments, checkout, escrow/custody, refunds, commissions or seller payout should be implemented under current Stage A.
 
-Every behavior change should include tests at the correct layer. For DB constraints and migrations, prefer integration coverage against PostgreSQL rather than SQLite-only assumptions.
+## 8. First 10 minutes for a new contributor
 
-## 8. Parallel-agent collaboration rules (mandatory)
+1. Read AGENTS.md, README.md and docs/PRODUCT_MODEL.md.
+2. Check [open Issues](https://github.com/AzizIo/Vstore/issues) and [open PRs](https://github.com/AzizIo/Vstore/pulls).
+3. Inspect current main and the exact files/tests for your task.
+4. Confirm API/DB contract and existing concurrency/security invariants before editing.
+5. Add behavior-level tests, run CI-equivalent checks, then open a focused PR.
 
-Multiple agents/developers work in this repository at the same time.
-
-1. **Never commit directly to `main`.** Create a focused branch from the latest `main` and open a PR.
-2. Before editing, inspect open PRs/issues and branch names. Fetch latest `main`; another agent may have merged or changed a shared contract.
-3. Avoid editing files owned by another active task. Coordinate through the GitHub issue/PR and state exact file ownership in the task.
-4. Keep PRs narrow. Do not mix frontend redesign, backend domain changes, migrations and CI refactors in one PR without a clear reason.
-5. Do not force-push, reset, revert or rewrite another agent's branch. Never merge someone else's PR without explicit authorization.
-6. If an API/schema contract must change, coordinate frontend and backend changes; document the contract and tests in the PR.
-7. Before finishing: run relevant lint/tests/build, inspect `git diff`, ensure no secrets, and report exact branch, commit, PR and CI result.
-8. If a conflict appears, fetch latest refs and reconcile intentionally. Do not overwrite another person's changes to make a test pass.
-
-Suggested branch names:
-- `feat/<area>-<short-description>`
-- `fix/<area>-<short-description>`
-- `test/<area>-<short-description>`
-- `docs/<short-description>`
-
-Suggested commit prefixes: `feat:`, `fix:`, `test:`, `docs:`, `refactor:`, `chore:`.
-
-## 9. Product/security guardrails
-
-These rules are non-negotiable:
-
-- Never trust `initDataUnsafe` or client-supplied Telegram user fields. Verify raw `Telegram.WebApp.initData` on the backend with the bot token and enforce freshness.
-- Never store Telegram bot tokens, JWT signing secrets, wallet private keys or seed phrases in source control. TON Connect is non-custodial; the server must not request wallet secrets.
-- Do not treat an NFT as verified because a user submitted a URL, image or metadata. Verify the item/collection and current ownership through a trusted provider/on-chain source.
-- TON NFT and Telegram Gifts are different asset types with different verification/transfer capabilities. Keep them behind separate adapters.
-- Do not claim escrow, automatic NFT transfer, buyer protection or seller payout is implemented until the full lifecycle is implemented and tested.
-- Telegram's in-app digital goods payment rules and Telegram Gifts API permissions constrain implementation. Read `README.md` and `docs/ASSET_INTEGRATION_AUDIT.md` before implementing checkout or transfer.
-- Listing creation starts as a **draft** from a verified asset owned by the seller; publication is allowed only through `POST /api/listings/{id}/publish` after a fresh server-side TEP-62 ownership re-check (provider call outside DB locks, revalidation under locks). Do not add any other publication path or bypass this check.
-- Do not add fake marketplace listings or fake payment/transfer success states to production UI.
-
-## 10. Project status snapshot (2026-11-10)
-
-This is a snapshot, not a promise that every item remains current. Verify the live repository and PR list before starting work. Product model and roadmap: `docs/PRODUCT_MODEL.md`.
-
-**Stage A — marketplace foundation (current).** Prices are a mandatory part of listings; reservation is not payment; payment/escrow are deliberately not implemented or imitated.
-
-### Implemented on `main`
-
-- [x] FastAPI app, configuration, CORS and health/readiness endpoints (PostgreSQL + Redis probes).
-- [x] PostgreSQL async engine/session and Alembic migrations (0001–0004).
-- [x] Core SQLAlchemy entities: users, wallets, NFT collections/assets, listings, orders, order events, notification outbox.
-- [x] Telegram Mini App initData HMAC validation and API JWT authentication; current-user endpoint.
-- [x] TON Connect wallet proof (server-side verification, wallet binding); `GET/POST /api/wallets/*`.
-- [x] TEP-62 NFT verification adapter (TON Center v3) and verified inventory `GET /api/assets/me`.
-- [x] Secure draft creation from verified owned assets; publication after a live ownership re-check (provider call outside DB locks, revalidation under locks).
-- [x] Listing management: publish, edit price/title/description, unpublish, seller-set expiry.
-- [x] Public catalog with filters, sorting (stable `price_asc`/`price_desc`/`newest`) and pagination; unpurchasable listings (stale/unverified/reserved/owner-mismatch) hidden from catalog and detail.
-- [x] Orders: creation with a **price/currency snapshot at reservation time**, buyer-scoped idempotency, one open order per listing, fresh ownership re-check before reservation (fail-closed 503 on provider outage), cancellation and expiry via a `SKIP LOCKED` worker.
-- [x] Telegram order notifications through a durable outbox (bot profile `bot`).
-- [x] React Mini App: catalog, listing detail (collection + item address), create/edit/unpublish listings, my listings, orders.
-- [x] Backend and frontend CI workflows with a PostgreSQL 16 service.
-
-### Do not assume available
-
-- [ ] Payment capture/refunds/payouts — `PaymentAdapter` is a protocol only; no provider.
-- [ ] Escrow/guarantee, disputes, fees, seller settlement (Stage C; ADR-0001/0002).
-- [ ] Server-side confirmation of NFT delivery after reservation (Stage B).
-- [ ] Telegram Gifts adapter (separate asset domain, deliberately out of scope).
-- [ ] Deal chat, admin panel, E2E tests, production hardening.
-
-### Open decisions for the maintainer (as of this snapshot)
-
-- Renaming the `pending_payment` order status (mentions a payment that does not exist) — requires a migration; raised as an open question, not done unilaterally.
-
-**Resolved:** PR #49 `docs/issue-48-mvp-scope` (price removal, destructive migration `0005_free_listings`) was closed by the owner on 2026-11-10 without merging. Main never contained the removal and no data was lost. Prices remain a mandatory part of the product model.
-
-### Recommended next implementation sequence
-
-1. Stage B: server-side NFT delivery confirmation and the full order lifecycle after reservation.
-2. Payment integration strictly per ADR-0001/0002 gates (platform classification, funded remedy, settlement rail — see the ADR blocker lists).
-3. Escrow/гарант only after separate design, testnet validation and audit.
-4. Admin, chat, E2E tests, production operations.
-
-## 11. First 10 minutes for a new agent
-
-1. Read this file and the relevant sections of `README.md`.
-2. Check current open issues and PRs: https://github.com/AzizIo/Vstore/issues and https://github.com/AzizIo/Vstore/pulls
-3. Check out the latest `main`, then create a task-specific branch.
-4. Open only the files listed in the relevant section above; follow imports/tests when necessary.
-5. Confirm the exact API/database contract before coding.
-6. Add tests with the feature, run checks, and open a focused PR.
-
-If this guide conflicts with the current code, **the code, migrations, tests and latest merged PRs are authoritative**. Update this guide when architecture or project status materially changes.
+If this guide conflicts with code, migrations, tests or approved product decisions, those are authoritative. Update this guide when status materially changes.
