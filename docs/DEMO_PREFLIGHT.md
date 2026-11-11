@@ -4,7 +4,8 @@ Run this read-only check from a laptop or another machine with outbound HTTPS be
 
 It verifies the public endpoints that can be checked without signing in:
 
-- API readiness, including PostgreSQL, Redis and authentication configuration
+- API readiness, including PostgreSQL, Redis and Telegram authentication configuration
+- TON Connect proof configuration (a valid backend domain allowlist and network; not just a reachable public manifest)
 - Mini App entry page (HTTP 200 HTML)
 - TON Connect manifest (HTTP 200 JSON, expected same-origin URLs and cross-origin GET access)
 - TON Connect icon (HTTP 200, `image/png` and a valid PNG signature)
@@ -25,4 +26,4 @@ If the manifest is hosted at a non-default path, pass `--manifest-url`. The curr
 
 Use origins only: do not include paths, query strings, usernames, passwords or tokens. The script never reads `.env`, does not print response bodies, does not send credentials, and does not modify the deployment. HTTP is accepted only for localhost development.
 
-Exit code is `0` only when all checks pass; otherwise it is `1`. The report is deliberately limited to public reachability and configuration. It does **not** prove Telegram launch, a live wallet proof, authenticated listing/order actions, bot delivery, or NFT transfer. Those require the separate manual Telegram acceptance checklist.
+Exit code is `0` only when all five checks pass; otherwise it is `1`. The API can remain healthy for public catalogue access while TON Connect proof is intentionally disabled; in that case this preflight reports the wallet-proof check as failed, so do not demonstrate wallet linking until the preview-specific allowlist and network are configured. The report is deliberately limited to public reachability and configuration. It does **not** prove Telegram launch, a live wallet proof, authenticated listing/order actions, bot delivery, or NFT transfer. Those require the separate manual Telegram acceptance checklist.
