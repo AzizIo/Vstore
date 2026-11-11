@@ -278,7 +278,7 @@ These are proposed tasks to create or map onto existing Issues after maintainer 
 | Order | Work item | Owner area | Depends on | Acceptance |
 |---|---|---|---|---|
 | B1 | Read-only transaction/trace evidence adapter for TEP-62 transfer correlation | Backend | Maintainer baseline | Implemented in [PR #63](https://github.com/AzizIo/Vstore/pull/63): bounded TON Center v3 correlation, typed outcomes and fail-closed checks. Indexed-provider trust assumptions are documented. |
-| B2 | Delivery-attempt persistence, state migration and immutable snapshots | Backend + DB | B1 | Implemented in draft [PR #85](https://github.com/AzizIo/Vstore/pull/85): preserves historical reservations/events, adds database constraints and uniqueness. No endpoint/worker uses it yet. |
+| B2 | Delivery-attempt persistence, state migration and immutable snapshots | Backend + DB | B1 | Implemented in [PR #85](https://github.com/AzizIo/Vstore/pull/85): preserves historical reservations/events, adds database constraints and uniqueness. No endpoint/worker uses it yet. |
 | B3 | Leased observer/reconciliation worker and deterministic provider polling | Backend | B1, B2 | Correlates exact item/source/destination/network/query_id; only finalized masterchain evidence can verify; ambiguous outcomes remain observing/manual_review. |
 | B4 | Delivery preparation/submission/read APIs with auth, locks and idempotency | Backend | B2, B3 | Snapshot verified buyer destination and freshly verified seller source; client-supplied hashes/addresses never establish completion. |
 | B5 | Transactional transfer outbox events/notifications and PostgreSQL concurrency/fault-injection tests | Backend + QA | B3, B4 | Duplicate/out-of-order events are idempotent; failure cases fail closed. |
