@@ -109,6 +109,11 @@ def test_readiness_returns_503_when_authentication_is_not_configured(monkeypatch
     monkeypatch.setattr(health, "_database_ready", dependency_ready)
     monkeypatch.setattr(health, "_redis_ready", dependency_ready)
     monkeypatch.setattr(health, "_authentication_ready", lambda: False)
+    monkeypatch.setattr(
+        health,
+        "settings",
+        SimpleNamespace(ton_connect_allowed_domains=["shop.example.test"]),
+    )
 
     with TestClient(app) as client:
         response = client.get("/api/health/ready")
