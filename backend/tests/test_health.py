@@ -21,7 +21,10 @@ def test_readiness_returns_each_dependency_status(monkeypatch) -> None:
     monkeypatch.setattr(
         health,
         "settings",
-        SimpleNamespace(ton_connect_allowed_domains=["shop.example.test"]),
+        SimpleNamespace(
+            ton_connect_allowed_domains=["shop.example.test"],
+            ton_connect_network="testnet",
+        ),
     )
 
     with TestClient(app) as client:
@@ -54,7 +57,10 @@ def test_readiness_returns_503_when_a_dependency_is_unavailable(monkeypatch) -> 
     monkeypatch.setattr(
         health,
         "settings",
-        SimpleNamespace(ton_connect_allowed_domains=["shop.example.test"]),
+        SimpleNamespace(
+            ton_connect_allowed_domains=["shop.example.test"],
+            ton_connect_network="testnet",
+        ),
     )
 
     with TestClient(app) as client:
@@ -87,7 +93,10 @@ def test_readiness_reports_both_dependencies_unavailable(monkeypatch) -> None:
     monkeypatch.setattr(
         health,
         "settings",
-        SimpleNamespace(ton_connect_allowed_domains=["shop.example.test"]),
+        SimpleNamespace(
+            ton_connect_allowed_domains=["shop.example.test"],
+            ton_connect_network="testnet",
+        ),
     )
 
     with TestClient(app) as client:
@@ -113,7 +122,10 @@ def test_readiness_returns_503_when_authentication_is_not_configured(monkeypatch
     monkeypatch.setattr(
         health,
         "settings",
-        SimpleNamespace(ton_connect_allowed_domains=["shop.example.test"]),
+        SimpleNamespace(
+            ton_connect_allowed_domains=["shop.example.test"],
+            ton_connect_network="testnet",
+        ),
     )
 
     with TestClient(app) as client:
