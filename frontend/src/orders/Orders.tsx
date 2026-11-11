@@ -49,7 +49,7 @@ function statusLabel(status: OrderStatus) {
 function statusGuidance(status: OrderStatus) {
   switch (status) {
     case "reserved":
-      return "The listing is reserved. The seller has not started the NFT transfer. Payments are not enabled.";
+      return "The listing is reserved. The seller has not started the NFT transfer.";
     case "awaiting_transfer":
       return "The seller is preparing a direct NFT transfer to the buyer. Payments are not enabled.";
     case "observing_transfer":
