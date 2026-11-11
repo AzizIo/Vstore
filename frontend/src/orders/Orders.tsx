@@ -421,7 +421,7 @@ export function Orders({
       </div>
 
       {loading ? (
-        <div className="workspace-order-grid" aria-label="Loading orders" role="status">{[1, 2, 3, 4].map((item) => <div className="workspace-skeleton" key={item}><span /><span /><span /><span /></div>)}</div>
+        <div className="workspace-order-grid" aria-label="Loading orders" role="status"><span className="sr-only">Loading orders...</span>{[1, 2, 3, 4].map((item) => <div className="workspace-skeleton" key={item}><span /><span /><span /><span /></div>)}</div>
       ) : error ? (
         <div className="orders-message workspace-empty" role="alert"><span className="workspace-empty-icon" aria-hidden="true">!</span><h2>Orders unavailable</h2><p>{error}</p><button className="primary-button" type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button></div>
       ) : visibleOrders.length === 0 ? (
