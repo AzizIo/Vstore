@@ -38,6 +38,23 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright E2E
+        run: npm run test:e2e
+
+      - name: Upload Playwright report and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Validate generated TON Connect manifest and icon
         run: |
           node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync("dist/tonconnect-manifest.json", "utf8")); if (manifest.url !== process.env.VITE_TONCONNECT_APP_URL || manifest.iconUrl !== process.env.VITE_TONCONNECT_APP_URL + "/tonconnect-icon.png") process.exit(1); if (!fs.existsSync("dist/tonconnect-icon.png")) process.exit(1);'
