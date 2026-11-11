@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.assets.ton_nft.address import AddressError, normalize_address
 from app.assets.ton_nft.delivery import normalize_transaction_hash
+from app.assets.ton_nft.errors import InvalidProviderData
 from app.assets.ton_nft.models import VerificationResult, VerificationStatus
 from app.assets.ton_nft.verifier import TONNFTVerifier
 from app.core.config import get_settings
@@ -1010,7 +1011,10 @@ async def submit_delivery_candidate(
 ) -> uuid.UUID:
     """Persist a seller-supplied transaction hash as an untrusted lookup hint."""
 
-    normalized_hash = normalize_transaction_hash(transaction_hash, "transaction_hash")
+    try:
+        normalized_hash = normalize_transaction_hash(transaction_hash, "transaction_hash")
+    except InvalidProviderData as exc:
+        raise OrderConflict("Invalid candidate transaction hash") from exc
     order_header = await session.execute(
         select(Order.listing_id, Listing.asset_id)
         .join(Listing, Listing.id == Order.listing_id)
