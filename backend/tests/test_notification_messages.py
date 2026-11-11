@@ -83,7 +83,7 @@ def test_builds_explicit_messages_for_supported_events_and_roles(
 
     monkeypatch.setattr(
         "app.notifications.service.get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url="https://t.me/viltara_shop_bot/marketplace"),
+        lambda: SimpleNamespace(telegram_mini_app_direct_link="https://t.me/viltara_shop_bot/marketplace"),
     )
 
     message = build_notification_message(delivery_factory(event_type, role))
@@ -107,7 +107,7 @@ def test_unknown_event_type_fails_explicitly_instead_of_expiring_order(
 
     monkeypatch.setattr(
         "app.notifications.service.get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url=None),
+        lambda: SimpleNamespace(telegram_mini_app_direct_link=None),
     )
 
     with pytest.raises(
@@ -125,7 +125,7 @@ def test_missing_mini_app_url_omits_link_but_keeps_notification(
 
     monkeypatch.setattr(
         "app.notifications.service.get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url=None),
+        lambda: SimpleNamespace(telegram_mini_app_direct_link=None),
     )
 
     message = build_notification_message(delivery_factory("order_created"))
@@ -136,7 +136,7 @@ def test_missing_mini_app_url_omits_link_but_keeps_notification(
 
 
 
-def test_regular_https_domain_is_not_added_as_telegram_mini_app_link(
+def test_public_web_app_url_is_not_added_as_telegram_direct_link(
     monkeypatch: pytest.MonkeyPatch,
     delivery_factory,
 ) -> None:
@@ -145,7 +145,7 @@ def test_regular_https_domain_is_not_added_as_telegram_mini_app_link(
     monkeypatch.setattr(
         "app.notifications.service.get_settings",
         lambda: SimpleNamespace(
-            telegram_mini_app_url="https://shop.example.com/miniapp"
+            telegram_mini_app_direct_link="https://shop.example.com/miniapp"
         ),
     )
 
