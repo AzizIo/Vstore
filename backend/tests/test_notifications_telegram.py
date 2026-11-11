@@ -2,7 +2,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from aiogram.methods import SendMessage
 from aiogram.exceptions import (
     TelegramBadRequest,
     TelegramForbiddenError,
@@ -12,13 +11,13 @@ from aiogram.exceptions import (
     TelegramServerError,
     TelegramUnauthorizedError,
 )
+from aiogram.methods import SendMessage
 
 from app.notifications.service import (
     PermanentNotificationError,
     TransientNotificationError,
 )
 from app.notifications.telegram import TelegramNotificationSender
-
 
 CHAT_ID = 123456789
 MESSAGE_TEXT = "Order reservation created"
