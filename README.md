@@ -20,11 +20,11 @@ Product boundaries and decisions approved for the current MVP are recorded in [d
 | Telegram order notifications using a durable outbox | Implemented; optional bot container |
 | TON Connect frontend challenge → proof → backend verification and manifest | Implemented in main via [PR #51](https://github.com/AzizIo/Vstore/pull/51); live Telegram/Tonkeeper acceptance remains open in [Issue #43](https://github.com/AzizIo/Vstore/issues/43) |
 | Full inventory reconciliation/sync and dedicated My NFT screen | Implemented in main via [PR #58](https://github.com/AzizIo/Vstore/pull/58); live testnet/provider acceptance remains open in [Issue #44](https://github.com/AzizIo/Vstore/issues/44) |
-| Server-side verification that a reserved NFT was delivered to the buyer | Not implemented; design proposal in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md); implementation tracked in [Issue #46](https://github.com/AzizIo/Vstore/issues/46) |
+| Server-side verification that a reserved NFT was delivered to the buyer | Not implemented; B1 read-only evidence provider and B2 persistence/schema are groundwork only. No prepare API or observer worker yet; see [Issue #46](https://github.com/AzizIo/Vstore/issues/46) |
 | Telegram Gifts adapter, deal chat, admin panel | Not implemented |
 | Payments, checkout, escrow/guarantee, refunds, commissions and seller payouts | Not implemented |
 
-The internal order status name pending_payment is a legacy name for the current reserved/pending order lifecycle. It **must not** be interpreted or presented as evidence that a payment exists.
+The legacy database status `pending_payment` is migrated to `reserved` by the Stage B B2 migration. It never represented a payment event. New delivery states and attempt snapshots are groundwork only: no endpoint or worker currently starts or confirms an NFT transfer.
 
 ## How listing and reservation work today
 
@@ -34,7 +34,7 @@ The internal order status name pending_payment is a legacy name for the current 
 4. A buyer reserves an active listing. The backend checks seller/asset state, takes a snapshot of price and currency, and uses idempotency/concurrency protections. The order expires or can be cancelled; the reservation does not lock the NFT on-chain.
 5. The current product has **no automated NFT delivery confirmation**. The service must not display a reservation as paid, completed, or delivered.
 
-The Stage B architecture is now documented in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md) (design merged through [PR #60](https://github.com/AzizIo/Vstore/pull/60)). It remains a proposal: the maintainer decisions in its final section must be approved before implementation begins under [Issue #46](https://github.com/AzizIo/Vstore/issues/46). A transaction hash, screenshot, client callback, or current-owner read alone is not sufficient proof of delivery.
+The Stage B architecture is documented in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md) (PR #60). The read-only evidence adapter is merged via [PR #63](https://github.com/AzizIo/Vstore/pull/63), and delivery-attempt persistence/state migration is introduced in [PR #64](https://github.com/AzizIo/Vstore/pull/64). The actual prepare/submit API, observer and order completion transition are still not implemented under [Issue #46](https://github.com/AzizIo/Vstore/issues/46). A transaction hash, screenshot, client callback, or current-owner read alone is not sufficient proof of delivery.
 
 ## Planned direct NFT transfer flow (Stage B — not implemented)
 
