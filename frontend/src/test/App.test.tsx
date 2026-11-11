@@ -450,7 +450,7 @@ describe("Buyer orders", () => {
       listing_id: listing.id,
       buyer_id: profile.id,
       seller_id: listing.seller.id,
-      status: "pending_payment",
+      status: "reserved",
       price_amount: "12.5",
       price_currency: "TON",
       title: listing.title,
@@ -459,7 +459,7 @@ describe("Buyer orders", () => {
       expires_at: "2026-01-01T00:15:00Z",
       created_at: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-01T00:00:00Z",
-      events: [{ from_status: null, to_status: "pending_payment", actor_type: "buyer", created_at: "2026-01-01T00:00:00Z" }],
+      events: [{ from_status: null, to_status: "reserved", actor_type: "buyer", created_at: "2026-01-01T00:00:00Z" }],
     };
     setTelegramInitData("query_id=raw&hash=verified", `order_${orderId.replace(/-/g, "")}`);
     vi.mocked(fetch).mockImplementation(async (input) => {
@@ -484,11 +484,11 @@ describe("Buyer orders", () => {
     setTelegramInitData();
     const pendingOrder = {
       id: "order-1", listing_id: listing.id, buyer_id: profile.id, seller_id: listing.seller.id,
-      status: "pending_payment", price_amount: "12.5", price_currency: "TON",
+      status: "reserved", price_amount: "12.5", price_currency: "TON",
       title: listing.title, asset_name: listing.asset.name, asset_type: listing.asset.asset_type,
       expires_at: "2026-01-01T00:15:00Z", created_at: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-01T00:00:00Z",
-      events: [{ from_status: null, to_status: "pending_payment", actor_type: "buyer", created_at: "2026-01-01T00:00:00Z" }],
+      events: [{ from_status: null, to_status: "reserved", actor_type: "buyer", created_at: "2026-01-01T00:00:00Z" }],
     };
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       const url = String(input);
@@ -512,7 +512,7 @@ describe("Buyer orders", () => {
     expect(new Headers(orderRequest?.[1]?.headers).get("Idempotency-Key")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Orders" }));
-    expect(await screen.findByText("Payment pending")).toBeInTheDocument();
+    expect(await screen.findByText("Reserved")).toBeInTheDocument();
   });
 });
 
