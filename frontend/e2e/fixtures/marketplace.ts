@@ -99,7 +99,7 @@ const linkedOrder = {
   listing_id: listingIds.moon,
   buyer_id: profile.id,
   seller_id: "seller-1",
-  status: "pending_payment",
+  status: "reserved",
   price_amount: "12.5",
   price_currency: "TON",
   title: "Moon Lantern",
@@ -111,7 +111,7 @@ const linkedOrder = {
   events: [
     {
       from_status: null,
-      to_status: "pending_payment",
+      to_status: "reserved",
       actor_type: "buyer",
       created_at: "2026-01-01T00:00:00Z",
     },
