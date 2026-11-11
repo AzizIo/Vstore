@@ -1,13 +1,13 @@
 import { API_BASE_URL } from "./config";
 import type { AssetType, PriceCurrency } from "./listings";
 
-export type OrderStatus = "pending_payment" | "cancelled" | "expired";
+export type OrderStatus = "reserved" | "awaiting_transfer" | "observing_transfer" | "completed" | "cancelled" | "expired";
 export type OrderRole = "buyer" | "seller";
 
 export interface OrderEvent {
   from_status: OrderStatus | null;
   to_status: OrderStatus;
-  actor_type: "buyer" | "system";
+  actor_type: "buyer" | "seller" | "system";
   created_at: string;
 }
 
@@ -29,7 +29,7 @@ export interface MarketplaceOrder {
 }
 
 function isOrderStatus(value: unknown): value is OrderStatus {
-  return value === "pending_payment" || value === "cancelled" || value === "expired";
+  return value === "reserved" || value === "awaiting_transfer" || value === "observing_transfer" || value === "completed" || value === "cancelled" || value === "expired";
 }
 
 function isOrder(value: unknown): value is MarketplaceOrder {
@@ -54,7 +54,7 @@ function isOrder(value: unknown): value is MarketplaceOrder {
       !!event && typeof event === "object" &&
       ((event as OrderEvent).from_status === null || isOrderStatus((event as OrderEvent).from_status)) &&
       isOrderStatus((event as OrderEvent).to_status) &&
-      ((event as OrderEvent).actor_type === "buyer" || (event as OrderEvent).actor_type === "system") &&
+      (["buyer", "seller", "system"] as string[]).includes((event as OrderEvent).actor_type) &&
       typeof (event as OrderEvent).created_at === "string"
     )
   );

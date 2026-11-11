@@ -8,7 +8,7 @@ const order = {
   listing_id: "listing-1",
   buyer_id: "buyer-1",
   seller_id: "seller-1",
-  status: "pending_payment" as const,
+  status: "reserved" as const,
   price_amount: "12.5",
   price_currency: "TON" as const,
   title: "Moon Lantern",
@@ -19,7 +19,7 @@ const order = {
   updated_at: "2026-01-01T00:00:00Z",
   events: [{
     from_status: null,
-    to_status: "pending_payment" as const,
+    to_status: "reserved" as const,
     actor_type: "buyer" as const,
     created_at: "2026-01-01T00:00:00Z",
   }],
@@ -45,7 +45,7 @@ describe("orders", () => {
     resolveRequest?.(jsonResponse({ items: [order] }));
 
     expect(await screen.findByText("Reservation pending")).toBeInTheDocument();
-    expect(screen.getByText(/Payment processing is not enabled/)).toBeInTheDocument();
+    expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
     expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
   });
 
@@ -58,7 +58,7 @@ describe("orders", () => {
           status: "cancelled",
           events: [
             ...order.events,
-            { from_status: "pending_payment", to_status: "cancelled", actor_type: "buyer", created_at: order.updated_at },
+            { from_status: "reserved", to_status: "cancelled", actor_type: "buyer", created_at: order.updated_at },
           ],
         });
       }

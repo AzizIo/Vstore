@@ -759,7 +759,7 @@ def test_inventory_sync_cancels_reserved_order_when_transfer_away_is_confirmed(
         buyer_id=buyer.id,
         seller_id=owner.id,
         idempotency_key="reserved-order-test",
-        status=OrderStatus.PENDING_PAYMENT,
+        status=OrderStatus.RESERVED,
         price_amount=Decimal("2.5"),
         price_currency=PriceCurrency.TON,
         expires_at=datetime.now(UTC) + timedelta(minutes=10),

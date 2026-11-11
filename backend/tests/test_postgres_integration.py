@@ -30,6 +30,8 @@ from app.db.models import (
     ListingStatus,
     NFTAsset,
     Order,
+    OrderDeliveryAttempt,
+    OrderDeliveryAttemptStatus,
     OrderEvent,
     OrderStatus,
     PriceCurrency,
@@ -136,9 +138,514 @@ def make_listing(owner: User, asset: NFTAsset, status: ListingStatus) -> Listing
     )
 
 
+ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
+
+
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0004_tg_notif_outbox"
+    assert revision == "0005_order_delivery_attempts"
+
+
+async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
+    test_database_url: str,
+    migrated_database,
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    seller_id = buyer_id = asset_id = listing_id = order_id = None
+    try:
+        async with session_factory() as session:
+            seller = await make_user(session, telegram_id=719100001)
+            buyer = await make_user(session, telegram_id=719100002)
+            asset = await make_asset(session, seller)
+            listing = make_listing(seller, asset, ListingStatus.RESERVED)
+            session.add(listing)
+            await session.flush()
+            now = datetime.now(UTC)
+            order = Order(
+                listing_id=listing.id,
+                buyer_id=buyer.id,
+                seller_id=seller.id,
+                idempotency_key=f"downgrade-event-{uuid4()}",
+                status=OrderStatus.RESERVED,
+                price_amount=Decimal("1.250000000"),
+                price_currency=PriceCurrency.TON,
+                expires_at=now + timedelta(minutes=15),
+            )
+            session.add(order)
+            await session.flush()
+            session.add(
+                OrderEvent(
+                    order_id=order.id,
+                    from_status=OrderStatus.RESERVED,
+                    to_status=OrderStatus.AWAITING_TRANSFER,
+                    actor_id=seller.id,
+                    actor_type="seller",
+                )
+            )
+            await session.commit()
+            seller_id, buyer_id = seller.id, buyer.id
+            asset_id, listing_id, order_id = asset.id, listing.id, order.id
+
+        await engine.dispose()
+        config = Config(ALEMBIC_CONFIG_PATH)
+        with pytest.raises(RuntimeError, match="delivery events"):
+            await asyncio.to_thread(
+                command.downgrade,
+                config,
+                "0004_tg_notif_outbox",
+            )
+
+        engine = create_async_engine(test_database_url, pool_pre_ping=True)
+        async with engine.connect() as connection:
+            revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+            assert revision == "0005_order_delivery_attempts"
+
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM order_events WHERE order_id = :order_id"),
+                {"order_id": order_id},
+            )
+            await connection.execute(
+                text("DELETE FROM orders WHERE id = :order_id"),
+                {"order_id": order_id},
+            )
+            await connection.execute(
+                text("DELETE FROM listings WHERE id = :listing_id"),
+                {"listing_id": listing_id},
+            )
+            await connection.execute(
+                text("DELETE FROM nft_assets WHERE id = :asset_id"),
+                {"asset_id": asset_id},
+            )
+            await connection.execute(
+                text("DELETE FROM users WHERE id IN (:seller_id, :buyer_id)"),
+                {"seller_id": seller_id, "buyer_id": buyer_id},
+            )
+    finally:
+        await engine.dispose()
+
+
+async def test_delivery_attempt_keeps_wallet_address_snapshots_after_unlink(
+    db_session: AsyncSession,
+) -> None:
+    seller = await make_user(db_session, telegram_id=710000001)
+    buyer = await make_user(db_session, telegram_id=710000002)
+    asset = await make_asset(db_session, seller)
+    seller_wallet = Wallet(
+        user_id=seller.id,
+        address=f"0:{uuid4().hex}{uuid4().hex}",
+        network="mainnet",
+        is_verified=True,
+        is_primary=True,
+    )
+    buyer_wallet = Wallet(
+        user_id=buyer.id,
+        address=f"0:{uuid4().hex}{uuid4().hex}",
+        network="mainnet",
+        is_verified=True,
+        is_primary=True,
+    )
+    db_session.add_all([seller_wallet, buyer_wallet])
+    await db_session.flush()
+    listing = make_listing(seller, asset, ListingStatus.RESERVED)
+    db_session.add(listing)
+    await db_session.flush()
+
+    now = datetime.now(UTC)
+    order = Order(
+        listing_id=listing.id,
+        buyer_id=buyer.id,
+        seller_id=seller.id,
+        idempotency_key=f"delivery-snapshot-{uuid4()}",
+        status=OrderStatus.RESERVED,
+        price_amount=Decimal("1.250000000"),
+        price_currency=PriceCurrency.TON,
+        expires_at=now + timedelta(minutes=15),
+    )
+    db_session.add(order)
+    await db_session.flush()
+
+    seller_address = seller_wallet.address
+    buyer_address = buyer_wallet.address
+    attempt = OrderDeliveryAttempt(
+        order_id=order.id,
+        attempt_number=1,
+        status=OrderDeliveryAttemptStatus.PREPARED,
+        network="mainnet",
+        item_address=asset.item_address or asset.external_id,
+        seller_wallet_id=seller_wallet.id,
+        seller_address_snapshot=seller_address,
+        buyer_wallet_id=buyer_wallet.id,
+        buyer_address_snapshot=buyer_address,
+        query_id=Decimal("18446744073709551615"),
+        prepared_at=now,
+        deadline=now + timedelta(minutes=15),
+    )
+    db_session.add(attempt)
+    await db_session.flush()
+
+    await db_session.delete(seller_wallet)
+    await db_session.delete(buyer_wallet)
+    await db_session.flush()
+    await db_session.refresh(attempt)
+
+    assert attempt.seller_wallet_id is None
+    assert attempt.buyer_wallet_id is None
+    assert attempt.seller_address_snapshot == seller_address
+    assert attempt.buyer_address_snapshot == buyer_address
+    assert attempt.query_id == Decimal("18446744073709551615")
+    assert attempt.status is OrderDeliveryAttemptStatus.PREPARED
+
+
+async def test_delivery_attempt_snapshot_columns_cannot_be_rewritten(
+    db_session: AsyncSession,
+) -> None:
+    seller = await make_user(db_session, telegram_id=710000005)
+    buyer = await make_user(db_session, telegram_id=710000006)
+    asset = await make_asset(db_session, seller)
+    now = datetime.now(UTC)
+    listing = make_listing(seller, asset, ListingStatus.RESERVED)
+    db_session.add(listing)
+    await db_session.flush()
+    order = Order(
+        listing_id=listing.id,
+        buyer_id=buyer.id,
+        seller_id=seller.id,
+        idempotency_key=f"delivery-immutable-{uuid4()}",
+        status=OrderStatus.AWAITING_TRANSFER,
+        price_amount=Decimal("1.250000000"),
+        price_currency=PriceCurrency.TON,
+        expires_at=now + timedelta(minutes=15),
+    )
+    db_session.add(order)
+    await db_session.flush()
+    attempt = OrderDeliveryAttempt(
+        order_id=order.id,
+        attempt_number=1,
+        status=OrderDeliveryAttemptStatus.PREPARED,
+        network="mainnet",
+        item_address=asset.item_address or asset.external_id,
+        seller_address_snapshot=f"0:{uuid4().hex}{uuid4().hex}",
+        buyer_address_snapshot=f"0:{uuid4().hex}{uuid4().hex}",
+        query_id=Decimal("7"),
+        prepared_at=now,
+        deadline=now + timedelta(minutes=15),
+    )
+    db_session.add(attempt)
+    await db_session.flush()
+
+    attempt.buyer_address_snapshot = f"0:{uuid4().hex}{uuid4().hex}"
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await db_session.rollback()
+
+
+async def test_delivery_attempt_active_and_verified_transfer_indexes_are_enforced(
+    db_session: AsyncSession,
+) -> None:
+    seller = await make_user(db_session, telegram_id=710000003)
+    buyer = await make_user(db_session, telegram_id=710000004)
+    asset = await make_asset(db_session, seller)
+    seller_wallet = Wallet(
+        user_id=seller.id,
+        address=f"0:{uuid4().hex}{uuid4().hex}",
+        network="mainnet",
+        is_verified=True,
+    )
+    buyer_wallet = Wallet(
+        user_id=buyer.id,
+        address=f"0:{uuid4().hex}{uuid4().hex}",
+        network="mainnet",
+        is_verified=True,
+    )
+    db_session.add_all([seller_wallet, buyer_wallet])
+    await db_session.flush()
+    listing = make_listing(seller, asset, ListingStatus.RESERVED)
+    db_session.add(listing)
+    await db_session.flush()
+    now = datetime.now(UTC)
+    order = Order(
+        listing_id=listing.id,
+        buyer_id=buyer.id,
+        seller_id=seller.id,
+        idempotency_key=f"delivery-index-{uuid4()}",
+        status=OrderStatus.OBSERVING_TRANSFER,
+        price_amount=Decimal("1.250000000"),
+        price_currency=PriceCurrency.TON,
+        expires_at=now + timedelta(minutes=15),
+    )
+    db_session.add(order)
+    await db_session.flush()
+
+    def make_attempt(number: int, status: OrderDeliveryAttemptStatus) -> OrderDeliveryAttempt:
+        return OrderDeliveryAttempt(
+            order_id=order.id,
+            attempt_number=number,
+            status=status,
+            network="mainnet",
+            item_address=asset.item_address or asset.external_id,
+            seller_wallet_id=seller_wallet.id,
+            seller_address_snapshot=seller_wallet.address,
+            buyer_wallet_id=buyer_wallet.id,
+            buyer_address_snapshot=buyer_wallet.address,
+            query_id=Decimal(number),
+            prepared_at=now,
+            deadline=now + timedelta(minutes=15),
+        )
+
+    db_session.add(make_attempt(1, OrderDeliveryAttemptStatus.PREPARED))
+    await db_session.flush()
+    nested = await db_session.begin_nested()
+    db_session.add(make_attempt(2, OrderDeliveryAttemptStatus.OBSERVING))
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await nested.rollback()
+
+    # The verified-transfer partial unique index: two distinct attempt numbers
+    # claiming the same verified network/item/transaction_hash for this order
+    # must be rejected, so one on-chain transfer cannot verify twice.
+    verified_hash = f"0:{uuid4().hex}{uuid4().hex}"
+    db_session.add(
+        OrderDeliveryAttempt(
+            order_id=order.id,
+            attempt_number=3,
+            status=OrderDeliveryAttemptStatus.VERIFIED,
+            network="mainnet",
+            item_address=asset.item_address or asset.external_id,
+            seller_address_snapshot=seller_wallet.address,
+            buyer_address_snapshot=buyer_wallet.address,
+            query_id=Decimal("3"),
+            transaction_hash=verified_hash,
+            verified_at=now + timedelta(minutes=1),
+            prepared_at=now,
+            deadline=now + timedelta(minutes=15),
+        )
+    )
+    await db_session.flush()
+    nested = await db_session.begin_nested()
+    db_session.add(
+        OrderDeliveryAttempt(
+            order_id=order.id,
+            attempt_number=4,
+            status=OrderDeliveryAttemptStatus.VERIFIED,
+            network="mainnet",
+            item_address=asset.item_address or asset.external_id,
+            seller_address_snapshot=seller_wallet.address,
+            buyer_address_snapshot=buyer_wallet.address,
+            query_id=Decimal("4"),
+            transaction_hash=verified_hash,
+            verified_at=now + timedelta(minutes=1),
+            prepared_at=now,
+            deadline=now + timedelta(minutes=15),
+        )
+    )
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await nested.rollback()
+
+
+async def test_verified_delivery_attempt_requires_provider_evidence(
+    db_session: AsyncSession,
+) -> None:
+    seller = await make_user(db_session, telegram_id=710000007)
+    buyer = await make_user(db_session, telegram_id=710000008)
+    asset = await make_asset(db_session, seller)
+    listing = make_listing(seller, asset, ListingStatus.RESERVED)
+    db_session.add(listing)
+    await db_session.flush()
+    now = datetime.now(UTC)
+    order = Order(
+        listing_id=listing.id,
+        buyer_id=buyer.id,
+        seller_id=seller.id,
+        idempotency_key=f"verified-evidence-{uuid4()}",
+        status=OrderStatus.OBSERVING_TRANSFER,
+        price_amount=Decimal("1.250000000"),
+        price_currency=PriceCurrency.TON,
+        expires_at=now + timedelta(minutes=15),
+    )
+    db_session.add(order)
+    await db_session.flush()
+
+    def make_verified_attempt(
+        number: int,
+        *,
+        transaction_hash: str | None,
+        verified_at: datetime | None,
+    ) -> OrderDeliveryAttempt:
+        return OrderDeliveryAttempt(
+            order_id=order.id,
+            attempt_number=number,
+            status=OrderDeliveryAttemptStatus.VERIFIED,
+            network="mainnet",
+            item_address=asset.item_address or asset.external_id,
+            seller_address_snapshot=f"0:{uuid4().hex}{uuid4().hex}",
+            buyer_address_snapshot=f"0:{uuid4().hex}{uuid4().hex}",
+            query_id=Decimal(number),
+            transaction_hash=transaction_hash,
+            verified_at=verified_at,
+            prepared_at=now,
+            deadline=now + timedelta(minutes=15),
+        )
+
+    # A verified row without a transaction hash and verified_at is malformed:
+    # it would bypass the verified-transfer deduplication guard entirely.
+    nested = await db_session.begin_nested()
+    db_session.add(make_verified_attempt(1, transaction_hash=None, verified_at=None))
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await nested.rollback()
+
+    # A hash without a verification timestamp is equally unverifiable evidence.
+    nested = await db_session.begin_nested()
+    db_session.add(
+        make_verified_attempt(2, transaction_hash=f"0:{uuid4().hex}", verified_at=None)
+    )
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await nested.rollback()
+
+    # Fully evidenced attempts remain persistable.
+    db_session.add(
+        make_verified_attempt(
+            3,
+            transaction_hash=f"0:{uuid4().hex}",
+            verified_at=now + timedelta(minutes=1),
+        )
+    )
+    await db_session.flush()
+
+
+async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
+    test_database_url: str,
+    migrated_database,
+) -> None:
+    config = Config(ALEMBIC_CONFIG_PATH)
+    await asyncio.to_thread(command.downgrade, config, "0004_tg_notif_outbox")
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    user_seller, user_buyer, asset_id, listing_id, order_id, event_id = (
+        uuid4(), uuid4(), uuid4(), uuid4(), uuid4(), uuid4()
+    )
+    try:
+        now = datetime.now(UTC)
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO users (id, telegram_id, first_name, is_blocked) "
+                    "VALUES (:id, :telegram_id, :first_name, false)"
+                ),
+                [
+                    {"id": user_seller, "telegram_id": 719000001, "first_name": "Legacy seller"},
+                    {"id": user_buyer, "telegram_id": 719000002, "first_name": "Legacy buyer"},
+                ],
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO nft_assets (id, asset_type, network, external_id, owner_id, "
+                    "verification_status) VALUES (:id, 'ton_nft', 'mainnet', :external_id, "
+                    ":owner_id, 'verified')"
+                ),
+                {
+                    "id": asset_id,
+                    "external_id": f"legacy:{uuid4()}",
+                    "owner_id": user_seller,
+                },
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO listings (id, asset_id, seller_id, status, price_amount, "
+                    "price_currency) VALUES (:id, :asset_id, :seller_id, 'reserved', "
+                    "12.500000000, 'TON')"
+                ),
+                {"id": listing_id, "asset_id": asset_id, "seller_id": user_seller},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO orders (id, listing_id, buyer_id, seller_id, idempotency_key, "
+                    "status, price_amount, price_currency, expires_at) VALUES (:id, :listing_id, "
+                    ":buyer_id, :seller_id, :idempotency_key, 'pending_payment', "
+                    "12.500000000, 'TON', :expires_at)"
+                ),
+                {
+                    "id": order_id,
+                    "listing_id": listing_id,
+                    "buyer_id": user_buyer,
+                    "seller_id": user_seller,
+                    "idempotency_key": "legacy-order-idempotency",
+                    "expires_at": now + timedelta(minutes=15),
+                },
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO order_events (id, order_id, from_status, to_status, actor_id, "
+                    "actor_type) VALUES (:id, :order_id, NULL, 'pending_payment', "
+                    ":actor_id, 'buyer')"
+                ),
+                {"id": event_id, "order_id": order_id, "actor_id": user_buyer},
+            )
+
+        await engine.dispose()
+        await asyncio.to_thread(command.upgrade, config, "head")
+        engine = create_async_engine(test_database_url, pool_pre_ping=True)
+        async with engine.connect() as connection:
+            order = (
+                await connection.execute(
+                    text(
+                        "SELECT status, price_amount, price_currency, idempotency_key "
+                        "FROM orders WHERE id = :id"
+                    ),
+                    {"id": order_id},
+                )
+            ).one()
+            event = (
+                await connection.execute(
+                    text(
+                        "SELECT from_status, to_status, actor_type FROM order_events "
+                        "WHERE id = :id"
+                    ),
+                    {"id": event_id},
+                )
+            ).one()
+            revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+            assert revision == "0005_order_delivery_attempts"
+            assert order.status == "reserved"
+            assert order.price_amount == Decimal("12.500000000")
+            assert order.price_currency == "TON"
+            assert order.idempotency_key == "legacy-order-idempotency"
+            assert event.from_status is None
+            assert event.to_status == "reserved"
+            assert event.actor_type == "buyer"
+        # Remove the committed fixture rows: they hold an open listing, which
+        # must not leak into subsequent integration tests sharing the database.
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM order_events WHERE order_id = :order_id"),
+                {"order_id": order_id},
+            )
+            await connection.execute(
+                text("DELETE FROM telegram_notification_outbox WHERE order_id = :order_id"),
+                {"order_id": order_id},
+            )
+            await connection.execute(
+                text("DELETE FROM orders WHERE id = :order_id"),
+                {"order_id": order_id},
+            )
+            await connection.execute(
+                text("DELETE FROM listings WHERE id = :listing_id"),
+                {"listing_id": listing_id},
+            )
+            await connection.execute(
+                text("DELETE FROM nft_assets WHERE id = :asset_id"),
+                {"asset_id": asset_id},
+            )
+            await connection.execute(
+                text("DELETE FROM users WHERE id IN (:seller_id, :buyer_id)"),
+                {"seller_id": user_seller, "buyer_id": user_buyer},
+            )
+    finally:
+        await engine.dispose()
+        await asyncio.to_thread(command.upgrade, config, "head")
 
 
 async def test_users_reject_duplicate_telegram_ids(db_session: AsyncSession) -> None:

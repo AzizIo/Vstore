@@ -218,7 +218,7 @@ async def test_reservation_verifies_ownership_outside_any_transaction(
             assert stored_listing is not None
             assert stored_listing.status is ListingStatus.RESERVED
             assert stored_order is not None
-            assert stored_order.status is OrderStatus.PENDING_PAYMENT
+            assert stored_order.status is OrderStatus.RESERVED
             assert stored_order.price_amount == Decimal("1.250000000")
     finally:
         await _cleanup(
@@ -383,7 +383,7 @@ async def test_provider_outage_is_retryable_and_changes_no_state(
         async with session_factory() as session:
             stored_order = await session.get(Order, order_id)
             assert stored_order is not None
-            assert stored_order.status is OrderStatus.PENDING_PAYMENT
+            assert stored_order.status is OrderStatus.RESERVED
     finally:
         await _cleanup(
             session_factory,

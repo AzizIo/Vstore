@@ -433,7 +433,8 @@ footer span { padding: 0 6px; color: var(--accent); }
 .order-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .order-card-heading h2 { margin: 0; font: 24px/1.2 var(--serif); }
 .order-status { flex: 0 0 auto; padding: 5px 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); font-size: 10px; }
-.order-status-pending_payment { border-color: #526879; color: #9dc4df; }
+.order-status-reserved, .order-status-awaiting_transfer, .order-status-observing_transfer { border-color: #526879; color: #9dc4df; }
+.order-status-completed { border-color: #50694f; color: #afd29d; }
 .order-status-cancelled, .order-status-expired { border-color: #684e4b; color: #d29d95; }
 .order-card-price { margin: 12px 0; color: var(--accent); font-size: 14px; font-weight: 600; }
 .order-card-note, .order-card-date { color: var(--muted); font-size: 12px; line-height: 1.6; }

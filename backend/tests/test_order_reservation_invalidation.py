@@ -261,7 +261,7 @@ async def test_matching_network_still_reserves(invalidation_database: str) -> No
         async with session_factory() as session:
             stored_order = await session.get(Order, order_id)
             assert stored_order is not None
-            assert stored_order.status is OrderStatus.PENDING_PAYMENT
+            assert stored_order.status is OrderStatus.RESERVED
     finally:
         await cleanup(
             session_factory,
