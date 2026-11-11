@@ -194,7 +194,7 @@ async def test_order_snapshots_xtr_price_across_draft_publish_and_reservation(
         async with session_factory() as session:
             stored = await session.get(Order, order_id)
             assert stored is not None
-            assert stored.status is OrderStatus.PENDING_PAYMENT
+            assert stored.status is OrderStatus.RESERVED
             assert stored.buyer_id == ids[4]
             assert stored.seller_id == ids[3]
             assert stored.price_amount == Decimal("250.000000000")
