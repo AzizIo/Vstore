@@ -903,7 +903,10 @@ async def prepare_delivery(
                 .with_for_update()
             )
             if same_key_attempt is not None:
-                attempt_id = same_key_attempt.id
+                if same_key_attempt.seller_wallet_id != snapshot.seller_wallet_id:
+                    rejection = "Idempotency key was already used with another seller wallet"
+                else:
+                    attempt_id = same_key_attempt.id
             else:
                 previous_attempt = await session.scalar(
                     select(OrderDeliveryAttempt)
