@@ -70,7 +70,7 @@ async def test_start_handler_works_without_optional_mini_app_url(
 
 
 @pytest.mark.asyncio
-async def test_app_command_uses_telegram_direct_link_button(
+async def test_app_command_uses_web_app_button(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     mini_app_url = "https://dealtime-com-badly-twice.trycloudflare.com"
@@ -286,7 +286,7 @@ async def test_start_menu_accepts_public_https_mini_app_url(
         bot_handlers,
         "get_settings",
         lambda: SimpleNamespace(
-            telegram_mini_app_url="http://shop.example.com/miniapp"
+            telegram_mini_app_url="https://shop.example.com/miniapp"
         ),
     )
     message = SimpleNamespace(answer=AsyncMock())
@@ -309,7 +309,7 @@ async def test_app_command_explains_invalid_mini_app_url(
         bot_handlers,
         "get_settings",
         lambda: SimpleNamespace(
-            telegram_mini_app_url="https://shop.example.com/miniapp"
+            telegram_mini_app_url="http://shop.example.com/miniapp"
         ),
     )
     message = SimpleNamespace(answer=AsyncMock())
