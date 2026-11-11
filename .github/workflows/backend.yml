@@ -57,7 +57,7 @@ jobs:
           docker compose config --quiet
 
       - name: Lint
-        run: ruff check app tests migrations
+        run: ruff check app tests migrations scripts
 
       - name: Test
         run: pytest --cov=app --cov-report=term-missing -q

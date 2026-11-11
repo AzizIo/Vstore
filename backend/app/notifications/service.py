@@ -31,6 +31,10 @@ class TransientNotificationError(Exception):
         self.retry_after_seconds = retry_after_seconds
 
 
+class UnsupportedNotificationEvent(PermanentNotificationError):
+    """An outbox event has no explicitly supported Telegram message."""
+
+
 @dataclass(frozen=True)
 class NotificationDelivery:
     id: uuid.UUID
@@ -192,7 +196,7 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
             if delivery.recipient_role == "buyer"
             else "A buyer reserved your listing."
         )
-        status = "Pending payment"
+        status = "Reserved"
     elif delivery.event_type == "order_cancelled":
         description = (
             "You cancelled the order."
@@ -200,9 +204,13 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
             else "The buyer cancelled the order."
         )
         status = "Cancelled"
-    else:
+    elif delivery.event_type == "order_expired":
         description = "The order reservation expired automatically."
         status = "Expired"
+    else:
+        raise UnsupportedNotificationEvent(
+            f"Unsupported Telegram notification event_type: {delivery.event_type!r}"
+        )
 
     lines = [
         f"VILTARA SHOP · Order #{order_reference}",

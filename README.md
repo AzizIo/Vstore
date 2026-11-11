@@ -116,6 +116,8 @@ Example current API routes (authenticate with a backend Bearer token where indic
 
 For the exact contract, inspect routes, schemas and tests under backend/app/api/ and backend/tests/; do not infer additional endpoints from the roadmap.
 
+Before a customer or investor walkthrough, run the read-only [live demo preflight](docs/DEMO_PREFLIGHT.md) against the public API and Mini App origins. It checks API readiness, the Mini App HTML, and the TON Connect manifest/icon without changing the deployment.
+
 ## Quality checks
 
 Backend (from the repository root):

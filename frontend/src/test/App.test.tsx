@@ -480,6 +480,51 @@ describe("Buyer orders", () => {
     )).toBe(true);
   });
 
+  it("opens a public listing from a Telegram startapp link without a verified session", async () => {
+    const listingId = "123e4567-e89b-12d3-a456-426614174000";
+    setTelegramInitData("", `listing_${listingId.replace(/-/g, "")}`);
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith(`/api/listings/${listingId}`)) {
+        return jsonResponse({ ...listing, id: listingId });
+      }
+      return jsonResponse(page);
+    });
+
+    renderMarketplace();
+
+    expect(await screen.findByRole("heading", { name: "Moon Lantern" })).toBeInTheDocument();
+    expect(screen.getByText("Open this Mini App in Telegram to sign in and place an order.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Place order" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Catalog" })).toHaveAttribute("aria-pressed", "true");
+
+    const detailRequest = vi.mocked(fetch).mock.calls.find(([input]) =>
+      String(input).endsWith(`/api/listings/${listingId}`)
+    );
+    expect(detailRequest).toBeDefined();
+    expect(new Headers(detailRequest?.[1]?.headers).get("Authorization")).toBeNull();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) =>
+      String(input).endsWith("/api/auth/telegram")
+    )).toBe(false);
+    expect(vi.mocked(fetch).mock.calls.some(([input, init]) =>
+      String(input).endsWith("/api/orders") && init?.method === "POST"
+    )).toBe(false);
+  });
+
+  it("ignores an unknown Telegram start prefix and remains on the public catalog", async () => {
+    const listingId = "123e4567-e89b-12d3-a456-426614174000";
+    setTelegramInitData("", `product_${listingId.replace(/-/g, "")}`);
+    renderMarketplace();
+
+    expect(await screen.findByText("Explore listings")).toBeInTheDocument();
+    expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Catalog" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("heading", { name: "Moon Lantern" })).not.toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) =>
+      String(input).endsWith(`/api/listings/${listingId}`)
+    )).toBe(false);
+  });
+
   it("creates an authenticated order from listing detail and displays its status", async () => {
     setTelegramInitData();
     const pendingOrder = {
