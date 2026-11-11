@@ -77,7 +77,7 @@ Important current API routes:
 | GET | /api/orders | Buyer/seller order list |
 | POST | /api/orders/{order_id}/cancel | Cancel eligible pending reservation |
 
-Do not invent route fields/query parameters: use API schemas and tests as source of truth. The B2 migration in PR #64 renames legacy `pending_payment` rows/events to `reserved`; this never represented a payment. Delivery statuses/attempts are schema groundwork only until the prepare API and observer are implemented.
+Do not invent route fields/query parameters: use API schemas and tests as source of truth. The B2 migration in PR #85 renames legacy `pending_payment` rows/events to `reserved`; this never represented a payment. Delivery statuses/attempts are schema groundwork only until the prepare API and observer are implemented.
 
 ## 4. Safety and product invariants
 
@@ -96,8 +96,8 @@ Do not invent route fields/query parameters: use API schemas and tests as source
 
 From repository root:
 
-    cp .env.example .env
-    # Generate AUTH_SECRET_KEY with: openssl rand -hex 32
+    test -f .env || cp .env.example .env
+    # If .env already exists, preserve it. Generate AUTH_SECRET_KEY locally with: openssl rand -hex 32
     docker compose up --build
     docker compose exec api alembic upgrade head
 
@@ -140,7 +140,7 @@ Treat this as a dated snapshot and check live GitHub before acting.
 - **Issue #43 / PR #51 merged:** code and CI are complete. Live Telegram/Tonkeeper proof signing, account/network switch and public manifest/icon checks remain open in Issue #43; do not enable production wallet configuration before those checks.
 - **Issue #44 / PR #58 merged:** full NFT inventory sync/reconciliation and dedicated My NFT UI are in main. Multi-page/multi-wallet/provider/ownership-loss manual acceptance and owner screenshots remain open in Issue #44.
 - **Issue #48:** keep docs aligned with approved product model (this document + README.md); do not remove listing prices.
-- **Issue #56:** Stage B design is documented in `docs/STAGE_B_ORDER_LIFECYCLE.md`. The maintainer's technical baseline is recorded in Issue #46. B1 read-only evidence is merged via PR #63; B2 status migration and delivery-attempt persistence are in draft PR #64. No prepare/submit API, observer, or completion transition exists yet.
+- **Issue #56:** Stage B design is documented in `docs/STAGE_B_ORDER_LIFECYCLE.md`. The maintainer's technical baseline is recorded in Issue #46. B1 read-only evidence is merged via PR #63; B2 status migration and delivery-attempt persistence are in PR #85. No prepare/submit API, observer, or completion transition exists yet.
 - **Future guaranteed transactions:** a separate later phase. No payments, checkout, escrow/custody, refunds, commissions or seller payout should be implemented under current Stage A.
 
 ## 8. First 10 minutes for a new contributor
