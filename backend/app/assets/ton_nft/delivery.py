@@ -23,6 +23,40 @@ from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable
 
 MAX_DELIVERY_RESPONSE_BYTES = 2_000_000
 TRANSFER_PAGE_SIZE = 1000
+
+
+def normalize_transaction_hash(value: object, field_name: str = "transaction_hash") -> str:
+    """Validate a TON transaction hash while preserving case-sensitive Base64."""
+
+    if not isinstance(value, str) or not value.strip():
+        raise InvalidProviderData(f"TON data is missing {field_name}")
+    raw = value.strip()
+    if raw.startswith("0x"):
+        hexadecimal = raw[2:]
+        if len(hexadecimal) != 64 or any(
+            character not in "0123456789abcdefABCDEF" for character in hexadecimal
+        ):
+            raise InvalidProviderData(f"TON data has an invalid {field_name}")
+        return hexadecimal.lower()
+    if len(raw) == 64 and all(
+        character in "0123456789abcdefABCDEF" for character in raw
+    ):
+        return raw.lower()
+
+    # TON Center v3 returns 32-byte hashes as case-sensitive Base64.
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=_-"
+    if len(raw) > 128 or any(character not in alphabet for character in raw):
+        raise InvalidProviderData(f"TON data has an invalid {field_name}")
+    try:
+        padding = "=" * (-len(raw) % 4)
+        decoded = base64.b64decode(raw + padding, altchars=b"-_", validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise InvalidProviderData(f"TON data has an invalid {field_name}") from exc
+    if len(decoded) != 32:
+        raise InvalidProviderData(f"TON data has an invalid {field_name} length")
+    return raw
+
+
 MAX_TRANSFER_ROWS = 5000
 MAX_TRACE_TRANSACTIONS = 2000
 TEP62_TRANSFER_OPCODE = 0x5FCC3D14
@@ -238,34 +272,7 @@ class TONCenterDeliveryEvidenceProvider:
 
     @staticmethod
     def _normalize_hash(value: object, field_name: str) -> str:
-        if not isinstance(value, str) or not value.strip():
-            raise InvalidProviderData(f"TON Center data is missing {field_name}")
-        raw = value.strip()
-        if raw.startswith("0x"):
-            hexadecimal = raw[2:]
-            if len(hexadecimal) != 64 or any(
-                character not in "0123456789abcdefABCDEF" for character in hexadecimal
-            ):
-                raise InvalidProviderData(f"TON Center data has an invalid {field_name}")
-            return hexadecimal.lower()
-        if len(raw) == 64 and all(
-            character in "0123456789abcdefABCDEF" for character in raw
-        ):
-            return raw.lower()
-
-        # Current TON Center API v3 encodes 32-byte hashes in case-sensitive
-        # Base64. Preserve the exact string; lowercasing Base64 changes the hash.
-        alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=_-"
-        if len(raw) > 128 or any(character not in alphabet for character in raw):
-            raise InvalidProviderData(f"TON Center data has an invalid {field_name}")
-        try:
-            padding = "=" * (-len(raw) % 4)
-            decoded = base64.b64decode(raw + padding, altchars=b"-_", validate=True)
-        except (binascii.Error, ValueError) as exc:
-            raise InvalidProviderData(f"TON Center data has an invalid {field_name}") from exc
-        if len(decoded) != 32:
-            raise InvalidProviderData(f"TON Center data has an invalid {field_name} length")
-        return raw
+        return normalize_transaction_hash(value, field_name)
 
     @staticmethod
     def _parse_opcode(value: object) -> int | None:
