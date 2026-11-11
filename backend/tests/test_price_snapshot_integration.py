@@ -33,6 +33,7 @@ from app.db.models import (
     User,
     Wallet,
 )
+from app.listings.service import publish_listing
 from app.orders.service import create_order
 
 pytestmark = pytest.mark.integration
@@ -94,13 +95,15 @@ async def test_money_columns_exist_in_both_tables(price_database: str) -> None:
         await engine.dispose()
 
 
-async def test_order_snapshots_xtr_price_from_listing(price_database: str) -> None:
-    """An XTR listing produces an XTR order with the exact reserved amount.
+async def test_order_snapshots_xtr_price_across_draft_publish_and_reservation(
+    price_database: str,
+) -> None:
+    """The seller price survives the real draft -> publish -> reserve workflow.
 
-    The order is created through the real `create_order` service — with its
-    ownership verification, idempotency and reservation transition — because
-    the point of this test is what the service actually persists, not what
-    the ORM would accept from a hand-built row.
+    Both lifecycle transitions use the real services and fresh ownership
+    verification. The test asserts the exact numeric amount/currency persisted
+    on the order, then changes the listing price to prove the order snapshot is
+    immutable.
     """
 
     engine = create_async_engine(price_database, pool_pre_ping=True)
@@ -137,7 +140,7 @@ async def test_order_snapshots_xtr_price_from_listing(price_database: str) -> No
         listing = Listing(
             asset_id=asset.id,
             seller_id=seller.id,
-            status=ListingStatus.ACTIVE,
+            status=ListingStatus.DRAFT,
             price_amount=Decimal("250.000000000"),
             price_currency=PriceCurrency.XTR,
             title="Stars-priced listing",
@@ -162,6 +165,18 @@ async def test_order_snapshots_xtr_price_from_listing(price_database: str) -> No
 
     try:
         verifier = _OwnerVerifier()
+
+        # A draft must pass the real seller publication service before a buyer
+        # can reserve it. Both steps re-check exact NFT ownership.
+        async with session_factory() as session:
+            published = await publish_listing(
+                session,
+                listing_id=ids[0],
+                seller_id=ids[3],
+                verifier=verifier,
+            )
+        assert published.status is ListingStatus.ACTIVE
+
         async with session_factory() as session:
             order_id = await create_order(
                 session,
@@ -171,9 +186,10 @@ async def test_order_snapshots_xtr_price_from_listing(price_database: str) -> No
                 verifier=verifier,
             )
 
-        assert verifier.calls, "the ownership verifier must have been consulted"
-        assert verifier.calls[0][0] == asset.item_address
-        assert verifier.calls[0][1] == wallet.address
+        assert verifier.calls == [
+            (asset.item_address, wallet.address),
+            (asset.item_address, wallet.address),
+        ], "publication and reservation must both re-check current ownership"
 
         async with session_factory() as session:
             stored = await session.get(Order, order_id)
