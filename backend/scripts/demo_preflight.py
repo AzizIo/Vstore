@@ -149,7 +149,13 @@ def run_preflight(
             if not isinstance(health_payload, dict):
                 health_payload = {}
             components = health_payload.get("checks", {})
-            ton_connect_proof_ready = components.get("ton_connect_proof") == "ok"
+            allowed_proof_domains = components.get("ton_connect_proof_domains", [])
+            expected_proof_domain = urlsplit(app_origin).hostname
+            ton_connect_proof_ready = (
+                components.get("ton_connect_proof") == "ok"
+                and isinstance(allowed_proof_domains, list)
+                and expected_proof_domain in allowed_proof_domains
+            )
             required = ("database", "redis", "authentication")
             missing_or_failed = [name for name in required if components.get(name) != "ok"]
             ready = (
@@ -177,11 +183,15 @@ def run_preflight(
     except (RuntimeError, ValueError) as error:
         checks.append(CheckResult("API readiness", False, str(error)))
 
-    proof_detail = (
-        "Backend TON Connect domain allowlist and network are configured."
-        if ton_connect_proof_ready
-        else "Backend TON_CONNECT_ALLOWED_DOMAINS or TON_CONNECT_NETWORK is missing/invalid."
-    )
+    if ton_connect_proof_ready:
+        proof_detail = "Backend TON Connect network is valid and its domain allowlist matches the Mini App host."
+    elif not components.get("ton_connect_proof") == "ok" if "components" in locals() else True:
+        proof_detail = "Backend TON_CONNECT_ALLOWED_DOMAINS or TON_CONNECT_NETWORK is missing/invalid."
+    else:
+        proof_detail = (
+            "Backend TON Connect domain allowlist does not include the Mini App host "
+            f"{urlsplit(app_origin).hostname!r}."
+        )
     checks.append(
         CheckResult(
             "TON Connect proof configuration",
