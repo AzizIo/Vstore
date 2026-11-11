@@ -47,7 +47,7 @@ The following describes the intended non-custodial flow. It is **not available i
 5. A backend observer independently retrieves and validates chain evidence for the exact item, network, source and destination under an approved finality policy. A transaction hash supplied by a user is only a lookup hint.
 6. Only after server-side verification may the order be marked completed. Provider outages, incomplete evidence, wrong recipients or ambiguous transfers must remain non-success states and require reconciliation.
 
-The state machine, proposed API/database contracts, failure handling and decisions required before implementation are described in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md). See [Issue #46](https://github.com/AzizIo/Vstore) for the implementation work. No payment, escrow, refund or seller-payout behavior is part of this flow.
+The state machine, proposed API/database contracts, failure handling and decisions required before implementation are described in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md). See [Issue #46](https://github.com/AzizIo/Vstore/issues/46) for the implementation work. No payment, escrow, refund or seller-payout behavior is part of this flow.
 
 ## Supported assets and wallet security
 
