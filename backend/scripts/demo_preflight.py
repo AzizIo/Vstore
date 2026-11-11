@@ -12,7 +12,7 @@ import json
 import sys
 from dataclasses import dataclass
 from typing import Any
-from urllib.error import HTTPError, URLError
+from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
