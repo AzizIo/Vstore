@@ -20,6 +20,13 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.assets.ton_nft.models import VerificationResult, VerificationStatus
+
+from app.api.listings import (
+    ListingCreateRequest,
+    create_listing_draft,
+    get_listings,
+)
+from app.listings.service import publish_listing
 from app.core.config import get_settings
 from app.db.models import (
     AssetType,
@@ -239,5 +246,163 @@ async def test_order_snapshots_xtr_price_from_listing(price_database: str) -> No
             )
             await session.execute(
                 User.__table__.delete().where(User.id.in_([ids[3], ids[4]]))
+            )
+        await engine.dispose()
+
+async def test_priced_listing_draft_publish_catalog_and_order_snapshot(
+    price_database: str,
+) -> None:
+    """Issue #45: exercise draft -> publish -> public catalog -> reserved order."""
+    engine = create_async_engine(price_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    suffix = uuid4().int % 1_000_000_000
+    amount = Decimal("37.123456789")
+    item_address = f"0:{uuid4().hex}{uuid4().hex}"
+    wallet_address = f"0:{uuid4().hex}{uuid4().hex}"
+
+    async with session_factory.begin() as session:
+        seller = User(
+            telegram_id=710_000_000 + suffix,
+            first_name="Priced listing seller",
+        )
+        buyer = User(
+            telegram_id=810_000_000 + suffix,
+            first_name="Priced listing buyer",
+        )
+        session.add_all([seller, buyer])
+        await session.flush()
+        asset = NFTAsset(
+            asset_type=AssetType.TON_NFT,
+            network="mainnet",
+            external_id=item_address,
+            item_address=item_address,
+            owner_id=seller.id,
+            name="Issue 45 integration NFT",
+            verification_status=AssetVerificationStatus.VERIFIED,
+        )
+        wallet = Wallet(
+            user_id=seller.id,
+            address=wallet_address,
+            network="mainnet",
+            is_verified=True,
+            is_primary=True,
+        )
+        session.add_all([asset, wallet])
+        await session.flush()
+        seller_id = seller.id
+        buyer_id = buyer.id
+        asset_id = asset.id
+        wallet_id = wallet.id
+
+    class _OwnerVerifier:
+        def __init__(self) -> None:
+            self.network = "mainnet"
+            self.calls: list[tuple[str, str]] = []
+
+        async def verify(self, requested_item: str, expected_owner: str):
+            self.calls.append((requested_item, expected_owner))
+            return VerificationResult(
+                status=VerificationStatus.VERIFIED,
+                item_address=requested_item,
+                owner_address=expected_owner,
+                expected_owner_address=expected_owner,
+            )
+
+    verifier = _OwnerVerifier()
+    listing_id = None
+    order_id = None
+    try:
+        async with session_factory() as session:
+            seller = await session.get(User, seller_id)
+            assert seller is not None
+            draft = await create_listing_draft(
+                ListingCreateRequest(
+                    asset_id=asset_id,
+                    price_amount=amount,
+                    price_currency=PriceCurrency.XTR,
+                    title="Priced draft to order",
+                ),
+                seller,
+                session,
+                verifier,
+            )
+            listing_id = draft.id
+
+        async with session_factory() as session:
+            published = await publish_listing(
+                session,
+                listing_id=listing_id,
+                seller_id=seller_id,
+                verifier=verifier,
+            )
+            assert published.status is ListingStatus.ACTIVE
+            assert published.price_amount == amount
+            assert published.price_currency is PriceCurrency.XTR
+
+        # The public catalogue must expose the same amount/currency that were
+        # entered on the draft and retained through the publish transition.
+        async with session_factory() as session:
+            page = await get_listings(
+                session,
+                limit=100,
+                offset=0,
+                asset_type=AssetType.TON_NFT,
+                currency=PriceCurrency.XTR,
+                search="Issue 45 integration NFT",
+                sort="newest",
+            )
+            visible = next((item for item in page.items if item.id == listing_id), None)
+            assert visible is not None
+            assert visible.price_amount == amount
+            assert visible.price_currency is PriceCurrency.XTR
+            assert visible.status is ListingStatus.ACTIVE
+
+        async with session_factory() as session:
+            order_id = await create_order(
+                session,
+                buyer_id=buyer_id,
+                listing_id=listing_id,
+                idempotency_key=f"issue-45-{suffix}",
+                verifier=verifier,
+            )
+
+        async with session_factory() as session:
+            stored_order = await session.get(Order, order_id)
+            stored_listing = await session.get(Listing, listing_id)
+            assert stored_order is not None
+            assert stored_listing is not None
+            assert stored_order.status is OrderStatus.PENDING_PAYMENT
+            assert stored_order.price_amount == amount
+            assert stored_order.price_currency is PriceCurrency.XTR
+            assert stored_listing.status is ListingStatus.RESERVED
+
+        assert (item_address, wallet_address) in verifier.calls
+    finally:
+        async with session_factory.begin() as session:
+            if order_id is not None:
+                await session.execute(
+                    text("DELETE FROM order_events WHERE order_id = :order_id"),
+                    {"order_id": order_id},
+                )
+                await session.execute(
+                    text("DELETE FROM telegram_notification_outbox WHERE order_id = :order_id"),
+                    {"order_id": order_id},
+                )
+                await session.execute(
+                    text("DELETE FROM orders WHERE id = :order_id"),
+                    {"order_id": order_id},
+                )
+            if listing_id is not None:
+                await session.execute(
+                    Listing.__table__.delete().where(Listing.id == listing_id)
+                )
+            await session.execute(
+                NFTAsset.__table__.delete().where(NFTAsset.id == asset_id)
+            )
+            await session.execute(
+                Wallet.__table__.delete().where(Wallet.id == wallet_id)
+            )
+            await session.execute(
+                User.__table__.delete().where(User.id.in_([seller_id, buyer_id]))
             )
         await engine.dispose()
