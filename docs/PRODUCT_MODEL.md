@@ -58,7 +58,7 @@ Seed-фразы и приватные ключи никогда не запра�
 
 ## 3. Карта текущего состояния (аудит 2026-11-11)
 
-Проверено по `main` @ `6191c8b` (2026-11-11). После предыдущего аудита в `main` смёржены PR #51 (TON Connect Proof lifecycle) и PR #58 (полная NFT inventory sync/reconciliation + My NFT UI). Схема БД этими PR не менялась; production wallet UI остаётся fail-closed до настройки публичных URL и domain allowlist.
+Проверено по `main` @ `c5b815c` (2026-11-11); B2 order-state migration and delivery-attempt persistence are proposed in draft PR #64. После предыдущего аудита в `main` смёржены PR #51 (TON Connect Proof lifecycle) и PR #58 (полная NFT inventory sync/reconciliation + My NFT UI). Схема БД этими PR не менялась; production wallet UI остаётся fail-closed до настройки публичных URL и domain allowlist.
 
 ### Готово и соответствует продукту
 
