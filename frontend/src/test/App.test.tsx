@@ -529,7 +529,7 @@ describe("TON Connect wallet UI", () => {
       const url = String(input);
       if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
       if (url.endsWith("/api/users/me")) return jsonResponse(profile);
-      if (url.endsWith("/api/wallets/me")) return jsonResponse([linkedWallet]);
+      if (url.endsWith("/api/wallets/me")) return jsonResponse([]);
       if (url.endsWith("/api/wallets/proof/challenge")) {
         return jsonResponse({ payload: "fresh-wallet-proof-nonce", expires_at: "2099-01-01T00:00:00Z" });
       }
@@ -586,7 +586,7 @@ describe("TON Connect wallet UI", () => {
     vi.mocked(fetch).mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith("/api/wallets/proof/verify")) return jsonResponse(linkedWallet);
-      if (url.endsWith("/api/wallets/me")) return jsonResponse([]);
+      if (url.endsWith("/api/wallets/me")) return jsonResponse([linkedWallet]);
       if (url.endsWith("/api/wallets/proof/challenge")) {
         return jsonResponse({ payload: "fresh-wallet-proof-nonce", expires_at: "2099-01-01T00:00:00Z" });
       }
