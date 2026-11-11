@@ -328,7 +328,7 @@ function MarketplaceApp() {
         </a>
         <div className="header-actions">
           <span className="network-label">TON MARKET</span>
-          <WalletConnection />
+          <WalletConnection accessToken={session.status === "authenticated" ? session.accessToken : null} />
         </div>
       </header>
       <SessionBanner />
