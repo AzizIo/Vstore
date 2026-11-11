@@ -6,9 +6,9 @@ from uuid import UUID
 import pytest
 
 from app.notifications.service import (
+    build_notification_message,
     NotificationDelivery,
     UnsupportedNotificationEvent,
-    build_notification_message,
 )
 
 
