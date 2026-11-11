@@ -65,6 +65,8 @@ jobs:
         working-directory: .
         env:
           PREVIEW_DB_PASSWORD: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          PREVIEW_TON_CONNECT_ALLOWED_DOMAINS: '["viltara-ci.example"]'
+          PREVIEW_TON_CONNECT_NETWORK: testnet
           VITE_TONCONNECT_APP_URL: https://viltara-ci.example
           VITE_TONCONNECT_MANIFEST_URL: https://viltara-ci.example/tonconnect-manifest.json
         run: docker compose -f docker-compose.preview.yml config --quiet
