@@ -5,27 +5,30 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
-    WebAppInfo,
 )
 
 from app.core.config import get_settings
+from app.telegram_direct_link import validate_telegram_direct_link
 
 router = Router(name="viltara-shop-user")
 
 
-def _mini_app_button(url: str) -> InlineKeyboardButton:
-    """Create a Telegram Web App button so Telegram provides WebApp context."""
+def _mini_app_button(url: str | None) -> InlineKeyboardButton | None:
+    """Create a URL button only when the configured Telegram direct link is valid."""
+    direct_link = validate_telegram_direct_link(url)
+    if direct_link is None:
+        return None
     return InlineKeyboardButton(
         text="Открыть VILTARA SHOP",
-        web_app=WebAppInfo(url=url),
+        url=direct_link,
     )
 
 
 def _menu_keyboard() -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
-    mini_app_url = get_settings().telegram_mini_app_url
-    if mini_app_url:
-        rows.append([_mini_app_button(mini_app_url)])
+    mini_app_button = _mini_app_button(get_settings().telegram_mini_app_url)
+    if mini_app_button is not None:
+        rows.append([mini_app_button])
     rows.append(
         [InlineKeyboardButton(text="Как пользоваться", callback_data="bot:help")]
     )
@@ -75,18 +78,20 @@ async def handle_help(message: Message) -> None:
 @router.message(Command("app"))
 async def handle_app(message: Message) -> None:
     """Open the configured Mini App or explain why the link is unavailable."""
-    mini_app_url = get_settings().telegram_mini_app_url
-    if not mini_app_url:
+    mini_app_button = _mini_app_button(get_settings().telegram_mini_app_url)
+    if mini_app_button is None:
         await message.answer(
-            "Mini App пока не настроен. Администратору нужно задать "
-            "TELEGRAM_MINI_APP_URL. Попробуйте команду /help."
+            "Mini App пока не настроен или ссылка указана неверно. "
+            "Администратору нужно задать TELEGRAM_MINI_APP_URL в формате "
+            "https://t.me/<bot_username>/<app_short_name>. "
+            "Попробуйте команду /help."
         )
         return
 
     await message.answer(
         "Откройте VILTARA SHOP по кнопке ниже.",
         reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[_mini_app_button(mini_app_url)]]
+            inline_keyboard=[[mini_app_button]]
         ),
     )
 

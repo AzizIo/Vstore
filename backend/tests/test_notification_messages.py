@@ -83,7 +83,7 @@ def test_builds_explicit_messages_for_supported_events_and_roles(
 
     monkeypatch.setattr(
         "app.notifications.service.get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url="https://t.me/viltara/app"),
+        lambda: SimpleNamespace(telegram_mini_app_url="https://t.me/viltara_shop_bot/marketplace"),
     )
 
     message = build_notification_message(delivery_factory(event_type, role))
@@ -92,7 +92,11 @@ def test_builds_explicit_messages_for_supported_events_and_roles(
     assert f"Status: {expected_status}" in message
     assert "Amount: 1.25 TON" in message
     assert "Pending payment" not in message
-    assert "Open in Mini App:" in message
+    expected_link = (
+        "https://t.me/viltara_shop_bot/marketplace?startapp=order_"
+        + ORDER_ID.hex
+    )
+    assert f"Open in Mini App: {expected_link}" in message
 
 
 def test_unknown_event_type_fails_explicitly_instead_of_expiring_order(
@@ -129,3 +133,24 @@ def test_missing_mini_app_url_omits_link_but_keeps_notification(
     assert "Your order was created and the listing is reserved." in message
     assert "Status: Reserved" in message
     assert "Open in Mini App:" not in message
+
+
+
+def test_regular_https_domain_is_not_added_as_telegram_mini_app_link(
+    monkeypatch: pytest.MonkeyPatch,
+    delivery_factory,
+) -> None:
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "app.notifications.service.get_settings",
+        lambda: SimpleNamespace(
+            telegram_mini_app_url="https://shop.example.com/miniapp"
+        ),
+    )
+
+    message = build_notification_message(delivery_factory("order_created"))
+
+    assert "Your order was created and the listing is reserved." in message
+    assert "Open in Mini App:" not in message
+    assert "shop.example.com" not in message

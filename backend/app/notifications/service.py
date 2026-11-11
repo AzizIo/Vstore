@@ -11,6 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.models import Order, TelegramNotificationOutbox
+from app.telegram_direct_link import (
+    telegram_direct_link_with_startapp,
+    validate_telegram_direct_link,
+)
 
 
 class NotificationSender(Protocol):
@@ -219,17 +223,13 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
         f"Amount: {amount} {delivery.price_currency}",
     ]
     settings = get_settings()
-    app_url = settings.telegram_mini_app_url
-    if app_url:
-        from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-
-        parsed = urlsplit(app_url)
-        if parsed.scheme == "https" and parsed.netloc:
-            query = dict(parse_qsl(parsed.query, keep_blank_values=True))
-            query["startapp"] = f"order_{str(delivery.order_id).replace('-', '')}"
-            order_url = urlunsplit(
-                (parsed.scheme, parsed.netloc, parsed.path, urlencode(query), "")
-            )
+    app_url = validate_telegram_direct_link(settings.telegram_mini_app_url)
+    if app_url is not None:
+        order_url = telegram_direct_link_with_startapp(
+            app_url,
+            startapp=f"order_{delivery.order_id.hex}",
+        )
+        if order_url is not None:
             lines.append(f"Open in Mini App: {order_url}")
 
     lines.append("Payment is not enabled. No payment has been received.")
