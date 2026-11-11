@@ -113,7 +113,7 @@ def test_unknown_event_type_fails_explicitly_instead_of_expiring_order(
     ):
         build_notification_message(delivery_factory("transfer_confirmed"))
 
-    
+
 def test_missing_mini_app_url_omits_link_but_keeps_notification(
     monkeypatch: pytest.MonkeyPatch,
     delivery_factory,
