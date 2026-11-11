@@ -118,6 +118,7 @@ def run_preflight(
         raise ValueError("Manifest URL must be /tonconnect-manifest.json on the Mini App origin.")
 
     checks: list[CheckResult] = []
+    ton_connect_proof_ready = False
 
     # API readiness includes database, Redis and the authentication configuration.
     try:
@@ -148,6 +149,7 @@ def run_preflight(
             if not isinstance(health_payload, dict):
                 health_payload = {}
             components = health_payload.get("checks", {})
+            ton_connect_proof_ready = components.get("ton_connect_proof") == "ok"
             required = ("database", "redis", "authentication")
             missing_or_failed = [name for name in required if components.get(name) != "ok"]
             ready = (
@@ -174,6 +176,19 @@ def run_preflight(
                 )
     except (RuntimeError, ValueError) as error:
         checks.append(CheckResult("API readiness", False, str(error)))
+
+    proof_detail = (
+        "Backend TON Connect domain allowlist and network are configured."
+        if ton_connect_proof_ready
+        else "Backend TON_CONNECT_ALLOWED_DOMAINS or TON_CONNECT_NETWORK is missing/invalid."
+    )
+    checks.append(
+        CheckResult(
+            "TON Connect proof configuration",
+            ton_connect_proof_ready,
+            proof_detail,
+        )
+    )
 
     # The root document must be served as HTML from the expected app origin.
     try:
