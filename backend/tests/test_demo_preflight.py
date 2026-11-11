@@ -362,4 +362,5 @@ def test_demo_preflight_handles_malformed_readiness_checks_without_crashing(
 
     assert not checks[0].ok
     assert "database" in checks[0].detail
-    assert all(check.ok for check in checks[1:])
+    assert not checks[1].ok
+    assert all(check.ok for check in checks[2:])
