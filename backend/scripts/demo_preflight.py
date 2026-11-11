@@ -190,14 +190,20 @@ def run_preflight(
         ton_connect_proof_configured and ton_connect_proof_domain_matches
     )
     if not ton_connect_proof_configured:
-        proof_detail = "Backend TON_CONNECT_ALLOWED_DOMAINS or TON_CONNECT_NETWORK is missing/invalid."
+        proof_detail = (
+            "Backend TON_CONNECT_ALLOWED_DOMAINS or TON_CONNECT_NETWORK "
+            "is missing or invalid."
+        )
     elif not ton_connect_proof_domain_matches:
         proof_detail = (
             "Backend TON Connect domain allowlist does not include the Mini App host "
             f"{urlsplit(app_origin).hostname!r}."
         )
     else:
-        proof_detail = "Backend TON Connect network is valid and its domain allowlist matches the Mini App host."
+        proof_detail = (
+            "Backend TON Connect network is valid and its domain allowlist "
+            "matches the Mini App host."
+        )
     checks.append(
         CheckResult(
             "TON Connect proof configuration",
