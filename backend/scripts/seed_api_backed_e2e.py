@@ -8,7 +8,6 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
-from app.core.config import get_settings
 from app.db.models import (
     AssetType,
     AssetVerificationStatus,
