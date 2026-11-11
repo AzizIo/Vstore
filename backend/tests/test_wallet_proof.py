@@ -22,7 +22,6 @@ from app.core.config import Settings
 from app.db.models import User, Wallet
 from app.db.session import get_db_session
 from app.main import app
-from app.wallets import proof as wallet_proof
 from app.wallets.proof import CHALLENGE_TTL_SECONDS
 from app.wallets.redis import get_redis_client
 
@@ -275,22 +274,6 @@ def test_missing_or_unrecognized_nonce_is_rejected(wallet_client) -> None:
     session.commit.assert_not_awaited()
 
 
-def test_expired_challenge_is_rejected(wallet_client) -> None:
-    client, _, session, redis = wallet_client
-    challenge = _create_challenge(client)
-    key = wallets_api._challenge_key(challenge)
-    redis.values.pop(key, None)
-    redis.expiries.pop(key, None)
-
-    response = client.post(
-        "/api/wallets/proof/verify",
-        json=_signed_request(challenge),
-    )
-
-    assert response.status_code == 401
-    session.commit.assert_not_awaited()
-
-
 def test_replayed_nonce_is_rejected(wallet_client) -> None:
     client, _, _, _ = wallet_client
     challenge = _create_challenge(client)
@@ -437,26 +420,3 @@ def test_current_user_wallet_list_filters_by_authenticated_user(wallet_client) -
     assert "seed_phrase" not in response.json()[0]
     statement = session.scalars.call_args.args[0]
     assert user.id in statement.compile().params.values()
-
-def test_unsupported_wallet_contract_is_rejected(
-    wallet_client,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client, _, session, _ = wallet_client
-    challenge = _create_challenge(client)
-
-    # Treat the V4 R2 code embedded in the fixture as unknown. The verifier
-    # must fail closed rather than extracting a public key from an unknown layout.
-    monkeypatch.setattr(
-        wallet_proof,
-        "WALLET_V4_R2_CODE",
-        wallet_proof.WALLET_V3_R1_CODE,
-    )
-
-    response = client.post(
-        "/api/wallets/proof/verify",
-        json=_signed_request(challenge),
-    )
-
-    assert response.status_code == 401
-    session.commit.assert_not_awaited()

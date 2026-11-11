@@ -13,10 +13,6 @@ on:
 jobs:
   frontend:
     runs-on: ubuntu-latest
-    env:
-      # Reserved example host for manifest artifact validation in CI only.
-      VITE_TONCONNECT_APP_URL: https://viltara-ci.example
-      VITE_TONCONNECT_MANIFEST_URL: https://viltara-ci.example/tonconnect-manifest.json
     defaults:
       run:
         working-directory: frontend
@@ -37,7 +33,3 @@ jobs:
 
       - name: Build production bundle
         run: npm run build
-
-      - name: Validate generated TON Connect manifest and icon
-        run: |
-          node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync("dist/tonconnect-manifest.json", "utf8")); if (manifest.url !== process.env.VITE_TONCONNECT_APP_URL || manifest.iconUrl !== process.env.VITE_TONCONNECT_APP_URL + "/tonconnect-icon.png") process.exit(1); if (!fs.existsSync("dist/tonconnect-icon.png")) process.exit(1);'

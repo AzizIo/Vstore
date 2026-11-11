@@ -56,9 +56,6 @@ services:
   miniapp:
     build:
       context: ./frontend
-    environment:
-      VITE_TONCONNECT_APP_URL: ${VITE_TONCONNECT_APP_URL:-}
-      VITE_TONCONNECT_MANIFEST_URL: ${VITE_TONCONNECT_MANIFEST_URL:-}
     ports:
       - "5173:5173"
     volumes:

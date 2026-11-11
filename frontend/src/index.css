@@ -511,3 +511,41 @@ footer span { padding: 0 6px; color: var(--accent); }
 .listing-management-error { color: #e19a8c; }
 .listing-management-success { color: #a4d5a5; }
 .listing-management-note { color: var(--muted); }
+
+
+/* Verified NFT inventory */
+.inventory-view { padding: 42px 0 72px; }
+.inventory-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 22px; }
+.inventory-heading .eyebrow { margin-bottom: 12px; }
+.inventory-heading h1 { margin: 0; font: 400 clamp(36px, 5vw, 54px)/1 var(--serif); }
+.inventory-intro { max-width: 640px; margin: 12px 0 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.inventory-sync-summary { margin: 0 0 24px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.inventory-message { padding: 34px 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.inventory-message h2 { margin: 0 0 10px; color: #f3f0e9; font: 25px/1.15 var(--serif); }
+.inventory-message p { max-width: 650px; }
+.inventory-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.inventory-card { display: grid; grid-template-columns: minmax(105px, 156px) minmax(0, 1fr); gap: 16px; padding: 13px; border: 1px solid var(--line); background: var(--surface); min-width: 0; }
+.inventory-artwork { display: grid; place-items: center; aspect-ratio: 1; background: #20251f; color: var(--accent); font: 40px var(--serif); overflow: hidden; }
+.inventory-artwork img { width: 100%; height: 100%; object-fit: cover; }
+.inventory-card-copy { min-width: 0; }
+.inventory-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.inventory-card-type { margin: 0 0 8px; color: var(--muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.inventory-verified { flex: 0 0 auto; padding: 3px 6px; border: 1px solid #526b54; border-radius: 3px; color: #acd0ae; font-size: 9px; }
+.inventory-card-copy h2 { margin: 0; font: 22px/1.12 var(--serif); overflow-wrap: anywhere; }
+.inventory-collection { display: grid; gap: 4px; margin: 10px 0 0; color: var(--muted); font-size: 10px; }
+.inventory-collection code, .inventory-address code { display: block; min-width: 0; overflow-wrap: anywhere; color: #c6c8bf; font: 10px/1.5 var(--mono); }
+.inventory-address { display: grid; gap: 4px; margin: 12px 0 0; }
+.inventory-address span { color: var(--muted); font-size: 10px; }
+.inventory-card-note { margin: 12px 0 0; color: #9cb79e; font-size: 10px; line-height: 1.5; }
+.inventory-pagination { display: grid; justify-items: center; gap: 10px; margin-top: 26px; }
+.inventory-pagination p { color: #e19a8c; font-size: 12px; }
+@media (max-width: 900px) {
+  .inventory-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .inventory-view { padding-top: 28px; }
+  .inventory-heading { align-items: flex-start; flex-direction: column; }
+  .inventory-card { grid-template-columns: 96px minmax(0, 1fr); gap: 12px; padding: 10px; }
+  .inventory-card-copy h2 { font-size: 19px; }
+  .inventory-card-heading { flex-direction: column; gap: 0; }
+}

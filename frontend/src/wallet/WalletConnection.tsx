@@ -2,15 +2,8 @@ import { lazy, Suspense } from "react";
 
 const ConfiguredWalletConnection = lazy(() => import("./TonConnectWallet"));
 
-export function WalletConnection({ accessToken }: { accessToken: string | null }) {
+export function WalletConnection() {
   const manifestUrl = import.meta.env.VITE_TONCONNECT_MANIFEST_URL?.trim();
-  if (!accessToken) {
-    return (
-      <p id="wallet-connect" className="wallet-config-message" role="status">
-        Open this mini app in Telegram to link a wallet.
-      </p>
-    );
-  }
   if (!manifestUrl) {
     return (
       <p id="wallet-connect" className="wallet-config-message" role="status">
@@ -21,7 +14,7 @@ export function WalletConnection({ accessToken }: { accessToken: string | null }
 
   return (
     <Suspense fallback={<p id="wallet-connect" className="wallet-config-message" role="status">Loading wallet options...</p>}>
-      <ConfiguredWalletConnection manifestUrl={manifestUrl} accessToken={accessToken} />
+      <ConfiguredWalletConnection manifestUrl={manifestUrl} />
     </Suspense>
   );
 }

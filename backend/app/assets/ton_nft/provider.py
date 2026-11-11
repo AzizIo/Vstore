@@ -45,6 +45,27 @@ class TONCenterV3Config:
             raise ValueError("timeout_seconds must be positive")
 
 
+def _safe_image_url(value: object) -> str | None:
+    if not isinstance(value, str) or not value or len(value) > 2048:
+        return None
+    if any(ord(character) < 32 or character == "\\" for character in value):
+        return None
+    try:
+        parsed = urlparse(value)
+        hostname = parsed.hostname
+        _ = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        return None
+    return value
+
+
 class TONCenterV3Provider:
     """Fetch NFT item snapshots from the documented TON Center v3 indexer."""
 
@@ -157,7 +178,7 @@ class TONCenterV3Provider:
         return NFTMetadata(
             name=name[:200] if isinstance(name, str) else None,
             description=description[:2000] if isinstance(description, str) else None,
-            image=image[:2048] if isinstance(image, str) else None,
+            image=_safe_image_url(image),
             attributes=safe_attrs,
         )
 

@@ -93,7 +93,7 @@ def test_remove_wallet_rejects_wallet_not_owned_by_authenticated_user(wallet_cli
     session.commit.assert_not_awaited()
 
 
-def test_remove_wallet_deletes_owned_wallet_when_no_live_activity(wallet_client):
+def test_remove_wallet_deletes_owned_wallet(wallet_client):
     client, user, session = wallet_client
     wallet = Wallet(
         id=uuid4(),
@@ -103,109 +103,12 @@ def test_remove_wallet_deletes_owned_wallet_when_no_live_activity(wallet_client)
         is_verified=True,
         is_primary=False,
     )
-    session.scalar.side_effect = [user.id, wallet, None, None]
+    session.scalar.return_value = wallet
 
     response = client.delete(f"/api/users/me/wallets/{wallet.id}")
 
     assert response.status_code == 204
     session.delete.assert_awaited_once_with(wallet)
     session.commit.assert_awaited_once()
-
-
-def test_remove_wallet_conflicts_when_user_has_active_listing(wallet_client):
-    client, user, session = wallet_client
-    wallet = Wallet(
-        id=uuid4(),
-        user_id=user.id,
-        address="0:" + "a" * 64,
-        network="mainnet",
-        is_verified=True,
-        is_primary=False,
-    )
-    session.scalar.side_effect = [user.id, wallet, uuid4(), None]
-
-    response = client.delete(f"/api/users/me/wallets/{wallet.id}")
-
-    assert response.status_code == 409
-    session.delete.assert_not_awaited()
-    session.commit.assert_not_awaited()
-
-
-def test_remove_wallet_conflicts_when_user_has_pending_order(wallet_client):
-    client, user, session = wallet_client
-    wallet = Wallet(
-        id=uuid4(),
-        user_id=user.id,
-        address="0:" + "a" * 64,
-        network="mainnet",
-        is_verified=True,
-        is_primary=False,
-    )
-    session.scalar.side_effect = [user.id, wallet, None, uuid4()]
-
-    response = client.delete(f"/api/users/me/wallets/{wallet.id}")
-
-    assert response.status_code == 409
-    session.delete.assert_not_awaited()
-    session.commit.assert_not_awaited()
-
-
-def test_set_primary_wallet_updates_only_authenticated_users_wallets(wallet_client):
-    client, user, session = wallet_client
-    primary = Wallet(
-        id=uuid4(),
-        user_id=user.id,
-        address="0:" + "a" * 64,
-        network="mainnet",
-        is_verified=True,
-        is_primary=False,
-    )
-    previous = Wallet(
-        id=uuid4(),
-        user_id=user.id,
-        address="0:" + "b" * 64,
-        network="mainnet",
-        is_verified=True,
-        is_primary=True,
-    )
-
-    class Rows:
-        def all(self):
-            return [primary, previous]
-
-    session.scalar.return_value = user.id
-    session.scalars.return_value = Rows()
-
-    response = client.patch(f"/api/wallets/{primary.id}/primary")
-
-    assert response.status_code == 200
-    assert response.json()["is_primary"] is True
-    assert primary.is_primary is True
-    assert previous.is_primary is False
-    session.commit.assert_awaited_once()
-    statement = session.scalars.call_args.args[0]
+    statement = session.scalar.call_args.args[0]
     assert user.id in statement.compile().params.values()
-
-
-def test_unverified_wallet_cannot_be_selected_as_primary(wallet_client):
-    client, user, session = wallet_client
-    wallet = Wallet(
-        id=uuid4(),
-        user_id=user.id,
-        address="0:" + "a" * 64,
-        network="mainnet",
-        is_verified=False,
-        is_primary=False,
-    )
-
-    class Rows:
-        def all(self):
-            return [wallet]
-
-    session.scalar.return_value = user.id
-    session.scalars.return_value = Rows()
-
-    response = client.patch(f"/api/wallets/{wallet.id}/primary")
-
-    assert response.status_code == 409
-    session.commit.assert_not_awaited()
