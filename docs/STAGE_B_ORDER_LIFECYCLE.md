@@ -7,7 +7,7 @@
 
 ## 1. Executive summary
 
-The current application can reserve an active listing, snapshot its price and currency, cancel or expire the reservation, and verify that the seller still owns the NFT at reservation time. It cannot independently confirm that the seller later transferred the exact NFT to the buyer. The current Order statuses are pending_payment, cancelled and expired; pending_payment is a legacy reservation label, not a payment event.
+The current application can reserve an active listing, snapshot its price and currency, cancel or expire the reservation, and verify that the seller still owns the NFT at reservation time. It cannot independently confirm that the seller later transferred the exact NFT to the buyer. The current Order statuses are reserved, awaiting_transfer, observing_transfer, completed, cancelled and expired. The legacy pending_payment label is migrated to reserved; it never represented a payment event.
 
 Stage B should add a server-observed delivery lifecycle for a direct, non-custodial TON NFT transfer. The seller authorizes any transfer in their own wallet. The backend stores a buyer-wallet snapshot and checks chain/provider evidence independently. A submitted transaction hash is only a lookup hint, and a client callback, screenshot, Tonkeeper screen, wallet connection, or current-owner response without transaction correlation is not sufficient proof of delivery.
 
@@ -22,7 +22,7 @@ Stage B should add a server-observed delivery lifecycle for a direct, non-custod
 | Listing | A Listing stores a mandatory positive price and currency; active listings are unique per NFT across active/reserved states. |
 | Reservation | POST /api/orders accepts listing_id and Idempotency-Key; the service reads an identity snapshot, checks the seller's verified wallet(s) through the TEP-62 verifier, then locks and revalidates listing → wallet → asset before creating the order. |
 | Reservation snapshot | Order stores buyer, seller, listing, price/currency, idempotency key and expires_at. It does not store an immutable buyer destination wallet or delivery attempt. |
-| Existing states | Order: pending_payment, cancelled, expired. Listing: draft, active, reserved, sold, cancelled, expired. |
+| Existing states | Order: reserved, awaiting_transfer, observing_transfer, completed, cancelled, expired. Listing: draft, active, reserved, sold, cancelled, expired. |
 | Events | OrderEvent records from/to status and actor; its database checks allow only the current Order status values. |
 | Expiry/cancel | Cancellation and the expiry worker lock listing → asset → order; the release helper will not republish an asset that is locally stale/unverified. |
 | Ownership loss | A fresh affirmative owner mismatch invalidates the listing and pending order; provider outage/inconclusive data is not treated as proof that the NFT was transferred. |
@@ -41,7 +41,7 @@ Stage B should add a server-observed delivery lifecycle for a direct, non-custod
 
 ## 3. Proposed state machine
 
-These names are a proposal, not an approved schema change. Prefer replacing the misleading pending_payment label with reserved during the Stage B migration, but only after the owner approves the API compatibility and data-migration plan.
+The order status vocabulary and forward migration are implemented in B2 (PR #64). The transfer transitions remain staged: B2 adds the allowed state values and durable attempt snapshots, but no API or worker yet moves an order into awaiting_transfer, observing_transfer or completed.
 
 ### Proposed order states
 
@@ -171,9 +171,9 @@ Do not add a public endpoint accepting arbitrary status or arbitrary buyer addre
 - Record old/new state, actor, attempt_id/correlation_id, event time and reason code. Keep this append-only and transactional with state transition/outbox changes.
 
 **Migration and compatibility:**
-- The current schema explicitly constrains Order and OrderEvent to pending_payment/cancelled/expired, and the pending-order partial unique index keys off pending_payment. New status names cannot be introduced by editing only the Python Enum.
+- The B2 migration extends the Order/OrderEvent constraints, renames historical pending_payment rows/events to reserved, and widens the order partial unique index to reserved/awaiting_transfer/observing_transfer. The database server default is also changed to reserved.
 - If owner approves a rename, write a forward data migration for existing rows and update constraints, indexes, API schemas, frontend types, test fixtures and any notification/event queries in the same PR. Do not run a destructive or ad-hoc production migration.
-- The existing pending_payment label is not an authorization decision. Until the owner approves a rename, keep it unchanged and keep documentation/UI wording neutral.
+- The pending_payment label existed only as a legacy reservation name; B2 migrates it to reserved. Payment/checkout is still not implemented.
 
 ## 7. Concurrency and idempotency invariants
 
@@ -279,8 +279,8 @@ These are proposed tasks to create or map onto existing Issues after maintainer 
 | Order | Work item | Owner area | Depends on | Acceptance |
 |---|---|---|---|---|
 | B0 | Approve state vocabulary, deadline rules, finality policy, buyer wallet snapshot point and API compatibility | Maintainer + Backend | This design | Written decisions resolve the open questions below |
-| B1 | Design and implement transaction/trace provider adapter for TEP-62 delivery evidence | Backend | B0 | Draft implementation in [PR #63](https://github.com/AzizIo/Vstore/pull/63): read-only TON Center v3 transfer/trace correlation, bounded pagination, typed outcomes, fail-closed checks and fixtures; see [TON_NFT_DELIVERY_EVIDENCE.md](TON_NFT_DELIVERY_EVIDENCE.md). No order state or DB changes are part of B1 |
-| B2 | Add delivery intent/snapshot/attempt persistence, state migration and constraints | Backend + DB | B0, B1 contract | Migration preserves old reservations and enforces idempotency/uniqueness |
+| B1 | Design and implement transaction/trace provider adapter for TEP-62 delivery evidence | Backend | B0 | Implemented by [PR #63](https://github.com/AzizIo/Vstore/pull/63) (merged as `d429677`): read-only TON Center v3 transfer/trace correlation, bounded pagination, typed outcomes, fail-closed checks and fixtures; see [TON_NFT_DELIVERY_EVIDENCE.md](TON_NFT_DELIVERY_EVIDENCE.md) |
+| B2 | Add delivery intent/snapshot/attempt persistence, state migration and constraints | Backend + DB | B1 | Implemented in [PR #64](https://github.com/AzizIo/Vstore/pull/64): preserves existing orders/events, adds delivery-attempt snapshots and PostgreSQL immutability/uniqueness constraints; no delivery API or observer transition yet |
 | B3 | Implement delivery preparation/submission/read API with auth, locks and idempotency | Backend | B2 | Client-supplied hashes/addresses never establish completion |
 | B4 | Implement leased observer/reconciliation worker and transactional completion/outbox | Backend | B1, B2, B3 | Duplicate/out-of-order provider events are idempotent; failure cases fail closed |
 | B5 | Add testnet contract/provider fixtures, PostgreSQL concurrency suite and fault injection | QA + Backend | B1–B4 | Full matrix above passes |
@@ -291,7 +291,7 @@ Issue #46 should remain blocked until the Stage B design and contracts are appro
 
 ## 12. Open decisions for the maintainer
 
-1. **Status naming:** approve migration from pending_payment to reserved, or retain legacy status until a broader order-state migration?
+1. **Status naming:** resolved in B2 — legacy pending_payment rows/events migrate to reserved; future delivery states are reserved/awaiting_transfer/observing_transfer/completed.
 2. **Buyer wallet snapshot:** must the buyer have a verified wallet at reservation time or only before seller delivery preparation? Recommendation: verify/snapshot before preparing the seller transfer.
 3. **Delivery timeout:** separate duration from reservation TTL? What should happen when a transaction may be submitted but provider indexing is delayed?
 4. **Finality:** which TON Center/other provider fields represent acceptable inclusion/finality, and is a second provider needed?
