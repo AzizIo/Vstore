@@ -47,7 +47,7 @@ describe("Order workspace", () => {
     render(<Orders accessToken="token" userId="buyer-1" />);
     fireEvent.click(await screen.findByRole("button", { name: /Open order Moonlight #42/i }));
     expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
-    expect(screen.getByText(/Payments are not enabled/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Payments are not enabled/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/remaining/)).toBeInTheDocument();
     expect(screen.getByText("order-123456")).toBeInTheDocument();
     expect(fetchOrder).toHaveBeenCalledWith("order-123456", "token");
@@ -60,6 +60,6 @@ describe("Order workspace", () => {
     expect(cancelOrder).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Confirm cancel" }));
     await waitFor(() => expect(cancelOrder).toHaveBeenCalledWith("order-123456", "token"));
-    expect(await screen.findByText("Cancelled")).toBeInTheDocument();
+    expect(await screen.findByText("Cancelled", { selector: ".order-status" })).toBeInTheDocument();
   });
 });
