@@ -167,6 +167,32 @@ test(
   await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "My Listings", exact: true })).toBeVisible();
 
+  const catalog = await page.evaluate(async () => {
+    const response = await fetch("/api/listings");
+    return {
+      status: response.status,
+      body: await response.json() as {
+        items?: Array<{ title?: string | null; asset?: { name?: string | null } }>;
+        total?: number;
+        limit?: number;
+        offset?: number;
+      },
+    };
+  });
+  expect(catalog.status).toBe(200);
+  expect(Array.isArray(catalog.body.items)).toBe(true);
+  expect(Number.isInteger(catalog.body.total)).toBe(true);
+  expect(catalog.body.limit).toBe(24);
+  expect(catalog.body.offset).toBe(0);
+
+  // If another active listing exists, prove the public UI renders data returned
+  // by the real catalog endpoint. The seller journey above reserves its fixture.
+  const firstListing = catalog.body.items?.[0];
+  const visibleTitle = firstListing?.title ?? firstListing?.asset?.name;
+  if (visibleTitle) {
+    await expect(page.getByText(visibleTitle, { exact: true })).toBeVisible();
+  }
+
   const statuses = await page.evaluate(async () => {
     const listing = await fetch("/api/listings/me");
     const draft = await fetch("/api/listings", {
