@@ -53,7 +53,7 @@ def _safe_image_url(value: object) -> str | None:
     try:
         parsed = urlparse(value)
         hostname = parsed.hostname
-        parsed.port
+        _ = parsed.port
     except ValueError:
         return None
     if (
