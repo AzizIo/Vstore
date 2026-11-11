@@ -223,7 +223,7 @@ async def test_unknown_command_is_routed_to_fallback_without_exception(
     )
     answer = AsyncMock()
     monkeypatch.setattr(Message, "answer", answer)
-    bot = Bot(token="123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz123456789")
+    bot = Bot(token="123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi")
     message = Message(
         message_id=3,
         date=datetime.now(UTC),
