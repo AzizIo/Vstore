@@ -58,7 +58,7 @@ Seed-фразы и приватные ключи никогда не запра�
 
 ## 3. Карта текущего состояния (аудит 2026-11-11)
 
-Проверено по `main` @ `6191c8b` (2026-11-11). После предыдущего аудита в `main` смёржены PR #51 (TON Connect Proof lifecycle) и PR #58 (полная NFT inventory sync/reconciliation + My NFT UI). Схема БД этими PR не менялась; production wallet UI остаётся fail-closed до настройки публичных URL и domain allowlist.
+Проверено по `main` @ `d429677` (2026-11-11); B2 changes are proposed in PR #64. После предыдущего аудита в `main` смёржены PR #51 (TON Connect Proof lifecycle) и PR #58 (полная NFT inventory sync/reconciliation + My NFT UI). Схема БД этими PR не менялась; production wallet UI остаётся fail-closed до настройки публичных URL и domain allowlist.
 
 ### Готово и соответствует продукту
 
@@ -85,8 +85,8 @@ Seed-фразы и приватные ключи никогда не запра�
 |---|---|
 | README | PR #59 merged; this status-refresh PR updates the capability table and wallet/inventory flow to the current main implementation while keeping manual live acceptance explicit |
 | AGENTS.md | PR #59 merged; this status-refresh PR updates TON Connect, inventory sync and API route status against current main |
-| Order `pending_payment` | имя статуса упоминает платёж, которого нет. Переименование требует миграции — предложено как отдельный вопрос владельцу, не сделано самовольно |
-| Подтверждение передачи NFT | Stage B design document `docs/STAGE_B_ORDER_LIFECYCLE.md` добавлен в `main` через PR #60; это проектное предложение, а не реализация. Решения владельца из раздела 12 документа остаются открытыми; Issue #46 не следует реализовывать до их согласования |
+| Order status | Legacy `pending_payment` migrates to `reserved`; allowed delivery statuses are reserved/awaiting_transfer/observing_transfer/completed. No API/worker yet performs delivery transitions; PR #64 adds the forward migration. |
+| Подтверждение передачи NFT | B1 read-only provider merged via PR #63. B2 attempt persistence/snapshots and state migration are in PR #64; prepare/submit API, observer and completion are not implemented yet. |
 
 ### Противоречит продукту / остановлено
 
@@ -108,10 +108,10 @@ Payment (провайдер, webhook, ledger), Escrow, чат сделки, ад
   └─ вопрос PR #49 закрыт; README/AGENTS приведены к реальности (этот PR)
 
 Этап B: сделки
-  дизайн подтверждения передачи NFT и жизненного цикла заказа находится в
-  docs/STAGE_B_ORDER_LIFECYCLE.md (PR #60 merged); реализация по Issue #46 ожидает
-  согласования решений владельца. Любая последующая платёжная интеграция — отдельное
-  решение по ADR-0001/0002 (Stars → отдельное утверждение).
+  B1 read-only TON transfer evidence provider merged (PR #63); B2 status migration
+  and immutable delivery-attempt snapshots are in PR #64. Prepare/submit API,
+  observer/reconciliation worker and completion/outbox transitions still require
+  implementation under Issue #46. Payments remain separate and out of scope.
 
 Этап C: escrow/гарант
   только после отдельного проектирования, тестнета, аудита — по ADR-0002
