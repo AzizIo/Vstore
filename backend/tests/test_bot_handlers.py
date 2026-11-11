@@ -10,8 +10,14 @@ from app import bot_handlers
 from app.bot import create_dispatcher
 
 
-def test_dispatcher_registers_message_and_callback_handlers() -> None:
-    dispatcher = create_dispatcher()
+@pytest.fixture(scope="module")
+def dispatcher() -> Dispatcher:
+    return create_dispatcher()
+
+
+def test_dispatcher_registers_message_and_callback_handlers(
+    dispatcher: Dispatcher,
+) -> None:
 
     assert isinstance(dispatcher, Dispatcher)
     assert bot_handlers.router in dispatcher.sub_routers
@@ -215,6 +221,7 @@ async def test_plain_text_fallback_guides_user_to_supported_actions(
 @pytest.mark.asyncio
 async def test_unknown_command_is_routed_to_fallback_without_exception(
     monkeypatch: pytest.MonkeyPatch,
+    dispatcher: Dispatcher,
 ) -> None:
     monkeypatch.setattr(
         bot_handlers,
@@ -232,7 +239,7 @@ async def test_unknown_command_is_routed_to_fallback_without_exception(
     )
 
     try:
-        await create_dispatcher().feed_update(
+        await dispatcher.feed_update(
             bot,
             Update(update_id=10, message=message),
         )
@@ -243,8 +250,9 @@ async def test_unknown_command_is_routed_to_fallback_without_exception(
     assert "не обрабатываю произвольные сообщения" in answer.await_args.args[0]
 
 
-def test_dispatcher_registers_each_public_handler() -> None:
-    dispatcher = create_dispatcher()
+def test_dispatcher_registers_each_public_handler(
+    dispatcher: Dispatcher,
+) -> None:
     message_handlers = {
         handler.callback.__name__ for handler in bot_handlers.router.message.handlers
     }
