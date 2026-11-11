@@ -1796,7 +1796,7 @@ async def test_delivery_observer_lease_fences_stale_worker_and_retries_inconclus
             first_claim = first_claims[0]
             assert await claim_due_delivery_attempts(session, now=now) == []
 
-        reclaimed_at = now + timedelta(seconds=61)
+        reclaimed_at = first_claim.lease_until + timedelta(seconds=1)
         async with session_factory() as session:
             second_claims = await claim_due_delivery_attempts(
                 session, now=reclaimed_at
