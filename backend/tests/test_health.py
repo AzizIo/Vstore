@@ -18,6 +18,11 @@ def test_readiness_returns_each_dependency_status(monkeypatch) -> None:
     monkeypatch.setattr(health, "_redis_ready", redis_ready)
     monkeypatch.setattr(health, "_authentication_ready", lambda: True)
     monkeypatch.setattr(health, "_ton_connect_proof_ready", lambda: True)
+    monkeypatch.setattr(
+        health,
+        "settings",
+        SimpleNamespace(ton_connect_allowed_domains=["shop.example.test"]),
+    )
 
     with TestClient(app) as client:
         response = client.get("/api/health/ready")
@@ -30,6 +35,7 @@ def test_readiness_returns_each_dependency_status(monkeypatch) -> None:
             "redis": "ok",
             "authentication": "ok",
             "ton_connect_proof": "ok",
+            "ton_connect_proof_domains": ["shop.example.test"],
         },
     }
 
@@ -45,6 +51,11 @@ def test_readiness_returns_503_when_a_dependency_is_unavailable(monkeypatch) -> 
     monkeypatch.setattr(health, "_redis_ready", redis_ready)
     monkeypatch.setattr(health, "_authentication_ready", lambda: True)
     monkeypatch.setattr(health, "_ton_connect_proof_ready", lambda: True)
+    monkeypatch.setattr(
+        health,
+        "settings",
+        SimpleNamespace(ton_connect_allowed_domains=["shop.example.test"]),
+    )
 
     with TestClient(app) as client:
         response = client.get("/api/health/ready")
@@ -72,6 +83,11 @@ def test_readiness_reports_both_dependencies_unavailable(monkeypatch) -> None:
     monkeypatch.setattr(health, "_redis_ready", redis_ready)
     monkeypatch.setattr(health, "_authentication_ready", lambda: True)
     monkeypatch.setattr(health, "_ton_connect_proof_ready", lambda: True)
+    monkeypatch.setattr(
+        health,
+        "settings",
+        SimpleNamespace(ton_connect_allowed_domains=["shop.example.test"]),
+    )
 
     with TestClient(app) as client:
         response = client.get("/api/health/ready")
