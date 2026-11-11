@@ -20,6 +20,7 @@ from app.assets.ton_nft.delivery import DeliveryEvidenceResult, DeliveryEvidence
 from app.assets.ton_nft.observer import (
     apply_delivery_observation,
     claim_due_delivery_attempts,
+    run_delivery_observer_pass,
 )
 from app.assets.ton_nft.models import (
     NFTItemSnapshot,
@@ -1712,27 +1713,37 @@ async def test_delivery_observer_verifies_and_completes_only_exact_finalized_evi
     async with session_factory.begin() as session:
         seller, buyer, asset, listing, order, attempt, now = await _create_observer_fixture(session)
     try:
-        async with session_factory() as session:
-            claims = await claim_due_delivery_attempts(session, now=now)
-            assert len(claims) == 1
-            claim = claims[0]
+        class _FinalizedProvider:
+            async def verify_transfer(self, intent):
+                assert intent.item_address == asset.item_address
+                assert intent.network == "mainnet"
+                assert intent.seller_wallet_address == "0:" + "b2" * 32
+                assert intent.buyer_wallet_address == "0:" + "c3" * 32
+                assert intent.query_id == 123456
+                return DeliveryEvidenceResult(
+                    status=DeliveryEvidenceStatus.VERIFIED_FINALIZED,
+                    item_address=intent.item_address,
+                    network=intent.network,
+                    seller_wallet_address=intent.seller_wallet_address,
+                    buyer_wallet_address=intent.buyer_wallet_address,
+                    query_id=intent.query_id,
+                    transaction_hash="ab" * 32,
+                    trace_id="cd" * 32,
+                    masterchain_seqno=123456,
+                )
 
-        evidence = DeliveryEvidenceResult(
-            status=DeliveryEvidenceStatus.VERIFIED_FINALIZED,
-            item_address=claim.item_address,
-            network=claim.network,
-            seller_wallet_address=claim.seller_address,
-            buyer_wallet_address=claim.buyer_address,
-            query_id=claim.query_id,
-            transaction_hash="ab" * 32,
-            trace_id="cd" * 32,
-            masterchain_seqno=123456,
+            async def aclose(self):
+                return None
+
+        result = await run_delivery_observer_pass(
+            session_factory,
+            now=now,
+            provider_factory=lambda _network: _FinalizedProvider(),
         )
-        async with session_factory() as session:
-            outcome = await apply_delivery_observation(
-                session, claim, evidence, now=now + timedelta(seconds=2)
-            )
-        assert outcome == "verified"
+        assert result.claimed == 1
+        assert result.verified == 1
+        assert result.retried == 0
+        assert result.manual_review == 0
 
         async with session_factory() as session:
             persisted_order = await session.get(Order, order.id)
