@@ -156,7 +156,9 @@ async def test_notification_worker_propagates_cancellation_and_releases_session(
         "process_due_notifications",
         wait_for_cancel,
     )
-    task = asyncio.create_task(bot_runtime._run_notification_worker(_FakeBot()))  # type: ignore[arg-type]
+    task = asyncio.create_task(
+        bot_runtime._run_notification_worker(_FakeBot())  # type: ignore[arg-type]
+    )
 
     await asyncio.wait_for(processing_started.wait(), timeout=1)
     task.cancel()
