@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     notification_retry_base_seconds: int = Field(default=5, gt=0)
     notification_retry_max_seconds: int = Field(default=3600, gt=0)
     telegram_mini_app_url: str | None = None
+    telegram_mini_app_direct_link: str | None = None
     ton_connect_allowed_domains: list[str] = Field(default_factory=list)
     ton_connect_network: Literal["mainnet", "testnet"] = "mainnet"
     ton_center_api_key: SecretStr | None = None
