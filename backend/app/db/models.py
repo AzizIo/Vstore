@@ -415,6 +415,12 @@ class OrderDeliveryAttempt(TimestampMixin, Base):
             postgresql_where=text("status = 'verified' AND transaction_hash IS NOT NULL"),
         ),
         Index("ix_order_delivery_attempts_observer", "status", "next_check_at"),
+        Index(
+            "ix_order_delivery_attempts_observer_lease",
+            "status",
+            "observer_lease_until",
+            "next_check_at",
+        ),
         Index("ix_order_delivery_attempts_order_created", "order_id", "created_at"),
     )
 
