@@ -52,6 +52,7 @@ def test_demo_preflight_passes_all_public_endpoint_checks(monkeypatch: pytest.Mo
                     "database": "ok",
                     "redis": "ok",
                     "authentication": "ok",
+                    "ton_connect_proof": "ok",
                 },
             }).encode(),
             "application/json",
@@ -84,7 +85,7 @@ def test_demo_preflight_passes_all_public_endpoint_checks(monkeypatch: pytest.Mo
 
     checks = run_preflight(api_origin, app_origin, timeout=3.0)
 
-    assert len(checks) == 4
+    assert len(checks) == 5
     assert all(check.ok for check in checks)
     assert requested == [
         f"{api_origin}/api/health/ready",
@@ -110,6 +111,7 @@ def test_demo_preflight_fails_when_manifest_does_not_allow_cross_origin_get(
                     "database": "ok",
                     "redis": "ok",
                     "authentication": "ok",
+                    "ton_connect_proof": "ok",
                 },
             }).encode(),
             "application/json",
@@ -135,9 +137,9 @@ def test_demo_preflight_fails_when_manifest_does_not_allow_cross_origin_get(
     checks = run_preflight(api_origin, app_origin)
 
     assert all(check.ok for check in checks[:2])
-    assert not checks[2].ok
-    assert "Access-Control-Allow-Origin" in checks[2].detail
-    assert checks[3].ok
+    assert not checks[3].ok
+    assert "Access-Control-Allow-Origin" in checks[3].detail
+    assert checks[4].ok
 
 
 def test_demo_preflight_fails_readiness_when_one_dependency_is_unavailable(
@@ -219,3 +221,52 @@ def test_demo_preflight_rejects_manifest_from_another_origin() -> None:
             "https://shop.example.test",
             "https://attacker.example.test/tonconnect-manifest.json",
         )
+
+
+
+def test_demo_preflight_fails_when_backend_wallet_proof_is_not_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api_origin = "https://api.example.test"
+    app_origin = "https://shop.example.test"
+    manifest_url = f"{app_origin}/tonconnect-manifest.json"
+    icon_url = f"{app_origin}/tonconnect-icon.png"
+    responses = {
+        f"{api_origin}/api/health/ready": FakeResponse(
+            f"{api_origin}/api/health/ready",
+            json.dumps({
+                "status": "ready",
+                "checks": {
+                    "database": "ok",
+                    "redis": "ok",
+                    "authentication": "ok",
+                    "ton_connect_proof": "error",
+                },
+            }).encode(),
+            "application/json",
+        ),
+        f"{app_origin}/": FakeResponse(
+            app_origin + "/",
+            b"<!doctype html><html><body>VILTARA</body></html>",
+            "text/html",
+        ),
+        manifest_url: FakeResponse(
+            manifest_url,
+            json.dumps({"url": app_origin, "name": "VILTARA SHOP", "iconUrl": icon_url}).encode(),
+            "application/json",
+            access_control_allow_origin="*",
+        ),
+        icon_url: FakeResponse(icon_url, PNG_SIGNATURE + b"demo", "image/png"),
+    }
+
+    monkeypatch.setattr(
+        "scripts.demo_preflight.urlopen",
+        lambda request, timeout: responses[request.full_url],
+    )
+
+    checks = run_preflight(api_origin, app_origin)
+
+    assert checks[0].ok
+    assert not checks[1].ok
+    assert "TON_CONNECT_ALLOWED_DOMAINS" in checks[1].detail
+    assert all(check.ok for check in checks[2:])
