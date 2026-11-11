@@ -32,10 +32,15 @@ services:
       - .env
     environment:
       ENVIRONMENT: production
+      AUTH_SECRET_KEY: ${PREVIEW_AUTH_SECRET_KEY:?Set PREVIEW_AUTH_SECRET_KEY in .env}
+      BOT_TOKEN: ${PREVIEW_BOT_TOKEN:?Set PREVIEW_BOT_TOKEN in .env}
+      TELEGRAM_MINI_APP_URL: ${PREVIEW_TELEGRAM_MINI_APP_URL:-}
       DATABASE_URL: postgresql+asyncpg://viltara_preview:${PREVIEW_DB_PASSWORD:?Set PREVIEW_DB_PASSWORD in .env}@db:5432/viltara_preview
       REDIS_URL: redis://redis:6379/0
       TON_CONNECT_ALLOWED_DOMAINS: ${PREVIEW_TON_CONNECT_ALLOWED_DOMAINS:?Set PREVIEW_TON_CONNECT_ALLOWED_DOMAINS in .env}
       TON_CONNECT_NETWORK: ${PREVIEW_TON_CONNECT_NETWORK:-testnet}
+      TON_CENTER_MAINNET_BASE_URL: ${PREVIEW_TON_CENTER_MAINNET_BASE_URL:-https://toncenter.com/api/v3}
+      TON_CENTER_TESTNET_BASE_URL: ${PREVIEW_TON_CENTER_TESTNET_BASE_URL:-https://testnet.toncenter.com/api/v3}
     expose:
       - "8000"
     depends_on:
@@ -60,8 +65,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.preview
       args:
-        VITE_TONCONNECT_APP_URL: ${VITE_TONCONNECT_APP_URL:?Set VITE_TONCONNECT_APP_URL in .env}
-        VITE_TONCONNECT_MANIFEST_URL: ${VITE_TONCONNECT_MANIFEST_URL:?Set VITE_TONCONNECT_MANIFEST_URL in .env}
+        VITE_TONCONNECT_APP_URL: ${PREVIEW_VITE_TONCONNECT_APP_URL:?Set PREVIEW_VITE_TONCONNECT_APP_URL in .env}
+        VITE_TONCONNECT_MANIFEST_URL: ${PREVIEW_VITE_TONCONNECT_MANIFEST_URL:?Set PREVIEW_VITE_TONCONNECT_MANIFEST_URL in .env}
     ports:
       - "127.0.0.1:${PREVIEW_HTTP_PORT:-8080}:80"
     depends_on:
@@ -81,10 +86,15 @@ services:
       - .env
     environment:
       ENVIRONMENT: production
+      AUTH_SECRET_KEY: ${PREVIEW_AUTH_SECRET_KEY:?Set PREVIEW_AUTH_SECRET_KEY in .env}
+      BOT_TOKEN: ${PREVIEW_BOT_TOKEN:?Set PREVIEW_BOT_TOKEN in .env}
+      TELEGRAM_MINI_APP_URL: ${PREVIEW_TELEGRAM_MINI_APP_URL:-}
       DATABASE_URL: postgresql+asyncpg://viltara_preview:${PREVIEW_DB_PASSWORD:?Set PREVIEW_DB_PASSWORD in .env}@db:5432/viltara_preview
       REDIS_URL: redis://redis:6379/0
       TON_CONNECT_ALLOWED_DOMAINS: ${PREVIEW_TON_CONNECT_ALLOWED_DOMAINS:?Set PREVIEW_TON_CONNECT_ALLOWED_DOMAINS in .env}
       TON_CONNECT_NETWORK: ${PREVIEW_TON_CONNECT_NETWORK:-testnet}
+      TON_CENTER_MAINNET_BASE_URL: ${PREVIEW_TON_CENTER_MAINNET_BASE_URL:-https://toncenter.com/api/v3}
+      TON_CENTER_TESTNET_BASE_URL: ${PREVIEW_TON_CENTER_TESTNET_BASE_URL:-https://testnet.toncenter.com/api/v3}
     depends_on:
       db:
         condition: service_healthy
