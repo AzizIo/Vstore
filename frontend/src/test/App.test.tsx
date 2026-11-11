@@ -5,9 +5,22 @@ import type { ReactNode } from "react";
 import { App } from "../App";
 
 const tonConnectMocks = vi.hoisted(() => ({
-  wallet: null as { account: { address: string; chain: string } } | null,
+  wallet: null as {
+    account: { address: string; chain: string; publicKey?: string; walletStateInit?: string };
+    connectItems?: {
+      tonProof?: {
+        proof: {
+          timestamp: number;
+          domain: { lengthBytes: number; value: string };
+          signature: string;
+          payload: string;
+        };
+      } | { error: number; message: string };
+    };
+  } | null,
   openModal: vi.fn(),
   disconnect: vi.fn(),
+  setConnectRequestParameters: vi.fn(),
 }));
 
 vi.mock("@tonconnect/ui-react", () => ({
@@ -16,7 +29,11 @@ vi.mock("@tonconnect/ui-react", () => ({
     <div data-testid="tonconnect-provider" data-manifest-url={manifestUrl}>{children}</div>
   ),
   useTonWallet: () => tonConnectMocks.wallet,
-  useTonConnectUI: () => [{ openModal: tonConnectMocks.openModal, disconnect: tonConnectMocks.disconnect }, vi.fn()],
+  useTonConnectUI: () => [{
+    openModal: tonConnectMocks.openModal,
+    disconnect: tonConnectMocks.disconnect,
+    setConnectRequestParameters: tonConnectMocks.setConnectRequestParameters,
+  }, vi.fn()],
 }));
 
 const listing = {
@@ -87,6 +104,10 @@ function setSuccessfulTelegramAuth(profileResponse: Response = jsonResponse(prof
     const url = String(input);
     if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
     if (url.endsWith("/api/users/me")) return profileResponse;
+    if (url.endsWith("/api/wallets/me")) return jsonResponse([]);
+    if (url.endsWith("/api/wallets/proof/challenge")) {
+      return jsonResponse({ payload: "fresh-wallet-proof-nonce", expires_at: "2099-01-01T00:00:00Z" });
+    }
     return jsonResponse(page);
   });
 }
@@ -173,7 +194,7 @@ describe("marketplace catalog", () => {
     const firstPage = makeListings(24, "first");
     const finalListing = { ...listing, id: "last-listing", title: "Last server listing" };
     vi.mocked(fetch).mockImplementation(async (input) => {
-      const requestUrl = new URL(String(input));
+      const requestUrl = new URL(String(input), "http://localhost");
       const offset = Number(requestUrl.searchParams.get("offset"));
       if (offset === 0) return jsonResponse({ items: firstPage, total: 25, limit: 24, offset: 0 });
       return jsonResponse({ items: [firstPage[0], finalListing], total: 25, limit: 24, offset: 24 });
@@ -188,7 +209,7 @@ describe("marketplace catalog", () => {
     expect(screen.getAllByText("first listing 1")).toHaveLength(1);
     expect(screen.getByText("25 items")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
-    const pageRequests = vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input)));
+    const pageRequests = vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input), "http://localhost"));
     expect(pageRequests.map((url) => url.searchParams.get("offset"))).toEqual(["0", "24"]);
   });
 
@@ -196,7 +217,7 @@ describe("marketplace catalog", () => {
     const initialListings = makeListings(24, "initial");
     const filteredListing = { ...listing, id: "filtered", title: "Filtered result" };
     vi.mocked(fetch).mockImplementation(async (input) => {
-      const requestUrl = new URL(String(input));
+      const requestUrl = new URL(String(input), "http://localhost");
       if (requestUrl.searchParams.has("search") || requestUrl.searchParams.has("asset_type") || requestUrl.searchParams.get("sort") !== "newest") {
         return jsonResponse({ items: [filteredListing], total: 1, limit: 24, offset: 0 });
       }
@@ -212,12 +233,12 @@ describe("marketplace catalog", () => {
     expect(await screen.findByText("next-page listing 1")).toBeInTheDocument();
     fireEvent.change(screen.getByRole("searchbox", { name: "Search listings" }), { target: { value: "rare" } });
     expect(await screen.findByText("Filtered result")).toBeInTheDocument();
-    expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).searchParams.get("offset")).toBe("0");
+    expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0");
 
     fireEvent.change(screen.getByRole("combobox", { name: "Asset type" }), { target: { value: "telegram_gift" } });
-    await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).searchParams.get("offset")).toBe("0"));
+    await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0"));
     fireEvent.change(screen.getByRole("combobox", { name: "Sort listings" }), { target: { value: "price_desc" } });
-    await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).searchParams.get("offset")).toBe("0"));
+    await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0"));
 
     expect(screen.getByText("Filtered result")).toBeInTheDocument();
     expect(screen.queryByText("initial listing 1")).not.toBeInTheDocument();
@@ -227,7 +248,7 @@ describe("marketplace catalog", () => {
     const initialListings = makeListings(24, "loaded");
     let nextPageRequests = 0;
     vi.mocked(fetch).mockImplementation(async (input) => {
-      const requestUrl = new URL(String(input));
+      const requestUrl = new URL(String(input), "http://localhost");
       if (requestUrl.searchParams.get("offset") === "0") {
         return jsonResponse({ items: initialListings, total: 25, limit: 24, offset: 0 });
       }
@@ -252,7 +273,7 @@ describe("marketplace catalog", () => {
     const initialListings = makeListings(24, "loaded");
     let resolveNextPage: ((response: Response) => void) | undefined;
     vi.mocked(fetch).mockImplementation(async (input) => {
-      const requestUrl = new URL(String(input));
+      const requestUrl = new URL(String(input), "http://localhost");
       if (requestUrl.searchParams.get("offset") === "0") {
         return jsonResponse({ items: initialListings, total: 25, limit: 24, offset: 0 });
       }
@@ -265,7 +286,7 @@ describe("marketplace catalog", () => {
     fireEvent.click(loadMore);
     fireEvent.click(loadMore);
 
-    expect(vi.mocked(fetch).mock.calls.filter(([input]) => new URL(String(input)).searchParams.get("offset") === "24")).toHaveLength(1);
+    expect(vi.mocked(fetch).mock.calls.filter(([input]) => new URL(String(input), "http://localhost").searchParams.get("offset") === "24")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Loading more..." })).toBeDisabled();
     resolveNextPage?.(jsonResponse({ items: [{ ...listing, id: "last", title: "Last listing" }], total: 25, limit: 24, offset: 24 }));
     expect(await screen.findByText("Last listing")).toBeInTheDocument();
@@ -275,7 +296,7 @@ describe("marketplace catalog", () => {
     const initialListings = makeListings(24, "loaded");
     let pageSignal: AbortSignal | undefined;
     vi.mocked(fetch).mockImplementation(async (input, options) => {
-      const requestUrl = new URL(String(input));
+      const requestUrl = new URL(String(input), "http://localhost");
       if (requestUrl.searchParams.get("offset") === "0") {
         return jsonResponse({ items: initialListings, total: 25, limit: 24, offset: 0 });
       }
@@ -501,20 +522,36 @@ describe("TON Connect wallet UI", () => {
     tonConnectMocks.wallet = null;
     tonConnectMocks.openModal.mockReset();
     tonConnectMocks.disconnect.mockReset();
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ items: [], total: 0, limit: 24, offset: 0 })));
+    tonConnectMocks.setConnectRequestParameters.mockReset();
+    setTelegramInitData();
+    setSuccessfulTelegramAuth(jsonResponse(profile));
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
+      if (url.endsWith("/api/users/me")) return jsonResponse(profile);
+      if (url.endsWith("/api/wallets/me")) return jsonResponse([]);
+      if (url.endsWith("/api/wallets/proof/challenge")) {
+        return jsonResponse({ payload: "fresh-wallet-proof-nonce", expires_at: "2099-01-01T00:00:00Z" });
+      }
+      return jsonResponse({ items: [], total: 0, limit: 24, offset: 0 });
+    });
   });
 
   it("shows a connect action when manifest configuration is available", async () => {
     vi.stubEnv("VITE_TONCONNECT_MANIFEST_URL", "https://wallet.example/manifest.json");
     renderMarketplace();
 
-    expect(await screen.findByRole("button", { name: "Connect wallet" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Connect & verify" })).toBeInTheDocument();
     expect(screen.getByTestId("tonconnect-provider")).toHaveAttribute(
       "data-manifest-url",
       "https://wallet.example/manifest.json",
     );
-    fireEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
-    expect(tonConnectMocks.openModal).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Connect & verify" }));
+    await waitFor(() => expect(tonConnectMocks.openModal).toHaveBeenCalledOnce());
+    expect(tonConnectMocks.setConnectRequestParameters).toHaveBeenCalledWith({
+      state: "ready",
+      value: { tonProof: "fresh-wallet-proof-nonce" },
+    });
   });
 
   it("shows the abbreviated wallet address and mainnet after connection", async () => {
@@ -524,9 +561,122 @@ describe("TON Connect wallet UI", () => {
 
     expect(await screen.findByText("0:abcd…7890")).toBeInTheDocument();
     expect(screen.getByText("Mainnet")).toBeInTheDocument();
-    expect(screen.getByText("Connection does not verify NFT ownership")).toBeInTheDocument();
+    expect(screen.getByText("Connected only · proof verification required")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
     expect(screen.queryByText(/verified/i)).not.toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) =>
+      String(input).endsWith("/api/wallets/proof/verify"),
+    )).toBe(false);
+  });
+
+  it("marks a wallet verified only after the backend accepts its fresh proof", async () => {
+    vi.stubEnv("VITE_TONCONNECT_MANIFEST_URL", "https://wallet.example/tonconnect-manifest.json");
+    const view = renderMarketplace();
+    fireEvent.click(await screen.findByRole("button", { name: "Connect & verify" }));
+    await waitFor(() => expect(tonConnectMocks.openModal).toHaveBeenCalledOnce());
+
+    const address = `0:${"a".repeat(64)}`;
+    const linkedWallet = {
+      id: "wallet-verified",
+      address,
+      network: "mainnet",
+      is_verified: true,
+      is_primary: false,
+    };
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/wallets/proof/verify")) return jsonResponse(linkedWallet);
+      if (url.endsWith("/api/wallets/me")) return jsonResponse([linkedWallet]);
+      if (url.endsWith("/api/wallets/proof/challenge")) {
+        return jsonResponse({ payload: "fresh-wallet-proof-nonce", expires_at: "2099-01-01T00:00:00Z" });
+      }
+      if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
+      if (url.endsWith("/api/users/me")) return jsonResponse(profile);
+      return jsonResponse({ items: [], total: 0, limit: 24, offset: 0 });
+    });
+    tonConnectMocks.wallet = {
+      account: { address, chain: "-239", walletStateInit: "state-init-boc" },
+      connectItems: {
+        tonProof: {
+          proof: {
+            timestamp: 1_900_000_000,
+            domain: { lengthBytes: 15, value: "app.example.com" },
+            signature: "base64-signature",
+            payload: "fresh-wallet-proof-nonce",
+          },
+        },
+      },
+    };
+    view.rerender(<QueryClientProvider client={view.queryClient}><App /></QueryClientProvider>);
+
+    expect(await screen.findByText("Wallet verified by VILTARA")).toBeInTheDocument();
+    const verificationCall = vi.mocked(fetch).mock.calls.find(([input]) =>
+      String(input).endsWith("/api/wallets/proof/verify"),
+    );
+    expect(verificationCall).toBeDefined();
+    const body = JSON.parse(String(verificationCall?.[1]?.body));
+    expect(body.proof.payload).toBe("fresh-wallet-proof-nonce");
+    expect(body.network).toBe("-239");
+    expect(body.address).toBe(address);
+    expect(body.proof.state_init).toBe("state-init-boc");
+    expect(vi.mocked(fetch).mock.calls.some(([input]) =>
+      String(input).endsWith("/api/wallets/me") &&
+      input !== verificationCall?.[0],
+    )).toBe(true);
+
+    // A subsequent account switch cannot inherit the previous wallet's verified UI state.
+    tonConnectMocks.wallet = {
+      account: { address: `0:${"b".repeat(64)}`, chain: "-239" },
+    };
+    view.rerender(<QueryClientProvider client={view.queryClient}><App /></QueryClientProvider>);
+    expect(await screen.findByText("Connected only · proof verification required")).toBeInTheDocument();
+
+    // The same address on a different chain also is not the verified mainnet wallet.
+    tonConnectMocks.wallet = {
+      account: { address, chain: "-3" },
+    };
+    view.rerender(<QueryClientProvider client={view.queryClient}><App /></QueryClientProvider>);
+    expect(await screen.findByText("Testnet")).toBeInTheDocument();
+    expect(screen.getByText("Connected only · proof verification required")).toBeInTheDocument();
+  });
+
+  it("keeps a connected wallet unverified when backend proof verification fails", async () => {
+    vi.stubEnv("VITE_TONCONNECT_MANIFEST_URL", "https://wallet.example/tonconnect-manifest.json");
+    const view = renderMarketplace();
+    fireEvent.click(await screen.findByRole("button", { name: "Connect & verify" }));
+    await waitFor(() => expect(tonConnectMocks.openModal).toHaveBeenCalledOnce());
+
+    const address = `0:${"b".repeat(64)}`;
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/wallets/proof/verify")) {
+        return jsonResponse({ detail: "Invalid or expired wallet proof" }, 401);
+      }
+      if (url.endsWith("/api/wallets/me")) return jsonResponse([]);
+      if (url.endsWith("/api/wallets/proof/challenge")) {
+        return jsonResponse({ payload: "fresh-wallet-proof-nonce", expires_at: "2099-01-01T00:00:00Z" });
+      }
+      if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
+      if (url.endsWith("/api/users/me")) return jsonResponse(profile);
+      return jsonResponse({ items: [], total: 0, limit: 24, offset: 0 });
+    });
+    tonConnectMocks.wallet = {
+      account: { address, chain: "-239", walletStateInit: "state-init-boc" },
+      connectItems: {
+        tonProof: {
+          proof: {
+            timestamp: 1_900_000_000,
+            domain: { lengthBytes: 15, value: "app.example.com" },
+            signature: "base64-signature",
+            payload: "fresh-wallet-proof-nonce",
+          },
+        },
+      },
+    };
+    view.rerender(<QueryClientProvider client={view.queryClient}><App /></QueryClientProvider>);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid or expired wallet proof");
+    expect(screen.queryByText("Wallet verified by VILTARA")).not.toBeInTheDocument();
   });
 
   it("shows testnet when reported by the connected wallet", async () => {
@@ -552,7 +702,7 @@ describe("TON Connect wallet UI", () => {
     renderMarketplace();
 
     expect(await screen.findByText("Wallet connection is not configured.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Connect wallet" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Connect & verify" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("tonconnect-provider")).not.toBeInTheDocument();
   });
 });

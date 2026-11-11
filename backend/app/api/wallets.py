@@ -3,7 +3,7 @@ import secrets
 from collections.abc import Awaitable
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from redis.asyncio import Redis
@@ -207,3 +207,35 @@ async def get_my_wallets(
         .order_by(Wallet.is_primary.desc(), Wallet.created_at.desc())
     )
     return list(result.all())
+
+
+@router.patch("/{wallet_id}/primary", response_model=WalletResponse)
+async def set_primary_wallet(
+    wallet_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Wallet:
+    # Lock the parent user first so concurrent primary-wallet changes serialize.
+    await session.scalar(select(User.id).where(User.id == user.id).with_for_update())
+    result = await session.scalars(
+        select(Wallet).where(Wallet.user_id == user.id).with_for_update()
+    )
+    wallets = list(result.all())
+    wallet = next((item for item in wallets if item.id == wallet_id), None)
+    if wallet is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Wallet not found",
+        )
+    if not wallet.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only a verified wallet can be primary",
+        )
+
+    for item in wallets:
+        item.is_primary = item.id == wallet.id
+
+    await session.commit()
+    await session.refresh(wallet)
+    return wallet

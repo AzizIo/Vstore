@@ -3,11 +3,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
-from app.db.models import User, Wallet
+from app.db.models import Listing, ListingStatus, Order, OrderStatus, User, Wallet
 from app.db.session import get_db_session
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -65,11 +65,40 @@ async def remove_wallet(
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> None:
+    # Serialize wallet removal with other wallet lifecycle operations. The
+    # marketplace currently associates NFT assets with users, not individual
+    # wallet rows, so unlinking is intentionally blocked while this user has
+    # any live listing or pending order instead of guessing which wallet backs it.
+    await session.scalar(select(User.id).where(User.id == user.id).with_for_update())
     wallet = await session.scalar(
-        select(Wallet).where(Wallet.id == wallet_id, Wallet.user_id == user.id)
+        select(Wallet)
+        .where(Wallet.id == wallet_id, Wallet.user_id == user.id)
+        .with_for_update()
     )
     if wallet is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Wallet not found")
+
+    active_listing_id = await session.scalar(
+        select(Listing.id)
+        .where(
+            Listing.seller_id == user.id,
+            Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED]),
+        )
+        .limit(1)
+    )
+    pending_order_id = await session.scalar(
+        select(Order.id)
+        .where(
+            or_(Order.buyer_id == user.id, Order.seller_id == user.id),
+            Order.status == OrderStatus.PENDING_PAYMENT,
+        )
+        .limit(1)
+    )
+    if active_listing_id is not None or pending_order_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Close active listings and pending orders before unlinking a wallet.",
+        )
 
     await session.delete(wallet)
     await session.commit()
