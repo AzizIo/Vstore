@@ -161,7 +161,7 @@ export async function mockMarketplaceApi(
   // The real Telegram script is deliberately not downloaded in browser tests.
   await page.route("https://telegram.org/js/telegram-web-app.js", (route) => route.abort());
 
-  await page.route("**/api/**", async (route) => {
+  await page.route((url) => new URL(url).pathname.startsWith("/api/"), async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method();
