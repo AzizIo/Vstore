@@ -7,9 +7,9 @@ import pytest
 
 from app.assets.ton_nft.delivery import (
     DeliveryEvidenceStatus,
+    TEP62TransferIntent,
     TONCenterDeliveryConfig,
     TONCenterDeliveryEvidenceProvider,
-    TEP62TransferIntent,
 )
 from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable
 
