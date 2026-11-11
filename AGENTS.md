@@ -12,10 +12,10 @@ This is a marketplace foundation, not a completed buying/selling/guarantee syste
 **Reservation is not payment.** Orders snapshot listing price/currency but no payment provider is wired to the lifecycle. Server-side NFT delivery confirmation after reservation, payment/checkout, escrow/guarantee, refunds, seller payouts, deal chat and admin panel are not implemented. Do not describe roadmap work as shipped.
 
 TON Connect nuance:
-- Backend endpoints and cryptographic verification for TON Connect Proof exist on main.
-- The current frontend wallet component on main supports connection and disconnection but does not yet run the complete challenge → proof → verify flow. A connected address alone does not prove control.
-- Draft PR #51 contains the full frontend proof lifecycle and manifest work; verify its live status/CI and merge state before assuming that it is part of main.
-- Draft PR #58 contains a full inventory reconciliation/screen proposal; verify the live status/CI before assuming that it is part of main.
+- Backend endpoints and cryptographic verification for TON Connect Proof, plus the complete frontend challenge → proof → verify flow and manifest, are merged into main via PR #51.
+- The wallet UI is fail-closed: it stays disabled while VITE_TONCONNECT_MANIFEST_URL is empty, and backend proof challenges stay unavailable while TON_CONNECT_ALLOWED_DOMAINS is empty/invalid. A connected address alone never proves control.
+- Full NFT inventory reconciliation, secondary-wallet ownership checks, guarded stale-order invalidation and the My NFT screen are merged into main via PR #58.
+- Live Telegram/Tonkeeper and testnet/provider acceptance remains open in Issues #43 and #44. Do not claim those manual checks are complete from CI results.
 
 ## 2. Repository map
 
@@ -69,6 +69,7 @@ Important current API routes:
 | POST | /api/wallets/proof/verify | Cryptographically verify proof and link wallet |
 | GET | /api/wallets/me | Current user's wallet records |
 | GET | /api/assets/me | Paginated verified inventory with server-side ownership recheck |
+| POST | /api/assets/me/sync | User-triggered full inventory reconciliation; bounded pagination, multi-wallet recheck and safe stale listing/order invalidation |
 | GET | /api/listings | Public filter/sort/page catalogue |
 | POST | /api/listings | Draft from verified eligible asset |
 | POST | /api/listings/{listing_id}/publish | Publish after fresh ownership verification |
@@ -135,9 +136,9 @@ Some PostgreSQL integration tests require a dedicated disposable TEST_DATABASE_U
 
 Treat this as a dated snapshot and check live GitHub before acting.
 
-- **Current Stage A:** priced listings, TEP-62 ownership checks, listing lifecycle, order reservation with price/currency snapshot, cancellation/expiry and durable informational Telegram notifications.
-- **Issue #43 / Draft PR #51:** complete TON Connect Proof frontend lifecycle, manifest and real Tonkeeper validation. Server proof verification exists, but the full frontend integration is not yet in main.
-- **Issue #44 / Draft PR #58:** full NFT inventory sync/reconciliation and dedicated inventory UI. Current main has the paginated GET inventory endpoint; do not assume proposed sync/reconciliation code is merged.
+- **Current Stage A:** priced listings, backend-verified TON Connect Proof (UI gated until public URLs/domain allowlist are configured), full TEP-62 NFT inventory sync/reconciliation, listing lifecycle, order reservation with price/currency snapshot, cancellation/expiry and durable informational Telegram notifications.
+- **Issue #43 / PR #51 merged:** code and CI are complete. Live Telegram/Tonkeeper proof signing, account/network switch and public manifest/icon checks remain open in Issue #43; do not enable production wallet configuration before those checks.
+- **Issue #44 / PR #58 merged:** full NFT inventory sync/reconciliation and dedicated My NFT UI are in main. Multi-page/multi-wallet/provider/ownership-loss manual acceptance and owner screenshots remain open in Issue #44.
 - **Issue #48:** keep docs aligned with approved product model (this document + README.md); do not remove listing prices.
 - **Issue #56:** Stage B architecture is documented and merged in `docs/STAGE_B_ORDER_LIFECYCLE.md`. Its final section contains maintainer decisions that remain open. Issue #46 implementation must wait until those decisions are explicitly approved; a merged design proposal is not approval of the proposed API/DB contract or migration.
 - **Future guaranteed transactions:** a separate later phase. No payments, checkout, escrow/custody, refunds, commissions or seller payout should be implemented under current Stage A.

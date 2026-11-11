@@ -14,12 +14,12 @@ Product boundaries and decisions approved for the current MVP are recorded in [d
 | Listings with seller-set price/currency; create draft, publish, edit and unpublish | Implemented |
 | Telegram Mini App initData verification and API bearer session | Implemented |
 | TON NFT (TEP-62) on-chain ownership verifier via TON Center v3 | Implemented |
-| Inventory endpoint GET /api/assets/me | Implemented; paginated reads and server-side ownership rechecks |
+| NFT inventory GET /api/assets/me and full sync POST /api/assets/me/sync | Implemented; paginated reads, provider reconciliation, multi-wallet ownership checks and guarded stale-listing/order invalidation |
 | Fresh ownership check before publishing and reservation | Implemented; provider errors fail closed |
 | Order reservation, price/currency snapshot, idempotency, cancellation and expiry | Implemented; **not a payment flow** |
 | Telegram order notifications using a durable outbox | Implemented; optional bot container |
-| TON Connect frontend challenge → proof → backend verification, manifest and Tonkeeper flow | In progress in [Draft PR #51](https://github.com/AzizIo/Vstore/pull/51); not part of main until merged and manually verified |
-| Full inventory reconciliation/sync and dedicated My NFT screen | In progress in [Draft PR #58](https://github.com/AzizIo/Vstore/pull/58); not part of main until merged and verified |
+| TON Connect frontend challenge → proof → backend verification and manifest | Implemented in main via [PR #51](https://github.com/AzizIo/Vstore/pull/51); live Telegram/Tonkeeper acceptance remains open in [Issue #43](https://github.com/AzizIo/Vstore/issues/43) |
+| Full inventory reconciliation/sync and dedicated My NFT screen | Implemented in main via [PR #58](https://github.com/AzizIo/Vstore/pull/58); live testnet/provider acceptance remains open in [Issue #44](https://github.com/AzizIo/Vstore/issues/44) |
 | Server-side verification that a reserved NFT was delivered to the buyer | Not implemented; design proposal in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md); implementation tracked in [Issue #46](https://github.com/AzizIo/Vstore/issues/46) |
 | Telegram Gifts adapter, deal chat, admin panel | Not implemented |
 | Payments, checkout, escrow/guarantee, refunds, commissions and seller payouts | Not implemented |
@@ -29,7 +29,7 @@ The internal order status name pending_payment is a legacy name for the current 
 ## How listing and reservation work today
 
 1. The Telegram Mini App authenticates the user's raw Telegram.WebApp.initData with the backend. Do not trust initDataUnsafe or client-supplied user fields.
-2. NFT inventory is sourced from a verified TON wallet and checked server-side using TEP-62 ownership data. Wallet connection alone is not proof of wallet control, and client-supplied NFT metadata is not proof of ownership.
+2. NFT inventory is sourced from backend-verified TON wallets. The My NFT screen uses the server-side inventory sync and TEP-62 ownership rechecks; wallet connection alone is not proof of wallet control, and client-supplied NFT metadata is not proof of ownership.
 3. A seller creates a draft for an eligible, verified asset. Publishing rechecks on-chain ownership immediately before making the listing active.
 4. A buyer reserves an active listing. The backend checks seller/asset state, takes a snapshot of price and currency, and uses idempotency/concurrency protections. The order expires or can be cancelled; the reservation does not lock the NFT on-chain.
 5. The current product has **no automated NFT delivery confirmation**. The service must not display a reservation as paid, completed, or delivered.
@@ -54,7 +54,7 @@ The state machine, proposed API/database contracts, failure handling and decisio
 - **Supported asset domain:** standard TON NFT items implementing TEP-62. Treat the item contract and current owner as authoritative; treat names, images and other metadata as untrusted display input.
 - **Telegram Gifts:** separate asset domain with different Telegram Business permissions and transfer rules. No generic Telegram Gifts transfer integration is currently shipped.
 - The server must never request, receive, or store seed phrases or private keys. TON Connect delegates wallet operations to the user's wallet.
-- The backend contains TON Connect Proof verification endpoints, but on main the existing wallet UI only exposes connection/disconnection. Do not treat that UI state as a verified wallet. The full frontend proof integration and manifest are in Draft PR #51 and still require live verification with Tonkeeper on the real HTTPS Mini App host.
+- The full TON Connect challenge → proof → backend verification flow and manifest are now in main via PR #51. The frontend remains deliberately disabled until VITE_TONCONNECT_MANIFEST_URL is configured and the backend exact-domain TON_CONNECT_ALLOWED_DOMAINS allowlist is non-empty. A connected address alone is never proof; live Tonkeeper acceptance on the real HTTPS Mini App host remains open in Issue #43.
 - No payment, escrow, refund, commission, seller payout, custody, or buyer-protection feature is enabled. The future guaranteed-transaction phase remains planned only; its architecture, security, platform-policy and legal review must be completed separately. Read [ADR-0001](docs/adr/0001-compliant-payments-and-escrow.md) and [the payment/escrow design proposal](docs/PAYMENTS_ESCROW_DESIGN.md) as proposals, not as implemented or approved settlement rails.
 
 ## Architecture
