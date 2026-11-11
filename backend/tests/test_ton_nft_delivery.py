@@ -374,3 +374,29 @@ async def test_malformed_base64_transfer_hash_is_rejected() -> None:
             await provider.verify_transfer(intent())
     finally:
         await client.aclose()
+
+@pytest.mark.asyncio
+async def test_transfer_lookup_paginates_before_matching_query_id() -> None:
+    requested_offsets: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/nft/transfers"):
+            offset = int(request.url.params["offset"])
+            requested_offsets.append(offset)
+            if offset == 0:
+                rows = [transfer_row(query_id=str(1000 + index)) for index in range(1000)]
+            elif offset == 1000:
+                rows = [transfer_row()]
+            else:
+                return httpx.Response(400)
+            return httpx.Response(200, json={"nft_transfers": rows})
+        return httpx.Response(200, json=trace_payload())
+
+    provider, client = provider_for(handler)
+    try:
+        result = await provider.verify_transfer(intent())
+    finally:
+        await client.aclose()
+
+    assert result.status is DeliveryEvidenceStatus.VERIFIED_FINALIZED
+    assert requested_offsets == [0, 1000]
