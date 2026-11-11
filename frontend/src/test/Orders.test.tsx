@@ -34,7 +34,7 @@ describe("orders", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ items: [order] })));
   });
 
-  it("shows loading, pending-payment status, and a clear no-payment notice", async () => {
+  it("shows loading, reserved status, and a clear no-payment notice", async () => {
     let resolveRequest: ((value: Response) => void) | undefined;
     vi.mocked(fetch).mockReturnValueOnce(new Promise((resolve) => {
       resolveRequest = resolve;
@@ -45,7 +45,7 @@ describe("orders", () => {
     resolveRequest?.(jsonResponse({ items: [order] }));
 
     expect(await screen.findByText("Reserved")).toBeInTheDocument();
-    expect(screen.getByText(/Payment processing is not enabled/)).toBeInTheDocument();
+    expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
     expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
   });
 
