@@ -50,7 +50,7 @@ Use a stable hostname that will remain the same across rebuilds. The hostname in
 
 The Mini App URL above is the HTTPS website origin used by TON Connect. `TELEGRAM_MINI_APP_URL` is a different value: the Telegram direct link configured in @BotFather.
 
-If the Telegram bot is not part of this preview, `BOT_TOKEN` and `TELEGRAM_MINI_APP_URL` may remain unset; the bot profile will not be started. The API still requires `BOT_TOKEN` for Telegram initData authentication readiness.
+The API requires `BOT_TOKEN` to verify Telegram `initData`, even when the separate bot container is not started. `TELEGRAM_MINI_APP_URL` is only needed when the bot menu and notification messages should include the configured Mini App direct link. Leave the bot profile off unless you specifically want polling and notification delivery in this preview.
 
 ## 2. Start the isolated stack
 
