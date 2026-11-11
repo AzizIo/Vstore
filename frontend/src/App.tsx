@@ -7,7 +7,7 @@ import {
   type ListingSort,
 } from "./api/listings";
 import { createOrder } from "./api/orders";
-import { SessionProvider, useSession } from "./auth/SessionProvider";
+import { SessionProvider, useRetrySession, useSession } from "./auth/SessionProvider";
 import { getTelegramStartParam } from "./auth/telegram";
 import { MyListings } from "./listings/MyListings";
 import { MyInventory } from "./inventory/MyInventory";
@@ -193,6 +193,7 @@ export function App() {
 
 function SessionBanner() {
   const session = useSession();
+  const retrySession = useRetrySession();
   if (session.status === "loading") {
     return <p className="session-banner" role="status">Checking Telegram session...</p>;
   }
@@ -202,7 +203,16 @@ function SessionBanner() {
     return <p className="session-banner session-authenticated" role="status">Signed in as {name || session.user.username}{username}</p>;
   }
   if (session.status === "error") {
-    return <p className="session-banner session-error" role="alert">{session.message}</p>;
+    return (
+      <div className="session-banner session-error" role="alert">
+        <span>{session.message}</span>
+        {session.retryable && (
+          <button className="text-button" type="button" onClick={retrySession}>
+            Retry session
+          </button>
+        )}
+      </div>
+    );
   }
   return (
     <p className="session-banner" role="status">
@@ -330,7 +340,14 @@ function MarketplaceApp() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#catalog" onClick={() => setListingId(null)}>
+        <a
+          className="brand"
+          href="#catalog"
+          onClick={() => {
+            setListingId(null);
+            setSection("catalog");
+          }}
+        >
           <span className="brand-mark" aria-hidden="true">V</span>
           <span className="brand-name">VILTARA</span>
         </a>

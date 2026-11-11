@@ -8,9 +8,10 @@ export type SessionState =
   | { status: "loading" }
   | { status: "unauthenticated"; reason: "missing_init_data" | "invalid_init_data" }
   | { status: "authenticated"; accessToken: string; user: UserProfile }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string; retryable: boolean };
 
 const SessionContext = createContext<SessionState | null>(null);
+const SessionRetryContext = createContext<(() => void) | null>(null);
 
 function clearPrivateCache(queryClient: ReturnType<typeof useQueryClient>) {
   queryClient.removeQueries({
@@ -23,17 +24,28 @@ function getSessionError(error: unknown): SessionState {
     return { status: "unauthenticated", reason: "invalid_init_data" };
   }
   if (error instanceof AuthApiError && error.status === 403) {
-    return { status: "error", message: "This account is restricted. Contact support for assistance." };
+    return {
+      status: "error",
+      message: "This account is restricted. Contact support for assistance.",
+      retryable: false,
+    };
   }
   return {
     status: "error",
     message: "Unable to verify your Telegram session. The public catalog is still available.",
+    retryable: true,
   };
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [session, setSession] = useState<SessionState>({ status: "loading" });
+  const [sessionAttempt, setSessionAttempt] = useState(0);
+
+  function retrySession() {
+    setSession({ status: "loading" });
+    setSessionAttempt((attempt) => attempt + 1);
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -52,20 +64,34 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (controller.signal.aborted) return;
         if (error instanceof AuthApiError && error.status === 401) clearPrivateCache(queryClient);
         setSession(error instanceof TypeError
-          ? { status: "error", message: "Telegram Mini App could not be initialized." }
+          ? {
+              status: "error",
+              message: "Telegram Mini App could not be initialized.",
+              retryable: true,
+            }
           : getSessionError(error));
       }
     }
 
     void loadSession();
     return () => controller.abort();
-  }, [queryClient]);
+  }, [queryClient, sessionAttempt]);
 
-  return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>;
+  return (
+    <SessionRetryContext.Provider value={retrySession}>
+      <SessionContext.Provider value={session}>{children}</SessionContext.Provider>
+    </SessionRetryContext.Provider>
+  );
 }
 
 export function useSession() {
   const session = useContext(SessionContext);
   if (!session) throw new Error("useSession must be used within SessionProvider.");
   return session;
+}
+
+export function useRetrySession() {
+  const retrySession = useContext(SessionRetryContext);
+  if (!retrySession) throw new Error("useRetrySession must be used within SessionProvider.");
+  return retrySession;
 }

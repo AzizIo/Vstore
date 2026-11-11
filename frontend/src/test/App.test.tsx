@@ -415,7 +415,32 @@ describe("marketplace catalog", () => {
     renderMarketplace();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("This account is restricted");
+    expect(screen.queryByRole("button", { name: "Retry session" })).not.toBeInTheDocument();
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
+  });
+
+  it("retries a transient Telegram authentication failure without reloading the Mini App", async () => {
+    setTelegramInitData();
+    let authAttempts = 0;
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/telegram")) {
+        authAttempts += 1;
+        return authAttempts === 1
+          ? jsonResponse({ detail: "Authentication temporarily unavailable" }, 503)
+          : jsonResponse(authResponse);
+      }
+      if (url.endsWith("/api/users/me")) return jsonResponse(profile);
+      if (url.endsWith("/api/wallets/me")) return jsonResponse([]);
+      return jsonResponse(page);
+    });
+    renderMarketplace();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to verify your Telegram session");
+    fireEvent.click(screen.getByRole("button", { name: "Retry session" }));
+
+    expect(await screen.findByText("Signed in as Alex Example · @alex")).toBeInTheDocument();
+    expect(authAttempts).toBe(2);
   });
 
   it("clears the session and private query cache when the protected profile returns 401", async () => {
@@ -941,4 +966,18 @@ describe("My Listings dashboard", () => {
 
     expect(await screen.findByText("Explore listings")).toBeInTheDocument();
   });
+  it("returns to the public catalog when the VILTARA brand is selected from a seller detail", async () => {
+    setTelegramInitData();
+    setAuthenticatedListingsResponse();
+    renderMarketplace();
+    await openMyListings();
+    fireEvent.click(await screen.findByRole("button", { name: /My draft lantern/ }));
+    await screen.findByRole("heading", { name: "My draft lantern" });
+
+    fireEvent.click(screen.getByRole("link", { name: "VILTARA" }));
+
+    expect(await screen.findByRole("heading", { name: "Explore listings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Catalog" })).toHaveAttribute("aria-pressed", "true");
+  });
+
 });
