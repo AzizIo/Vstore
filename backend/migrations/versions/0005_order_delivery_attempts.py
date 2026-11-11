@@ -25,6 +25,12 @@ _ALL_ORDER_STATUSES = (
 def upgrade() -> None:
     # Remove legacy constraints/index while preserving the rows that they protect.
     op.drop_index("uq_orders_pending_listing", table_name="orders")
+    op.alter_column(
+        "orders",
+        "status",
+        existing_type=sa.String(length=32),
+        server_default="reserved",
+    )
     op.drop_constraint("ck_orders_status", "orders", type_="check")
     op.drop_constraint("ck_order_events_statuses", "order_events", type_="check")
     op.drop_constraint("ck_order_events_actor_type", "order_events", type_="check")
@@ -208,6 +214,12 @@ def downgrade() -> None:
     op.drop_table("order_delivery_attempts")
 
     op.drop_index("uq_orders_pending_listing", table_name="orders")
+    op.alter_column(
+        "orders",
+        "status",
+        existing_type=sa.String(length=32),
+        server_default="pending_payment",
+    )
     op.drop_constraint("ck_orders_status", "orders", type_="check")
     op.drop_constraint("ck_order_events_statuses", "order_events", type_="check")
     op.drop_constraint("ck_order_events_actor_type", "order_events", type_="check")
