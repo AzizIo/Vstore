@@ -1014,6 +1014,7 @@ async def test_publish_listing_rejects_provider_owner_mismatch(
         )
         await engine.dispose()
 
+
 async def test_upsert_verified_asset_listing_guard_is_scoped_to_conflicting_asset(
     db_session: AsyncSession,
 ) -> None:
@@ -1110,7 +1111,9 @@ async def test_upsert_verified_asset_listing_guard_is_scoped_to_conflicting_asse
     assert asset_a.name == "NFT A original"
     assert asset_a.description == "A protected description"
     assert asset_a.image_url == "https://example.test/a-original.png"
-    assert asset_a.metadata_json == {"attributes": [{"trait_type": "version", "value": "original"}]}
+    assert asset_a.metadata_json == {
+        "attributes": [{"trait_type": "version", "value": "original"}]
+    }
     assert asset_b.owner_id == sync_owner.id
     assert asset_b.name == "NFT B refreshed"
     assert asset_b.description == "B updated while A is listed"
