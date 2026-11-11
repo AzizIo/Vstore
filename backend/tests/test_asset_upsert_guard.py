@@ -27,14 +27,14 @@ def test_open_listing_guard_correlates_to_upsert_target() -> None:
 
     sql = str(statement.compile(dialect=postgresql.dialect()))
     guard_match = re.search(
-        r"WHERE NOT \\(EXISTS \\((.*?)\\)\\)\\s+RETURNING",
+        r"WHERE NOT \(EXISTS \((.*?)\)\)\s+RETURNING",
         sql,
         flags=re.DOTALL,
     )
 
     assert guard_match is not None, sql
     guard_sql = guard_match.group(1)
-    from_match = re.search(r"\\bFROM\\s+(.+?)\\s+WHERE\\b", guard_sql, flags=re.DOTALL)
+    from_match = re.search(r"\bFROM\s+(.+?)\s+WHERE\b", guard_sql, flags=re.DOTALL)
 
     assert from_match is not None, guard_sql
     assert from_match.group(1).strip() == "listings", guard_sql
