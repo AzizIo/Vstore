@@ -10,6 +10,7 @@ import { createOrder } from "./api/orders";
 import { SessionProvider, useSession } from "./auth/SessionProvider";
 import { getTelegramStartOrderId } from "./auth/telegram";
 import { MyListings } from "./listings/MyListings";
+import { MyInventory } from "./inventory/MyInventory";
 import { Orders } from "./orders/Orders";
 import { WalletConnection } from "./wallet/WalletConnection";
 
@@ -215,7 +216,7 @@ function SessionBanner() {
 function MarketplaceApp() {
   const session = useSession();
   const [initialOrderId, setInitialOrderId] = useState<string | null>(null);
-  const [section, setSection] = useState<"catalog" | "my-listings" | "orders">("catalog");
+  const [section, setSection] = useState<"catalog" | "my-listings" | "my-nft" | "orders">("catalog");
   const [listings, setListings] = useState<Listing[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -347,6 +348,17 @@ function MarketplaceApp() {
         <button
           className="navigation-tab"
           type="button"
+          aria-pressed={section === "my-nft"}
+          onClick={() => {
+            setListingId(null);
+            setSection("my-nft");
+          }}
+        >
+          My NFT
+        </button>
+        <button
+          className="navigation-tab"
+          type="button"
           aria-pressed={section === "my-listings"}
           onClick={() => {
             setListingId(null);
@@ -379,6 +391,15 @@ function MarketplaceApp() {
         )
       ) : section === "my-listings" ? (
         <MyListings />
+      ) : section === "my-nft" ? (
+        session.status === "authenticated" ? (
+          <MyInventory accessToken={session.accessToken} />
+        ) : (
+          <div className="inventory-message" role="status">
+            <h2>Sign in to view your inventory</h2>
+            <p>Your NFT inventory requires a verified Telegram session and a TON wallet confirmed by backend proof.</p>
+          </div>
+        )
       ) : listingId ? (
         <ListingDetail listingId={listingId} onBack={() => setListingId(null)} />
       ) : (
