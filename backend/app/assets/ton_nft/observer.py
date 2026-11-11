@@ -85,6 +85,23 @@ class DeliveryObserverPassResult:
     lease_lost: int = 0
 
 
+def _owns_unexpired_lease(
+    attempt: OrderDeliveryAttempt | None,
+    claim: DeliveryObservationClaim,
+    *,
+    checked_at: datetime,
+) -> bool:
+    """Fence results from workers whose lease expired while provider I/O ran."""
+
+    return (
+        attempt is not None
+        and attempt.observer_lease_token == claim.lease_token
+        and attempt.status is OrderDeliveryAttemptStatus.OBSERVING
+        and attempt.observer_lease_until is not None
+        and attempt.observer_lease_until > checked_at
+    )
+
+
 def _build_provider(network: str) -> TONCenterDeliveryEvidenceProvider:
     settings = get_settings()
     if network == "mainnet":
@@ -293,7 +310,9 @@ async def _mark_manual_review(
             )
             .with_for_update()
         )
-        if attempt is None:
+        if not _owns_unexpired_lease(
+            attempt, claim, checked_at=datetime.now(UTC)
+        ):
             return False
         attempt.status = OrderDeliveryAttemptStatus.MANUAL_REVIEW
         attempt.reason_code = reason_code[:64]
@@ -322,7 +341,9 @@ async def _schedule_retry(
             )
             .with_for_update()
         )
-        if attempt is None:
+        if not _owns_unexpired_lease(
+            attempt, claim, checked_at=datetime.now(UTC)
+        ):
             return "lease_lost"
 
         attempt.last_checked_at = now
@@ -372,10 +393,8 @@ async def _apply_verified_evidence(
             .where(OrderDeliveryAttempt.id == claim.attempt_id)
             .with_for_update()
         )
-        if (
-            attempt is None
-            or attempt.observer_lease_token != claim.lease_token
-            or attempt.status is not OrderDeliveryAttemptStatus.OBSERVING
+        if not _owns_unexpired_lease(
+            attempt, claim, checked_at=datetime.now(UTC)
         ):
             return "lease_lost"
 
@@ -557,9 +576,9 @@ async def run_delivery_observer_pass(
                     )
                 )
                 async with session_factory() as session:
-                    return await apply_delivery_observation(
-                        session, claim, evidence, now=current_time
-                    )
+                    # Use a fresh clock after provider I/O; apply_delivery_observation
+                    # checks the lease again after acquiring the database locks.
+                    return await apply_delivery_observation(session, claim, evidence)
             except (ProviderUnavailable, InvalidProviderData):
                 logger.warning(
                     "Delivery evidence provider returned an unavailable or invalid response "
@@ -571,7 +590,7 @@ async def run_delivery_observer_pass(
                     return await _schedule_retry(
                         session,
                         claim,
-                        now=current_time,
+                        now=datetime.now(UTC),
                         reason_code="provider_unavailable_or_invalid",
                     )
             except asyncio.CancelledError:
@@ -586,7 +605,7 @@ async def run_delivery_observer_pass(
                         return await _schedule_retry(
                             session,
                             claim,
-                            now=current_time,
+                            now=datetime.now(UTC),
                             reason_code="observer_internal_error",
                         )
                 except Exception:
