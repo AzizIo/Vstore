@@ -42,8 +42,13 @@ async def main() -> None:
         raise RuntimeError("BOT_TOKEN is required to start the Telegram bot.")
     if not settings.telegram_mini_app_url:
         logger.warning(
-            "TELEGRAM_MINI_APP_URL is not configured; order notifications will not include "
-            "Mini App deep links."
+            "TELEGRAM_MINI_APP_URL is not configured; /start and /app will not show "
+            "a Mini App launch button."
+        )
+    if not settings.telegram_mini_app_direct_link:
+        logger.info(
+            "TELEGRAM_MINI_APP_DIRECT_LINK is not configured; order notification "
+            "deep links will be omitted."
         )
 
     logging.basicConfig(level=logging.INFO)
