@@ -122,7 +122,8 @@ def upgrade() -> None:
             name="ck_order_delivery_attempt_deadline",
         ),
         sa.CheckConstraint(
-            "status IN ('prepared', 'observing', 'verified', 'failed', 'manual_review', 'cancelled')",
+            "status IN ('prepared', 'observing', 'verified', 'failed', "
+            "'manual_review', 'cancelled')",
             name="ck_order_delivery_attempt_status",
         ),
         sa.CheckConstraint(
