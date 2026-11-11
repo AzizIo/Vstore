@@ -1794,6 +1794,17 @@ async def test_delivery_observer_lease_fences_stale_worker_and_retries_inconclus
             first_claims = await claim_due_delivery_attempts(session, now=now)
             assert len(first_claims) == 1
             first_claim = first_claims[0]
+            settings = get_settings()
+            waves = (
+                settings.delivery_observer_batch_size
+                + settings.delivery_observer_concurrency
+                - 1
+            ) // settings.delivery_observer_concurrency
+            expected_lease = max(
+                settings.delivery_observer_lease_seconds,
+                int(settings.ton_center_timeout_seconds * 6 * waves) + 30,
+            )
+            assert first_claim.lease_until == now + timedelta(seconds=expected_lease)
             assert await claim_due_delivery_attempts(session, now=now) == []
 
         reclaimed_at = first_claim.lease_until + timedelta(seconds=1)
