@@ -121,7 +121,7 @@ describe("orders", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Sales/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Seller · Sale")).toBeInTheDocument();
     expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
     await waitFor(() => {
       expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/api/orders?role=seller"))).toBe(true);
