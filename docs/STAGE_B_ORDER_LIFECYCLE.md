@@ -7,7 +7,7 @@
 
 ## 1. Executive summary
 
-The current application can reserve an active listing, snapshot its price and currency, cancel or expire the reservation, and verify that the seller still owns the NFT at reservation time. B1 adds read-only, fail-closed TON transfer evidence. B2 (implemented in draft PR #64) adds the forward migration from `pending_payment` to `reserved`, delivery-attempt snapshots and database constraints. There is still no prepare/submit API, observer, or active order transition into delivery states. No delivery is currently completed by the application.
+The current application can reserve an active listing, snapshot its price and currency, cancel or expire the reservation, and verify that the seller still owns the NFT at reservation time. B1 adds read-only, fail-closed TON transfer evidence. B2 (implemented in PR #85) adds the forward migration from `pending_payment` to `reserved`, delivery-attempt snapshots and database constraints. There is still no prepare/submit API, observer, or active order transition into delivery states. No delivery is currently completed by the application.
 
 Stage B should add a server-observed delivery lifecycle for a direct, non-custodial TON NFT transfer. The seller authorizes any transfer in their own wallet. The backend stores a buyer-wallet snapshot and checks chain/provider evidence independently. A submitted transaction hash is only a lookup hint, and a client callback, screenshot, Tonkeeper screen, wallet connection, or current-owner response without transaction correlation is not sufficient proof of delivery.
 
@@ -40,7 +40,7 @@ Stage B should add a server-observed delivery lifecycle for a direct, non-custod
 
 ## 3. Proposed state machine
 
-B2 in draft PR #64 adds these values to the database/API type vocabulary and migrates legacy rows in place. They are schema states, not a claim that the current services already execute delivery transitions.
+B2 in PR #85 adds these values to the database/API type vocabulary and migrates legacy rows in place. They are schema states, not a claim that the current services already execute delivery transitions.
 
 ### Order states and target transitions
 
@@ -170,7 +170,7 @@ Do not add a public endpoint accepting arbitrary status or arbitrary buyer addre
 - Record old/new state, actor, attempt_id/correlation_id, event time and reason code. Keep this append-only and transactional with state transition/outbox changes.
 
 **Migration and compatibility:**
-- B2 in draft PR #64 adds a forward migration from `pending_payment` to `reserved`, preserving order/event IDs and all price, currency, idempotency and timestamp data. It updates Order/OrderEvent constraints, the partial unique index, backend/frontend types and fixtures together.
+- B2 in PR #85 adds a forward migration from `pending_payment` to `reserved`, preserving order/event IDs and all price, currency, idempotency and timestamp data. It updates Order/OrderEvent constraints, the partial unique index, backend/frontend types and fixtures together.
 - The migration adds `order_delivery_attempts` with immutable seller/buyer address snapshots and database uniqueness/check constraints. Its downgrade refuses to remove recorded attempts or newer delivery states.
 - Do not run this migration against production/VPS until the PR is merged, reviewed, and a separate deployment/backup plan is approved.
 
@@ -278,7 +278,7 @@ These are proposed tasks to create or map onto existing Issues after maintainer 
 | Order | Work item | Owner area | Depends on | Acceptance |
 |---|---|---|---|---|
 | B1 | Read-only transaction/trace evidence adapter for TEP-62 transfer correlation | Backend | Maintainer baseline | Implemented in [PR #63](https://github.com/AzizIo/Vstore/pull/63): bounded TON Center v3 correlation, typed outcomes and fail-closed checks. Indexed-provider trust assumptions are documented. |
-| B2 | Delivery-attempt persistence, state migration and immutable snapshots | Backend + DB | B1 | Implemented in draft [PR #64](https://github.com/AzizIo/Vstore/pull/64): preserves historical reservations/events, adds database constraints and uniqueness. No endpoint/worker uses it yet. |
+| B2 | Delivery-attempt persistence, state migration and immutable snapshots | Backend + DB | B1 | Implemented in draft [PR #85](https://github.com/AzizIo/Vstore/pull/85): preserves historical reservations/events, adds database constraints and uniqueness. No endpoint/worker uses it yet. |
 | B3 | Leased observer/reconciliation worker and deterministic provider polling | Backend | B1, B2 | Correlates exact item/source/destination/network/query_id; only finalized masterchain evidence can verify; ambiguous outcomes remain observing/manual_review. |
 | B4 | Delivery preparation/submission/read APIs with auth, locks and idempotency | Backend | B2, B3 | Snapshot verified buyer destination and freshly verified seller source; client-supplied hashes/addresses never establish completion. |
 | B5 | Transactional transfer outbox events/notifications and PostgreSQL concurrency/fault-injection tests | Backend + QA | B3, B4 | Duplicate/out-of-order events are idempotent; failure cases fail closed. |
