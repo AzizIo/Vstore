@@ -16,6 +16,7 @@ const nft: InventoryAsset = {
   asset_type: "ton_nft",
   external_id: "0:" + "11".repeat(32),
   item_address: "0:" + "11".repeat(32),
+  collection_address: null,
   name: "Verified collectible",
   description: null,
   image_url: null,

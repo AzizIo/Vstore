@@ -281,3 +281,19 @@ async def test_unsupported_asset_has_distinct_status() -> None:
     provider = FakeProvider(error=UnsupportedAsset("unsupported"))
     result = await TONNFTVerifier(provider).verify(ITEM, OWNER)
     assert result.status is VerificationStatus.UNSUPPORTED
+
+
+@pytest.mark.parametrize(
+    ("image", "expected"),
+    [
+        ("https://cdn.example.test/nft.png", "https://cdn.example.test/nft.png"),
+        ("http://cdn.example.test/nft.png", None),
+        ("javascript:alert(1)", None),
+        ("data:image/png;base64,AA==", None),
+        ("https://user:pass@cdn.example.test/nft.png", None),
+        ("https://cdn.example.test/" + "x" * 2050, None),
+    ],
+)
+def test_provider_rejects_unsafe_or_oversized_image_urls(image: str, expected: str | None) -> None:
+    metadata = TONCenterV3Provider._metadata({"content": {"metadata": {"image": image}}})
+    assert metadata.image == expected
