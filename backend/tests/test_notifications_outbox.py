@@ -377,7 +377,7 @@ async def test_transient_retries_stop_at_configured_max_attempts(
             notification_max_attempts=2,
             notification_retry_base_seconds=5,
             notification_retry_max_seconds=30,
-            telegram_mini_app_url=None,
+            telegram_mini_app_direct_link=None,
         ),
     )
 
