@@ -107,6 +107,8 @@ async def test_help_callback_is_acknowledged_and_updates_the_message(
     callback.answer.assert_awaited_once()
     edit_text.assert_awaited_once()
     assert "резервирование, а не оплата" in edit_text.await_args.args[0]
+    keyboard = edit_text.await_args.kwargs["reply_markup"]
+    assert keyboard.inline_keyboard[0][0].callback_data == "bot:menu"
 
 
 @pytest.mark.asyncio
@@ -178,10 +180,8 @@ async def test_menu_callback_acknowledges_query_and_restores_main_menu(
     await bot_handlers.handle_menu_callback(callback)  # type: ignore[arg-type]
 
     callback.answer.assert_awaited_once()
-    edit_text.assert_awaited_once_with(
-        bot_handlers.START_MESSAGE,
-        reply_markup=edit_text.await_args.kwargs["reply_markup"],
-    )
+    edit_text.assert_awaited_once()
+    assert edit_text.await_args.args[0] == bot_handlers.START_MESSAGE
     keyboard = edit_text.await_args.kwargs["reply_markup"]
     assert keyboard.inline_keyboard[0][0].web_app == WebAppInfo(
         url="https://example.com/miniapp"
