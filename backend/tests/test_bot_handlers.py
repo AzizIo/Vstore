@@ -33,7 +33,7 @@ async def test_start_handler_sends_welcome_and_configured_mini_app_button(
     monkeypatch.setattr(
         bot_handlers,
         "get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url="https://t.me/viltara_shop_bot/marketplace"),
+        lambda: SimpleNamespace(telegram_mini_app_url="https://dealtime-com-badly-twice.trycloudflare.com"),
     )
     message = SimpleNamespace(answer=AsyncMock())
 
@@ -45,8 +45,9 @@ async def test_start_handler_sends_welcome_and_configured_mini_app_button(
     keyboard = args.kwargs["reply_markup"]
     button = keyboard.inline_keyboard[0][0]
     assert button.text == "Открыть VILTARA SHOP"
-    assert button.url == "https://t.me/viltara_shop_bot/marketplace"
-    assert button.web_app is None
+    assert button.url is None
+    assert button.web_app is not None
+    assert button.web_app.url == "https://dealtime-com-badly-twice.trycloudflare.com"
     assert keyboard.inline_keyboard[1][0].callback_data == "bot:help"
 
 
@@ -72,7 +73,7 @@ async def test_start_handler_works_without_optional_mini_app_url(
 async def test_app_command_uses_telegram_direct_link_button(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    mini_app_url = "https://t.me/viltara_shop_bot/marketplace"
+    mini_app_url = "https://dealtime-com-badly-twice.trycloudflare.com"
     monkeypatch.setattr(
         bot_handlers,
         "get_settings",
@@ -85,8 +86,9 @@ async def test_app_command_uses_telegram_direct_link_button(
     message.answer.assert_awaited_once()
     keyboard = message.answer.await_args.kwargs["reply_markup"]
     button = keyboard.inline_keyboard[0][0]
-    assert button.url == mini_app_url
-    assert button.web_app is None
+    assert button.url is None
+    assert button.web_app is not None
+    assert button.web_app.url == mini_app_url
 
 
 @pytest.mark.asyncio
@@ -124,7 +126,7 @@ async def test_help_command_explains_supported_features_and_limits(
     monkeypatch.setattr(
         bot_handlers,
         "get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url="https://t.me/viltara_shop_bot/marketplace"),
+        lambda: SimpleNamespace(telegram_mini_app_url="https://dealtime-com-badly-twice.trycloudflare.com"),
     )
     message = SimpleNamespace(answer=AsyncMock())
 
@@ -138,8 +140,9 @@ async def test_help_command_explains_supported_features_and_limits(
     assert "Заказы" in text
     assert "резервирование, а не оплата" in text
     keyboard = message.answer.await_args.kwargs["reply_markup"]
-    assert keyboard.inline_keyboard[0][0].url == "https://t.me/viltara_shop_bot/marketplace"
-    assert keyboard.inline_keyboard[0][0].web_app is None
+    assert keyboard.inline_keyboard[0][0].url is None
+    assert keyboard.inline_keyboard[0][0].web_app is not None
+    assert keyboard.inline_keyboard[0][0].web_app.url == "https://dealtime-com-badly-twice.trycloudflare.com"
 
 
 @pytest.mark.asyncio
@@ -170,7 +173,7 @@ async def test_menu_callback_acknowledges_query_and_restores_main_menu(
     monkeypatch.setattr(
         bot_handlers,
         "get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url="https://t.me/viltara_shop_bot/marketplace"),
+        lambda: SimpleNamespace(telegram_mini_app_url="https://dealtime-com-badly-twice.trycloudflare.com"),
     )
     message = Message(
         message_id=2,
@@ -188,8 +191,9 @@ async def test_menu_callback_acknowledges_query_and_restores_main_menu(
     edit_text.assert_awaited_once()
     assert edit_text.await_args.args[0] == bot_handlers.START_MESSAGE
     keyboard = edit_text.await_args.kwargs["reply_markup"]
-    assert keyboard.inline_keyboard[0][0].url == "https://t.me/viltara_shop_bot/marketplace"
-    assert keyboard.inline_keyboard[0][0].web_app is None
+    assert keyboard.inline_keyboard[0][0].url is None
+    assert keyboard.inline_keyboard[0][0].web_app is not None
+    assert keyboard.inline_keyboard[0][0].web_app.url == "https://dealtime-com-badly-twice.trycloudflare.com"
     assert keyboard.inline_keyboard[1][0].callback_data == "bot:help"
 
 
@@ -275,14 +279,14 @@ def test_dispatcher_registers_each_public_handler(
 
 
 @pytest.mark.asyncio
-async def test_start_menu_omits_button_for_non_telegram_https_domain(
+async def test_start_menu_accepts_public_https_mini_app_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         bot_handlers,
         "get_settings",
         lambda: SimpleNamespace(
-            telegram_mini_app_url="https://shop.example.com/miniapp"
+            telegram_mini_app_url="http://shop.example.com/miniapp"
         ),
     )
     message = SimpleNamespace(answer=AsyncMock())
@@ -290,12 +294,15 @@ async def test_start_menu_omits_button_for_non_telegram_https_domain(
     await bot_handlers.handle_start(message)  # type: ignore[arg-type]
 
     keyboard = message.answer.await_args.kwargs["reply_markup"]
-    assert len(keyboard.inline_keyboard) == 1
-    assert keyboard.inline_keyboard[0][0].callback_data == "bot:help"
+    assert len(keyboard.inline_keyboard) == 2
+    button = keyboard.inline_keyboard[0][0]
+    assert button.web_app is not None
+    assert button.web_app.url == "https://shop.example.com/miniapp"
+    assert keyboard.inline_keyboard[1][0].callback_data == "bot:help"
 
 
 @pytest.mark.asyncio
-async def test_app_command_explains_invalid_telegram_direct_link(
+async def test_app_command_explains_invalid_mini_app_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -311,5 +318,5 @@ async def test_app_command_explains_invalid_telegram_direct_link(
 
     response_text = message.answer.await_args.args[0]
     assert "ссылка указана неверно" in response_text
-    assert "https://t.me/<bot_username>/<app_short_name>" in response_text
+    assert "публичный HTTPS-адрес" in response_text
     assert "reply_markup" not in message.answer.await_args.kwargs
