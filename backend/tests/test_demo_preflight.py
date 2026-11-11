@@ -6,16 +6,24 @@ from urllib.request import Request
 
 import pytest
 
-from scripts.demo_preflight import PNG_SIGNATURE, run_preflight
+from scripts.demo_preflight import CORS_PROBE_ORIGIN, PNG_SIGNATURE, run_preflight
 
 
 class FakeResponse:
-    def __init__(self, url: str, body: bytes, content_type: str) -> None:
+    def __init__(
+        self,
+        url: str,
+        body: bytes,
+        content_type: str,
+        access_control_allow_origin: str | None = None,
+    ) -> None:
         self.status = 200
         self._url = url
         self._body = body
         self.headers = Message()
         self.headers["Content-Type"] = content_type
+        if access_control_allow_origin is not None:
+            self.headers["Access-Control-Allow-Origin"] = access_control_allow_origin
 
     def __enter__(self) -> FakeResponse:
         return self
@@ -57,6 +65,7 @@ def test_demo_preflight_passes_all_public_endpoint_checks(monkeypatch: pytest.Mo
             manifest_url,
             json.dumps({"url": app_origin, "name": "VILTARA SHOP", "iconUrl": icon_url}).encode(),
             "application/json",
+            access_control_allow_origin="*",
         ),
         icon_url: FakeResponse(icon_url, PNG_SIGNATURE + b"demo", "image/png"),
     }
@@ -65,6 +74,10 @@ def test_demo_preflight_passes_all_public_endpoint_checks(monkeypatch: pytest.Mo
     def fake_urlopen(request: Request, timeout: float) -> FakeResponse:
         assert timeout == 3.0
         requested.append(request.full_url)
+        if request.full_url == manifest_url:
+            assert request.get_header("Origin") == CORS_PROBE_ORIGIN
+        else:
+            assert request.get_header("Origin") is None
         return responses[request.full_url]
 
     monkeypatch.setattr("scripts.demo_preflight.urlopen", fake_urlopen)
@@ -79,6 +92,52 @@ def test_demo_preflight_passes_all_public_endpoint_checks(monkeypatch: pytest.Mo
         manifest_url,
         icon_url,
     ]
+
+
+def test_demo_preflight_fails_when_manifest_does_not_allow_cross_origin_get(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api_origin = "https://api.example.test"
+    app_origin = "https://shop.example.test"
+    manifest_url = f"{app_origin}/tonconnect-manifest.json"
+    icon_url = f"{app_origin}/tonconnect-icon.png"
+    responses = {
+        f"{api_origin}/api/health/ready": FakeResponse(
+            f"{api_origin}/api/health/ready",
+            json.dumps({
+                "status": "ready",
+                "checks": {
+                    "database": "ok",
+                    "redis": "ok",
+                    "authentication": "ok",
+                },
+            }).encode(),
+            "application/json",
+        ),
+        f"{app_origin}/": FakeResponse(
+            app_origin + "/",
+            b"<!doctype html><html><body>VILTARA</body></html>",
+            "text/html",
+        ),
+        manifest_url: FakeResponse(
+            manifest_url,
+            json.dumps({"url": app_origin, "name": "VILTARA SHOP", "iconUrl": icon_url}).encode(),
+            "application/json",
+        ),
+        icon_url: FakeResponse(icon_url, PNG_SIGNATURE + b"demo", "image/png"),
+    }
+
+    monkeypatch.setattr(
+        "scripts.demo_preflight.urlopen",
+        lambda request, timeout: responses[request.full_url],
+    )
+
+    checks = run_preflight(api_origin, app_origin)
+
+    assert all(check.ok for check in checks[:2])
+    assert not checks[2].ok
+    assert "Access-Control-Allow-Origin" in checks[2].detail
+    assert checks[3].ok
 
 
 def test_demo_preflight_fails_readiness_when_one_dependency_is_unavailable(
@@ -115,6 +174,7 @@ def test_demo_preflight_fails_readiness_when_one_dependency_is_unavailable(
                 "iconUrl": f"{app_origin}/tonconnect-icon.png",
             }).encode(),
             "application/json",
+            access_control_allow_origin="*",
         ),
         f"{app_origin}/tonconnect-icon.png": FakeResponse(
             f"{app_origin}/tonconnect-icon.png",
