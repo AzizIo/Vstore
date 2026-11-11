@@ -1,3 +1,5 @@
+from urllib.parse import urlsplit
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
@@ -7,8 +9,6 @@ from aiogram.types import (
     Message,
     WebAppInfo,
 )
-
-from urllib.parse import urlsplit
 
 from app.core.config import get_settings
 
@@ -26,7 +26,12 @@ def _mini_app_button(url: str | None) -> InlineKeyboardButton | None:
     except ValueError:
         return None
 
-    if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or parsed.username
+        or parsed.password
+    ):
         return None
 
     return InlineKeyboardButton(
