@@ -5,22 +5,33 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
+    WebAppInfo,
 )
 
+from urllib.parse import urlsplit
+
 from app.core.config import get_settings
-from app.telegram_direct_link import validate_telegram_direct_link
 
 router = Router(name="viltara-shop-user")
 
 
 def _mini_app_button(url: str | None) -> InlineKeyboardButton | None:
-    """Create a URL button only when the configured Telegram direct link is valid."""
-    direct_link = validate_telegram_direct_link(url)
-    if direct_link is None:
+    """Create an in-Telegram Mini App button for a configured HTTPS URL."""
+    if not url:
         return None
+
+    candidate = url.strip()
+    try:
+        parsed = urlsplit(candidate)
+    except ValueError:
+        return None
+
+    if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+        return None
+
     return InlineKeyboardButton(
         text="Открыть VILTARA SHOP",
-        url=direct_link,
+        web_app=WebAppInfo(url=candidate),
     )
 
 
@@ -82,9 +93,8 @@ async def handle_app(message: Message) -> None:
     if mini_app_button is None:
         await message.answer(
             "Mini App пока не настроен или ссылка указана неверно. "
-            "Администратору нужно задать TELEGRAM_MINI_APP_URL в формате "
-            "https://t.me/<bot_username>/<app_short_name>. "
-            "Попробуйте команду /help."
+            "Администратору нужно задать TELEGRAM_MINI_APP_URL как публичный HTTPS-адрес "
+            "Mini App. Попробуйте команду /help."
         )
         return
 
