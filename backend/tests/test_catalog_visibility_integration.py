@@ -291,7 +291,7 @@ async def test_expired_active_listings_are_hidden_and_transitioned(
 
     engine = create_async_engine(catalog_database, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
-    now = datetime(2026, 11, 10, 12, 0, tzinfo=UTC)
+    now = datetime.now(UTC)
     listing_ids: list = []
     asset_ids: list = []
 
