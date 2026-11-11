@@ -68,10 +68,13 @@ def _get(url: str, timeout: float) -> HttpResult:
                 final_url=str(response.geturl()),
             )
     except HTTPError as error:
+        body = error.read(MAX_RESPONSE_BYTES + 1)
+        if len(body) > MAX_RESPONSE_BYTES:
+            body = b""
         return HttpResult(
             status=int(error.code),
             content_type=_content_type(error.headers),
-            body=b"",
+            body=body,
             final_url=str(error.geturl()),
         )
     except URLError as error:
@@ -111,8 +114,8 @@ def run_preflight(
     # API readiness includes database, Redis and the authentication configuration.
     try:
         health = _get(f"{api_origin}/api/health/ready", timeout)
-        if health.status != 200 or health.content_type != "application/json":
-            checks.append(CheckResult("API readiness", False, f"Expected HTTP 200 JSON; got HTTP {health.status} {health.content_type or 'unknown content type'}."))
+        if health.content_type != "application/json":
+            checks.append(CheckResult("API readiness", False, f"Expected JSON; got HTTP {health.status} {health.content_type or 'unknown content type'}."))
         elif not _same_origin(health.final_url, api_origin):
             checks.append(CheckResult("API readiness", False, "Readiness endpoint redirected to a different origin."))
         else:
@@ -123,11 +126,12 @@ def run_preflight(
             components = payload.get("checks", {}) if isinstance(payload, dict) else {}
             required = ("database", "redis", "authentication")
             missing_or_failed = [name for name in required if components.get(name) != "ok"]
-            if payload.get("status") == "ready" and not missing_or_failed:
+            ready = health.status == 200 and isinstance(payload, dict) and payload.get("status") == "ready" and not missing_or_failed
+            if ready:
                 checks.append(CheckResult("API readiness", True, "API, database, Redis and authentication are ready."))
             else:
                 failed = ", ".join(missing_or_failed) or "overall readiness"
-                checks.append(CheckResult("API readiness", False, f"API is not ready: {failed}."))
+                checks.append(CheckResult("API readiness", False, f"API is not ready (HTTP {health.status}): {failed}."))
     except (RuntimeError, ValueError) as error:
         checks.append(CheckResult("API readiness", False, str(error)))
 
