@@ -101,6 +101,7 @@ jobs:
       BOT_TOKEN: e2e-only-not-a-real-telegram-bot-token
       AUTH_SECRET_KEY: e2e-only-secret-never-use-outside-disposable-ci-database-123456789
       TON_CONNECT_NETWORK: mainnet
+      TON_CONNECT_ALLOWED_DOMAINS: '["viltara-e2e.example"]'
       TON_CENTER_MAINNET_BASE_URL: http://127.0.0.1:8999/api/v3
       VITE_TONCONNECT_APP_URL: https://viltara-e2e.example
       VITE_TONCONNECT_MANIFEST_URL: ""
