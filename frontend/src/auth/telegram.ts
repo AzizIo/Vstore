@@ -13,6 +13,10 @@ declare global {
   }
 }
 
+export type TelegramStartParam =
+  | { type: "order"; id: string }
+  | { type: "listing"; id: string };
+
 function readTelegramInitData(): string | null {
   const webApp = window.Telegram?.WebApp;
   if (!webApp) return null;
@@ -55,19 +59,36 @@ export function getTelegramInitData(signal?: AbortSignal): Promise<string | null
   });
 }
 
-export function getTelegramStartOrderId(): string | null {
+function normalizeUuid(hex: string): string {
+  const value = hex.toLowerCase();
+  return [
+    value.slice(0, 8),
+    value.slice(8, 12),
+    value.slice(12, 16),
+    value.slice(16, 20),
+    value.slice(20),
+  ].join("-");
+}
+
+/**
+ * Parses Telegram's untrusted start_param only as a navigation hint.
+ * Authentication must always use the separately verified initData flow.
+ */
+export function getTelegramStartParam(): TelegramStartParam | null {
   const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
   if (typeof startParam !== "string") return null;
 
-  const match = /^order_([0-9a-f]{32})$/i.exec(startParam);
+  const match = /^(order|listing)_([0-9a-f]{32})$/i.exec(startParam);
   if (!match) return null;
 
-  const hex = match[1].toLowerCase();
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    hex.slice(12, 16),
-    hex.slice(16, 20),
-    hex.slice(20),
-  ].join("-");
+  const type = match[1].toLowerCase();
+  if (type !== "order" && type !== "listing") return null;
+
+  return { type, id: normalizeUuid(match[2]) };
+}
+
+/** Backwards-compatible helper for callers that only consume order links. */
+export function getTelegramStartOrderId(): string | null {
+  const startParam = getTelegramStartParam();
+  return startParam?.type === "order" ? startParam.id : null;
 }
