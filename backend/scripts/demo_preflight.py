@@ -112,9 +112,22 @@ def run_preflight(
     try:
         health = _get(f"{api_origin}/api/health/ready", timeout)
         if health.content_type != "application/json":
-            checks.append(CheckResult("API readiness", False, f"Expected JSON; got HTTP {health.status} {health.content_type or 'unknown content type'}."))
+            checks.append(
+                CheckResult(
+                    "API readiness",
+                    False,
+                    f"Expected JSON; got HTTP {health.status} "
+                    f"{health.content_type or 'unknown content type'}.",
+                )
+            )
         elif not _same_origin(health.final_url, api_origin):
-            checks.append(CheckResult("API readiness", False, "Readiness endpoint redirected to a different origin."))
+            checks.append(
+                CheckResult(
+                    "API readiness",
+                    False,
+                    "Readiness endpoint redirected to a different origin.",
+                )
+            )
         else:
             try:
                 payload = json.loads(health.body)
@@ -123,12 +136,29 @@ def run_preflight(
             components = payload.get("checks", {}) if isinstance(payload, dict) else {}
             required = ("database", "redis", "authentication")
             missing_or_failed = [name for name in required if components.get(name) != "ok"]
-            ready = health.status == 200 and isinstance(payload, dict) and payload.get("status") == "ready" and not missing_or_failed
+            ready = (
+                health.status == 200
+                and isinstance(payload, dict)
+                and payload.get("status") == "ready"
+                and not missing_or_failed
+            )
             if ready:
-                checks.append(CheckResult("API readiness", True, "API, database, Redis and authentication are ready."))
+                checks.append(
+                    CheckResult(
+                        "API readiness",
+                        True,
+                        "API, database, Redis and authentication are ready.",
+                    )
+                )
             else:
                 failed = ", ".join(missing_or_failed) or "overall readiness"
-                checks.append(CheckResult("API readiness", False, f"API is not ready (HTTP {health.status}): {failed}."))
+                checks.append(
+                    CheckResult(
+                        "API readiness",
+                        False,
+                        f"API is not ready (HTTP {health.status}): {failed}.",
+                    )
+                )
     except (RuntimeError, ValueError) as error:
         checks.append(CheckResult("API readiness", False, str(error)))
 
@@ -141,7 +171,14 @@ def run_preflight(
             and bool(app.body.strip())
             and _same_origin(app.final_url, app_origin)
         )
-        detail = "Mini App entry page is reachable." if ok else f"Expected HTTP 200 HTML on the same origin; got HTTP {app.status} {app.content_type or 'unknown content type'}."
+        if ok:
+            detail = "Mini App entry page is reachable."
+        else:
+            detail = (
+                "Expected HTTP 200 HTML on the same origin; "
+                f"got HTTP {app.status} "
+                f"{app.content_type or 'unknown content type'}."
+            )
         checks.append(CheckResult("Mini App page", ok, detail))
     except (RuntimeError, ValueError) as error:
         checks.append(CheckResult("Mini App page", False, str(error)))
@@ -152,7 +189,10 @@ def run_preflight(
     try:
         manifest = _get(manifest_target, timeout)
         if manifest.status != 200 or manifest.content_type != "application/json":
-            detail = f"Expected HTTP 200 JSON; got HTTP {manifest.status} {manifest.content_type or 'unknown content type'}."
+            detail = (
+                f"Expected HTTP 200 JSON; got HTTP {manifest.status} "
+                f"{manifest.content_type or 'unknown content type'}."
+            )
         elif not _same_origin(manifest.final_url, app_origin):
             detail = "Manifest redirected to a different origin."
         else:
@@ -186,22 +226,51 @@ def run_preflight(
                 and icon.body.startswith(PNG_SIGNATURE)
                 and _same_origin(icon.final_url, app_origin)
             )
-            detail = "TON Connect icon is a valid PNG served from the Mini App origin." if ok else f"Expected HTTP 200 PNG on the same origin; got HTTP {icon.status} {icon.content_type or 'unknown content type'}."
+            if ok:
+                detail = "TON Connect icon is a valid PNG served from the Mini App origin."
+            else:
+                detail = (
+                    "Expected HTTP 200 PNG on the same origin; "
+                    f"got HTTP {icon.status} "
+                    f"{icon.content_type or 'unknown content type'}."
+                )
             checks.append(CheckResult("TON Connect icon", ok, detail))
         except (RuntimeError, ValueError) as error:
             checks.append(CheckResult("TON Connect icon", False, str(error)))
     else:
-        checks.append(CheckResult("TON Connect icon", False, "Skipped because the manifest did not validate."))
+        checks.append(
+            CheckResult(
+                "TON Connect icon",
+                False,
+                "Skipped because the manifest did not validate.",
+            )
+        )
 
     return checks
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Read-only VILTARA live-demo preflight.")
-    parser.add_argument("--api-url", required=True, help="Public API origin, for example https://api.example.com")
-    parser.add_argument("--mini-app-url", required=True, help="Public Mini App origin, for example https://shop.example.com")
-    parser.add_argument("--manifest-url", help="Optional manifest URL; defaults to <Mini App origin>/tonconnect-manifest.json")
-    parser.add_argument("--timeout", type=float, default=8.0, help="Per-request timeout in seconds (default: 8)")
+    parser.add_argument(
+        "--api-url",
+        required=True,
+        help="Public API origin, for example https://api.example.com",
+    )
+    parser.add_argument(
+        "--mini-app-url",
+        required=True,
+        help="Public Mini App origin, for example https://shop.example.com",
+    )
+    parser.add_argument(
+        "--manifest-url",
+        help="Optional manifest URL; defaults to <Mini App origin>/tonconnect-manifest.json",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=8.0,
+        help="Per-request timeout in seconds (default: 8)",
+    )
     args = parser.parse_args()
 
     if args.timeout <= 0:
