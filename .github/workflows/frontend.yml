@@ -39,7 +39,11 @@ jobs:
         run: npm run build
 
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        # Do not use --with-deps: the extra apt download step intermittently
+        # fails on runner DNS resolution of security.ubuntu.com. The bundled
+        # headless shell (installed by `npm install` / `npx playwright install`)
+        # is sufficient for the chromium test channel.
+        run: npx playwright install chromium
 
       - name: Run Playwright E2E
         run: npm run test:e2e
