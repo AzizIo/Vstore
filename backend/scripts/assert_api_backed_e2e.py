@@ -6,6 +6,7 @@ import asyncio
 from decimal import Decimal
 from urllib.parse import urlparse
 
+from redis.asyncio import Redis
 from sqlalchemy import select
 
 from app.core.config import get_settings
@@ -115,6 +116,24 @@ async def assert_journey() -> None:
             E2E_SELLER_TELEGRAM_ID,
             E2E_BUYER_TELEGRAM_ID,
         }
+        seller_id = str(seller.id)
+
+    redis = Redis.from_url(get_settings().redis_url, decode_responses=True)
+    try:
+        challenge_keys = await redis.keys("wallet-proof:challenge:*")
+        challenge_owners = {
+            await redis.get(key) for key in challenge_keys
+        }
+        assert seller_id in challenge_owners, (
+            "The verified Telegram API session did not persist a wallet-proof "
+            "challenge bound to the seller in Redis."
+        )
+        challenge_ttls = [await redis.ttl(key) for key in challenge_keys]
+        assert any(ttl > 0 for ttl in challenge_ttls), (
+            "The Redis wallet-proof challenge must have a positive TTL."
+        )
+    finally:
+        await redis.aclose()
 
     await dispose_engine()
     print(
