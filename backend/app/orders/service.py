@@ -404,7 +404,7 @@ async def _reserve_listing(
                 buyer_id=buyer_id,
                 seller_id=listing.seller_id,
                 idempotency_key=idempotency_key,
-                status=OrderStatus.PENDING_PAYMENT,
+                status=OrderStatus.RESERVED,
                 price_amount=Decimal(listing.price_amount),
                 price_currency=listing.price_currency,
                 expires_at=current_time
@@ -417,7 +417,7 @@ async def _reserve_listing(
                 OrderEvent(
                     order_id=order.id,
                     from_status=None,
-                    to_status=OrderStatus.PENDING_PAYMENT,
+                    to_status=OrderStatus.RESERVED,
                     actor_id=buyer_id,
                     actor_type="buyer",
                 )
@@ -472,7 +472,7 @@ async def cancel_order(
         )
         if order is None:
             raise OrderConflict("Order not found")
-        if order.status != OrderStatus.PENDING_PAYMENT:
+        if order.status != OrderStatus.RESERVED:
             return order.id
 
         if order.expires_at <= current_time or (
@@ -491,7 +491,7 @@ async def cancel_order(
         session.add(
             OrderEvent(
                 order_id=order.id,
-                from_status=OrderStatus.PENDING_PAYMENT,
+                from_status=OrderStatus.RESERVED,
                 to_status=target_status,
                 actor_id=actor_id,
                 actor_type=actor_type,
@@ -533,7 +533,7 @@ async def _invalidate_lost_ownership(
             select(Order)
             .where(
                 Order.listing_id == listing.id,
-                Order.status == OrderStatus.PENDING_PAYMENT,
+                Order.status == OrderStatus.RESERVED,
             )
             .with_for_update()
         )
@@ -543,7 +543,7 @@ async def _invalidate_lost_ownership(
         session.add(
             OrderEvent(
                 order_id=pending_order.id,
-                from_status=OrderStatus.PENDING_PAYMENT,
+                from_status=OrderStatus.RESERVED,
                 to_status=OrderStatus.CANCELLED,
                 actor_id=None,
                 actor_type="system",
@@ -605,7 +605,7 @@ async def expire_pending_orders(
             await session.scalars(
                 select(Order.listing_id)
                 .join(Listing, Listing.id == Order.listing_id)
-                .where(Order.status == OrderStatus.PENDING_PAYMENT)
+                .where(Order.status == OrderStatus.RESERVED)
                 .where(
                     (Order.expires_at <= current_time)
                     | (
@@ -634,7 +634,7 @@ async def expire_pending_orders(
                 select(Order)
                 .where(
                     Order.listing_id == listing_id,
-                    Order.status == OrderStatus.PENDING_PAYMENT,
+                    Order.status == OrderStatus.RESERVED,
                 )
                 .join(Listing, Listing.id == Order.listing_id)
                 .where(
@@ -653,7 +653,7 @@ async def expire_pending_orders(
             session.add(
                 OrderEvent(
                     order_id=order.id,
-                    from_status=OrderStatus.PENDING_PAYMENT,
+                    from_status=OrderStatus.RESERVED,
                     to_status=OrderStatus.EXPIRED,
                     actor_id=None,
                     actor_type="system",
