@@ -319,3 +319,44 @@ async def test_invalid_query_id_is_rejected_before_provider_request() -> None:
         await client.aclose()
 
     assert requested == []
+
+@pytest.mark.asyncio
+async def test_case_sensitive_base64_hashes_are_preserved_for_transfer_and_trace_lookup() -> None:
+    transaction_hash = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789+/=="
+    trace_id = "ZyXwVuTsRqPoNmLkJiHgFeDcBa9876543210-_=="
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/nft/transfers"):
+            return httpx.Response(
+                200,
+                json={
+                    "nft_transfers": [
+                        transfer_row(
+                            transaction_hash=transaction_hash,
+                            trace_id=trace_id,
+                        )
+                    ]
+                },
+            )
+        return httpx.Response(
+            200,
+            json=trace_payload(
+                trace_id=trace_id,
+                actions=[
+                    {
+                        "success": True,
+                        "transactions_full": [item_transaction(hash=transaction_hash)],
+                    }
+                ],
+            ),
+        )
+
+    provider, client = provider_for(handler)
+    try:
+        result = await provider.verify_transfer(intent())
+    finally:
+        await client.aclose()
+
+    assert result.status is DeliveryEvidenceStatus.VERIFIED_FINALIZED
+    assert result.transaction_hash == transaction_hash
+    assert result.trace_id == trace_id
