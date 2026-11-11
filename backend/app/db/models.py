@@ -385,6 +385,10 @@ class OrderDeliveryAttempt(TimestampMixin, Base):
             "masterchain_seqno IS NULL OR masterchain_seqno > 0",
             name="ck_order_delivery_attempt_masterchain_seqno",
         ),
+        CheckConstraint(
+            "status != 'verified' OR (transaction_hash IS NOT NULL AND verified_at IS NOT NULL)",
+            name="ck_order_delivery_attempt_verified_evidence",
+        ),
         UniqueConstraint(
             "order_id", "attempt_number", name="uq_order_delivery_attempt_order_number"
         ),

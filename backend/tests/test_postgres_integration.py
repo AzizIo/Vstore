@@ -316,10 +316,125 @@ async def test_delivery_attempt_active_and_verified_transfer_indexes_are_enforce
 
     db_session.add(make_attempt(1, OrderDeliveryAttemptStatus.PREPARED))
     await db_session.flush()
+    nested = await db_session.begin_nested()
     db_session.add(make_attempt(2, OrderDeliveryAttemptStatus.OBSERVING))
     with pytest.raises(IntegrityError):
         await db_session.flush()
-    await db_session.rollback()
+    await nested.rollback()
+
+    # The verified-transfer partial unique index: two distinct attempt numbers
+    # claiming the same verified network/item/transaction_hash for this order
+    # must be rejected, so one on-chain transfer cannot verify twice.
+    verified_hash = f"0:{uuid4().hex}{uuid4().hex}"
+    db_session.add(
+        OrderDeliveryAttempt(
+            order_id=order.id,
+            attempt_number=3,
+            status=OrderDeliveryAttemptStatus.VERIFIED,
+            network="mainnet",
+            item_address=asset.item_address or asset.external_id,
+            seller_address_snapshot=seller_wallet.address,
+            buyer_address_snapshot=buyer_wallet.address,
+            query_id=Decimal("3"),
+            transaction_hash=verified_hash,
+            verified_at=now + timedelta(minutes=1),
+            prepared_at=now,
+            deadline=now + timedelta(minutes=15),
+        )
+    )
+    await db_session.flush()
+    nested = await db_session.begin_nested()
+    db_session.add(
+        OrderDeliveryAttempt(
+            order_id=order.id,
+            attempt_number=4,
+            status=OrderDeliveryAttemptStatus.VERIFIED,
+            network="mainnet",
+            item_address=asset.item_address or asset.external_id,
+            seller_address_snapshot=seller_wallet.address,
+            buyer_address_snapshot=buyer_wallet.address,
+            query_id=Decimal("4"),
+            transaction_hash=verified_hash,
+            verified_at=now + timedelta(minutes=1),
+            prepared_at=now,
+            deadline=now + timedelta(minutes=15),
+        )
+    )
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await nested.rollback()
+
+
+async def test_verified_delivery_attempt_requires_provider_evidence(
+    db_session: AsyncSession,
+) -> None:
+    seller = await make_user(db_session, telegram_id=710000007)
+    buyer = await make_user(db_session, telegram_id=710000008)
+    asset = await make_asset(db_session, seller)
+    listing = make_listing(seller, asset, ListingStatus.RESERVED)
+    db_session.add(listing)
+    await db_session.flush()
+    now = datetime.now(UTC)
+    order = Order(
+        listing_id=listing.id,
+        buyer_id=buyer.id,
+        seller_id=seller.id,
+        idempotency_key=f"verified-evidence-{uuid4()}",
+        status=OrderStatus.OBSERVING_TRANSFER,
+        price_amount=Decimal("1.250000000"),
+        price_currency=PriceCurrency.TON,
+        expires_at=now + timedelta(minutes=15),
+    )
+    db_session.add(order)
+    await db_session.flush()
+
+    def make_verified_attempt(
+        number: int,
+        *,
+        transaction_hash: str | None,
+        verified_at: datetime | None,
+    ) -> OrderDeliveryAttempt:
+        return OrderDeliveryAttempt(
+            order_id=order.id,
+            attempt_number=number,
+            status=OrderDeliveryAttemptStatus.VERIFIED,
+            network="mainnet",
+            item_address=asset.item_address or asset.external_id,
+            seller_address_snapshot=f"0:{uuid4().hex}{uuid4().hex}",
+            buyer_address_snapshot=f"0:{uuid4().hex}{uuid4().hex}",
+            query_id=Decimal(number),
+            transaction_hash=transaction_hash,
+            verified_at=verified_at,
+            prepared_at=now,
+            deadline=now + timedelta(minutes=15),
+        )
+
+    # A verified row without a transaction hash and verified_at is malformed:
+    # it would bypass the verified-transfer deduplication guard entirely.
+    nested = await db_session.begin_nested()
+    db_session.add(make_verified_attempt(1, transaction_hash=None, verified_at=None))
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await nested.rollback()
+
+    # A hash without a verification timestamp is equally unverifiable evidence.
+    nested = await db_session.begin_nested()
+    db_session.add(
+        make_verified_attempt(2, transaction_hash=f"0:{uuid4().hex}", verified_at=None)
+    )
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await nested.rollback()
+
+    # Fully evidenced attempts remain persistable.
+    db_session.add(
+        make_verified_attempt(
+            3,
+            transaction_hash=f"0:{uuid4().hex}",
+            verified_at=now + timedelta(minutes=1),
+        )
+    )
+    await db_session.flush()
 
 
 async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
