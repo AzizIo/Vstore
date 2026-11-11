@@ -58,7 +58,7 @@ Seed-фразы и приватные ключи никогда не запра�
 
 ## 3. Карта текущего состояния (аудит 2026-11-11)
 
-Проверено по `main` @ `c47d20a`. Runtime-код после `1a01cc7` в этом обновлении не менялся; в `main` добавлен Stage B design document `docs/STAGE_B_ORDER_LIFECYCLE.md` через PR #60.
+Проверено по `main` @ `6191c8b` (2026-11-11). После предыдущего аудита в `main` смёржены PR #51 (TON Connect Proof lifecycle) и PR #58 (полная NFT inventory sync/reconciliation + My NFT UI). Схема БД этими PR не менялась; production wallet UI остаётся fail-closed до настройки публичных URL и domain allowlist.
 
 ### Готово и соответствует продукту
 
@@ -75,14 +75,16 @@ Seed-фразы и приватные ключи никогда не запра�
 | Скрытие непокупаемых листингов (stale/unverified/reserved) из каталога и detail | ✅ (PR #50) |
 | Истечение резерва/срока листинга воркером | ✅ |
 | Уведомления через durable outbox | ✅ |
+| TON Connect Proof challenge → frontend signing flow → backend verification and wallet lifecycle | ✅ PR #51; UI fail-closed until public manifest URL and exact backend domain allowlist are configured; live Tonkeeper acceptance remains in Issue #43 |
+| Full NFT inventory sync/reconciliation, multi-wallet ownership checks and My NFT UI | ✅ PR #58; manual testnet/provider and owner acceptance remains in Issue #44 |
 | `PaymentAdapter` протокол без провайдера | ✅ корректно изолирован |
 
 ### Частично / требует решения
 
 | Пункт | Проблема |
 |---|---|
-| README | PR #59 приводит описание, таблицу статусов, планируемый transfer flow и roadmap в соответствие с текущим кодом; Stage B и будущая гарантия явно отделены от реализованных функций |
-| AGENTS.md | PR #59 актуализирует карту проекта, безопасный порядок работы, открытые PR и блокировку Issue #46 до утверждения Stage B решений |
+| README | PR #59 merged; this status-refresh PR updates the capability table and wallet/inventory flow to the current main implementation while keeping manual live acceptance explicit |
+| AGENTS.md | PR #59 merged; this status-refresh PR updates TON Connect, inventory sync and API route status against current main |
 | Order `pending_payment` | имя статуса упоминает платёж, которого нет. Переименование требует миграции — предложено как отдельный вопрос владельцу, не сделано самовольно |
 | Подтверждение передачи NFT | Stage B design document `docs/STAGE_B_ORDER_LIFECYCLE.md` добавлен в `main` через PR #60; это проектное предложение, а не реализация. Решения владельца из раздела 12 документа остаются открытыми; Issue #46 не следует реализовывать до их согласования |
 
