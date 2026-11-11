@@ -6,7 +6,6 @@ from logging import getLogger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.assets.ton_nft.observer import run_delivery_observer_pass
 from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
@@ -14,6 +13,7 @@ from app.api.listings import router as listings_router
 from app.api.orders import router as orders_router
 from app.api.users import router as users_router
 from app.api.wallets import router as wallets_router
+from app.assets.ton_nft.observer import run_delivery_observer_pass
 from app.core.config import get_settings
 from app.db.session import async_session_factory, dispose_engine
 from app.listings.service import expire_active_listings
