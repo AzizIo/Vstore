@@ -60,7 +60,7 @@ describe("listing API client", () => {
     })).resolves.toEqual(page);
 
     const [url, options] = vi.mocked(fetch).mock.calls[0];
-    const parsed = new URL(String(url));
+    const parsed = new URL(String(url), "http://localhost");
     expect(parsed.pathname).toBe("/api/listings");
     expect(parsed.searchParams.get("limit")).toBe("24");
     expect(parsed.searchParams.get("offset")).toBe("0");
@@ -76,7 +76,7 @@ describe("listing API client", () => {
 
     await fetchListings({ search: "   ", assetType: "all", sort: "newest" });
 
-    const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]));
+    const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]), "http://localhost");
     expect(parsed.searchParams.has("search")).toBe(false);
     expect(parsed.searchParams.has("asset_type")).toBe(false);
   });
@@ -98,7 +98,7 @@ describe("listing API client", () => {
 
     await fetchListings({ search: "", assetType: "all", sort: "newest", limit: 3, offset: 3 });
 
-    const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]));
+    const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]), "http://localhost");
     expect(parsed.searchParams.get("limit")).toBe("3");
     expect(parsed.searchParams.get("offset")).toBe("3");
   });
@@ -153,8 +153,8 @@ describe("listing API client", () => {
     await expect(fetchMyListings("current-session-token", controller.signal)).resolves.toEqual([listing]);
 
     const [url, options] = vi.mocked(fetch).mock.calls[0];
-    expect(new URL(String(url)).pathname).toBe("/api/listings/me");
-    expect(new URL(String(url)).search).toBe("");
+    expect(new URL(String(url), "http://localhost").pathname).toBe("/api/listings/me");
+    expect(new URL(String(url), "http://localhost").search).toBe("");
     expect(new Headers(options?.headers).get("Authorization")).toBe("Bearer current-session-token");
     expect(options?.signal).toBe(controller.signal);
   });
@@ -211,7 +211,7 @@ describe("listing API client", () => {
       .resolves.toMatchObject({ id: listing.id, status: "active" });
 
     const [url, options] = vi.mocked(fetch).mock.calls[0];
-    expect(new URL(String(url)).pathname).toBe("/api/listings/listing%2Fone/publish");
+    expect(new URL(String(url), "http://localhost").pathname).toBe("/api/listings/listing%2Fone/publish");
     expect(options?.method).toBe("POST");
     expect(new Headers(options?.headers).get("Authorization")).toBe("Bearer seller-token");
     expect(options?.signal).toBe(controller.signal);
@@ -233,7 +233,7 @@ describe("listing API client", () => {
     });
 
     const [url, options] = vi.mocked(fetch).mock.calls[0];
-    expect(new URL(String(url)).pathname).toBe("/api/listings/listing-1");
+    expect(new URL(String(url), "http://localhost").pathname).toBe("/api/listings/listing-1");
     expect(options?.method).toBe("PATCH");
     expect(new Headers(options?.headers).get("Authorization")).toBe("Bearer seller-token");
     expect(new Headers(options?.headers).get("Content-Type")).toBe("application/json");
@@ -252,7 +252,7 @@ describe("listing API client", () => {
       .resolves.toMatchObject({ id: listing.id, status: "cancelled" });
 
     const [url, options] = vi.mocked(fetch).mock.calls[0];
-    expect(new URL(String(url)).pathname).toBe("/api/listings/listing-1/cancel");
+    expect(new URL(String(url), "http://localhost").pathname).toBe("/api/listings/listing-1/cancel");
     expect(options?.method).toBe("POST");
     expect(new Headers(options?.headers).get("Authorization")).toBe("Bearer seller-token");
   });

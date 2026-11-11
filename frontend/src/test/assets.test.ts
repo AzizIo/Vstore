@@ -43,7 +43,7 @@ describe("seller asset API", () => {
     await expect(fetchMyInventory("session-token", { limit: 24, offset: 0 }, controller.signal)).resolves.toEqual(inventory);
 
     const [url, options] = vi.mocked(fetch).mock.calls[0];
-    const parsed = new URL(String(url));
+    const parsed = new URL(String(url), "http://localhost");
     expect(parsed.pathname).toBe("/api/assets/me");
     expect(parsed.searchParams.get("limit")).toBe("24");
     expect(parsed.searchParams.get("offset")).toBe("0");
@@ -55,7 +55,7 @@ describe("seller asset API", () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...inventory, offset: 24, next_offset: 25 }));
     await fetchMyInventory("session-token", { walletId: "wallet-id", limit: 24, offset: 24 });
 
-    const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]));
+    const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]), "http://localhost");
     expect(parsed.searchParams.get("wallet_id")).toBe("wallet-id");
     expect(parsed.searchParams.has("owner_address")).toBe(false);
   });

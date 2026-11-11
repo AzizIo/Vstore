@@ -28,14 +28,14 @@ describe("wallet proof API", () => {
   it("requests a fresh challenge with the authenticated Telegram session", async () => {
     fetchMock.mockResolvedValue(jsonResponse({
       payload: "one-time-server-nonce",
-      expires_at: "2026-11-10T17:00:00+00:00",
+      expires_at: "2099-01-01T00:00:00Z",
     }));
 
     const result = await createWalletProofChallenge("telegram-access-token");
 
     expect(result.payload).toBe("one-time-server-nonce");
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8000/api/wallets/proof/challenge",
+      "/api/wallets/proof/challenge",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
@@ -73,7 +73,7 @@ describe("wallet proof API", () => {
 
     expect(result).toEqual(linkedWallet);
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("http://localhost:8000/api/wallets/proof/verify");
+    expect(url).toBe("/api/wallets/proof/verify");
     expect(options.method).toBe("POST");
     expect(JSON.parse(String(options.body))).toEqual({
       address: linkedWallet.address,
@@ -94,7 +94,7 @@ describe("wallet proof API", () => {
     await expect(unlinkWallet("telegram-access-token", "wallet-id")).resolves.toBeUndefined();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8000/api/users/me/wallets/wallet-id",
+      "/api/users/me/wallets/wallet-id",
       expect.objectContaining({
         method: "DELETE",
         headers: expect.objectContaining({
