@@ -24,7 +24,7 @@ _ALL_ORDER_STATUSES = (
 
 def upgrade() -> None:
     # Remove legacy constraints/index while preserving the rows that they protect.
-    op.drop_index("uq_orders_pending_listing", table_name="orders")
+    op.drop_index("uq_orders_open_listing", table_name="orders")
     op.alter_column(
         "orders",
         "status",
@@ -69,7 +69,7 @@ def upgrade() -> None:
         "actor_type IN ('buyer', 'seller', 'system')",
     )
     op.create_index(
-        "uq_orders_pending_listing",
+        "uq_orders_open_listing",
         "orders",
         ["listing_id"],
         unique=True,
@@ -81,7 +81,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("order_id", sa.Uuid(), nullable=False),
         sa.Column("attempt_number", sa.Integer(), nullable=False),
-        sa.Column("status", sa.String(length=16), server_default="prepared", nullable=False),
+        sa.Column("status", sa.String(length=32), server_default="prepared", nullable=False),
         sa.Column("network", sa.String(length=16), nullable=False),
         sa.Column("item_address", sa.String(length=128), nullable=False),
         sa.Column("seller_wallet_id", sa.Uuid(), nullable=True),
@@ -213,7 +213,7 @@ def downgrade() -> None:
     )
     op.drop_table("order_delivery_attempts")
 
-    op.drop_index("uq_orders_pending_listing", table_name="orders")
+    op.drop_index("uq_orders_open_listing", table_name="orders")
     op.alter_column(
         "orders",
         "status",
@@ -256,7 +256,7 @@ def downgrade() -> None:
         "actor_type IN ('buyer', 'system')",
     )
     op.create_index(
-        "uq_orders_pending_listing",
+        "uq_orders_open_listing",
         "orders",
         ["listing_id"],
         unique=True,
