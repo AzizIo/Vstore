@@ -131,6 +131,8 @@ async def test_verifies_exact_finalized_tep62_transfer_from_seller_to_buyer() ->
         "/api/v3/traces",
     ]
     assert requests[0].url.params["item_address"] == ITEM
+    assert requests[0].url.params["owner_address"] == SELLER
+    assert requests[0].url.params["direction"] == "out"
     assert requests[1].url.params["trace_id"] == TRACE_ID
     assert requests[1].url.params["include_actions"] == "true"
 
