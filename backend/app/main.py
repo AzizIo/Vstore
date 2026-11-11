@@ -17,6 +17,7 @@ from app.core.config import get_settings
 from app.db.session import async_session_factory, dispose_engine
 from app.listings.service import expire_active_listings
 from app.orders.service import expire_pending_orders
+from app.assets.ton_nft.observer import run_delivery_observer_pass
 
 logger = getLogger(__name__)
 
@@ -37,17 +38,46 @@ async def _expire_orders_periodically() -> None:
             logger.exception("Could not complete marketplace expiration; the next poll will retry")
 
 
+async def _observe_delivery_attempts_periodically() -> None:
+    poll_interval = get_settings().delivery_observer_poll_seconds
+    while True:
+        try:
+            await asyncio.sleep(poll_interval)
+            result = await run_delivery_observer_pass(async_session_factory)
+            if result.claimed:
+                logger.info(
+                    "Delivery observer pass: claimed=%s verified=%s retried=%s "
+                    "manual_review=%s lease_lost=%s",
+                    result.claimed,
+                    result.verified,
+                    result.retried,
+                    result.manual_review,
+                    result.lease_lost,
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "Could not complete delivery observer pass; the next poll will retry"
+            )
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     expiration_task = asyncio.create_task(_expire_orders_periodically())
+    delivery_observer_task = asyncio.create_task(
+        _observe_delivery_attempts_periodically()
+    )
     try:
         yield
     finally:
         expiration_task.cancel()
-        try:
-            await expiration_task
-        except asyncio.CancelledError:
-            pass
+        delivery_observer_task.cancel()
+        for task in (expiration_task, delivery_observer_task):
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         await dispose_engine()
 
 
