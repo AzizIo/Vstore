@@ -389,7 +389,7 @@ export function Orders({
       <div className="orders-view order-detail-view">
         {detailLoading && <p className="workspace-inline-loading" role="status">Refreshing order details…</p>}
         {detailError && <div className="orders-error" role="alert"><span>{detailError}</span><button className="text-button" type="button" onClick={() => void openOrder(selectedOrder)}>Retry</button></div>}
-        <OrderDetails order={selectedOrder} role={selectedOrder.buyer_id === userId ? "buyer" : role} busy={busyOrderId === selectedOrder.id} onClose={() => setSelectedOrder(null)} onCancel={(id) => void handleCancel(id)} />
+        <OrderDetails order={selectedOrder} role={userId ? (selectedOrder.buyer_id === userId ? "buyer" : "seller") : role} busy={busyOrderId === selectedOrder.id} onClose={() => setSelectedOrder(null)} onCancel={(id) => void handleCancel(id)} />
       </div>
     );
   }
