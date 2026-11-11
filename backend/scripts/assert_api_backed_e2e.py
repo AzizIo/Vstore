@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from decimal import Decimal
-from urllib.parse import urlparse
 
 from redis.asyncio import Redis
 from sqlalchemy import select
@@ -20,28 +19,15 @@ from app.db.models import (
     User,
 )
 from app.db.session import async_session_factory, dispose_engine
+from scripts.e2e_safety import assert_e2e_environment
 from scripts.e2e_ton_provider import (
     E2E_BUYER_TELEGRAM_ID,
     E2E_SELLER_TELEGRAM_ID,
 )
 
 
-def _assert_isolated_e2e_database() -> None:
-    settings = get_settings()
-    database = urlparse(settings.database_url)
-    if (
-        settings.environment != "test"
-        or database.hostname not in {"127.0.0.1", "localhost"}
-        or database.path != "/viltara_e2e"
-    ):
-        raise SystemExit(
-            "Refusing to inspect: this script requires ENVIRONMENT=test and "
-            "the loopback viltara_e2e database."
-        )
-
-
 async def assert_journey() -> None:
-    _assert_isolated_e2e_database()
+    await assert_e2e_environment()
 
     async with async_session_factory() as session:
         seller = await session.scalar(
