@@ -1097,6 +1097,7 @@ async def test_upsert_verified_asset_listing_guard_is_scoped_to_conflicting_asse
     assert blocked is None
     assert updated_b is not None
     assert updated_b.id == asset_b.id
+    await db_session.refresh(updated_b)
     assert updated_b.owner_id == sync_owner.id
     assert updated_b.name == "NFT B refreshed"
     assert updated_b.description == "B updated while A is listed"
