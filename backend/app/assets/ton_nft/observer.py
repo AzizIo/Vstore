@@ -125,6 +125,14 @@ async def claim_due_delivery_attempts(
     batch_limit = limit or settings.delivery_observer_batch_size
     if batch_limit < 1:
         raise ValueError("Delivery observer batch size must be positive")
+    concurrency = settings.delivery_observer_concurrency
+    provider_waves = (batch_limit + concurrency - 1) // concurrency
+    # TON Center may need up to five transfer pages plus one trace request.
+    # Ensure the lease covers bounded provider timeouts for every wave.
+    lease_seconds = max(
+        settings.delivery_observer_lease_seconds,
+        int(settings.ton_center_timeout_seconds * 6 * provider_waves) + 30,
+    )
 
     claims: list[DeliveryObservationClaim] = []
     async with session.begin():
@@ -223,9 +231,7 @@ async def claim_due_delivery_attempts(
                 continue
 
             lease_token = uuid.uuid4()
-            lease_until = current_time + timedelta(
-                seconds=settings.delivery_observer_lease_seconds
-            )
+            lease_until = current_time + timedelta(seconds=lease_seconds)
             previous_order_status = order.status
             attempt.status = OrderDeliveryAttemptStatus.OBSERVING
             attempt.observer_attempt_count += 1
@@ -328,7 +334,7 @@ async def _schedule_retry(
             attempt.next_check_at = None
             return "manual_review"
 
-        exponent = max(attempt.observer_attempt_count - 1, 0)
+        exponent = min(max(attempt.observer_attempt_count - 1, 0), 30)
         delay = min(
             settings.delivery_observer_retry_base_seconds * (2**exponent),
             settings.delivery_observer_retry_max_seconds,
