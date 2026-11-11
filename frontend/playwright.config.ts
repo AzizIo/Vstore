@@ -7,6 +7,7 @@ const manifestUrl = process.env.VITE_TONCONNECT_MANIFEST_URL
 
 export default defineConfig({
   testDir: "./e2e",
+  testMatch: "**/*.pw.ts",
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,

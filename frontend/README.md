@@ -34,8 +34,8 @@ npm run test:e2e:ui
 Run one spec or one named scenario:
 
 ```bash
-npx playwright test e2e/marketplace.spec.ts
-npx playwright test e2e/marketplace.spec.ts --grep "listing start_param"
+npx playwright test e2e/marketplace.pw.ts
+npx playwright test e2e/marketplace.pw.ts --grep "listing start_param"
 ```
 
 Playwright starts Vite automatically through `webServer` in `playwright.config.ts`. By default it serves on `http://127.0.0.1:5173`; no backend service is needed.
