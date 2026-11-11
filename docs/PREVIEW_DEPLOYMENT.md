@@ -9,7 +9,7 @@ It is designed for a demo on a VPS behind an existing HTTPS reverse proxy or tun
 - PostgreSQL and Redis are private to the Compose network and have no published host ports.
 - Only Nginx is published, and only on `127.0.0.1` (default port `8080`).
 - The preview uses a separate PostgreSQL volume named `viltara_preview_postgres_data`; it does not reuse or migrate the volume from the development Compose project.
-- The optional bot runs in the same isolated preview project and uses its own preview database.
+- The optional bot runs in the same isolated preview project and shares the preview database with the API.
 
 This is a safer preview baseline, not a substitute for a production security review, backups, monitoring, rate limiting, and a managed TLS/reverse-proxy configuration.
 
@@ -34,27 +34,26 @@ Use one generated value for `AUTH_SECRET_KEY` and another for `PREVIEW_DB_PASSWO
 Set these values in the root `.env`:
 
 ```dotenv
-ENVIRONMENT=production
-AUTH_SECRET_KEY=<64-hex-character-secret>
+PREVIEW_AUTH_SECRET_KEY=<fresh-64-hex-character-secret>
+PREVIEW_BOT_TOKEN=<BotFather-token-for-preview-bot>
 PREVIEW_DB_PASSWORD=<different-64-hex-character-secret>
 PREVIEW_HTTP_PORT=8080
 
-BOT_TOKEN=<BotFather-token>
-TELEGRAM_MINI_APP_URL=https://t.me/<bot_username>/<app_short_name>
+PREVIEW_TELEGRAM_MINI_APP_URL=https://t.me/<preview_bot_username>/<app_short_name>
 
-VITE_TONCONNECT_APP_URL=https://<stable-public-mini-app-host>
-VITE_TONCONNECT_MANIFEST_URL=https://<stable-public-mini-app-host>/tonconnect-manifest.json
+PREVIEW_PREVIEW_VITE_TONCONNECT_APP_URL=https://<stable-public-mini-app-host>
+PREVIEW_PREVIEW_VITE_TONCONNECT_MANIFEST_URL=https://<stable-public-mini-app-host>/tonconnect-manifest.json
 PREVIEW_TON_CONNECT_ALLOWED_DOMAINS=["<stable-public-mini-app-host>"]
 PREVIEW_TON_CONNECT_NETWORK=testnet
 ```
 
-Use a stable hostname that will remain the same across rebuilds. The hostname in `PREVIEW_TON_CONNECT_ALLOWED_DOMAINS` must be exact: no scheme, port, path, or trailing slash. The preview stack maps these preview-specific values to the API's `TON_CONNECT_ALLOWED_DOMAINS` and `TON_CONNECT_NETWORK`; it does not inherit the existing dev stack's TON domain/network. `PREVIEW_TON_CONNECT_NETWORK` defaults to `testnet`; use a disposable test wallet and testnet provider for the preview. Only switch the preview to mainnet deliberately and with a separately reviewed plan. The two `VITE_TONCONNECT_*` values are build-time inputs for the static frontend, so changing them requires rebuilding the `miniapp` image.
+Use a stable hostname that will remain the same across rebuilds. The hostname in `PREVIEW_TON_CONNECT_ALLOWED_DOMAINS` must be exact: no scheme, port, path, or trailing slash. The preview stack maps these preview-specific values to the API's `TON_CONNECT_ALLOWED_DOMAINS`, `TON_CONNECT_NETWORK`, and TON Center provider URLs; it does not inherit the existing dev stack's TON domain/network. `PREVIEW_TON_CONNECT_NETWORK` defaults to `testnet`; use a disposable test wallet and testnet provider for the preview. Only switch the preview to mainnet deliberately and with a separately reviewed plan. The two `VITE_TONCONNECT_*` values are build-time inputs for the static frontend, so changing them requires rebuilding the `miniapp` image.
 
-The Mini App URL above is the HTTPS website origin used by TON Connect. `TELEGRAM_MINI_APP_URL` is a different value: the Telegram direct link configured in @BotFather.
+The Mini App URL above is the HTTPS website origin used by TON Connect. `PREVIEW_TELEGRAM_MINI_APP_URL` is a different value: the Telegram direct link for the preview bot configured in @BotFather.
 
-The API requires `BOT_TOKEN` to verify Telegram `initData`, even when the separate bot container is not started. `TELEGRAM_MINI_APP_URL` is only needed when the bot menu and notification messages should include the configured Mini App direct link.
+The preview Compose file maps these `PREVIEW_*` values into the API's normal `AUTH_SECRET_KEY`, `BOT_TOKEN`, `TELEGRAM_MINI_APP_URL` and `VITE_TONCONNECT_*` settings **inside preview containers only**. The existing development stack's `.env` values are not changed. Use a fresh `PREVIEW_AUTH_SECRET_KEY` (at least 32 characters) so tokens from the existing stack are not accepted in preview. The preview API requires `PREVIEW_BOT_TOKEN` to verify Telegram `initData`, even when the separate preview bot container is not started.
 
-**Do not run two polling bot containers with the same `BOT_TOKEN`.** If the existing development stack's bot is already polling this token, leave the preview bot profile off or deliberately use a separate BotFather test bot/token for the preview. Starting two pollers for one token causes Telegram polling conflicts. The preview outbox is stored in the preview PostgreSQL database, so notifications from it are delivered only when a worker connected to that same preview database is running.
+Use a dedicated BotFather preview bot and configure its Mini App domain/menu URL to the stable preview host. If you deliberately reuse the existing bot token, never run a second polling process for it: two polling bot containers with the same token conflict. The preview outbox is stored in preview PostgreSQL, so preview notifications are delivered only when a worker connected to that same preview database is running.
 
 ## 2. Where preview data goes
 
