@@ -146,6 +146,86 @@ async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSessio
     assert revision == "0005_order_delivery_attempts"
 
 
+async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
+    test_database_url: str,
+    migrated_database,
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    seller_id = buyer_id = asset_id = listing_id = order_id = None
+    try:
+        async with session_factory() as session:
+            seller = await make_user(session, telegram_id=719100001)
+            buyer = await make_user(session, telegram_id=719100002)
+            asset = await make_asset(session, seller)
+            listing = make_listing(seller, asset, ListingStatus.RESERVED)
+            session.add(listing)
+            await session.flush()
+            now = datetime.now(UTC)
+            order = Order(
+                listing_id=listing.id,
+                buyer_id=buyer.id,
+                seller_id=seller.id,
+                idempotency_key=f"downgrade-event-{uuid4()}",
+                status=OrderStatus.RESERVED,
+                price_amount=Decimal("1.250000000"),
+                price_currency=PriceCurrency.TON,
+                expires_at=now + timedelta(minutes=15),
+            )
+            session.add(order)
+            await session.flush()
+            session.add(
+                OrderEvent(
+                    order_id=order.id,
+                    from_status=OrderStatus.RESERVED,
+                    to_status=OrderStatus.AWAITING_TRANSFER,
+                    actor_id=seller.id,
+                    actor_type="seller",
+                )
+            )
+            await session.commit()
+            seller_id, buyer_id = seller.id, buyer.id
+            asset_id, listing_id, order_id = asset.id, listing.id, order.id
+
+        await engine.dispose()
+        config = Config(ALEMBIC_CONFIG_PATH)
+        with pytest.raises(RuntimeError, match="delivery events"):
+            await asyncio.to_thread(
+                command.downgrade,
+                config,
+                "0004_tg_notif_outbox",
+            )
+
+        engine = create_async_engine(test_database_url, pool_pre_ping=True)
+        async with engine.connect() as connection:
+            revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+            assert revision == "0005_order_delivery_attempts"
+
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM order_events WHERE order_id = :order_id"),
+                {"order_id": order_id},
+            )
+            await connection.execute(
+                text("DELETE FROM orders WHERE id = :order_id"),
+                {"order_id": order_id},
+            )
+            await connection.execute(
+                text("DELETE FROM listings WHERE id = :listing_id"),
+                {"listing_id": listing_id},
+            )
+            await connection.execute(
+                text("DELETE FROM nft_assets WHERE id = :asset_id"),
+                {"asset_id": asset_id},
+            )
+            await connection.execute(
+                text("DELETE FROM users WHERE id IN (:seller_id, :buyer_id)"),
+                {"seller_id": seller_id, "buyer_id": buyer_id},
+            )
+    finally:
+        await engine.dispose()
+
+
 async def test_delivery_attempt_keeps_wallet_address_snapshots_after_unlink(
     db_session: AsyncSession,
 ) -> None:
