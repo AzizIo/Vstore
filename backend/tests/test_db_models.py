@@ -17,6 +17,7 @@ def test_marketplace_tables_are_registered() -> None:
         "listings",
         "orders",
         "order_events",
+        "order_delivery_attempts",
         "telegram_notification_outbox",
     }
 
@@ -65,9 +66,24 @@ def test_nft_asset_external_identity_is_scoped_by_network() -> None:
     ]
 
 
-def test_order_lifecycle_has_only_server_supported_initial_terminal_states() -> None:
+def test_order_lifecycle_uses_explicit_non_payment_reservation_states() -> None:
     assert {item.value for item in OrderStatus} == {
-        "pending_payment",
+        "reserved",
+        "awaiting_transfer",
+        "observing_transfer",
+        "completed",
         "cancelled",
         "expired",
     }
+
+
+def test_delivery_attempt_model_has_immutable_wallet_snapshots_and_retry_states() -> None:
+    from app.db.models import OrderDeliveryAttemptStatus
+
+    assert {item.value for item in OrderDeliveryAttemptStatus} == {
+        "prepared", "observing", "verified", "failed", "manual_review", "cancelled"
+    }
+    table = Base.metadata.tables["order_delivery_attempts"]
+    assert {"seller_address_snapshot", "buyer_address_snapshot", "query_id"} <= set(table.c.keys())
+    assert any(index.name == "uq_order_delivery_attempt_active_order" for index in table.indexes)
+    assert any(index.name == "uq_order_delivery_attempt_verified_transfer" for index in table.indexes)
