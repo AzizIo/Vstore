@@ -279,7 +279,7 @@ These are proposed tasks to create or map onto existing Issues after maintainer 
 |---|---|---|---|---|
 | B1 | Read-only transaction/trace evidence adapter for TEP-62 transfer correlation | Backend | Maintainer baseline | Implemented in [PR #63](https://github.com/AzizIo/Vstore/pull/63): bounded TON Center v3 correlation, typed outcomes and fail-closed checks. Indexed-provider trust assumptions are documented. |
 | B2 | Delivery-attempt persistence, state migration and immutable snapshots | Backend + DB | B1 | Implemented in [PR #85](https://github.com/AzizIo/Vstore/pull/85): preserves historical reservations/events, adds database constraints and uniqueness. |
-| B3 | Leased observer/reconciliation worker and deterministic provider polling | Backend | B1, B2 | Implementation in progress on feat/issue-46-delivery-observer: leased PostgreSQL claims, bounded retries, exact B1 evidence correlation and fail-closed manual review; finalization is atomic across attempt/order/listing/asset/event. |
+| B3 | Leased observer/reconciliation worker and deterministic provider polling | Backend | B1, B2 | Implemented in [PR #86](https://github.com/AzizIo/Vstore/pull/86): leased PostgreSQL claims, bounded concurrent provider polling, exact B1 evidence correlation, fail-closed manual review and atomic finalization across attempt/order/listing/asset/event. |
 | B4 | Delivery preparation/submission/read APIs with auth, locks and idempotency | Backend | B2, B3 | Snapshot verified buyer destination and freshly verified seller source; client-supplied hashes/addresses never establish completion. |
 | B5 | Transactional transfer outbox events/notifications and PostgreSQL concurrency/fault-injection tests | Backend + QA | B3, B4 | Duplicate/out-of-order events are idempotent; failure cases fail closed. |
 | B6 | Buyer destination confirmation, seller TON Connect transaction request and status UI | Frontend | B4 API contract | UI shows delivered only from backend persisted verification; no payments UI. |
@@ -322,11 +322,11 @@ These defaults authorize the staged B1–B7 technical work only. They do not aut
 The B3 observer is a backend-only worker. It does not expose an API, ask the seller to sign a transfer, broadcast a transaction, or accept client-supplied evidence as proof.
 
 - Claims due prepared/observing attempts in bounded batches with PostgreSQL FOR UPDATE SKIP LOCKED.
-- Uses a persisted random lease token and lease deadline. Expired leases are reclaimable; a stale worker cannot write after another worker has reclaimed the attempt.
+- Uses a persisted random lease token and a timeout-aware lease deadline. Bounded concurrent polling keeps claims inside the lease window; expired leases are reclaimable and a stale worker cannot write after another worker has reclaimed the attempt.
 - Releases all database locks before calling TON Center v3. The provider is selected from the attempt's persisted network.
 - Uses only the immutable item, seller, buyer, network and query_id snapshots. Candidate transaction hashes remain lookup hints and are not trusted.
 - Retries not_found, inconclusive, provider failures and internal transient errors with bounded exponential backoff. At the delivery deadline or retry limit, the attempt moves to manual_review; the order and reserved listing are not released.
 - A provider failed result, destination mismatch, changed local order/listing/asset state, duplicate verified transaction, or inconsistent evidence is quarantined as manual_review.
 - Only verified_finalized evidence with exact snapshot matches, a transaction hash, trace ID and positive masterchain seqno can complete an order. The attempt, order, listing, asset owner and append-only order event are committed in one transaction after the lease and state are revalidated.
 - The v3 provider remains an indexed-data trust assumption, not a cryptographic proof. A verified order is not a payment and does not imply escrow or marketplace custody.
-- B3 adds migration 0006_delivery_observer_leases for observer retry count and reclaimable lease metadata. No production/VPS migration is included in this PR.
+- B3 adds migration 0006_delivery_observer_leases for observer retry count and reclaimable lease metadata. No production/VPS migration is included in PR #86.
