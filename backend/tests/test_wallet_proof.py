@@ -274,6 +274,22 @@ def test_missing_or_unrecognized_nonce_is_rejected(wallet_client) -> None:
     session.commit.assert_not_awaited()
 
 
+def test_expired_challenge_is_rejected(wallet_client) -> None:
+    client, _, session, redis = wallet_client
+    challenge = _create_challenge(client)
+    key = wallets_api._challenge_key(challenge)
+    redis.values.pop(key, None)
+    redis.expiries.pop(key, None)
+
+    response = client.post(
+        "/api/wallets/proof/verify",
+        json=_signed_request(challenge),
+    )
+
+    assert response.status_code == 401
+    session.commit.assert_not_awaited()
+
+
 def test_replayed_nonce_is_rejected(wallet_client) -> None:
     client, _, _, _ = wallet_client
     challenge = _create_challenge(client)
