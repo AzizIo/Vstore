@@ -164,7 +164,9 @@ class TONCenterDeliveryEvidenceProvider:
             raise ProviderUnavailable("TON Center returned an API error")
         return cast(dict[str, Any], payload)
 
-    async def _fetch_transfers(self, item_address: str) -> list[dict[str, Any]]:
+    async def _fetch_transfers(
+        self, item_address: str, seller_address: str
+    ) -> list[dict[str, Any]]:
         """Read all indexed transfer pages for the exact item, with a hard cap."""
         rows: list[dict[str, Any]] = []
         offset = 0
@@ -173,6 +175,8 @@ class TONCenterDeliveryEvidenceProvider:
                 "nft/transfers",
                 {
                     "item_address": item_address,
+                    "owner_address": seller_address,
+                    "direction": "out",
                     "limit": TRANSFER_PAGE_SIZE,
                     "offset": offset,
                     "sort": "desc",
@@ -465,7 +469,7 @@ class TONCenterDeliveryEvidenceProvider:
         # candidate_transaction_hash is deliberately only a hint from the caller.
         # We never use it to select or accept evidence; the canonical indexer row,
         # query_id and trace correlation below determine the transaction.
-        transfers = await self._fetch_transfers(item_address)
+        transfers = await self._fetch_transfers(item_address, seller_address)
         candidates: list[dict[str, Any]] = []
         for row in transfers:
             row_item = self._normalized_address(row.get("nft_address"), "nft_address")
