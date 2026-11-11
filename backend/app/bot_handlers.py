@@ -5,6 +5,7 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
+    WebAppInfo,
 )
 
 from app.core.config import get_settings
@@ -12,13 +13,19 @@ from app.core.config import get_settings
 router = Router(name="viltara-shop-user")
 
 
+def _mini_app_button(url: str) -> InlineKeyboardButton:
+    """Create a Telegram Web App button so Telegram provides WebApp context."""
+    return InlineKeyboardButton(
+        text="Открыть VILTARA SHOP",
+        web_app=WebAppInfo(url=url),
+    )
+
+
 def _menu_keyboard() -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     mini_app_url = get_settings().telegram_mini_app_url
     if mini_app_url:
-        rows.append(
-            [InlineKeyboardButton(text="Открыть VILTARA SHOP", url=mini_app_url)]
-        )
+        rows.append([_mini_app_button(mini_app_url)])
     rows.append(
         [InlineKeyboardButton(text="Как пользоваться", callback_data="bot:help")]
     )
@@ -79,9 +86,7 @@ async def handle_app(message: Message) -> None:
     await message.answer(
         "Откройте VILTARA SHOP по кнопке ниже.",
         reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="Открыть VILTARA SHOP", url=mini_app_url)]
-            ]
+            inline_keyboard=[[_mini_app_button(mini_app_url)]]
         ),
     )
 
