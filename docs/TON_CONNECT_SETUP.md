@@ -14,7 +14,12 @@ VITE_TONCONNECT_APP_URL=https://<your-public-miniapp-host>
 VITE_TONCONNECT_MANIFEST_URL=https://<your-public-miniapp-host>/tonconnect-manifest.json
 TON_CONNECT_ALLOWED_DOMAINS=["<your-public-miniapp-host>"]
 TON_CONNECT_NETWORK=mainnet
+# Optional Telegram order-notification deep link; distinct from the HTTPS Web App URL.
+TELEGRAM_MINI_APP_DIRECT_LINK=https://t.me/<bot_username>/<app_short_name>
 ```
+
+
+`TELEGRAM_MINI_APP_URL` is the public HTTPS URL used by the bot's inline Web App launch button. `TELEGRAM_MINI_APP_DIRECT_LINK` is optional and must be the Telegram `https://t.me/<bot_username>/<app_short_name>` direct link used to open an order from a notification. Do not put a `t.me` link in `TELEGRAM_MINI_APP_URL`; the two settings serve different Telegram URL contracts.
 
 Docker Compose passes the two `VITE_TONCONNECT_*` values into the `miniapp` container. After changing them on the server, recreate only that service so Vite reads the new values:
 

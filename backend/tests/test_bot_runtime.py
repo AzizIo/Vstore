@@ -24,6 +24,7 @@ def _settings(*, bot_token: str | None = "123456:test-token") -> SimpleNamespace
     return SimpleNamespace(
         bot_token=bot_token,
         telegram_mini_app_url="https://example.com/miniapp",
+        telegram_mini_app_direct_link=None,
         notification_poll_seconds=0.001,
     )
 

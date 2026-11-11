@@ -65,9 +65,32 @@ jobs:
         working-directory: .
         env:
           PREVIEW_DB_PASSWORD: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-          VITE_TONCONNECT_APP_URL: https://viltara-ci.example
-          VITE_TONCONNECT_MANIFEST_URL: https://viltara-ci.example/tonconnect-manifest.json
-        run: docker compose -f docker-compose.preview.yml config --quiet
+          PREVIEW_TON_CONNECT_ALLOWED_DOMAINS: '["viltara-ci.example"]'
+          PREVIEW_TON_CONNECT_NETWORK: testnet
+          PREVIEW_AUTH_SECRET_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef
+          PREVIEW_BOT_TOKEN: 123456:ci-test-token
+          PREVIEW_VITE_TONCONNECT_APP_URL: https://viltara-ci.example
+          PREVIEW_VITE_TONCONNECT_MANIFEST_URL: https://viltara-ci.example/tonconnect-manifest.json
+        run: |
+          docker compose --profile bot -f docker-compose.preview.yml config --quiet
+          docker compose --profile bot -f docker-compose.preview.yml config --format json | python -c '
+          import json, sys
+          config = json.load(sys.stdin)
+          services = config["services"]
+          assert config.get("name") == "viltara-preview", "Preview project name must stay isolated"
+          for name in ("db", "redis", "api", "bot"):
+              assert not services[name].get("ports"), f"{name} must not publish host ports"
+          miniapp_ports = services["miniapp"].get("ports", [])
+          assert len(miniapp_ports) == 1, "Mini App must publish exactly one loopback port"
+          port = miniapp_ports[0]
+          assert isinstance(port, dict) and port.get("host_ip") == "127.0.0.1", "Mini App must bind to 127.0.0.1 only"
+          api_env = services["api"]["environment"]
+          bot_env = services["bot"]["environment"]
+          assert api_env["DATABASE_URL"] == bot_env["DATABASE_URL"], "API and bot must share Preview DB"
+          assert "viltara_preview" in api_env["DATABASE_URL"], "Preview must use its dedicated database"
+          assert api_env["AUTH_SECRET_KEY"] == bot_env["AUTH_SECRET_KEY"]
+          assert api_env["BOT_TOKEN"] == bot_env["BOT_TOKEN"]
+          '
 
       - name: Lint
         run: ruff check app tests migrations scripts

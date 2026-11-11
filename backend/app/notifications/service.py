@@ -223,7 +223,7 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
         f"Amount: {amount} {delivery.price_currency}",
     ]
     settings = get_settings()
-    app_url = validate_telegram_direct_link(settings.telegram_mini_app_url)
+    app_url = validate_telegram_direct_link(settings.telegram_mini_app_direct_link)
     if app_url is not None:
         order_url = telegram_direct_link_with_startapp(
             app_url,

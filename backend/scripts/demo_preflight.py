@@ -118,6 +118,8 @@ def run_preflight(
         raise ValueError("Manifest URL must be /tonconnect-manifest.json on the Mini App origin.")
 
     checks: list[CheckResult] = []
+    ton_connect_proof_configured = False
+    ton_connect_proof_domain_matches = False
 
     # API readiness includes database, Redis and the authentication configuration.
     try:
@@ -148,6 +150,15 @@ def run_preflight(
             if not isinstance(health_payload, dict):
                 health_payload = {}
             components = health_payload.get("checks", {})
+            if not isinstance(components, dict):
+                components = {}
+            allowed_proof_domains = components.get("ton_connect_proof_domains", [])
+            expected_proof_domain = urlsplit(app_origin).hostname
+            ton_connect_proof_configured = components.get("ton_connect_proof") == "ok"
+            ton_connect_proof_domain_matches = (
+                isinstance(allowed_proof_domains, list)
+                and expected_proof_domain in allowed_proof_domains
+            )
             required = ("database", "redis", "authentication")
             missing_or_failed = [name for name in required if components.get(name) != "ok"]
             ready = (
@@ -174,6 +185,32 @@ def run_preflight(
                 )
     except (RuntimeError, ValueError) as error:
         checks.append(CheckResult("API readiness", False, str(error)))
+
+    ton_connect_proof_ready = (
+        ton_connect_proof_configured and ton_connect_proof_domain_matches
+    )
+    if not ton_connect_proof_configured:
+        proof_detail = (
+            "Backend TON_CONNECT_ALLOWED_DOMAINS or TON_CONNECT_NETWORK "
+            "is missing or invalid."
+        )
+    elif not ton_connect_proof_domain_matches:
+        proof_detail = (
+            "Backend TON Connect domain allowlist does not include the Mini App host "
+            f"{urlsplit(app_origin).hostname!r}."
+        )
+    else:
+        proof_detail = (
+            "Backend TON Connect network is valid and its domain allowlist "
+            "matches the Mini App host."
+        )
+    checks.append(
+        CheckResult(
+            "TON Connect proof configuration",
+            ton_connect_proof_ready,
+            proof_detail,
+        )
+    )
 
     # The root document must be served as HTML from the expected app origin.
     try:
