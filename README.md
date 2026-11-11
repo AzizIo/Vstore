@@ -20,7 +20,7 @@ Product boundaries and decisions approved for the current MVP are recorded in [d
 | Telegram order notifications using a durable outbox | Implemented; optional bot container |
 | TON Connect frontend challenge → proof → backend verification, manifest and Tonkeeper flow | In progress in [Draft PR #51](https://github.com/AzizIo/Vstore/pull/51); not part of main until merged and manually verified |
 | Full inventory reconciliation/sync and dedicated My NFT screen | In progress in [Draft PR #58](https://github.com/AzizIo/Vstore/pull/58); not part of main until merged and verified |
-| Server-side verification that a reserved NFT was delivered to the buyer | Not implemented; Stage B design is tracked in [Issue #56](https://github.com/AzizIo/Vstore/issues/56) |
+| Server-side verification that a reserved NFT was delivered to the buyer | Not implemented; design proposal in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md); implementation tracked in [Issue #46](https://github.com/AzizIo/Vstore/issues/46) |
 | Telegram Gifts adapter, deal chat, admin panel | Not implemented |
 | Payments, checkout, escrow/guarantee, refunds, commissions and seller payouts | Not implemented |
 
