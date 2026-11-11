@@ -200,7 +200,8 @@ class TONCenterDeliveryEvidenceProvider:
         matching = [
             cast(dict[str, Any], trace)
             for trace in traces
-            if trace.get("trace_id") == trace_id
+            if isinstance(trace.get("trace_id"), str)
+            and self._normalize_hash(trace["trace_id"], "trace_id") == trace_id
         ]
         if len(matching) > 1:
             raise InvalidProviderData("TON Center returned duplicate records for one trace")
@@ -239,8 +240,7 @@ class TONCenterDeliveryEvidenceProvider:
         if normalized.startswith("0x"):
             normalized = normalized[2:]
         if len(normalized) > 128 or any(
-            not character.isalnum() and character not in {"-", "_"}
-            for character in normalized
+            ord(character) < 33 or character.isspace() for character in normalized
         ):
             raise InvalidProviderData(f"TON Center data has an invalid {field_name}")
         return normalized
@@ -316,7 +316,7 @@ class TONCenterDeliveryEvidenceProvider:
         seller_address: str,
         transaction_hash: str,
     ) -> str | None:
-        matches: list[dict[str, Any]] = []
+        matches: dict[tuple[str, str], dict[str, Any]] = {}
         for transaction in cls._trace_transactions(trace):
             account = transaction.get("account")
             if not isinstance(account, str):
@@ -328,17 +328,21 @@ class TONCenterDeliveryEvidenceProvider:
             tx_hash = transaction.get("hash")
             if not isinstance(tx_hash, str):
                 continue
-            if (
-                normalized_account == item_address
-                and cls._normalize_hash(tx_hash, "item transaction hash") == transaction_hash
-            ):
-                matches.append(transaction)
+            normalized_hash = cls._normalize_hash(tx_hash, "item transaction hash")
+            if normalized_account == item_address and normalized_hash == transaction_hash:
+                key = (normalized_account, normalized_hash)
+                previous = matches.get(key)
+                if previous is not None and previous != transaction:
+                    raise InvalidProviderData(
+                        "TON Center trace returned inconsistent copies of the item transaction"
+                    )
+                matches[key] = transaction
         if not matches:
             return "Trace does not contain the exact NFT item transaction"
         if len(matches) != 1:
             raise InvalidProviderData("TON Center trace contains duplicate item transactions")
 
-        transaction = matches[0]
+        transaction = next(iter(matches.values()))
         incoming = transaction.get("in_msg")
         if not isinstance(incoming, dict):
             return "NFT item transaction has no inbound message"
@@ -528,7 +532,10 @@ class TONCenterDeliveryEvidenceProvider:
         if transaction_problem is not None:
             status = (
                 DeliveryEvidenceStatus.FAILED
-                if "failed" in transaction_problem or "aborted" in transaction_problem
+                if any(
+                    marker in transaction_problem
+                    for marker in ("failed", "aborted", "not the expected")
+                )
                 else DeliveryEvidenceStatus.INCONCLUSIVE
             )
             return self._result(
