@@ -148,6 +148,8 @@ Frontend:
 
 Frontend CI runs Vitest, TypeScript checks and a production Vite build. Use the CI result for the exact commit you intend to review.
 
+The separate API-backed Playwright suite runs the real React app against FastAPI, disposable PostgreSQL/Redis and a loopback TON provider fixture. It validates Telegram initData signatures, verified seller inventory, listing publication, buyer reservation, price snapshots and notification outbox persistence. It stops at reservation; no NFT delivery observer or `completed` transition is implied. See [docs/API_BACKED_E2E.md](docs/API_BACKED_E2E.md).
+
 ## Roadmap
 
 1. **MVP — non-custodial NFT listing and direct-transfer verification (Issues #42–#47):** Stage A currently provides listings, ownership checks, reservations and expiry/cancellation. Stage B adds the post-reservation transfer lifecycle and complete Telegram user journey; these parts are still in progress and must not be presented as shipped.

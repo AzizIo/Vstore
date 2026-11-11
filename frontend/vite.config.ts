@@ -104,7 +104,9 @@ export default defineConfig(({ mode, command }) => {
       allowedHosts: [".trycloudflare.com"],
       proxy: {
         "/api": {
-          target: "http://api:8000",
+          // Docker Compose uses the service hostname; API-backed E2E runs the
+          // real API as a loopback process on the GitHub Actions runner.
+          target: process.env.VITE_API_PROXY_TARGET?.trim() || "http://api:8000",
           changeOrigin: true,
         },
       },

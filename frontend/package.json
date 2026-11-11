@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:api": "playwright test -c playwright.api-backed.config.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.80.0",
