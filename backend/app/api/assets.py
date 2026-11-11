@@ -415,6 +415,9 @@ async def sync_my_verified_inventory(
         # transferred away until every wallet owned by this account was checked.
         verified_elsewhere: dict[str, NFTItemSnapshot] = {}
         stale_candidates: list[tuple[UUID, str, bool]] = []
+        existing_id_by_address = {
+            address: asset_id for asset_id, address in existing_snapshot
+        }
         recheck_addresses = sorted(
             {
                 address
@@ -422,6 +425,11 @@ async def sync_my_verified_inventory(
                 if address not in discovered
             }
         )
+        if len(recheck_addresses) > _MAX_SYNC_ITEMS:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Stored inventory is too large for one sync; no changes were saved",
+            )
         for recheck_index, item_address in enumerate(recheck_addresses):
             if recheck_index % 10 == 0:
                 await _renew_sync_lock(redis, lock_key, lock_token)
@@ -474,7 +482,7 @@ async def sync_my_verified_inventory(
             if not verified_by_other_wallet:
                 stale_candidates.append(
                     (
-                        next(asset_id for asset_id, address in existing_snapshot if address == item_address),
+                        existing_id_by_address[item_address],
                         item_address,
                         conclusive_mismatch,
                     )
@@ -510,7 +518,6 @@ async def sync_my_verified_inventory(
             )
 
         now = datetime.now(UTC)
-        persisted_count = 0
         stale_count = 0
         cancelled_listing_count = 0
         try:
@@ -518,10 +525,7 @@ async def sync_my_verified_inventory(
             for upsert_index, snapshot in enumerate(snapshots_to_upsert.values()):
                 if upsert_index % 25 == 0:
                     await _renew_sync_lock(redis, lock_key, lock_token)
-                asset = await _upsert_verified_asset(
-                    session, user_id, network, snapshot
-                )
-                persisted_count += int(asset is not None)
+                await _upsert_verified_asset(session, user_id, network, snapshot)
 
             for stale_index, (asset_id, _item_address, conclusive_loss) in enumerate(stale_candidates):
                 if stale_index % 25 == 0:

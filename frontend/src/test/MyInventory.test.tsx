@@ -103,7 +103,7 @@ describe("My NFT inventory", () => {
   });
 
   it("asks the user to verify a wallet when the backend reports no verified wallet", async () => {
-    inventoryApi.fetchMyInventory.mockRejectedValueOnce(
+    inventoryApi.fetchMyInventory.mockReset().mockRejectedValueOnce(
       new Error("A verified TON wallet is required to discover NFT inventory"),
     );
 

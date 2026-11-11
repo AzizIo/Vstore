@@ -281,7 +281,7 @@ export function MyInventory({ accessToken }: { accessToken: string }) {
                 className="load-more-button"
                 type="button"
                 onClick={() => void loadMore()}
-                disabled={loadingMore || !hasMore}
+                disabled={loading || loadingMore || !hasMore}
               >
                 {loadingMore ? "Loading more..." : loadMoreError ? "Retry loading more" : "Load more NFTs"}
               </button>
