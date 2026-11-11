@@ -322,8 +322,8 @@ async def test_invalid_query_id_is_rejected_before_provider_request() -> None:
 
 @pytest.mark.asyncio
 async def test_case_sensitive_base64_hashes_are_preserved_for_transfer_and_trace_lookup() -> None:
-    transaction_hash = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789+/=="
-    trace_id = "ZyXwVuTsRqPoNmLkJiHgFeDcBa9876543210-_=="
+    transaction_hash = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+    trace_id = "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8="
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/nft/transfers"):
