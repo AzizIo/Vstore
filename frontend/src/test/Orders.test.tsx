@@ -31,7 +31,10 @@ function jsonResponse(body: unknown, status = 200) {
 
 describe("orders", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ items: [order] })));
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (input) => {
+      const url = String(input);
+      return url.match(/\\/api\\/orders\\/[^/?]+$/) ? jsonResponse(order) : jsonResponse({ items: [order] });
+    }));
   });
 
   it("shows loading, pending-payment status, and a clear no-payment notice", async () => {
@@ -63,6 +66,7 @@ describe("orders", () => {
           ],
         });
       }
+      if (String(input).endsWith(`/api/orders/${order.id}`)) return jsonResponse(order);
       return jsonResponse({ items: [order] });
     });
     render(<Orders accessToken="private-token" />);
@@ -127,11 +131,17 @@ describe("orders", () => {
 
 describe("order workspace interactions", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ items: [
+    const orders = [
       order,
-      { ...order, id: "order-2", title: "Golden Gift", status: "completed", price_amount: "30", created_at: "2026-01-02T00:00:00Z" },
-      { ...order, id: "order-3", title: "Silver Gift", status: "expired", price_amount: "5", created_at: "2026-01-03T00:00:00Z" },
-    ] })));
+      { ...order, id: "order-2", title: "Golden Gift", status: "completed" as const, price_amount: "30", created_at: "2026-01-02T00:00:00Z" },
+      { ...order, id: "order-3", title: "Silver Gift", status: "expired" as const, price_amount: "5", created_at: "2026-01-03T00:00:00Z" },
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (input) => {
+      const url = String(input);
+      const match = url.match(/\\/api\\/orders\\/([^/?]+)$/);
+      if (match) return jsonResponse(orders.find((item) => item.id === decodeURIComponent(match[1])) ?? order);
+      return jsonResponse({ items: orders });
+    }));
   });
 
   it("searches titles and IDs and filters by lifecycle state", async () => {
