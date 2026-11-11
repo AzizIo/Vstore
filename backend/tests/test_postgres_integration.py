@@ -148,7 +148,7 @@ ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0005_order_delivery_attempts"
+    assert revision == "0006_delivery_observer_leases"
 
 
 async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
@@ -204,7 +204,7 @@ async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
         engine = create_async_engine(test_database_url, pool_pre_ping=True)
         async with engine.connect() as connection:
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0005_order_delivery_attempts"
+            assert revision == "0006_delivery_observer_leases"
 
         async with engine.begin() as connection:
             await connection.execute(
@@ -613,7 +613,7 @@ async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
                 )
             ).one()
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0005_order_delivery_attempts"
+            assert revision == "0006_delivery_observer_leases"
             assert order.status == "reserved"
             assert order.price_amount == Decimal("12.500000000")
             assert order.price_currency == "TON"
