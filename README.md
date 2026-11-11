@@ -89,9 +89,19 @@ Local endpoints:
 - OpenAPI: http://localhost:8000/docs
 - Readiness: http://localhost:8000/api/health/ready
 
-To run the optional Telegram bot/outbox worker, set BOT_TOKEN and TELEGRAM_MINI_APP_URL in .env, then run:
+To run the optional Telegram bot/outbox worker, set `BOT_TOKEN` and `TELEGRAM_MINI_APP_URL` in `.env`, then run:
 
     docker compose --profile bot up --build
+
+`TELEGRAM_MINI_APP_URL` must be the configured Telegram Mini App direct link, not the frontend website origin:
+
+```text
+https://t.me/<bot_username>/<app_short_name>
+```
+
+Create/configure the named Mini App via [@BotFather](https://t.me/BotFather) and use the exact bot username and app short name from that setup. The bot validates this format before showing a launch button; notification links use the same validator and append an `order_<32-hex-id>` `startapp` value. Telegram Mini App direct links can also use `startapp=listing_<32-hex-id>`. These parameters are navigation hints only; the frontend's existing parser handles order/listing IDs, and authentication still uses verified Telegram `initData`.
+
+See [Telegram Mini Apps direct links](https://core.telegram.org/bots/webapps#direct-link-mini-apps) for details.
 
 Apply schema migrations after starting the stack:
 

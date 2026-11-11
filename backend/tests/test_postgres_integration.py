@@ -1325,3 +1325,110 @@ async def test_publish_listing_rejects_provider_owner_mismatch(
             user_ids=[owner.id],
         )
         await engine.dispose()
+
+
+async def test_upsert_verified_asset_listing_guard_is_scoped_to_conflicting_asset(
+    db_session: AsyncSession,
+) -> None:
+    owner = await make_user(
+        db_session,
+        telegram_id=800_000_000 + uuid4().int % 100_000_000,
+    )
+    sync_owner = await make_user(
+        db_session,
+        telegram_id=900_000_000 + uuid4().int % 100_000_000,
+    )
+    address_a = f"0:{uuid4().hex}{uuid4().hex}"
+    address_b = f"0:{uuid4().hex}{uuid4().hex}"
+    original_attributes = ({"trait_type": "version", "value": "original"},)
+
+    original_a = NFTItemSnapshot(
+        address=address_a,
+        initialized=True,
+        index=1,
+        collection_address=None,
+        owner_address="0:owner-a",
+        metadata=NFTMetadata(
+            name="NFT A original",
+            description="A protected description",
+            image="https://example.test/a-original.png",
+            attributes=original_attributes,
+        ),
+    )
+    original_b = NFTItemSnapshot(
+        address=address_b,
+        initialized=True,
+        index=2,
+        collection_address=None,
+        owner_address="0:owner-b",
+        metadata=NFTMetadata(
+            name="NFT B original",
+            description="B old description",
+            image="https://example.test/b-original.png",
+            attributes=original_attributes,
+        ),
+    )
+    asset_a = await _upsert_verified_asset(db_session, owner.id, "mainnet", original_a)
+    asset_b = await _upsert_verified_asset(db_session, owner.id, "mainnet", original_b)
+    assert asset_a is not None
+    assert asset_b is not None
+
+    db_session.add(make_listing(owner, asset_a, ListingStatus.ACTIVE))
+    await db_session.flush()
+
+    refreshed_a = NFTItemSnapshot(
+        address=address_a,
+        initialized=True,
+        index=1,
+        collection_address=None,
+        owner_address="0:owner-a-refreshed",
+        metadata=NFTMetadata(
+            name="NFT A must stay protected",
+            description="Must not overwrite A",
+            image="https://example.test/a-refreshed.png",
+            attributes=({"trait_type": "version", "value": "replacement"},),
+        ),
+    )
+    refreshed_b = NFTItemSnapshot(
+        address=address_b,
+        initialized=True,
+        index=2,
+        collection_address=None,
+        owner_address="0:owner-b-refreshed",
+        metadata=NFTMetadata(
+            name="NFT B refreshed",
+            description="B updated while A is listed",
+            image="https://example.test/b-refreshed.png",
+            attributes=({"trait_type": "version", "value": "refreshed"},),
+        ),
+    )
+
+    blocked = await _upsert_verified_asset(db_session, sync_owner.id, "mainnet", refreshed_a)
+    updated_b = await _upsert_verified_asset(db_session, sync_owner.id, "mainnet", refreshed_b)
+
+    assert blocked is None
+    assert updated_b is not None
+    assert updated_b.id == asset_b.id
+    await db_session.refresh(updated_b)
+    assert updated_b.owner_id == sync_owner.id
+    assert updated_b.name == "NFT B refreshed"
+    assert updated_b.description == "B updated while A is listed"
+    assert updated_b.image_url == "https://example.test/b-refreshed.png"
+    assert updated_b.metadata_json == {
+        "attributes": [{"trait_type": "version", "value": "refreshed"}]
+    }
+
+    await db_session.refresh(asset_a)
+    await db_session.refresh(asset_b)
+    assert asset_a.owner_id == owner.id
+    assert asset_a.name == "NFT A original"
+    assert asset_a.description == "A protected description"
+    assert asset_a.image_url == "https://example.test/a-original.png"
+    assert asset_a.metadata_json == {
+        "attributes": [{"trait_type": "version", "value": "original"}]
+    }
+    assert asset_b.owner_id == sync_owner.id
+    assert asset_b.name == "NFT B refreshed"
+    assert asset_b.description == "B updated while A is listed"
+    assert asset_b.image_url == "https://example.test/b-refreshed.png"
+
