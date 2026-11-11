@@ -17,6 +17,7 @@ def test_readiness_returns_each_dependency_status(monkeypatch) -> None:
     monkeypatch.setattr(health, "_database_ready", database_ready)
     monkeypatch.setattr(health, "_redis_ready", redis_ready)
     monkeypatch.setattr(health, "_authentication_ready", lambda: True)
+    monkeypatch.setattr(health, "_ton_connect_proof_ready", lambda: True)
 
     with TestClient(app) as client:
         response = client.get("/api/health/ready")
@@ -28,6 +29,7 @@ def test_readiness_returns_each_dependency_status(monkeypatch) -> None:
             "database": "ok",
             "redis": "ok",
             "authentication": "ok",
+            "ton_connect_proof": "ok",
         },
     }
 
@@ -42,6 +44,7 @@ def test_readiness_returns_503_when_a_dependency_is_unavailable(monkeypatch) -> 
     monkeypatch.setattr(health, "_database_ready", database_ready)
     monkeypatch.setattr(health, "_redis_ready", redis_ready)
     monkeypatch.setattr(health, "_authentication_ready", lambda: True)
+    monkeypatch.setattr(health, "_ton_connect_proof_ready", lambda: True)
 
     with TestClient(app) as client:
         response = client.get("/api/health/ready")
@@ -53,6 +56,7 @@ def test_readiness_returns_503_when_a_dependency_is_unavailable(monkeypatch) -> 
             "database": "error",
             "redis": "ok",
             "authentication": "ok",
+            "ton_connect_proof": "ok",
         },
     }
 
@@ -67,6 +71,7 @@ def test_readiness_reports_both_dependencies_unavailable(monkeypatch) -> None:
     monkeypatch.setattr(health, "_database_ready", database_ready)
     monkeypatch.setattr(health, "_redis_ready", redis_ready)
     monkeypatch.setattr(health, "_authentication_ready", lambda: True)
+    monkeypatch.setattr(health, "_ton_connect_proof_ready", lambda: True)
 
     with TestClient(app) as client:
         response = client.get("/api/health/ready")
@@ -97,6 +102,7 @@ def test_readiness_returns_503_when_authentication_is_not_configured(monkeypatch
             "database": "ok",
             "redis": "ok",
             "authentication": "error",
+            "ton_connect_proof": "ok",
         },
     }
 
@@ -127,3 +133,52 @@ def test_authentication_readiness_requires_usable_credentials(
     )
 
     assert health._authentication_ready() is expected
+
+
+
+def test_readiness_exposes_disabled_ton_connect_without_breaking_catalogue_health(monkeypatch) -> None:
+    async def dependency_ready() -> bool:
+        return True
+
+    monkeypatch.setattr(health, "_database_ready", dependency_ready)
+    monkeypatch.setattr(health, "_redis_ready", dependency_ready)
+    monkeypatch.setattr(health, "_authentication_ready", lambda: True)
+    monkeypatch.setattr(health, "_ton_connect_proof_ready", lambda: False)
+
+    with TestClient(app) as client:
+        response = client.get("/api/health/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ready",
+        "checks": {
+            "database": "ok",
+            "redis": "ok",
+            "authentication": "ok",
+            "ton_connect_proof": "error",
+        },
+    }
+
+
+def test_ton_connect_proof_readiness_uses_backend_configuration(monkeypatch) -> None:
+    monkeypatch.setattr(
+        health,
+        "settings",
+        SimpleNamespace(
+            ton_connect_allowed_domains=["shop.example.test"],
+            ton_connect_network="testnet",
+        ),
+    )
+
+    assert health._ton_connect_proof_ready() is True
+
+    monkeypatch.setattr(
+        health,
+        "settings",
+        SimpleNamespace(
+            ton_connect_allowed_domains=[],
+            ton_connect_network="testnet",
+        ),
+    )
+
+    assert health._ton_connect_proof_ready() is False
