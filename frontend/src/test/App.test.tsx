@@ -582,7 +582,7 @@ describe("Buyer orders", () => {
     expect(new Headers(orderRequest?.[1]?.headers).get("Idempotency-Key")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Orders" }));
-    expect(await screen.findByText("Payment pending")).toBeInTheDocument();
+    expect(await screen.findByText("Reservation pending")).toBeInTheDocument();
   });
 });
 
