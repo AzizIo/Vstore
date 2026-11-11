@@ -69,9 +69,21 @@ class PriceCurrency(str, enum.Enum):
 
 
 class OrderStatus(str, enum.Enum):
-    PENDING_PAYMENT = "pending_payment"
+    RESERVED = "reserved"
+    AWAITING_TRANSFER = "awaiting_transfer"
+    OBSERVING_TRANSFER = "observing_transfer"
+    COMPLETED = "completed"
     CANCELLED = "cancelled"
     EXPIRED = "expired"
+
+
+class OrderDeliveryAttemptStatus(str, enum.Enum):
+    PREPARED = "prepared"
+    OBSERVING = "observing"
+    VERIFIED = "verified"
+    FAILED = "failed"
+    MANUAL_REVIEW = "manual_review"
+    CANCELLED = "cancelled"
 
 
 def enum_column(enum_type: type[enum.Enum], name: str) -> Enum:
@@ -246,7 +258,7 @@ class Order(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("price_amount > 0", name="ck_orders_price_positive"),
         CheckConstraint(
-            "status IN ('pending_payment', 'cancelled', 'expired')",
+            "status IN ('reserved', 'awaiting_transfer', 'observing_transfer', 'completed', 'cancelled', 'expired')",
             name="ck_orders_status",
         ),
         UniqueConstraint("buyer_id", "idempotency_key", name="uq_orders_buyer_idempotency"),
@@ -254,7 +266,7 @@ class Order(TimestampMixin, Base):
             "uq_orders_pending_listing",
             "listing_id",
             unique=True,
-            postgresql_where=text("status = 'pending_payment'"),
+            postgresql_where=text("status IN ('reserved', 'awaiting_transfer', 'observing_transfer')"),
         ),
         Index("ix_orders_buyer_created_at", "buyer_id", "created_at"),
         Index("ix_orders_seller_created_at", "seller_id", "created_at"),
@@ -274,8 +286,8 @@ class Order(TimestampMixin, Base):
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[OrderStatus] = mapped_column(
         enum_column(OrderStatus, "order_status"),
-        default=OrderStatus.PENDING_PAYMENT,
-        server_default=OrderStatus.PENDING_PAYMENT.value,
+        default=OrderStatus.RESERVED,
+        server_default=OrderStatus.RESERVED.value,
         nullable=False,
     )
     price_amount: Mapped[Decimal] = mapped_column(Numeric(24, 9), nullable=False)
@@ -290,18 +302,21 @@ class Order(TimestampMixin, Base):
     events: Mapped[list[OrderEvent]] = relationship(
         back_populates="order", order_by="OrderEvent.created_at"
     )
+    delivery_attempts: Mapped[list[OrderDeliveryAttempt]] = relationship(
+        back_populates="order", order_by="OrderDeliveryAttempt.attempt_number"
+    )
 
 
 class OrderEvent(Base):
     __tablename__ = "order_events"
     __table_args__ = (
         CheckConstraint(
-            "actor_type IN ('buyer', 'system')",
+            "actor_type IN ('buyer', 'seller', 'system')",
             name="ck_order_events_actor_type",
         ),
         CheckConstraint(
-            "(from_status IS NULL OR from_status IN ('pending_payment', 'cancelled', 'expired')) "
-            "AND to_status IN ('pending_payment', 'cancelled', 'expired')",
+            "(from_status IS NULL OR from_status IN ('reserved', 'awaiting_transfer', 'observing_transfer', 'completed', 'cancelled', 'expired')) "
+            "AND to_status IN ('reserved', 'awaiting_transfer', 'observing_transfer', 'completed', 'cancelled', 'expired')",
             name="ck_order_events_statuses",
         ),
     )
@@ -327,6 +342,90 @@ class OrderEvent(Base):
     order: Mapped[Order] = relationship(back_populates="events")
     actor: Mapped[User | None] = relationship()
 
+
+
+class OrderDeliveryAttempt(TimestampMixin, Base):
+    """Immutable source/destination snapshot and one candidate transfer attempt."""
+
+    __tablename__ = "order_delivery_attempts"
+    __table_args__ = (
+        CheckConstraint("attempt_number > 0", name="ck_order_delivery_attempt_number_positive"),
+        CheckConstraint(
+            "query_id >= 0 AND query_id <= 18446744073709551615",
+            name="ck_order_delivery_attempt_query_id_uint64",
+        ),
+        CheckConstraint("deadline > prepared_at", name="ck_order_delivery_attempt_deadline"),
+        CheckConstraint(
+            "status IN ('prepared', 'observing', 'verified', 'failed', 'manual_review', 'cancelled')",
+            name="ck_order_delivery_attempt_status",
+        ),
+        CheckConstraint(
+            "masterchain_seqno IS NULL OR masterchain_seqno > 0",
+            name="ck_order_delivery_attempt_masterchain_seqno",
+        ),
+        UniqueConstraint(
+            "order_id", "attempt_number", name="uq_order_delivery_attempt_order_number"
+        ),
+        UniqueConstraint(
+            "network", "item_address", "query_id",
+            name="uq_order_delivery_attempt_item_query",
+        ),
+        Index(
+            "uq_order_delivery_attempt_active_order",
+            "order_id",
+            unique=True,
+            postgresql_where=text("status IN ('prepared', 'observing', 'manual_review')"),
+        ),
+        Index(
+            "uq_order_delivery_attempt_verified_transfer",
+            "network",
+            "item_address",
+            "transaction_hash",
+            unique=True,
+            postgresql_where=text("status = 'verified' AND transaction_hash IS NOT NULL"),
+        ),
+        Index("ix_order_delivery_attempts_observer", "status", "next_check_at"),
+        Index("ix_order_delivery_attempts_order_created", "order_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False
+    )
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[OrderDeliveryAttemptStatus] = mapped_column(
+        enum_column(OrderDeliveryAttemptStatus, "order_delivery_attempt_status"),
+        default=OrderDeliveryAttemptStatus.PREPARED,
+        server_default=OrderDeliveryAttemptStatus.PREPARED.value,
+        nullable=False,
+    )
+    network: Mapped[str] = mapped_column(String(16), nullable=False)
+    item_address: Mapped[str] = mapped_column(String(128), nullable=False)
+    seller_wallet_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("wallets.id", ondelete="SET NULL")
+    )
+    seller_address_snapshot: Mapped[str] = mapped_column(String(128), nullable=False)
+    buyer_wallet_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("wallets.id", ondelete="SET NULL")
+    )
+    buyer_address_snapshot: Mapped[str] = mapped_column(String(128), nullable=False)
+    query_id: Mapped[Decimal] = mapped_column(Numeric(20, 0), nullable=False)
+    candidate_transaction_hash: Mapped[str | None] = mapped_column(String(128))
+    transaction_hash: Mapped[str | None] = mapped_column(String(128))
+    trace_id: Mapped[str | None] = mapped_column(String(128))
+    masterchain_seqno: Mapped[int | None] = mapped_column(BigInteger)
+    provider_source: Mapped[str | None] = mapped_column(String(32))
+    reason_code: Mapped[str | None] = mapped_column(String(64))
+    prepared_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    order: Mapped[Order] = relationship(back_populates="delivery_attempts")
 
 
 class TelegramNotificationOutbox(Base):
