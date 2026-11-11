@@ -1793,6 +1793,17 @@ async def test_delivery_prepare_snapshots_verified_wallets_and_submission_is_ide
         assert repeated_id == attempt_id
 
         async with session_factory() as session:
+            with pytest.raises(OrderConflict, match="another seller wallet"):
+                await prepare_delivery(
+                    session,
+                    order_id=order_id,
+                    seller_id=seller_id,
+                    seller_wallet_id=uuid4(),
+                    idempotency_key="prepare-request-001",
+                    verifier=_OwnerVerifier(),
+                )
+
+        async with session_factory() as session:
             persisted_order = await session.get(Order, order_id)
             attempt = await session.get(OrderDeliveryAttempt, attempt_id)
             assert persisted_order is not None
