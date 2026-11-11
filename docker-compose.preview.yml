@@ -34,6 +34,8 @@ services:
       ENVIRONMENT: production
       DATABASE_URL: postgresql+asyncpg://viltara_preview:${PREVIEW_DB_PASSWORD:?Set PREVIEW_DB_PASSWORD in .env}@db:5432/viltara_preview
       REDIS_URL: redis://redis:6379/0
+      TON_CONNECT_ALLOWED_DOMAINS: ${PREVIEW_TON_CONNECT_ALLOWED_DOMAINS:?Set PREVIEW_TON_CONNECT_ALLOWED_DOMAINS in .env}
+      TON_CONNECT_NETWORK: ${PREVIEW_TON_CONNECT_NETWORK:-testnet}
     expose:
       - "8000"
     depends_on:
@@ -81,6 +83,8 @@ services:
       ENVIRONMENT: production
       DATABASE_URL: postgresql+asyncpg://viltara_preview:${PREVIEW_DB_PASSWORD:?Set PREVIEW_DB_PASSWORD in .env}@db:5432/viltara_preview
       REDIS_URL: redis://redis:6379/0
+      TON_CONNECT_ALLOWED_DOMAINS: ${PREVIEW_TON_CONNECT_ALLOWED_DOMAINS:?Set PREVIEW_TON_CONNECT_ALLOWED_DOMAINS in .env}
+      TON_CONNECT_NETWORK: ${PREVIEW_TON_CONNECT_NETWORK:-testnet}
     depends_on:
       db:
         condition: service_healthy
