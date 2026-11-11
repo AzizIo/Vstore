@@ -1,262 +1,137 @@
 # VILTARA SHOP
 
-Telegram-бот с интегрированным Telegram Mini App — P2P-маркетплейс для размещения и прямой передачи TON NFT (TEP-62) между пользователями.
+VILTARA SHOP is a Telegram Mini App and optional bot for a peer-to-peer marketplace of **TON NFTs that implement TEP-62**. Sellers can create priced listings for assets whose current ownership has been checked by the backend. Buyers can reserve a listing and view the resulting order.
 
-> **Текущий этап: маркетплейс-foundation без оплаты.** Реализованы каталог, объявления с ценой,
-> резервирование и проверка владения NFT. Платежи, escrow/гарант, чат сделки и админ-панель
-> **не реализованы** и не имитируются. Подробная модель и дорожная карта — в
-> [`docs/PRODUCT_MODEL.md`](docs/PRODUCT_MODEL.md).
+**Reservation is not payment.** The current product stage does not collect funds, provide escrow, transfer NFTs on behalf of users, or verify post-reservation delivery. A reservation records the buyer, seller, listing, price/currency snapshot, expiry and lifecycle events; it does not mean that the seller has transferred the NFT or that the buyer has paid.
 
-## Техническое задание
+Product boundaries and decisions approved for the current MVP are recorded in [docs/PRODUCT_MODEL.md](docs/PRODUCT_MODEL.md).
 
-> Раздел ниже — исходное ТЗ, целиком. Не всё из него реализовано: см. статус реализации
-> в конце файла и границу этапа в `docs/PRODUCT_MODEL.md`.
+## Current MVP status
 
-### 1. Формат проектаа
-
-Telegram-бот с интегрированным Telegram Mini App — маркетплейсом для покупки и продажи настоящих NFT-подарков Telegram.
-
-### 2. Основной функционал
-
-- **Каталог NFT:** просмотр объявлений, изображений подарков, характеристик и цен.
-- **Продажа NFT:** создание объявления, указание цены и данных подарка.
-- **Покупка NFT:** просмотр объявления и создание сделки с уникальным ID.
-- **Проверка NFT:** проверка доступных данных о подарке, его идентификатора и владельца через поддерживаемые API или TON-инструменты.
-- **Сделки через гаранта** *(не реализовано; этап C)*: покупатель оплачивает заказ, продавец передаёт NFT, система проверяет получение, после чего продавцу перечисляются деньги за вычетом комиссии.
-- **Чат сделки** *(не реализован)*: общение покупателя и продавца в рамках конкретного заказа.
-- **Профиль пользователя:** информация о пользователе, его объявлениях и истории сделок.
-- **Платежи** *(не реализованы; этап B)*: интеграция платёжного механизма для приёма оплаты и выплат продавцам.
-- **Админ-панель** *(не реализована)*: управление пользователями, объявлениями, сделками, комиссиями и спорными ситуациями.
-
-### 3. Дизайн
-
-Современный премиальный интерфейс Mini App с удобной навигацией, адаптацией под мобильные устройства и визуальным стилем NFT-маркетплейса.
-
-### 4. Результат
-
-Рабочая демоверсия маркетплейса с реальными NFT, основными пользовательскими сценариями и административной панелью.
-
-### 5. Важные технические ограничения
-
-Конкретные способы проверки и передачи NFT, приёма и удержания средств определяются после проверки доступных API и платёжных решений. Гарантированная автоматизация всей сделки зависит от технической возможности реализации выбранного механизма.
-
----
-
-## Технический стек
-
-Стек выбран с учётом Telegram Mini Apps, асинхронной нагрузки, работы с TON и возможности развивать проект без преждевременного разделения на микросервисы.
-
-### Backend
-
-| Технология | Назначение |
+| Capability | Status on main |
 |---|---|
-| Python 3.13+ | Основной язык backend |
-| FastAPI | REST API и webhook endpoints |
-| aiogram 3 | Telegram Bot API и обработка обновлений |
-| Pydantic v2 / pydantic-settings | Валидация данных и конфигурация |
-| SQLAlchemy 2.x Async | Асинхронная работа с БД |
-| Alembic | Миграции схемы БД |
+| Public catalogue, filters, sorting and pagination | Implemented |
+| Listings with seller-set price/currency; create draft, publish, edit and unpublish | Implemented |
+| Telegram Mini App initData verification and API bearer session | Implemented |
+| TON NFT (TEP-62) on-chain ownership verifier via TON Center v3 | Implemented |
+| Inventory endpoint GET /api/assets/me | Implemented; paginated reads and server-side ownership rechecks |
+| Fresh ownership check before publishing and reservation | Implemented; provider errors fail closed |
+| Order reservation, price/currency snapshot, idempotency, cancellation and expiry | Implemented; **not a payment flow** |
+| Telegram order notifications using a durable outbox | Implemented; optional bot container |
+| TON Connect frontend challenge → proof → backend verification, manifest and Tonkeeper flow | In progress in [Draft PR #51](https://github.com/AzizIo/Vstore/pull/51); not part of main until merged and manually verified |
+| Full inventory reconciliation/sync and dedicated My NFT screen | In progress in [Draft PR #58](https://github.com/AzizIo/Vstore/pull/58); not part of main until merged and verified |
+| Server-side verification that a reserved NFT was delivered to the buyer | Not implemented; Stage B design is tracked in [Issue #56](https://github.com/AzizIo/Vstore/issues/56) |
+| Telegram Gifts adapter, deal chat, admin panel | Not implemented |
+| Payments, checkout, escrow/guarantee, refunds, commissions and seller payouts | Not implemented |
 
-### Telegram Mini App
+The internal order status name pending_payment is a legacy name for the current reserved/pending order lifecycle. It **must not** be interpreted or presented as evidence that a payment exists.
 
-| Технология | Назначение |
-|---|---|
-| React | UI |
-| TypeScript | Типизация frontend |
-| Vite | Сборка и dev server |
-| Tailwind CSS | Стилизация и адаптивная вёрстка |
-| TanStack Query | Серверное состояние, запросы и кеш |
-| Zustand | Локальное состояние интерфейса |
-| @tonconnect/ui-react | Подключение TON-кошельков |
+## How listing and reservation work today
 
-### Данные и инфраструктура
+1. The Telegram Mini App authenticates the user's raw Telegram.WebApp.initData with the backend. Do not trust initDataUnsafe or client-supplied user fields.
+2. NFT inventory is sourced from a verified TON wallet and checked server-side using TEP-62 ownership data. Wallet connection alone is not proof of wallet control, and client-supplied NFT metadata is not proof of ownership.
+3. A seller creates a draft for an eligible, verified asset. Publishing rechecks on-chain ownership immediately before making the listing active.
+4. A buyer reserves an active listing. The backend checks seller/asset state, takes a snapshot of price and currency, and uses idempotency/concurrency protections. The order expires or can be cancelled; the reservation does not lock the NFT on-chain.
+5. The current product has **no automated NFT delivery confirmation**. The service must not display a reservation as paid, completed, or delivered.
 
-| Технология | Назначение |
-|---|---|
-| PostgreSQL | Основная реляционная БД |
-| Redis | Кеш, временные данные, распределённые блокировки |
-| Docker / Docker Compose | Контейнеризация и локальная среда |
-| S3-compatible storage | Хранение изображений и медиа |
-| GitHub Actions | CI: проверки и тесты |
+The planned Stage B work is to design and then implement a trusted server-side delivery observer: it must verify the exact NFT item, network, seller, and recipient/buyer wallet snapshot from on-chain state. A transaction hash, screenshot, or client event alone is not sufficient. See [Issue #56](https://github.com/AzizIo/Vstore/issues/56); do not start dependent delivery implementation before that design is reviewed.
 
-### TON и NFT
+## Supported assets and wallet security
 
-- **TON Connect** — подключение кошелька пользователя и запрос подтверждения транзакций. Приватные ключи пользователей не хранятся на сервере.
-- **TON Center API v3** — индексированные данные о NFT, владельцах и транзакциях.
-- **Проверка NFT** — проверять адрес item-контракта, принадлежность коллекции и актуального владельца; не доверять только переданным пользователем ссылкам, изображениям или metadata.
-- **Blockchain watcher** — отдельный backend-модуль для отслеживания транзакций и подтверждения состоявшихся переводов.
-- **Asset adapters** — изолировать интеграцию с TON NFT и Telegram Gifts, поскольку это разные механизмы владения и передачи активов.
+- **Supported asset domain:** standard TON NFT items implementing TEP-62. Treat the item contract and current owner as authoritative; treat names, images and other metadata as untrusted display input.
+- **Telegram Gifts:** separate asset domain with different Telegram Business permissions and transfer rules. No generic Telegram Gifts transfer integration is currently shipped.
+- The server must never request, receive, or store seed phrases or private keys. TON Connect delegates wallet operations to the user's wallet.
+- The backend contains TON Connect Proof verification endpoints, but on main the existing wallet UI only exposes connection/disconnection. Do not treat that UI state as a verified wallet. The full frontend proof integration and manifest are in Draft PR #51 and still require live verification with Tonkeeper on the real HTTPS Mini App host.
+- No payment, escrow, refund, commission, seller payout, custody, or buyer-protection feature is enabled. The future guaranteed-transaction phase remains planned only; its architecture, security, platform-policy and legal review must be completed separately. Read [ADR-0001](docs/adr/0001-compliant-payments-and-escrow.md) and [the payment/escrow design proposal](docs/PAYMENTS_ESCROW_DESIGN.md) as proposals, not as implemented or approved settlement rails.
 
-### Тестирование и качество
+## Architecture
 
-| Инструмент | Назначение |
-|---|---|
-| pytest / pytest-asyncio / pytest-cov | Backend tests и coverage report |
-| Ruff | Python lint и format |
-| mypy | Статическая проверка типов Python |
-| Vitest / @vitest/coverage-v8 | Frontend unit tests и coverage report |
-| Playwright | E2E-тестирование Mini App |
-| GitHub Actions | Автоматический запуск проверок |
+The repository is a modular monolith:
 
-## Запуск тестов
+- **Backend:** Python 3.13+, FastAPI, Pydantic v2, SQLAlchemy async, PostgreSQL, Alembic.
+- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, TON Connect UI.
+- **Infrastructure:** Docker Compose, PostgreSQL, Redis; optional aiogram bot and notification outbox worker.
+- **Assets:** TEP-62/TON Center v3 verification is isolated under backend/app/assets/ton_nft/.
+- **Orders:** reservation lifecycle and events are under backend/app/orders/; there is no payment provider wired to the current order flow.
 
-Backend:
+For the platform and asset limitations, see [docs/ASSET_INTEGRATION_AUDIT.md](docs/ASSET_INTEGRATION_AUDIT.md). For notification retry and delivery semantics, see [docs/TELEGRAM_NOTIFICATIONS.md](docs/TELEGRAM_NOTIFICATIONS.md). The current product boundaries are defined by [docs/PRODUCT_MODEL.md](docs/PRODUCT_MODEL.md).
 
-```bash
-cd backend
-python -m pip install -e ".[dev]"
-ruff check app tests migrations
-pytest --cov=app --cov-report=term-missing -q
-```
+## Local development
+
+Requirements: Docker with Docker Compose, Node/npm for standalone frontend checks, and Python 3.13+ for standalone backend checks.
+
+From the repository root, copy the environment template, configure the required values, and start the stack:
+
+    cp .env.example .env
+    # Generate AUTH_SECRET_KEY with: openssl rand -hex 32
+    docker compose up --build
+    docker compose exec api alembic upgrade head
+
+The PostgreSQL and Redis credentials in the Compose file are development-only. Never use them as production secrets. Never commit .env, bot tokens, JWT secrets, API keys, private keys or real user data.
+
+Local endpoints:
+
+- Mini App: http://localhost:5173
+- API: http://localhost:8000
+- OpenAPI: http://localhost:8000/docs
+- Readiness: http://localhost:8000/api/health/ready
+
+To run the optional Telegram bot/outbox worker, set BOT_TOKEN and TELEGRAM_MINI_APP_URL in .env, then run:
+
+    docker compose --profile bot up --build
+
+Apply schema migrations after starting the stack:
+
+    docker compose exec api alembic upgrade head
+
+Example current API routes (authenticate with a backend Bearer token where indicated):
+
+| Method | Route | Purpose |
+|---|---|---|
+| POST | /api/auth/telegram | Verify raw Telegram initData and issue an API session |
+| GET | /api/users/me | Current user |
+| POST | /api/wallets/proof/challenge | Issue a short-lived user-bound TON proof challenge |
+| POST | /api/wallets/proof/verify | Cryptographically verify TON Connect Proof and link wallet |
+| GET | /api/wallets/me | Current user's linked wallets |
+| GET | /api/assets/me | Verified NFT inventory (server-side ownership recheck) |
+| GET | /api/listings?limit=24&offset=0&sort=newest | Public listings |
+| POST | /api/listings | Create listing draft from a verified eligible asset |
+| POST | /api/listings/{listing_id}/publish | Publish after a fresh ownership check |
+| POST | /api/orders | Reserve listing (requires Idempotency-Key; **not payment**) |
+| GET | /api/orders | Buyer's or seller's orders |
+| POST | /api/orders/{order_id}/cancel | Cancel an eligible pending reservation |
+
+For the exact contract, inspect routes, schemas and tests under backend/app/api/ and backend/tests/; do not infer additional endpoints from the roadmap.
+
+## Quality checks
+
+Backend (from the repository root):
+
+    cd backend
+    python -m pip install -e ".[dev]"
+    ruff check app tests migrations
+    pytest --cov=app --cov-report=term-missing -q
+
+Some PostgreSQL integration tests require a dedicated disposable TEST_DATABASE_URL and are skipped if it is not configured. Never point test fixtures or migrations at a production/shared database. GitHub Actions provisions an isolated PostgreSQL service in Backend CI.
 
 Frontend:
 
-```bash
-cd frontend
-npm install
-npm run test:coverage
-npm run build
-```
+    cd frontend
+    npm install
+    npm run test:coverage
+    npm run build
 
-Обе проверки запускаются автоматически через GitHub Actions: Backend CI и Frontend CI. Coverage выводится в логах соответствующего workflow.
+Frontend CI runs Vitest, TypeScript checks and a production Vite build. Use the CI result for the exact commit you intend to review.
 
-## Архитектурные решения
+## Roadmap
 
-На первом этапе используется **модульный монолит**: один backend-проект с чёткими границами модулей. Это проще развивать и тестировать, чем набор микросервисов, и при необходимости позволяет позже выделить отдельные компоненты.
+1. **Stage A — marketplace foundation (current):** priced listings, server-side ownership checks, reservations, order lifecycle through cancellation/expiry and informational Telegram notifications.
+2. **Stage B — delivery and post-reservation lifecycle (design first):** define order state machine, delivery proof, event/database/API contracts, failure recovery and tests in Issue #56. Dependent implementation must wait for review of this design.
+3. **Future — guaranteed transactions (not implemented):** separate product phase requiring its own architecture, security, platform-policy and legal review. Do not assume a custody model, refund policy, payment method or seller settlement has been approved.
+4. **Other planned work:** Telegram Gifts (only if a supported transfer path is established), deal chat, admin and production operations.
 
-Предварительные backend-модули:
+Prices are part of the Listing model and must not be removed to make the no-payment MVP appear “free”. A reservation is not a payment, and the future guarantee is not available in the current product.
 
-- `auth` — Telegram initData validation, пользовательские сессии и роли.
-- `users` — профили и настройки.
-- `assets` — NFT/Gift адаптеры, metadata и проверка владения.
-- `listings` — объявления, фильтры и каталог.
-- `orders` — заказы и жизненный цикл сделок.
-- `escrow` — состояния гаранта, комиссии, ledger и обработка споров.
-- `payments` — приём платежей, подтверждения, возвраты и выплаты.
-- `blockchain` — TON Connect-related verification, индексатор и watcher.
-- `chat` — сообщения и события сделки.
-- `admin` — административные операции и аудит.
-- `notifications` — Telegram-уведомления.
+## Contributing
 
-## Критически важные ограничения Telegram и TON
-
-1. **Оплата цифровых товаров внутри Telegram.** По правилам Telegram Bot Platform цифровые товары и услуги, продаваемые внутри ботов и Mini Apps, должны оплачиваться Telegram Stars (`XTR`). TON Connect не следует использовать как обход этого требования для встроенного checkout.
-2. **TON Connect — не кастодиальный кошелёк.** Он позволяет приложению подключиться к кошельку и запросить подпись/транзакцию, но не передаёт приложению приватные ключи.
-3. **Telegram Gifts API имеет ограничения.** Методы просмотра, upgrade и transfer подарков бизнес-аккаунта требуют подключённого business bot и соответствующих прав. Нельзя считать, что обычный бот может забрать или передать любой подарок любого пользователя.
-4. **Не смешивать Telegram Gifts и стандартные TON NFT.** Для каждого типа актива нужен отдельный адаптер и подтверждённый сценарий проверки/передачи.
-5. **Гарант не считается реализованным только по факту оплаты.** Перед запуском реальных сделок необходимо отдельно подтвердить юридически и технически допустимую схему удержания средств, передачи актива, возврата и выплаты продавцу. Нельзя обещать автоматический escrow, пока этот механизм не реализован и не протестирован.
-
-## Результат технического аудита
-
-Подробный аудит ограничений Telegram Gifts, стандарта TON NFT, проверки владельца, передачи активов и платежей находится в [`docs/ASSET_INTEGRATION_AUDIT.md`](docs/ASSET_INTEGRATION_AUDIT.md).
-
-Ключевое решение: первый реальный сценарий строить вокруг проверяемых TON NFT стандарта TEP-62. Telegram Gifts поддерживать отдельным адаптером; автоматическую передачу разрешать только в сценариях, подтверждённых возможностями Telegram Business API. Escrow оставить выключенным до разработки и проверки отдельного механизма.
-
-Архитектурное решение по платежам и escrow (ADR) и технический дизайн описаны в
-[`docs/adr/0001-compliant-payments-and-escrow.md`](docs/adr/0001-compliant-payments-and-escrow.md)
-и [`docs/PAYMENTS_ESCROW_DESIGN.md`](docs/PAYMENTS_ESCROW_DESIGN.md).
-
-## Предлагаемый порядок разработки
-
-1. Аудит Telegram Gifts / TON NFT и фиксация поддерживаемых сценариев.
-2. Каркас проекта, Docker Compose, PostgreSQL, Redis, миграции и CI.
-3. Telegram-бот, Mini App и безопасная авторизация через проверку `initData`.
-4. Каталог, карточка актива, профиль и объявления.
-5. Проверка NFT и мониторинг транзакций.
-6. Заказы, состояния сделок, журнал операций и админ-панель.
-7. Платёжная интеграция и escrow только после подтверждения реализуемой схемы.
-8. Тестирование, аудит безопасности и production deployment.
-
-
-## Локальный запуск каркаса
-
-Требования: Docker Desktop / Docker Engine с Docker Compose.
-
-1. Скопировать пример переменных окружения и указать токен бота из BotFather в `BOT_TOKEN` (он нужен для проверки Mini App `initData`):
-
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Сгенерировать секрет API (вставить результат в `AUTH_SECRET_KEY` в `.env`):
-
-   ```bash
-   openssl rand -hex 32
-   ```
-
-3. Запустить API, Mini App, PostgreSQL и Redis:
-
-   ```bash
-   docker compose up --build
-   ```
-
-4. Применить миграции базы данных:
-
-   ```bash
-   docker compose exec api alembic upgrade head
-   ```
-
-5. Проверить сервисы:
-   - Mini App: http://localhost:5173
-   - API: http://localhost:8000
-   - Swagger: http://localhost:8000/docs
-   - Readiness: http://localhost:8000/api/health/ready
-   - Telegram login: `POST /api/auth/telegram` с JSON body `{"init_data":"<Telegram.WebApp.initData>"}`. Передавать нужно именно `Telegram.WebApp.initData`, не `initDataUnsafe`.
-   - Current user: `GET /api/users/me` с заголовком `Authorization: Bearer <access_token>`.
-   - Public catalog: `GET /api/listings?limit=24&offset=0&sort=newest`; filters: `asset_type`, `currency`, `search`, `sort=price_asc|price_desc|newest`. Видимы только `active` объявления, у которых актив `verified` и принадлежит продавцу; `reserved`, `stale`, `pending` и `failed` скрыты.
-   - Listing details: `GET /api/listings/{listing_id}` (действует то же правило видимости, иначе 404).
-   - My listings: `GET /api/listings/me` (требуется Bearer token).
-   - Create listing draft: `POST /api/listings` (требуется Bearer token; только для уже подтверждённого актива, принадлежащего пользователю).
-
-6. Для запуска Telegram-бота указать `BOT_TOKEN` в `.env` и выполнить:
-
-   ```bash
-   docker compose --profile bot up --build
-   ```
-
-### Текущий статус (аудит 2026-11-10)
-
-**Этап A — маркетплейс-foundation (в работе):**
-
-- [x] Backend FastAPI и конфигурация через environment; readiness-проверки PostgreSQL и Redis.
-- [x] Асинхронное подключение SQLAlchemy к PostgreSQL; Alembic-миграции (0001–0004).
-- [x] Docker Compose для локальной среды; базовый aiogram polling entrypoint.
-- [x] React + TypeScript + Vite Mini App: каталог, карточка объявления, создание/редактирование, мои объявления, заказы.
-- [x] HMAC-проверка Telegram Mini App initData, JWT-аутентификация, `GET /api/users/me`.
-- [x] TON Connect wallet proof: серверная проверка proof и привязка кошелька (`/api/wallets/*`).
-- [x] TEP-62 NFT verification adapter (TON Center v3) + инвентарь `/api/assets/me`.
-- [x] Черновики объявлений из верифицированных активов; публикация после live ownership re-check.
-- [x] Управление объявлениями: публикация, редактирование цены/заголовка/описания, снятие, срок публикации.
-- [x] **Цена и валюта — полноценная часть объявления:** Decimal `Numeric(24,9)`, check > 0, сортировка `price_asc/price_desc`, фильтр по валюте; цена во всех UI.
-- [x] Заказы: создание с **снимком цены/валюты на момент резерва**, идемпотентность, конкурентная защита, свежая проверка владения перед резервом (fail-closed 503 при недоступности провайдера).
-- [x] Скрытие непокупаемых листингов (stale/unverified/reserved) из каталога и карточки.
-- [x] Telegram order notifications через durable outbox.
-
-**Не реализовано и не имитируется:**
-
-- [ ] Платежи: приём/подтверждение средств (этап B; `PaymentAdapter` — только контракт).
-- [ ] Escrow/гарант, споры, комиссии, выплаты (этап C; ADR-0001/0002).
-- [ ] Подтверждение передачи NFT в сделке (серверная on-chain проверка после резерва — этап B).
-- [ ] Чат сделки, админ-панель.
-- [ ] E2E-тесты, production hardening, deployment runbook.
-
-**Важно:** резервирование заказа не означает оплату — платёжного механизма нет, статусов «оплачено» не существует. Текущие пароли PostgreSQL в Compose предназначены только для локальной разработки. Каркас не принимает реальные платежи и не передаёт NFT.
-
----
-
-*Проект находится в разработке. Описание будет дополняться по мере реализации функциональности.*
-
-
-### Telegram order notifications
-
-Order creation, buyer cancellation, and automatic expiry enqueue recipient notifications in the
-same transaction as the order state change. Delivery is handled by the separate optional bot
-container using a PostgreSQL-backed outbox. Configure `BOT_TOKEN` and
-`TELEGRAM_MINI_APP_URL` in `.env`, then start the bot profile:
-
-```bash
-docker compose --profile bot up --build
-```
-
-See [docs/TELEGRAM_NOTIFICATIONS.md](docs/TELEGRAM_NOTIFICATIONS.md) for retry, monitoring,
-and delivery-guarantee details.
+Read [AGENTS.md](AGENTS.md) before changing code. Never commit directly to main; create a task-specific branch and focused PR. Inspect active issues/PRs before starting work, do not overwrite another branch, and do not merge or close issues without authorization.
