@@ -5,9 +5,8 @@ from __future__ import annotations
 import os
 from urllib.parse import urlsplit
 
-from redis.asyncio import Redis
-
 from app.core.config import get_settings
+from redis.asyncio import Redis
 
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
