@@ -235,6 +235,23 @@ export async function mockMarketplaceApi(
         : fulfillJson({ detail: "Listing not found." }, 404);
     }
 
+    if (path === `/api/orders/${orderId}/cancel` && method === "POST" && options.authenticated) {
+      return fulfillJson({
+        ...linkedOrder,
+        status: "cancelled",
+        updated_at: "2026-01-01T00:05:00Z",
+        events: [
+          ...linkedOrder.events,
+          {
+            from_status: "reserved",
+            to_status: "cancelled",
+            actor_type: "buyer",
+            created_at: "2026-01-01T00:05:00Z",
+          },
+        ],
+      });
+    }
+
     if (path === `/api/orders/${orderId}` && method === "GET" && options.authenticated) {
       return fulfillJson(linkedOrder);
     }
