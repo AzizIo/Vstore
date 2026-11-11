@@ -6,6 +6,8 @@ const appUrl = process.env.VITE_TONCONNECT_APP_URL ?? "https://viltara-e2e.examp
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.pw.ts",
+  // API-backed tests have their own real-API config and service environment.
+  testIgnore: ["**/api-backed/**"],
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,

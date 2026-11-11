@@ -4,10 +4,18 @@ on:
   push:
     paths:
       - "frontend/**"
+      - "backend/**"
+      - "docker-compose.yml"
+      - ".env.example"
+      - ".github/workflows/backend.yml"
       - ".github/workflows/frontend.yml"
   pull_request:
     paths:
       - "frontend/**"
+      - "backend/**"
+      - "docker-compose.yml"
+      - ".env.example"
+      - ".github/workflows/backend.yml"
       - ".github/workflows/frontend.yml"
 
 permissions:
@@ -72,3 +80,130 @@ jobs:
       - name: Validate generated TON Connect manifest and icon
         run: |
           node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync("dist/tonconnect-manifest.json", "utf8")); if (manifest.url !== process.env.VITE_TONCONNECT_APP_URL || manifest.iconUrl !== process.env.VITE_TONCONNECT_APP_URL + "/tonconnect-icon.png") process.exit(1); if (!fs.existsSync("dist/tonconnect-icon.png")) process.exit(1);'
+
+  api-backed-e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: viltara_e2e
+          POSTGRES_USER: viltara
+          POSTGRES_PASSWORD: viltara_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U viltara -d viltara_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # All endpoints and credentials below are disposable CI-only fixtures.
+      # BOT_TOKEN is used solely to sign test initData; no Telegram API is called.
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+asyncpg://viltara:viltara_e2e@127.0.0.1:5432/viltara_e2e
+      REDIS_URL: redis://127.0.0.1:6379/0
+      BOT_TOKEN: e2e-only-not-a-real-telegram-bot-token
+      AUTH_SECRET_KEY: e2e-only-secret-never-use-outside-disposable-ci-database-123456789
+      TON_CONNECT_NETWORK: mainnet
+      TON_CONNECT_ALLOWED_DOMAINS: '["viltara-e2e.example"]'
+      TON_CENTER_MAINNET_BASE_URL: http://127.0.0.1:8999/api/v3
+      VITE_TONCONNECT_APP_URL: https://viltara-e2e.example
+      VITE_TONCONNECT_MANIFEST_URL: ""
+      VITE_API_PROXY_TARGET: http://127.0.0.1:8000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: python -m pip install -e ".[dev]"
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Apply migrations to disposable E2E database
+        working-directory: backend
+        run: python -m alembic upgrade head
+
+      - name: Start local TON Center fixture
+        working-directory: backend
+        run: |
+          nohup python -m scripts.e2e_ton_provider >/tmp/viltara-e2e-ton-provider.log 2>&1 &
+          echo $! >/tmp/viltara-e2e-ton-provider.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:8999/api/v3/nft/items?owner_address=0:1111111111111111111111111111111111111111111111111111111111111111" >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/viltara-e2e-ton-provider.log
+          exit 1
+
+      - name: Seed verified seller fixture
+        working-directory: backend
+        run: python -m scripts.seed_api_backed_e2e
+
+      - name: Start real FastAPI application
+        working-directory: backend
+        run: |
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 >/tmp/viltara-e2e-api.log 2>&1 &
+          echo $! >/tmp/viltara-e2e-api.pid
+
+      - name: Wait for API, PostgreSQL, Redis and auth readiness
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/api/health/ready >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/viltara-e2e-api.log
+          exit 1
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install chromium
+
+      - name: Run API-backed Playwright journey
+        working-directory: frontend
+        run: npm run test:e2e:api
+
+      - name: Assert persisted order, event and notification outbox rows
+        working-directory: backend
+        run: python -m scripts.assert_api_backed_e2e
+
+      - name: Upload API-backed Playwright diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-backed-playwright-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            frontend/playwright-report-api-backed/
+            frontend/test-results-api-backed/
+            /tmp/viltara-e2e-api.log
+            /tmp/viltara-e2e-ton-provider.log
+          if-no-files-found: ignore
+          retention-days: 7
