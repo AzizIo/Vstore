@@ -1817,6 +1817,17 @@ async def test_delivery_prepare_snapshots_verified_wallets_and_submission_is_ide
             assert attempt.buyer_address_snapshot == buyer_address
             assert int(attempt.query_id) >= 0
             assert attempt.deadline > attempt.prepared_at
+            late_submission_at = attempt.deadline + timedelta(seconds=1)
+
+        async with session_factory() as session:
+            with pytest.raises(OrderConflict, match="preparation window has expired"):
+                await submit_delivery_candidate(
+                    session,
+                    order_id=order_id,
+                    seller_id=seller_id,
+                    transaction_hash="ef" * 32,
+                    now=late_submission_at,
+                )
 
         candidate_hash = "ef" * 32
         async with session_factory() as session:
