@@ -263,7 +263,7 @@ class Order(TimestampMixin, Base):
         ),
         UniqueConstraint("buyer_id", "idempotency_key", name="uq_orders_buyer_idempotency"),
         Index(
-            "uq_orders_pending_listing",
+            "uq_orders_open_listing",
             "listing_id",
             unique=True,
             postgresql_where=text("status IN ('reserved', 'awaiting_transfer', 'observing_transfer')"),
