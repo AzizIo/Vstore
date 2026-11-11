@@ -258,7 +258,8 @@ class Order(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("price_amount > 0", name="ck_orders_price_positive"),
         CheckConstraint(
-            "status IN ('reserved', 'awaiting_transfer', 'observing_transfer', 'completed', 'cancelled', 'expired')",
+            "status IN ('reserved', 'awaiting_transfer', 'observing_transfer', "
+            "'completed', 'cancelled', 'expired')",
             name="ck_orders_status",
         ),
         UniqueConstraint("buyer_id", "idempotency_key", name="uq_orders_buyer_idempotency"),
@@ -266,7 +267,9 @@ class Order(TimestampMixin, Base):
             "uq_orders_open_listing",
             "listing_id",
             unique=True,
-            postgresql_where=text("status IN ('reserved', 'awaiting_transfer', 'observing_transfer')"),
+            postgresql_where=text(
+                "status IN ('reserved', 'awaiting_transfer', 'observing_transfer')"
+            ),
         ),
         Index("ix_orders_buyer_created_at", "buyer_id", "created_at"),
         Index("ix_orders_seller_created_at", "seller_id", "created_at"),
@@ -315,8 +318,11 @@ class OrderEvent(Base):
             name="ck_order_events_actor_type",
         ),
         CheckConstraint(
-            "(from_status IS NULL OR from_status IN ('reserved', 'awaiting_transfer', 'observing_transfer', 'completed', 'cancelled', 'expired')) "
-            "AND to_status IN ('reserved', 'awaiting_transfer', 'observing_transfer', 'completed', 'cancelled', 'expired')",
+            "(from_status IS NULL OR from_status IN "
+            "('reserved', 'awaiting_transfer', 'observing_transfer', "
+            "'completed', 'cancelled', 'expired')) "
+            "AND to_status IN ('reserved', 'awaiting_transfer', 'observing_transfer', "
+            "'completed', 'cancelled', 'expired')",
             name="ck_order_events_statuses",
         ),
     )
@@ -354,9 +360,13 @@ class OrderDeliveryAttempt(TimestampMixin, Base):
             "query_id >= 0 AND query_id <= 18446744073709551615",
             name="ck_order_delivery_attempt_query_id_uint64",
         ),
-        CheckConstraint("deadline > prepared_at", name="ck_order_delivery_attempt_deadline"),
         CheckConstraint(
-            "status IN ('prepared', 'observing', 'verified', 'failed', 'manual_review', 'cancelled')",
+            "deadline > prepared_at",
+            name="ck_order_delivery_attempt_deadline",
+        ),
+        CheckConstraint(
+            "status IN ('prepared', 'observing', 'verified', 'failed', "
+            "'manual_review', 'cancelled')",
             name="ck_order_delivery_attempt_status",
         ),
         CheckConstraint(
