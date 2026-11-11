@@ -231,10 +231,18 @@ def downgrade() -> None:
     attempts = bind.execute(
         sa.text("SELECT count(*) FROM order_delivery_attempts")
     ).scalar_one()
-    if active_orders or attempts:
+    delivery_events = bind.execute(
+        sa.text(
+            "SELECT count(*) FROM order_events WHERE "
+            "from_status IN ('awaiting_transfer', 'observing_transfer', 'completed') "
+            "OR to_status IN ('awaiting_transfer', 'observing_transfer', 'completed') "
+            "OR actor_type = 'seller'"
+        )
+    ).scalar_one()
+    if active_orders or attempts or delivery_events:
         raise RuntimeError(
-            "Cannot downgrade delivery lifecycle after non-reservation states "
-            "or delivery attempts have been recorded; preserve the evidence."
+            "Cannot downgrade delivery lifecycle after non-reservation states, "
+            "delivery events, or attempts have been recorded; preserve the evidence."
         )
 
     op.drop_index(
