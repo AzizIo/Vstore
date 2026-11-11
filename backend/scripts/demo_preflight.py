@@ -150,6 +150,8 @@ def run_preflight(
             if not isinstance(health_payload, dict):
                 health_payload = {}
             components = health_payload.get("checks", {})
+            if not isinstance(components, dict):
+                components = {}
             allowed_proof_domains = components.get("ton_connect_proof_domains", [])
             expected_proof_domain = urlsplit(app_origin).hostname
             ton_connect_proof_configured = components.get("ton_connect_proof") == "ok"
