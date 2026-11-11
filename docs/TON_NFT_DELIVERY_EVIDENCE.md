@@ -30,7 +30,7 @@ Missing or inconsistent chain/indexer fields do not produce a success result.
 
 Provider/network/configuration failures raise typed `ProviderUnavailable` or `InvalidProviderData`; they are not converted into a successful or failed business transition.
 
-The optional client-supplied transaction hash is only a hint. The adapter does not select or accept evidence from that value; it returns the canonical transfer hash found through the indexed transfer + trace correlation. TON Center's published API v3 migration notice states that hashes are returned in Base64, not hex; Base64 is case-sensitive, so the adapter preserves its exact case when correlating transfer and trace records.
+The optional client-supplied transaction hash is only a hint. The adapter does not select or accept evidence from that value; it returns the canonical transfer hash found through the indexed transfer + trace correlation. TON Center's published API v3 migration notice states that hashes are returned in Base64, not hex; Base64 is case-sensitive, so the adapter preserves its exact case and validates a 32-byte decoded value when correlating transfer and trace records.
 
 Reference for the current hash representation: [TON Center API v3 migration notice](https://t.me/toncenter_news/6).
 
