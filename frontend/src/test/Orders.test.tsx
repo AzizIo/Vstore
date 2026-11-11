@@ -65,7 +65,10 @@ describe("orders", () => {
       return jsonResponse({ items: [order] });
     });
     render(<Orders accessToken="private-token" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Open order Moon Lantern/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Cancel order" }));
+    expect(await screen.findByText("Cancel this reservation?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm cancellation" }));
 
     expect(await screen.findByText("Cancelled")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel order" })).not.toBeInTheDocument();
@@ -74,9 +77,7 @@ describe("orders", () => {
   it("shows seller sales without a buyer cancellation action", async () => {
     render(<Orders accessToken="private-token" />);
     await screen.findByText("Moon Lantern");
-    fireEvent.change(screen.getByRole("combobox", { name: "Order role" }), {
-      target: { value: "seller" },
-    });
+    fireEvent.click(screen.getByRole("tab", { name: /Sales/ }));
 
     await waitFor(() => {
       expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("role=seller");
@@ -115,9 +116,59 @@ describe("orders", () => {
     );
 
     expect(await screen.findByText("OPENED FROM TELEGRAM NOTIFICATION")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Order role" })).toHaveValue("seller");
+    expect(screen.getByRole("tab", { name: /Sales/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
     await waitFor(() => {
       expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/api/orders?role=seller"))).toBe(true);
     });
   });
+
+
+describe("order workspace interactions", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ items: [
+      order,
+      { ...order, id: "order-2", title: "Golden Gift", status: "completed", price_amount: "30", created_at: "2026-01-02T00:00:00Z" },
+      { ...order, id: "order-3", title: "Silver Gift", status: "expired", price_amount: "5", created_at: "2026-01-03T00:00:00Z" },
+    ] })));
+  });
+
+  it("searches titles and IDs and filters by lifecycle state", async () => {
+    render(<Orders accessToken="token" onCatalog={vi.fn()} />);
+    expect(await screen.findByText("Golden Gift")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Active/ }));
+    expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
+    expect(screen.queryByText("Golden Gift")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search orders by asset title or order ID" }), {
+      target: { value: "order-1" },
+    });
+    expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
+    expect(screen.queryByText("Silver Gift")).not.toBeInTheDocument();
+  });
+
+  it("opens order details, displays lifecycle facts and countdown, and returns to the workspace", async () => {
+    render(<Orders accessToken="token" userId="buyer-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Open order Moon Lantern/ }));
+    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Event timeline" })).toBeInTheDocument();
+    expect(screen.getByText("Order ID")).toBeInTheDocument();
+    expect(screen.getByText(/remaining|Reservation expired/)).toBeInTheDocument();
+    expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "← Back to orders" }));
+    expect(await screen.findByRole("heading", { name: "Order workspace" })).toBeInTheDocument();
+  });
+
+  it("sorts orders by price and offers a catalog action when empty", async () => {
+    render(<Orders accessToken="token" onCatalog={vi.fn()} />);
+    await screen.findByText("Golden Gift");
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort orders" }), { target: { value: "price" } });
+    const cards = screen.getAllByRole("button", { name: /Open order/ });
+    expect(cards[0]).toHaveAccessibleName(/Golden Gift/);
+
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ items: [] }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(await screen.findByText("No purchases yet")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Explore catalog" })).toBeInTheDocument();
+  });
+});
