@@ -68,6 +68,7 @@ def test_readiness_returns_503_when_a_dependency_is_unavailable(monkeypatch) -> 
             "redis": "ok",
             "authentication": "ok",
             "ton_connect_proof": "ok",
+            "ton_connect_proof_domains": ["shop.example.test"],
         },
     }
 
