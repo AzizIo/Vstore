@@ -131,7 +131,7 @@ test(
 
     await buyerPage.getByRole("button", { name: /E2E Published NFT/ }).click();
     await expect(buyerPage.getByRole("heading", { name: "E2E Published NFT" })).toBeVisible();
-    await expect(buyerPage.getByText(/^15\\.75(?:0+)? TON$/)).toBeVisible();
+    await expect(buyerPage.getByText(/^15\.75(?:0+)? TON$/)).toBeVisible();
     await buyerPage.getByRole("button", { name: "Place order", exact: true }).click();
     await expect(
       buyerPage.getByText("Order created. Payment is not enabled; check its status in Orders."),
