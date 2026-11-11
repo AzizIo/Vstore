@@ -279,7 +279,7 @@ These are proposed tasks to create or map onto existing Issues after maintainer 
 | Order | Work item | Owner area | Depends on | Acceptance |
 |---|---|---|---|---|
 | B0 | Approve state vocabulary, deadline rules, finality policy, buyer wallet snapshot point and API compatibility | Maintainer + Backend | This design | Written decisions resolve the open questions below |
-| B1 | Design and implement transaction/trace provider adapter for TEP-62 delivery evidence | Backend | B0 | Typed provider results distinguish confirmed, failed, not-found-yet, unsupported and unavailable |
+| B1 | Design and implement transaction/trace provider adapter for TEP-62 delivery evidence | Backend | B0 | Draft implementation in [PR #63](https://github.com/AzizIo/Vstore/pull/63): read-only TON Center v3 transfer/trace correlation, bounded pagination, typed outcomes, fail-closed checks and fixtures; see [TON_NFT_DELIVERY_EVIDENCE.md](TON_NFT_DELIVERY_EVIDENCE.md). No order state or DB changes are part of B1 |
 | B2 | Add delivery intent/snapshot/attempt persistence, state migration and constraints | Backend + DB | B0, B1 contract | Migration preserves old reservations and enforces idempotency/uniqueness |
 | B3 | Implement delivery preparation/submission/read API with auth, locks and idempotency | Backend | B2 | Client-supplied hashes/addresses never establish completion |
 | B4 | Implement leased observer/reconciliation worker and transactional completion/outbox | Backend | B1, B2, B3 | Duplicate/out-of-order provider events are idempotent; failure cases fail closed |
