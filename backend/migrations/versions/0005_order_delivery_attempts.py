@@ -177,6 +177,40 @@ def upgrade() -> None:
         ["order_id", "created_at"],
     )
 
+    # Snapshotted addresses/identity cannot be rewritten after a seller is
+    # authorized to deliver. Wallet row IDs may still be nulled by ON DELETE SET NULL.
+    op.execute(
+        """
+        CREATE FUNCTION prevent_order_delivery_attempt_snapshot_mutation()
+        RETURNS trigger AS $
+        BEGIN
+            IF NEW.order_id IS DISTINCT FROM OLD.order_id
+                OR NEW.attempt_number IS DISTINCT FROM OLD.attempt_number
+                OR NEW.network IS DISTINCT FROM OLD.network
+                OR NEW.item_address IS DISTINCT FROM OLD.item_address
+                OR NEW.seller_address_snapshot IS DISTINCT FROM OLD.seller_address_snapshot
+                OR NEW.buyer_address_snapshot IS DISTINCT FROM OLD.buyer_address_snapshot
+                OR NEW.query_id IS DISTINCT FROM OLD.query_id
+                OR NEW.prepared_at IS DISTINCT FROM OLD.prepared_at
+                OR NEW.deadline IS DISTINCT FROM OLD.deadline
+            THEN
+                RAISE EXCEPTION 'order delivery attempt snapshots are immutable'
+                    USING ERRCODE = 'check_violation';
+            END IF;
+            RETURN NEW;
+        END;
+        $ LANGUAGE plpgsql
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER trg_order_delivery_attempt_snapshots_immutable
+        BEFORE UPDATE ON order_delivery_attempts
+        FOR EACH ROW
+        EXECUTE FUNCTION prevent_order_delivery_attempt_snapshot_mutation()
+        """
+    )
+
 
 def downgrade() -> None:
     bind = op.get_bind()
@@ -210,6 +244,13 @@ def downgrade() -> None:
     op.drop_index(
         "uq_order_delivery_attempt_active_order",
         table_name="order_delivery_attempts",
+    )
+    op.execute(
+        "DROP TRIGGER IF EXISTS trg_order_delivery_attempt_snapshots_immutable "
+        "ON order_delivery_attempts"
+    )
+    op.execute(
+        "DROP FUNCTION IF EXISTS prevent_order_delivery_attempt_snapshot_mutation()"
     )
     op.drop_table("order_delivery_attempts")
 
