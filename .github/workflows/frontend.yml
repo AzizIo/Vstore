@@ -38,6 +38,14 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+      - name: Build static preview container
+        run: |
+          docker build \
+            --file Dockerfile.preview \
+            --build-arg VITE_TONCONNECT_APP_URL="$VITE_TONCONNECT_APP_URL" \
+            --build-arg VITE_TONCONNECT_MANIFEST_URL="$VITE_TONCONNECT_MANIFEST_URL" \
+            --tag viltara-miniapp-preview-ci .
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
