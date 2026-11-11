@@ -310,13 +310,12 @@ async def _mark_manual_review(
             )
             .with_for_update()
         )
-        if not _owns_unexpired_lease(
-            attempt, claim, checked_at=datetime.now(UTC)
-        ):
+        checked_at = max(now, datetime.now(UTC))
+        if not _owns_unexpired_lease(attempt, claim, checked_at=checked_at):
             return False
         attempt.status = OrderDeliveryAttemptStatus.MANUAL_REVIEW
         attempt.reason_code = reason_code[:64]
-        attempt.last_checked_at = now
+        attempt.last_checked_at = checked_at
         attempt.next_check_at = None
         attempt.observer_lease_token = None
         attempt.observer_lease_until = None
@@ -341,16 +340,15 @@ async def _schedule_retry(
             )
             .with_for_update()
         )
-        if not _owns_unexpired_lease(
-            attempt, claim, checked_at=datetime.now(UTC)
-        ):
+        checked_at = max(now, datetime.now(UTC))
+        if not _owns_unexpired_lease(attempt, claim, checked_at=checked_at):
             return "lease_lost"
 
-        attempt.last_checked_at = now
+        attempt.last_checked_at = checked_at
         attempt.reason_code = reason_code[:64]
         attempt.observer_lease_token = None
         attempt.observer_lease_until = None
-        if now >= attempt.deadline or (
+        if checked_at >= attempt.deadline or (
             attempt.observer_attempt_count >= settings.delivery_observer_max_attempts
         ):
             attempt.status = OrderDeliveryAttemptStatus.MANUAL_REVIEW
@@ -363,7 +361,7 @@ async def _schedule_retry(
             settings.delivery_observer_retry_max_seconds,
         )
         attempt.status = OrderDeliveryAttemptStatus.OBSERVING
-        attempt.next_check_at = now + timedelta(seconds=delay)
+        attempt.next_check_at = checked_at + timedelta(seconds=delay)
         return "retried"
 
 
@@ -393,9 +391,8 @@ async def _apply_verified_evidence(
             .where(OrderDeliveryAttempt.id == claim.attempt_id)
             .with_for_update()
         )
-        if not _owns_unexpired_lease(
-            attempt, claim, checked_at=datetime.now(UTC)
-        ):
+        checked_at = max(now, datetime.now(UTC))
+        if not _owns_unexpired_lease(attempt, claim, checked_at=checked_at):
             return "lease_lost"
 
         try:
@@ -455,7 +452,7 @@ async def _apply_verified_evidence(
             attempt.reason_code = (
                 "evidence_mismatch" if not evidence_matches else "state_changed"
             )
-            attempt.last_checked_at = now
+            attempt.last_checked_at = checked_at
             attempt.next_check_at = None
             attempt.observer_lease_token = None
             attempt.observer_lease_until = None
@@ -473,7 +470,7 @@ async def _apply_verified_evidence(
         if duplicate is not None:
             attempt.status = OrderDeliveryAttemptStatus.MANUAL_REVIEW
             attempt.reason_code = "transfer_already_used"
-            attempt.last_checked_at = now
+            attempt.last_checked_at = checked_at
             attempt.next_check_at = None
             attempt.observer_lease_token = None
             attempt.observer_lease_until = None
@@ -486,8 +483,8 @@ async def _apply_verified_evidence(
         attempt.masterchain_seqno = evidence.masterchain_seqno
         attempt.provider_source = evidence.evidence_source[:32]
         attempt.reason_code = "finalized_transfer_verified"
-        attempt.verified_at = now
-        attempt.last_checked_at = now
+        attempt.verified_at = checked_at
+        attempt.last_checked_at = checked_at
         attempt.next_check_at = None
         attempt.observer_lease_token = None
         attempt.observer_lease_until = None
@@ -496,7 +493,7 @@ async def _apply_verified_evidence(
         listing.status = ListingStatus.SOLD
         asset.owner_id = order.buyer_id
         asset.verification_status = AssetVerificationStatus.VERIFIED
-        asset.verified_at = now
+        asset.verified_at = checked_at
         session.add(
             OrderEvent(
                 order_id=order.id,
