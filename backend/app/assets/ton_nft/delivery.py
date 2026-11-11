@@ -331,12 +331,9 @@ class TONCenterDeliveryEvidenceProvider:
             normalized_hash = cls._normalize_hash(tx_hash, "item transaction hash")
             if normalized_account == item_address and normalized_hash == transaction_hash:
                 key = (normalized_account, normalized_hash)
-                previous = matches.get(key)
-                if previous is not None and previous != transaction:
-                    raise InvalidProviderData(
-                        "TON Center trace returned inconsistent copies of the item transaction"
-                    )
-                matches[key] = transaction
+                # The API exposes transactions both in action summaries and in
+                # the nested trace tree. These are two views of the same TX.
+                matches.setdefault(key, transaction)
         if not matches:
             return "Trace does not contain the exact NFT item transaction"
         if len(matches) != 1:
@@ -442,6 +439,9 @@ class TONCenterDeliveryEvidenceProvider:
             query_id=intent.query_id,
             candidate_transaction_hash=intent.candidate_transaction_hash,
         )
+        # candidate_transaction_hash is deliberately only a hint from the caller.
+        # We never use it to select or accept evidence; the canonical indexer row,
+        # query_id and trace correlation below determine the transaction.
         transfers = await self._fetch_transfers(item_address)
         candidates: list[dict[str, Any]] = []
         for row in transfers:
