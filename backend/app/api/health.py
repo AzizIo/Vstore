@@ -7,11 +7,23 @@ from sqlalchemy import text
 
 from app.core.config import get_settings
 from app.db.session import engine
+from app.wallets.proof import WalletProofConfigurationError, validate_proof_configuration
 
 router = APIRouter(tags=["health"])
 settings = get_settings()
 
 CHECK_TIMEOUT_SECONDS = 2.0
+
+
+def _ton_connect_proof_ready() -> bool:
+    try:
+        validate_proof_configuration(
+            settings.ton_connect_allowed_domains,
+            settings.ton_connect_network,
+        )
+    except WalletProofConfigurationError:
+        return False
+    return True
 
 
 def _authentication_ready() -> bool:
@@ -65,6 +77,9 @@ async def readiness() -> dict[str, object]:
         "database": "ok" if database_ok else "error",
         "redis": "ok" if redis_ok else "error",
         "authentication": "ok" if authentication_ok else "error",
+        # Wallet proof is a separately gated feature: keep catalogue/API health
+        # available when it is intentionally disabled, but expose its state to preflight.
+        "ton_connect_proof": "ok" if _ton_connect_proof_ready() else "error",
     }
 
     if not database_ok or not redis_ok or not authentication_ok:
