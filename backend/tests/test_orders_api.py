@@ -204,3 +204,11 @@ def test_delivery_read_route_hides_non_participant(api_client, monkeypatch):
 
     assert response.status_code == 404
 
+
+def test_delivery_submission_rejects_malformed_transaction_hash(api_client):
+    response = api_client.post(
+        f"/api/orders/{uuid4()}/delivery/submissions",
+        json={"transaction_hash": "not-a-ton-hash"},
+    )
+    assert response.status_code == 422
+
