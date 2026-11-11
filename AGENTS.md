@@ -77,7 +77,7 @@ Important current API routes:
 | GET | /api/orders | Buyer/seller order list |
 | POST | /api/orders/{order_id}/cancel | Cancel eligible pending reservation |
 
-Do not invent route fields/query parameters: use API schemas and tests as source of truth. Current order status pending_payment is a legacy name and must not be treated as a real payment event or presented to users as “paid”.
+Do not invent route fields/query parameters: use API schemas and tests as source of truth. Legacy database `pending_payment` rows are migrated to `reserved`; no status may be treated as a payment or shown as “paid”. Order states for delivery are schema groundwork only until a delivery API/observer is implemented.
 
 ## 4. Safety and product invariants
 
@@ -140,7 +140,7 @@ Treat this as a dated snapshot and check live GitHub before acting.
 - **Issue #43 / PR #51 merged:** code and CI are complete. Live Telegram/Tonkeeper proof signing, account/network switch and public manifest/icon checks remain open in Issue #43; do not enable production wallet configuration before those checks.
 - **Issue #44 / PR #58 merged:** full NFT inventory sync/reconciliation and dedicated My NFT UI are in main. Multi-page/multi-wallet/provider/ownership-loss manual acceptance and owner screenshots remain open in Issue #44.
 - **Issue #48:** keep docs aligned with approved product model (this document + README.md); do not remove listing prices.
-- **Issue #56:** Stage B architecture is documented and merged in `docs/STAGE_B_ORDER_LIFECYCLE.md`. Its final section contains maintainer decisions that remain open. Issue #46 implementation must wait until those decisions are explicitly approved; a merged design proposal is not approval of the proposed API/DB contract or migration.
+- **Issue #56:** Stage B architecture is documented and merged in `docs/STAGE_B_ORDER_LIFECYCLE.md`. B1 read-only TON Center transfer evidence is merged via PR #63. B2 order-status migration and delivery-attempt persistence are in PR #64; this adds no prepare/submit API or observer. Do not mark orders delivered until B3/B4 add server-side state transitions and reconciliation.
 - **Future guaranteed transactions:** a separate later phase. No payments, checkout, escrow/custody, refunds, commissions or seller payout should be implemented under current Stage A.
 
 ## 8. First 10 minutes for a new contributor
