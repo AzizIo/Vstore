@@ -1876,6 +1876,72 @@ async def test_delivery_observer_lease_fences_stale_worker_and_retries_inconclus
         await engine.dispose()
 
 
+async def test_delivery_observer_rejects_expired_lease_before_another_worker_reclaims_it(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        seller, buyer, asset, listing, order, attempt, now = await _create_observer_fixture(session)
+    try:
+        async with session_factory() as session:
+            claims = await claim_due_delivery_attempts(session, now=now)
+            assert len(claims) == 1
+            claim = claims[0]
+
+        # Simulate provider I/O lasting beyond the lease. No replacement worker
+        # has claimed the row, so the token still matches; expiry alone must fence it.
+        expired_at = datetime.now(UTC) - timedelta(seconds=1)
+        async with session_factory.begin() as session:
+            persisted_attempt = await session.get(OrderDeliveryAttempt, attempt.id)
+            assert persisted_attempt is not None
+            persisted_attempt.observer_lease_until = expired_at
+            persisted_attempt.next_check_at = expired_at
+
+        finalized = DeliveryEvidenceResult(
+            status=DeliveryEvidenceStatus.VERIFIED_FINALIZED,
+            item_address=claim.item_address,
+            network=claim.network,
+            seller_wallet_address=claim.seller_address,
+            buyer_wallet_address=claim.buyer_address,
+            query_id=claim.query_id,
+            transaction_hash="ef" * 32,
+            trace_id="12" * 32,
+            masterchain_seqno=123456,
+        )
+        async with session_factory() as session:
+            outcome = await apply_delivery_observation(session, claim, finalized)
+        assert outcome == "lease_lost"
+
+        async with session_factory() as session:
+            persisted_order = await session.get(Order, order.id)
+            persisted_listing = await session.get(Listing, listing.id)
+            persisted_asset = await session.get(NFTAsset, asset.id)
+            persisted_attempt = await session.get(OrderDeliveryAttempt, attempt.id)
+            assert persisted_order is not None
+            assert persisted_order.status is OrderStatus.OBSERVING_TRANSFER
+            assert persisted_listing is not None
+            assert persisted_listing.status is ListingStatus.RESERVED
+            assert persisted_asset is not None
+            assert persisted_asset.owner_id == seller.id
+            assert persisted_attempt is not None
+            assert persisted_attempt.status is OrderDeliveryAttemptStatus.OBSERVING
+            assert persisted_attempt.observer_lease_token == claim.lease_token
+            assert persisted_attempt.transaction_hash is None
+            assert persisted_attempt.verified_at is None
+    finally:
+        await _cleanup_observer_fixture(
+            session_factory,
+            seller_id=seller.id,
+            buyer_id=buyer.id,
+            asset_id=asset.id,
+            listing_id=listing.id,
+            order_id=order.id,
+            attempt_id=attempt.id,
+        )
+        await engine.dispose()
+
+
 async def test_delivery_observer_quarantines_failed_transfer_without_releasing_listing(
     test_database_url: str, migrated_database
 ) -> None:
