@@ -491,6 +491,11 @@ async def cancel_order(
         )
         if order is None:
             raise OrderConflict("Order not found")
+        if order.status in (
+            OrderStatus.AWAITING_TRANSFER,
+            OrderStatus.OBSERVING_TRANSFER,
+        ):
+            raise OrderConflict("Order cannot be cancelled after delivery preparation")
         if order.status != OrderStatus.RESERVED:
             return order.id
 
@@ -694,6 +699,7 @@ async def _load_delivery_preparation_snapshot(
     *,
     order_id: uuid.UUID,
     seller_id: uuid.UUID,
+    seller_wallet_id: uuid.UUID,
     idempotency_key: str,
     now: datetime,
 ) -> tuple[uuid.UUID | None, _DeliveryPreparationSnapshot | None]:
@@ -708,6 +714,8 @@ async def _load_delivery_preparation_snapshot(
         )
     )
     if existing is not None:
+        if existing.seller_wallet_id != seller_wallet_id:
+            raise OrderConflict("Idempotency key was already used with another seller wallet")
         return existing.id, None
 
     previous_attempt = await session.scalar(
@@ -743,16 +751,7 @@ async def _load_delivery_preparation_snapshot(
 
     seller_wallet = await session.scalar(
         select(Wallet).where(
-            Wallet.id == (await session.scalar(
-                select(Wallet.id)
-                .where(
-                    Wallet.user_id == order.seller_id,
-                    Wallet.is_verified.is_(True),
-                    Wallet.network == asset.network,
-                )
-                .order_by(Wallet.is_primary.desc(), Wallet.created_at.desc())
-                .limit(1)
-            )),
+            Wallet.id == seller_wallet_id,
             Wallet.user_id == order.seller_id,
             Wallet.is_verified.is_(True),
             Wallet.network == asset.network,
@@ -819,6 +818,7 @@ async def prepare_delivery(
         session,
         order_id=order_id,
         seller_id=seller_id,
+        seller_wallet_id=seller_wallet_id,
         idempotency_key=idempotency_key,
         now=current_time,
     )
@@ -827,8 +827,6 @@ async def prepare_delivery(
     if snapshot is None:  # pragma: no cover - guarded by the loader
         raise OrderConflict("Delivery is not available")
 
-    if snapshot.seller_wallet_id != seller_wallet_id:
-        raise OrderConflict("Selected seller wallet is not eligible for this order")
     if verifier.network is not None and verifier.network != snapshot.network:
         raise OrderVerificationUnavailable(
             "The TON ownership provider is not configured for this asset's network"
