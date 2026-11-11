@@ -220,14 +220,12 @@ class TONCenterDeliveryEvidenceProvider:
 
     @staticmethod
     def _parse_uint64(value: object, field_name: str) -> int:
-        if isinstance(value, bool):
-            raise InvalidProviderData(f"TON Center transfer has an invalid {field_name}")
-        try:
+        if isinstance(value, int) and not isinstance(value, bool):
+            parsed = value
+        elif isinstance(value, str) and value.isascii() and value.isdecimal():
             parsed = int(value)
-        except (TypeError, ValueError) as exc:
-            raise InvalidProviderData(
-                f"TON Center transfer has an invalid {field_name}"
-            ) from exc
+        else:
+            raise InvalidProviderData(f"TON Center transfer has an invalid {field_name}")
         if parsed < 0 or parsed > 2**64 - 1:
             raise InvalidProviderData(f"TON Center transfer has an out-of-range {field_name}")
         return parsed
@@ -290,7 +288,9 @@ class TONCenterDeliveryEvidenceProvider:
                 transaction = node.get("transaction")
                 if transaction is not None:
                     if not isinstance(transaction, dict):
-                        raise InvalidProviderData("TON Center trace tree has an invalid transaction")
+                        raise InvalidProviderData(
+                            "TON Center trace tree has an invalid transaction"
+                        )
                     count += 1
                     if count > MAX_TRACE_TRANSACTIONS:
                         raise InvalidProviderData(
@@ -421,7 +421,9 @@ class TONCenterDeliveryEvidenceProvider:
         except AddressError as exc:
             raise InvalidProviderData("Delivery intent contains an invalid TON address") from exc
         if intent.network != self.config.network:
-            raise InvalidProviderData("Delivery intent network does not match the configured provider")
+            raise InvalidProviderData(
+                "Delivery intent network does not match the configured provider"
+            )
         if (
             isinstance(intent.query_id, bool)
             or not isinstance(intent.query_id, int)
@@ -487,7 +489,10 @@ class TONCenterDeliveryEvidenceProvider:
                 DeliveryEvidenceStatus.FAILED,
                 transaction_hash=transaction_hash,
                 trace_id=trace_id,
-                reason="Indexed TEP-62 transfer sender or recipient differs from the immutable intent",
+                reason=(
+                    "Indexed TEP-62 transfer sender or recipient differs from "
+                    "the immutable intent"
+                ),
             )
 
         trace = await self._fetch_trace(trace_id)
