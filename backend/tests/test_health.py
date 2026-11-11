@@ -161,7 +161,9 @@ def test_authentication_readiness_requires_usable_credentials(
 
 
 
-def test_readiness_exposes_disabled_ton_connect_without_breaking_catalogue_health(monkeypatch) -> None:
+def test_readiness_exposes_disabled_ton_connect_without_breaking_catalogue_health(
+    monkeypatch,
+) -> None:
     async def dependency_ready() -> bool:
         return True
 
