@@ -110,6 +110,7 @@ jobs:
       # All endpoints and credentials below are disposable CI-only fixtures.
       # BOT_TOKEN is used solely to sign test initData; no Telegram API is called.
       ENVIRONMENT: test
+      E2E_MODE: "1"
       DATABASE_URL: postgresql+asyncpg://viltara:viltara_e2e@127.0.0.1:5432/viltara_e2e
       REDIS_URL: redis://127.0.0.1:6379/0
       BOT_TOKEN: e2e-only-not-a-real-telegram-bot-token
@@ -143,6 +144,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm install
+
+      - name: Validate isolated PostgreSQL and Redis targets
+        working-directory: backend
+        run: python -m scripts.e2e_preflight
 
       - name: Apply migrations to disposable E2E database
         working-directory: backend
