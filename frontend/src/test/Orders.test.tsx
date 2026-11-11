@@ -44,7 +44,7 @@ describe("orders", () => {
 
     resolveRequest?.(jsonResponse({ items: [order] }));
 
-    expect(await screen.findByText("Payment pending")).toBeInTheDocument();
+    expect(await screen.findByText("Reservation pending")).toBeInTheDocument();
     expect(screen.getByText(/Payment processing is not enabled/)).toBeInTheDocument();
     expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
   });

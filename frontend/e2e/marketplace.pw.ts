@@ -172,4 +172,50 @@ test.describe("navigation and unauthenticated access", () => {
     expect(requests.some((request) => request.startsWith("GET /api/listings/me"))).toBe(false);
     expect(requests.some((request) => request.startsWith("GET /api/orders"))).toBe(false);
   });
+
+  test("returns to the public catalog when the VILTARA brand is clicked from a private section", async ({ page }) => {
+    await mockMarketplaceApi(page);
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "My Listings" }).click();
+    await expect(page.getByRole("heading", { name: "Open VILTARA in Telegram" })).toBeVisible();
+
+    await page.getByRole("link", { name: "VILTARA" }).click();
+
+    await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Catalog", exact: true })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("applies Telegram safe-area insets without introducing horizontal overflow on a phone viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mockMarketplaceApi(page);
+    await page.goto("/");
+    await page.addStyleTag({
+      content: `:root {
+        --tg-safe-area-inset-top: 20px;
+        --tg-safe-area-inset-right: 12px;
+        --tg-safe-area-inset-left: 14px;
+        --tg-content-safe-area-inset-bottom: 28px;
+      }`,
+    });
+
+    const layout = await page.evaluate(() => ({
+      paddingTop: getComputedStyle(document.body).paddingTop,
+      paddingRight: getComputedStyle(document.body).paddingRight,
+      paddingBottom: getComputedStyle(document.body).paddingBottom,
+      paddingLeft: getComputedStyle(document.body).paddingLeft,
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+
+    expect(layout).toMatchObject({
+      paddingTop: "20px",
+      paddingRight: "12px",
+      paddingBottom: "28px",
+      paddingLeft: "14px",
+    });
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
+    await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
+  });
+
 });
