@@ -198,6 +198,7 @@ def run_preflight(
 
     # The manifest must be valid JSON, same-origin, and readable cross-origin.
     manifest_valid = False
+    cors_ok = False
     icon_url = f"{app_origin}/tonconnect-icon.png"
     try:
         manifest = _get(manifest_target, timeout, origin=CORS_PROBE_ORIGIN)
