@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from aiogram import Dispatcher
-from aiogram.types import Chat, Message
+from aiogram.types import Chat, Message, WebAppInfo
 
 from app import bot_handlers
 from app.bot import create_dispatcher
@@ -37,8 +37,10 @@ async def test_start_handler_sends_welcome_and_configured_mini_app_button(
     args = message.answer.await_args
     assert "Добро пожаловать в VILTARA SHOP" in args.args[0]
     keyboard = args.kwargs["reply_markup"]
-    assert keyboard.inline_keyboard[0][0].text == "Открыть VILTARA SHOP"
-    assert keyboard.inline_keyboard[0][0].url == "https://example.com/miniapp"
+    button = keyboard.inline_keyboard[0][0]
+    assert button.text == "Открыть VILTARA SHOP"
+    assert button.web_app == WebAppInfo(url="https://example.com/miniapp")
+    assert button.url is None
     assert keyboard.inline_keyboard[1][0].callback_data == "bot:help"
 
 
@@ -58,6 +60,27 @@ async def test_start_handler_works_without_optional_mini_app_url(
     keyboard = message.answer.await_args.kwargs["reply_markup"]
     assert len(keyboard.inline_keyboard) == 1
     assert keyboard.inline_keyboard[0][0].callback_data == "bot:help"
+
+
+@pytest.mark.asyncio
+async def test_app_command_uses_web_app_button(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mini_app_url = "https://example.com/miniapp"
+    monkeypatch.setattr(
+        bot_handlers,
+        "get_settings",
+        lambda: SimpleNamespace(telegram_mini_app_url=mini_app_url),
+    )
+    message = SimpleNamespace(answer=AsyncMock())
+
+    await bot_handlers.handle_app(message)  # type: ignore[arg-type]
+
+    message.answer.assert_awaited_once()
+    keyboard = message.answer.await_args.kwargs["reply_markup"]
+    button = keyboard.inline_keyboard[0][0]
+    assert button.web_app == WebAppInfo(url=mini_app_url)
+    assert button.url is None
 
 
 @pytest.mark.asyncio
