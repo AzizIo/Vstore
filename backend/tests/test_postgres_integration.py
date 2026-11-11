@@ -138,6 +138,9 @@ def make_listing(owner: User, asset: NFTAsset, status: ListingStatus) -> Listing
     )
 
 
+ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
+
+
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
     assert revision == "0005_order_delivery_attempts"
@@ -323,7 +326,7 @@ async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
     test_database_url: str,
     migrated_database,
 ) -> None:
-    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    config = Config(ALEMBIC_CONFIG_PATH)
     await asyncio.to_thread(command.downgrade, config, "0004_tg_notif_outbox")
     engine = create_async_engine(test_database_url, pool_pre_ping=True)
     user_seller, user_buyer, asset_id, listing_id, order_id, event_id = (
@@ -381,7 +384,8 @@ async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
             await connection.execute(
                 text(
                     "INSERT INTO order_events (id, order_id, from_status, to_status, actor_id, "
-                    "actor_type) VALUES (:id, :order_id, NULL, 'pending_payment', :actor_id, 'buyer')"
+                    "actor_type) VALUES (:id, :order_id, NULL, 'pending_payment', "
+                    ":actor_id, 'buyer')"
                 ),
                 {"id": event_id, "order_id": order_id, "actor_id": user_buyer},
             )
