@@ -80,7 +80,7 @@ Suggested state flow (illustrative):
                                                           └─ deadline uncertain ─> observing_transfer
                                                                                      ├─ proof complete ─> completed
                                                                                      ├─ conclusively no transfer ─> awaiting_transfer
-                                                                                     └─ ambiguous/provider conflict ─> manual_review
+                                                                                     └─ ambiguous/provider conflict ─> observing_transfer (attempt=manual_review)
 
 A cancellation/expiry path must share the same lock-order and transition guard as delivery preparation. If a transfer may have been submitted, it is unsafe to release a listing solely because the local deadline elapsed.
 
