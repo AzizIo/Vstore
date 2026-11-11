@@ -17,22 +17,26 @@ After Playwright exits, a database assertion checks that PostgreSQL contains the
 
 The `api-backed-e2e` job provisions disposable PostgreSQL 16 and Redis 7 services. It applies the repository's Alembic migrations to the database named `viltara_e2e`, starts FastAPI and the local TON provider on loopback, then starts Vite with its API proxy pointed at that FastAPI process.
 
-The seed and assertion scripts refuse to run unless all of the following are true:
+The E2E workflow explicitly sets `E2E_MODE=1`. Before any migration, seed or post-run assertion, the shared safety guard requires all of the following:
 
-- `ENVIRONMENT=test`
-- database hostname is `localhost` or `127.0.0.1`
-- database name is exactly `viltara_e2e`
+- `ENVIRONMENT=test` and `E2E_MODE=1`
+- PostgreSQL URL scheme `postgresql+asyncpg`, loopback host, and database name exactly `viltara_e2e`
+- Redis URL scheme `redis`, loopback host, and database index `0`
+- Redis responds to `PING`
+
+Alembic runs the same guard before opening its migration connection whenever `E2E_MODE=1`; the preflight command runs it before migrations in CI. Seed and assertion scripts repeat the check before accessing either service. The guard fails closed and does not print connection credentials.
 
 The CI `BOT_TOKEN` and `AUTH_SECRET_KEY` are non-production test values. The bot token is used only to calculate the Telegram initData signature; the job never calls Telegram. No real wallet, real TON provider, production DB, VPS, or deploy is involved.
 
 ## Local execution
 
-Use a disposable local PostgreSQL database named `viltara_e2e` and a local Redis instance. Never point these scripts at a shared or production database.
+Use a disposable local PostgreSQL database named `viltara_e2e` and a local Redis instance. Create a fresh disposable database for each complete run; do not reuse a database containing previous E2E orders. Never point these scripts at a shared or production database.
 
 From the repository root, set the same test-only environment variables used by the workflow:
 
 ```sh
 export ENVIRONMENT=test
+export E2E_MODE=1
 export DATABASE_URL=postgresql+asyncpg://viltara:viltara_e2e@127.0.0.1:5432/viltara_e2e
 export REDIS_URL=redis://127.0.0.1:6379/0
 export BOT_TOKEN=e2e-only-not-a-real-telegram-bot-token
@@ -48,6 +52,7 @@ Then run the following in separate terminals:
 ```sh
 cd backend
 python -m pip install -e ".[dev]"
+python -m scripts.e2e_preflight
 python -m alembic upgrade head
 python -m scripts.e2e_ton_provider
 ```

@@ -1,4 +1,5 @@
 import asyncio
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -7,12 +8,17 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import get_settings
 from app.db.models import Base
+from scripts.e2e_safety import assert_e2e_environment
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+
+# Explicit opt-in guard for the isolated API-backed E2E migration path.
+if os.getenv("E2E_MODE") == "1":
+    asyncio.run(assert_e2e_environment())
 config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 
 
