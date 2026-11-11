@@ -8,6 +8,7 @@ releases a listing or marks an order completed.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from collections.abc import Callable
@@ -528,77 +529,80 @@ async def run_delivery_observer_pass(
     async with session_factory() as session:
         claims = await claim_due_delivery_attempts(session, now=current_time)
 
-    verified = retried = manual_review = lease_lost = 0
+    settings = get_settings()
+    semaphore = asyncio.Semaphore(settings.delivery_observer_concurrency)
     make_provider = provider_factory or _build_provider
-    for claim in claims:
-        provider: DeliveryEvidenceProvider | None = None
-        try:
-            provider = make_provider(claim.network)
-            evidence = await provider.verify_transfer(
-                TEP62TransferIntent(
-                    item_address=claim.item_address,
-                    network=claim.network,
-                    seller_wallet_address=claim.seller_address,
-                    buyer_wallet_address=claim.buyer_address,
-                    query_id=claim.query_id,
-                    candidate_transaction_hash=claim.candidate_transaction_hash,
-                )
-            )
-        except (ProviderUnavailable, InvalidProviderData):
-            logger.warning(
-                "Delivery evidence provider returned an unavailable or invalid response "
-                "for attempt %s",
-                claim.attempt_id,
-                exc_info=True,
-            )
-            async with session_factory() as session:
-                outcome = await _schedule_retry(
-                    session,
-                    claim,
-                    now=current_time,
-                    reason_code="provider_unavailable_or_invalid",
-                )
-        except Exception:
-            logger.exception(
-                "Unexpected delivery observer failure for attempt %s",
-                claim.attempt_id,
-            )
-            async with session_factory() as session:
-                outcome = await _schedule_retry(
-                    session,
-                    claim,
-                    now=current_time,
-                    reason_code="observer_internal_error",
-                )
-        else:
-            async with session_factory() as session:
-                outcome = await apply_delivery_observation(
-                    session, claim, evidence, now=current_time
-                )
-        finally:
-            if provider is not None:
-                try:
-                    await provider.aclose()
-                except Exception:
-                    logger.warning(
-                        "Could not close delivery evidence provider for attempt %s",
-                        claim.attempt_id,
-                        exc_info=True,
+
+    async def process_claim(claim: DeliveryObservationClaim) -> str:
+        async with semaphore:
+            provider: DeliveryEvidenceProvider | None = None
+            try:
+                provider = make_provider(claim.network)
+                evidence = await provider.verify_transfer(
+                    TEP62TransferIntent(
+                        item_address=claim.item_address,
+                        network=claim.network,
+                        seller_wallet_address=claim.seller_address,
+                        buyer_wallet_address=claim.buyer_address,
+                        query_id=claim.query_id,
+                        candidate_transaction_hash=claim.candidate_transaction_hash,
                     )
+                )
+                async with session_factory() as session:
+                    return await apply_delivery_observation(
+                        session, claim, evidence, now=current_time
+                    )
+            except (ProviderUnavailable, InvalidProviderData):
+                logger.warning(
+                    "Delivery evidence provider returned an unavailable or invalid response "
+                    "for attempt %s",
+                    claim.attempt_id,
+                    exc_info=True,
+                )
+                async with session_factory() as session:
+                    return await _schedule_retry(
+                        session,
+                        claim,
+                        now=current_time,
+                        reason_code="provider_unavailable_or_invalid",
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception(
+                    "Unexpected delivery observer failure for attempt %s",
+                    claim.attempt_id,
+                )
+                try:
+                    async with session_factory() as session:
+                        return await _schedule_retry(
+                            session,
+                            claim,
+                            now=current_time,
+                            reason_code="observer_internal_error",
+                        )
+                except Exception:
+                    logger.exception(
+                        "Could not persist observer retry for attempt %s; lease will expire",
+                        claim.attempt_id,
+                    )
+                    return "lease_lost"
+            finally:
+                if provider is not None:
+                    try:
+                        await provider.aclose()
+                    except Exception:
+                        logger.warning(
+                            "Could not close delivery evidence provider for attempt %s",
+                            claim.attempt_id,
+                            exc_info=True,
+                        )
 
-        if outcome == "verified":
-            verified += 1
-        elif outcome == "retried":
-            retried += 1
-        elif outcome == "manual_review":
-            manual_review += 1
-        else:
-            lease_lost += 1
-
+    outcomes = await asyncio.gather(*(process_claim(claim) for claim in claims))
     return DeliveryObserverPassResult(
         claimed=len(claims),
-        verified=verified,
-        retried=retried,
-        manual_review=manual_review,
-        lease_lost=lease_lost,
+        verified=outcomes.count("verified"),
+        retried=outcomes.count("retried"),
+        manual_review=outcomes.count("manual_review"),
+        lease_lost=outcomes.count("lease_lost"),
     )
