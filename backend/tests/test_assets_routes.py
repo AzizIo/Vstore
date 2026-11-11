@@ -643,3 +643,68 @@ def test_inventory_sync_is_idempotent_for_the_same_owned_item(
     assert second.json()["stale_count"] == 0
     assert len(verifier.calls) == 2
     second_session.commit.assert_awaited_once()
+
+def test_inventory_sync_preserves_asset_verified_in_another_user_wallet(
+    api_client, owner, verified_wallet
+) -> None:
+    secondary_wallet = Wallet(
+        id=uuid4(),
+        user_id=owner.id,
+        address=OTHER_OWNER,
+        network="mainnet",
+        is_verified=True,
+        is_primary=False,
+    )
+    snapshot = _inventory_item(ITEM, owner=OTHER_OWNER)
+    asset = make_asset(owner.id, snapshot)
+    asset.network = "mainnet"
+    provider = PaginatedInventoryProvider({
+        0: NFTInventoryPage(items=(), has_more=False, next_offset=0)
+    })
+    mismatch = VerificationResult(
+        VerificationStatus.OWNER_MISMATCH,
+        ITEM,
+        owner_address=OTHER_OWNER,
+        expected_owner_address=OWNER,
+    )
+    verified_by_secondary = VerificationResult(
+        VerificationStatus.VERIFIED,
+        ITEM,
+        owner_address=OTHER_OWNER,
+        expected_owner_address=OTHER_OWNER,
+        metadata=snapshot.metadata,
+    )
+    verifier = SyncVerifier(
+        provider,
+        {
+            (ITEM, OWNER): mismatch,
+            (ITEM, OTHER_OWNER): verified_by_secondary,
+        },
+    )
+    redis = FakeSyncRedis()
+    session = SimpleNamespace(
+        scalars=AsyncMock(side_effect=[
+            _rows([verified_wallet, secondary_wallet]),
+            _rows([asset]),
+            _rows([verified_wallet, secondary_wallet]),
+        ]),
+        scalar=AsyncMock(return_value=asset),
+        rollback=AsyncMock(),
+        commit=AsyncMock(),
+    )
+    _install_sync_overrides(session, verifier, redis)
+    try:
+        response = api_client.post("/api/assets/me/sync")
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_ton_nft_verifier, None)
+        app.dependency_overrides.pop(get_redis_client, None)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["verified_count"] == 1
+    assert body["stale_count"] == 0
+    assert body["cancelled_listing_count"] == 0
+    assert asset.verification_status is AssetVerificationStatus.VERIFIED
+    assert verifier.calls == [(ITEM, OWNER), (ITEM, OTHER_OWNER)]
+    session.commit.assert_awaited_once()
