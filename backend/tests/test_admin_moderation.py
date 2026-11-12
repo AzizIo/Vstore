@@ -69,3 +69,33 @@ def test_admin_queue_bounds_pagination(client: TestClient, limit: str) -> None:
     response = client.get(f"/api/admin/moderation?limit={limit}")
     assert response.status_code == 422
     get_settings().admin_telegram_ids = []
+
+
+def test_audit_snapshot_excludes_telegram_ids_and_wallet_addresses() -> None:
+    from decimal import Decimal
+    from types import SimpleNamespace
+
+    from app.admin.moderation import _snapshot
+    from app.db.models import AssetVerificationStatus, PriceCurrency
+
+    seller_id = uuid4()
+    listing = SimpleNamespace(
+        id=uuid4(),
+        status=ListingStatus.ACTIVE,
+        title="Privacy test listing",
+        price_amount=Decimal("12.5"),
+        price_currency=PriceCurrency.TON,
+        seller_id=seller_id,
+        asset=SimpleNamespace(
+            verification_status=AssetVerificationStatus.VERIFIED,
+            owner_id=seller_id,
+            item_address="private-item-address",
+            wallet_address="private-wallet-address",
+        ),
+        telegram_id=123456789,
+    )
+    snapshot = _snapshot(listing)
+    assert snapshot["asset_owner_matches_seller"] is True
+    assert "telegram_id" not in snapshot
+    assert "wallet_address" not in snapshot
+    assert "item_address" not in snapshot

@@ -34,6 +34,7 @@ from app.db.models import (
     AssetVerificationStatus,
     Listing,
     ListingStatus,
+    ModerationAuditLog,
     NFTAsset,
     Order,
     OrderDeliveryAttempt,
@@ -153,7 +154,44 @@ ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0008_delivery_notif_events"
+    assert revision == "0009_admin_moderation_audit"
+
+
+
+
+async def test_moderation_audit_log_rejects_update_and_delete(db_session: AsyncSession) -> None:
+    seller = await make_user(db_session, telegram_id=719199001)
+    asset = await make_asset(db_session, seller)
+    listing = make_listing(seller, asset, ListingStatus.ACTIVE)
+    db_session.add(listing)
+    await db_session.flush()
+    audit = ModerationAuditLog(
+        actor_id=seller.id,
+        target_type="listing",
+        target_id=listing.id,
+        action="suspended",
+        reason_code="other",
+        reason="Integration immutability check",
+        before_snapshot={"status": "active"},
+        after_snapshot={"status": "suspended"},
+        idempotency_key="immutable-test-" + uuid4().hex,
+    )
+    db_session.add(audit)
+    await db_session.flush()
+
+    with pytest.raises(DBAPIError, match="moderation audit log is append-only"):
+        async with db_session.begin_nested():
+            await db_session.execute(
+                text("UPDATE moderation_audit_log SET reason = 'tampered' WHERE id = :id"),
+                {"id": audit.id},
+            )
+
+    with pytest.raises(DBAPIError, match="moderation audit log is append-only"):
+        async with db_session.begin_nested():
+            await db_session.execute(
+                text("DELETE FROM moderation_audit_log WHERE id = :id"),
+                {"id": audit.id},
+            )
 
 
 async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
