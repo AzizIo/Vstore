@@ -38,7 +38,7 @@ describe("getTransferPayload", () => {
     expect(slice.loadAddress()?.toRawString()).toBe(Address.parse(attempt.buyer_address).toRawString());
     expect(slice.loadAddress()?.toRawString()).toBe(Address.parse(attempt.seller_address).toRawString());
     expect(slice.loadBit()).toBe(false); // no custom payload
-    expect(slice.loadCoins()).toBe(1n); // forward amount in nanotons
+    expect(slice.loadCoins()).toBe(0n); // no forward amount
     expect(slice.loadBit()).toBe(false); // empty inline forward payload
     expect(slice.remainingBits).toBe(0);
     expect(slice.remainingRefs).toBe(0);
