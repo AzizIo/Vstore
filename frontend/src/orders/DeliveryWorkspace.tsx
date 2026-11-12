@@ -6,8 +6,6 @@ import {
   useTonConnectUI,
   useTonWallet,
 } from "@tonconnect/ui-react";
-import { Address, beginCell } from "@ton/core";
-
 import {
   fetchDeliveryState,
   prepareDelivery,
@@ -38,17 +36,14 @@ function localTonConnectTestBoundary(): LocalTonConnectTestBoundary | null {
     .__VILTARA_TON_CONNECT_TEST__ ?? null;
 }
 
-function rawAddress(value: string): string {
-  return Address.parse(value).toRawString();
-}
-
 function networkForChain(chain: string): "mainnet" | "testnet" | null {
   if (chain === CHAIN.MAINNET) return "mainnet";
   if (chain === CHAIN.TESTNET) return "testnet";
   return null;
 }
 
-export function getTransferPayload(attempt: DeliveryAttempt): string {
+export async function getTransferPayload(attempt: DeliveryAttempt): Promise<string> {
+  const { Address, beginCell } = await import("@ton/core");
   const queryId = BigInt(attempt.query_id);
   if (queryId < 0n || queryId > 0xffffffffffffffffn) {
     throw new Error("The prepared transfer contains an invalid query ID.");
@@ -146,10 +141,12 @@ function DeliveryPanel({
         throw new Error("Connect a supported TON wallet on mainnet or testnet first.");
       }
       const records = await fetchMyWallets(accessToken);
+      const { Address } = await import("@ton/core");
+      const connectedAddress = Address.parse(wallet.account.address).toRawString();
       const linked = records.find((record) =>
         record.is_verified &&
         record.network === connectedNetwork &&
-        rawAddress(record.address) === rawAddress(wallet.account.address),
+        Address.parse(record.address).toRawString() === connectedAddress,
       );
       if (!linked) {
         throw new Error("This connected wallet is not verified for your seller account. Verify it in Wallets first.");
@@ -190,14 +187,15 @@ function DeliveryPanel({
       if (connectedNetwork !== attempt.network) {
         throw new Error(`Wrong wallet network. This delivery requires TON ${attempt.network}.`);
       }
-      if (rawAddress(wallet.account.address) !== rawAddress(attempt.seller_address)) {
-        throw new Error("The connected wallet does not match the snapshotted seller source.");
-      }
       if (Date.parse(attempt.deadline) <= Date.now()) {
         throw new Error("The 15-minute delivery preparation window has expired. Refresh status before taking action.");
       }
 
-      const payload = getTransferPayload(attempt);
+      const { Address } = await import("@ton/core");
+      if (Address.parse(wallet.account.address).toRawString() !== Address.parse(attempt.seller_address).toRawString()) {
+        throw new Error("The connected wallet does not match the snapshotted seller source.");
+      }
+      const payload = await getTransferPayload(attempt);
       const item = Address.parse(attempt.item_address).toString({
         urlSafe: true,
         bounceable: true,
