@@ -365,7 +365,12 @@ export function DeliveryWorkspace({
   accessToken: string;
   onRefreshOrder: () => void;
 }) {
-  const manifestUrl = import.meta.env.VITE_TONCONNECT_MANIFEST_URL?.trim();
+  const configuredManifestUrl = import.meta.env.VITE_TONCONNECT_MANIFEST_URL?.trim();
+  const testBoundary = localTonConnectTestBoundary();
+  const manifestUrl = configuredManifestUrl ||
+    (testBoundary && typeof window !== "undefined"
+      ? `${window.location.origin}/tonconnect-manifest.json`
+      : "");
   if (!manifestUrl) {
     return <section className="workspace-section" aria-label="NFT transfer"><p className="eyebrow">NON-CUSTODIAL DELIVERY</p><h2>NFT transfer</h2><p className="workspace-muted">TON Connect is not configured for this Mini App. No wallet transfer can be initiated here.</p></section>;
   }
