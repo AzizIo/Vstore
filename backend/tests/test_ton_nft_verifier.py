@@ -858,3 +858,34 @@ async def test_verifier_still_proves_owner_when_metadata_is_unavailable(
     assert result.status is VerificationStatus.VERIFIED
     assert result.metadata.name is None
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_onchain_image_url_wins_over_offchain_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.assets.ton_nft import provider as provider_module
+
+    async def fetch(_uri: str, *, ipfs_gateway_url: str) -> dict[str, object]:
+        return {"image": "https://cdn.example/offchain.png"}
+
+    monkeypatch.setattr(provider_module, "_fetch_metadata_json", fetch)
+    provider = TONCenterV3Provider(TONCenterV3Config(base_url="https://ton.example"))
+    item = await provider._parse_item_with_metadata(
+        {
+            "address": ITEM,
+            "owner_address": OWNER,
+            "collection_address": None,
+            "index": "7",
+            "init": True,
+            "content": {
+                "uri": "https://metadata.example/item.json",
+                "metadata": {"image_url": "ipfs://bafybeigdyrzt5sfp7udm7hu76uh2yltop2wyklgdnzbz3u7zvy3gq/onchain.png"},
+            },
+        }
+    )
+    assert item.metadata.image == (
+        "https://ipfs.io/ipfs/"
+        "bafybeigdyrzt5sfp7udm7hu76uh2yltop2wyklgdnzbz3u7zvy3gq/onchain.png"
+    )
+    await provider.aclose()
