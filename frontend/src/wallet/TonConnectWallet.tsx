@@ -48,6 +48,7 @@ function WalletControls({
     : wallet?.account.chain === CHAIN.TESTNET
       ? "testnet"
       : null;
+  const connectedAddress = wallet?.account.address ?? null;
   const challengeRef = useRef<string | null>(null);
   const connectedAccountRef = useRef<{ address: string; chain: string } | null>(null);
   connectedAccountRef.current = wallet
@@ -61,16 +62,16 @@ function WalletControls({
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const selectedWallet = wallet && network
+    const selectedWallet = connectedAddress && network
       ? wallets.find(
           (item) =>
             item.is_verified &&
-            item.address === wallet.account.address &&
+            item.address === connectedAddress &&
             item.network === network,
         ) ?? null
       : null;
     onSelectedWalletChange(selectedWallet);
-  }, [wallet?.account.address, network, wallets, onSelectedWalletChange]);
+  }, [connectedAddress, network, wallets, onSelectedWalletChange]);
 
   useEffect(() => {
     const controller = new AbortController();
