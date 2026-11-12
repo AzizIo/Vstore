@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import json
 import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlsplit
 
 from pytoniq_core.boc.address import Address
 from pytoniq_core.boc.builder import Builder
 from pytoniq_core.boc.cell import Cell
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlsplit
 
 E2E_SELLER_WALLET_ADDRESS = "0:" + "11" * 32
 E2E_BUYER_WALLET_ADDRESS = "0:" + "33" * 32
@@ -34,7 +34,7 @@ def _cell_boc(cell: Cell) -> str:
 
 
 def _address_stack(address: str) -> dict[str, str]:
-    return {"type": "cell", "value": _cell_boc(Address(address).to_cell())}
+    return {"type": "slice", "value": _cell_boc(Address(address).to_cell())}
 
 
 def _nft_data_stack(owner_address: str) -> list[dict[str, str]]:
