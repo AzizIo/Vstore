@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchListing,
   fetchListings,
@@ -15,6 +15,7 @@ import { MyInventory } from "./inventory/MyInventory";
 import { Orders } from "./orders/Orders";
 import { SellerReviews } from "./reviews/SellerReviews";
 import { WalletConnection } from "./wallet/WalletConnection";
+import type { WalletRecord } from "./wallet/api";
 
 const assetTypeLabels: Record<AssetType, string> = {
   ton_nft: "TON NFT",
@@ -296,6 +297,21 @@ function SessionBanner() {
 
 function MarketplaceApp() {
   const session = useSession();
+  const sessionAccessToken = session.status === "authenticated"
+    ? session.accessToken
+    : null;
+  const [selectedWalletState, setSelectedWalletState] = useState<{
+    accessToken: string;
+    wallet: WalletRecord | null;
+  } | null>(null);
+  const onSelectedWalletChange = useCallback((wallet: WalletRecord | null) => {
+    if (sessionAccessToken) {
+      setSelectedWalletState({ accessToken: sessionAccessToken, wallet });
+    }
+  }, [sessionAccessToken]);
+  const selectedWallet = selectedWalletState?.accessToken === sessionAccessToken
+    ? selectedWalletState.wallet
+    : null;
   const startParam = useRef(getTelegramStartParam()).current;
   const [initialOrderId, setInitialOrderId] = useState<string | null>(null);
   const [section, setSection] = useState<"catalog" | "my-listings" | "my-nft" | "orders">("catalog");
@@ -427,7 +443,10 @@ function MarketplaceApp() {
         </a>
         <div className="header-actions">
           <span className="network-label">TON MARKET</span>
-          <WalletConnection accessToken={session.status === "authenticated" ? session.accessToken : null} />
+          <WalletConnection
+            accessToken={sessionAccessToken}
+            onSelectedWalletChange={onSelectedWalletChange}
+          />
         </div>
       </header>
       <SessionBanner />
@@ -491,7 +510,11 @@ function MarketplaceApp() {
         <MyListings />
       ) : section === "my-nft" ? (
         session.status === "authenticated" ? (
-          <MyInventory accessToken={session.accessToken} />
+          <MyInventory
+            key={selectedWallet ? `${selectedWallet.id}:${selectedWallet.network}` : "no-selected-wallet"}
+            accessToken={session.accessToken}
+            selectedWallet={selectedWallet}
+          />
         ) : (
           <div className="inventory-message" role="status">
             <h2>Sign in to view your inventory</h2>

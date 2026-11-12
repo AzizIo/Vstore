@@ -120,6 +120,9 @@ export async function fetchMyInventory(
   ) {
     throw new Error("The seller service returned an invalid inventory response.");
   }
+  if (pageRequest.walletId && data.wallet_id !== pageRequest.walletId) {
+    throw new Error("The seller service returned inventory for a different wallet.");
+  }
   return data as InventoryPage;
 }
 

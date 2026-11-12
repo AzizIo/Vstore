@@ -734,6 +734,105 @@ describe("TON Connect wallet UI", () => {
     });
   });
 
+  it("uses the connected verified non-primary wallet for every inventory operation", async () => {
+    vi.stubEnv("VITE_TONCONNECT_MANIFEST_URL", "https://wallet.example/manifest.json");
+    const selectedAddress = `0:${"a".repeat(64)}`;
+    const primaryAddress = `0:${"b".repeat(64)}`;
+    const selectedWallet = {
+      id: "wallet-selected",
+      address: selectedAddress,
+      network: "mainnet",
+      is_verified: true,
+      is_primary: false,
+    };
+    const primaryWallet = {
+      id: "wallet-primary",
+      address: primaryAddress,
+      network: "mainnet",
+      is_verified: true,
+      is_primary: true,
+    };
+    const selectedAsset = {
+      id: "asset-selected",
+      asset_type: "ton_nft",
+      external_id: selectedAddress,
+      item_address: selectedAddress,
+      collection_address: null,
+      name: "Selected wallet NFT",
+      description: null,
+      image_url: null,
+      verification_status: "verified",
+      eligible_for_listing: true,
+    };
+    const nextAsset = {
+      ...selectedAsset,
+      id: "asset-selected-next",
+      external_id: `0:${"c".repeat(64)}`,
+      item_address: `0:${"c".repeat(64)}`,
+      name: "Second selected wallet NFT",
+    };
+    const inventoryRequests: Array<{ walletId: string | null; offset: string | null }> = [];
+    const syncRequests: string[] = [];
+    tonConnectMocks.wallet = {
+      account: { address: selectedAddress, chain: "-239" },
+    };
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = new URL(String(input), "http://localhost");
+      if (url.pathname === "/api/auth/telegram") return jsonResponse(authResponse);
+      if (url.pathname === "/api/users/me") return jsonResponse(profile);
+      if (url.pathname === "/api/wallets/me") {
+        return jsonResponse([primaryWallet, selectedWallet]);
+      }
+      if (url.pathname === "/api/assets/me/sync") {
+        syncRequests.push(url.searchParams.get("wallet_id") ?? "");
+        return jsonResponse({
+          wallet_id: selectedWallet.id,
+          synced_at: "2026-11-12T12:00:00Z",
+          discovered_count: 2,
+          verified_count: 2,
+          stale_count: 0,
+          invalid_count: 0,
+          unsupported_count: 0,
+          cancelled_listing_count: 0,
+        });
+      }
+      if (url.pathname === "/api/assets/me") {
+        const walletId = url.searchParams.get("wallet_id");
+        const offset = url.searchParams.get("offset");
+        inventoryRequests.push({ walletId, offset });
+        return jsonResponse({
+          items: offset === "24" ? [nextAsset] : [selectedAsset],
+          wallet_id: selectedWallet.id,
+          limit: 24,
+          offset: Number(offset ?? 0),
+          next_offset: offset === "24" ? 25 : 24,
+          has_more: offset !== "24",
+        });
+      }
+      return jsonResponse(page);
+    });
+
+    renderMarketplace();
+    expect(await screen.findByText("Wallet verified by VILTARA")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "My NFT" }));
+
+    expect(await screen.findByText("Selected wallet NFT")).toBeInTheDocument();
+    expect(screen.getByText(/Showing verified NFTs for 0:aaaaaa…aaaaa · mainnet/)).toBeInTheDocument();
+    expect(inventoryRequests).toEqual([{ walletId: selectedWallet.id, offset: "0" }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more NFTs" }));
+    expect(await screen.findByText("Second selected wallet NFT")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sync inventory" }));
+    await waitFor(() => expect(syncRequests).toEqual([selectedWallet.id]));
+    await waitFor(() => expect(inventoryRequests).toHaveLength(3));
+    expect(inventoryRequests).toEqual([
+      { walletId: selectedWallet.id, offset: "0" },
+      { walletId: selectedWallet.id, offset: "24" },
+      { walletId: selectedWallet.id, offset: "0" },
+    ]);
+  });
+
   it("shows a connect action when manifest configuration is available", async () => {
     vi.stubEnv("VITE_TONCONNECT_MANIFEST_URL", "https://wallet.example/manifest.json");
     renderMarketplace();

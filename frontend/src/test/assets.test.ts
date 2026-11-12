@@ -61,6 +61,19 @@ describe("seller asset API", () => {
     expect(parsed.searchParams.has("owner_address")).toBe(false);
   });
 
+  it("rejects a page returned for a different explicitly selected wallet", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({
+      ...inventory,
+      wallet_id: "primary-wallet-id",
+    }));
+
+    await expect(fetchMyInventory("session-token", {
+      walletId: "connected-wallet-id",
+      limit: 24,
+      offset: 0,
+    })).rejects.toThrow("inventory for a different wallet");
+  });
+
   it("rejects inventory records that are not verified and eligible", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...inventory, items: [{ ...asset, eligible_for_listing: false }] }));
     await expect(fetchMyInventory("session-token")).rejects.toThrow("invalid inventory response");
