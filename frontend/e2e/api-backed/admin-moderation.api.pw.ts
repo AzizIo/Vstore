@@ -115,6 +115,13 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
       headers: { Authorization: "Bearer " + buyerSession.access_token },
     });
     expect(forbidden.status()).toBe(403);
+
+    const cancelResponse = await context.request.post(
+      "http://127.0.0.1:8000/api/listings/" + draft.id + "/cancel",
+      { headers },
+    );
+    expect(cancelResponse.status()).toBe(200);
+    expect((await cancelResponse.json()).status).toBe("cancelled");
   } finally {
     await context.close();
   }
