@@ -90,12 +90,22 @@ def test_listing_catalog_accepts_supported_sort_values(sort: str) -> None:
 
     app.dependency_overrides[get_db_session] = override_session
     try:
+        query = f"sort={sort}"
+        if sort in {"price_asc", "price_desc"}:
+            query += "&currency=TON"
         with TestClient(app) as client:
-            response = client.get(f"/api/listings?sort={sort}")
+            response = client.get(f"/api/listings?{query}")
         assert response.status_code == 200
         assert response.json() == {"items": [], "total": 0, "limit": 24, "offset": 0}
     finally:
         app.dependency_overrides.pop(get_db_session, None)
+
+
+def test_listing_catalog_rejects_price_sort_without_currency() -> None:
+    with TestClient(app) as client:
+        response = client.get("/api/listings?sort=price_asc")
+    assert response.status_code == 422
+    assert "Select a price currency" in response.json()["detail"]
 
 
 def test_listing_catalog_rejects_unknown_sort() -> None:
