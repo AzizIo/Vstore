@@ -57,7 +57,7 @@ describe("orders", () => {
 
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Open order Moon Lantern/ }));
-    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Order status" })).toBeInTheDocument();
     expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
   });
 
@@ -128,7 +128,7 @@ describe("orders", () => {
       />,
     );
 
-    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Order status" })).toBeInTheDocument();
     expect(screen.getByText("Seller · Sale")).toBeInTheDocument();
     expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
     await waitFor(() => {
@@ -169,13 +169,13 @@ describe("order workspace interactions", () => {
   it("opens order details, displays lifecycle facts and countdown, and returns to the workspace", async () => {
     render(<Orders accessToken="token" userId="buyer-1" />);
     fireEvent.click(await screen.findByRole("button", { name: /Open order Moon Lantern/ }));
-    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Event timeline" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Order status" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
     expect(screen.getByText("Order ID")).toBeInTheDocument();
     expect(screen.getByText(/remaining|Reservation expired/)).toBeInTheDocument();
     expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "← Back to orders" }));
-    expect(await screen.findByRole("heading", { name: "Order workspace" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Orders" })).toBeInTheDocument();
   });
 
   it("sorts orders by price and offers a catalog action when empty", async () => {

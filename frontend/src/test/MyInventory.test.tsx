@@ -65,7 +65,7 @@ const lastPage: InventoryPage = {
   has_more: false,
 };
 
-describe("My NFT inventory", () => {
+describe("My NFTs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     inventoryApi.syncMyInventory.mockResolvedValue(syncResponse);
@@ -78,7 +78,7 @@ describe("My NFT inventory", () => {
   it("syncs server-side, displays verified inventory and supports pagination", async () => {
     render(<MyInventory accessToken="session-token" />);
 
-    expect(await screen.findByRole("heading", { name: "My NFT inventory" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "My NFTs" })).toBeInTheDocument();
     expect(await screen.findByText("Moon Lantern NFT")).toBeInTheDocument();
     expect(inventoryApi.syncMyInventory).not.toHaveBeenCalled();
     expect(inventoryApi.fetchMyInventory).toHaveBeenCalledWith(

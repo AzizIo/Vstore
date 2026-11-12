@@ -144,6 +144,16 @@ describe("marketplace catalog", () => {
     expect(screen.getByLabelText("Listings loading")).toHaveAttribute("aria-busy", "true");
   });
 
+
+  it("uses clear marketplace copy and shows the seller on each catalog card", async () => {
+    renderMarketplace();
+    expect(await screen.findByRole("heading", { name: "Collectibles on TON." })).toBeInTheDocument();
+    expect(screen.getByText("NFTs and Telegram gifts, listed by their owners.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "For sale" })).toBeInTheDocument();
+    expect(screen.getByText("@collector", { selector: ".listing-card-seller" })).toBeInTheDocument();
+    expect(screen.queryByText(/Find your next favorite thing/i)).not.toBeInTheDocument();
+  });
+
   it("renders listings returned by the public API", async () => {
     renderMarketplace();
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
@@ -348,7 +358,7 @@ describe("marketplace catalog", () => {
     expect(screen.getByText("A collectible lantern.")).toBeInTheDocument();
     expect(screen.getByText("nft-001")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Back to catalog/ }));
-    await waitFor(() => expect(screen.getByText("Explore listings")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("For sale")).toBeInTheDocument());
   });
 
   it("shows the seller profile name and Telegram handle on listing detail", async () => {
@@ -524,7 +534,7 @@ describe("Buyer orders", () => {
 
     renderMarketplace();
 
-    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Order status" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: listing.title })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Orders" })).toHaveAttribute("aria-pressed", "true");
     expect(vi.mocked(fetch).mock.calls.some(([input]) =>
@@ -546,7 +556,7 @@ describe("Buyer orders", () => {
     renderMarketplace();
 
     expect(await screen.findByRole("heading", { name: "Moon Lantern" })).toBeInTheDocument();
-    expect(screen.getByText("Open this Mini App in Telegram to sign in and place an order.")).toBeInTheDocument();
+    expect(screen.getByText("Open VILTARA in Telegram to place an order.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Place order" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Catalog" })).toHaveAttribute("aria-pressed", "true");
 
@@ -568,7 +578,7 @@ describe("Buyer orders", () => {
     setTelegramInitData("", `product_${listingId.replace(/-/g, "")}`);
     renderMarketplace();
 
-    expect(await screen.findByText("Explore listings")).toBeInTheDocument();
+    expect(await screen.findByText("For sale")).toBeInTheDocument();
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Catalog" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("heading", { name: "Moon Lantern" })).not.toBeInTheDocument();
@@ -604,7 +614,7 @@ describe("Buyer orders", () => {
     expect(confirmation).toHaveTextContent("Moon Lantern");
     expect(confirmation).toHaveTextContent("12.5 TON");
     expect(confirmation).toHaveTextContent("Ari (@collector)");
-    expect(confirmation).toHaveTextContent("Payment is not enabled and no funds will be collected");
+    expect(confirmation).toHaveTextContent("Payments are not enabled, no funds will be collected and the NFT stays with the seller");
     expect(vi.mocked(fetch).mock.calls.some(([input, init]) => String(input).endsWith("/api/orders") && init?.method === "POST")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Confirm reservation" }));
 
@@ -751,9 +761,10 @@ describe("TON Connect wallet UI", () => {
 
     expect(await screen.findByText("0:abcd…7890")).toBeInTheDocument();
     expect(screen.getByText("Mainnet")).toBeInTheDocument();
-    expect(screen.getByText("Connected only · proof verification required")).toBeInTheDocument();
+    expect(screen.getByText("Connected · ownership not verified")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
-    expect(screen.queryByText(/verified/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Connected · ownership not verified")).toBeInTheDocument();
+    expect(screen.queryByText("Verified for this account")).not.toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.some(([input]) =>
       String(input).endsWith("/api/wallets/proof/verify"),
     )).toBe(false);
@@ -799,7 +810,7 @@ describe("TON Connect wallet UI", () => {
     };
     view.rerender(<QueryClientProvider client={view.queryClient}><App /></QueryClientProvider>);
 
-    expect(await screen.findByText("Wallet verified by VILTARA")).toBeInTheDocument();
+    expect(await screen.findByText("Verified for this account")).toBeInTheDocument();
     const verificationCall = vi.mocked(fetch).mock.calls.find(([input]) =>
       String(input).endsWith("/api/wallets/proof/verify"),
     );
@@ -819,7 +830,7 @@ describe("TON Connect wallet UI", () => {
       account: { address: `0:${"b".repeat(64)}`, chain: "-239" },
     };
     view.rerender(<QueryClientProvider client={view.queryClient}><App /></QueryClientProvider>);
-    expect(await screen.findByText("Connected only · proof verification required")).toBeInTheDocument();
+    expect(await screen.findByText("Connected · ownership not verified")).toBeInTheDocument();
 
     // The same address on a different chain also is not the verified mainnet wallet.
     tonConnectMocks.wallet = {
@@ -827,7 +838,7 @@ describe("TON Connect wallet UI", () => {
     };
     view.rerender(<QueryClientProvider client={view.queryClient}><App /></QueryClientProvider>);
     expect(await screen.findByText("Testnet")).toBeInTheDocument();
-    expect(screen.getByText("Connected only · proof verification required")).toBeInTheDocument();
+    expect(screen.getByText("Connected · ownership not verified")).toBeInTheDocument();
   });
 
   it("keeps a connected wallet unverified when backend proof verification fails", async () => {
@@ -866,7 +877,7 @@ describe("TON Connect wallet UI", () => {
     view.rerender(<QueryClientProvider client={view.queryClient}><App /></QueryClientProvider>);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Invalid or expired wallet proof");
-    expect(screen.queryByText("Wallet verified by VILTARA")).not.toBeInTheDocument();
+    expect(screen.queryByText("Verified for this account")).not.toBeInTheDocument();
   });
 
   it("shows testnet when reported by the connected wallet", async () => {
@@ -1084,7 +1095,7 @@ describe("My Listings dashboard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Catalog" }));
 
-    expect(await screen.findByText("Explore listings")).toBeInTheDocument();
+    expect(await screen.findByText("For sale")).toBeInTheDocument();
   });
   it("returns to the public catalog when the VILTARA brand is selected from a seller detail", async () => {
     setTelegramInitData();
@@ -1096,7 +1107,7 @@ describe("My Listings dashboard", () => {
 
     fireEvent.click(screen.getByRole("link", { name: "VILTARA" }));
 
-    expect(await screen.findByRole("heading", { name: "Explore listings" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "For sale" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Catalog" })).toHaveAttribute("aria-pressed", "true");
   });
 

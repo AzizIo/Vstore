@@ -68,7 +68,7 @@ describe("CreateListing seller flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /Verified collectible/ }));
     fireEvent.change(screen.getByRole("spinbutton", { name: "Price amount" }), { target: { value: "1.5" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Title Optional" }), { target: { value: "My collectible" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create private draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
 
     expect(await screen.findByText("Draft — not published")).toBeInTheDocument();
     expect(apiMocks.createListingDraft).toHaveBeenCalledWith(
@@ -92,7 +92,7 @@ describe("CreateListing seller flow", () => {
     fireEvent.change(screen.getByLabelText("Listing expiration"), {
       target: { value: "2030-05-02T12:30" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Create private draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
 
     expect(await screen.findByText("Draft — not published")).toBeInTheDocument();
     expect(apiMocks.createListingDraft).toHaveBeenCalledWith(
@@ -123,7 +123,7 @@ describe("CreateListing seller flow", () => {
     renderCreateListing();
 
     expect(await screen.findByText("No eligible TON NFTs found")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Create private draft/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Save draft/ })).not.toBeInTheDocument();
   });
 
   it("retries inventory failures", async () => {
@@ -166,9 +166,9 @@ describe("CreateListing seller flow", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /Verified collectible/ }));
     fireEvent.change(screen.getByRole("spinbutton", { name: "Price amount" }), { target: { value: "1" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create private draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("NFT ownership could not be freshly verified");
-    expect(screen.getByRole("button", { name: "Create private draft" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeInTheDocument();
   });
 });
