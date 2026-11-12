@@ -284,7 +284,7 @@ function DeliveryPanel({
   const canPrepare = role === "seller" && order.status === "reserved" && !attempt;
   const canRequestTransfer = role === "seller" &&
     ["awaiting_transfer", "observing_transfer"].includes(order.status) &&
-    Boolean(attempt) &&
+    attempt !== null &&
     (attempt.status === "prepared" ||
       (attempt.status === "observing" && !attempt.candidate_transaction_hash && !attempt.submitted_at));
   const showDetails = Boolean(attempt);
