@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import base64
+import json
+
 import httpx
 import pytest
+from pytoniq_core.boc.address import Address as TonAddress
 
 from app.assets.ton_nft.address import AddressError, normalize_address
 from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable, UnsupportedAsset
@@ -22,6 +26,37 @@ ITEM = "0:" + "11" * 32
 COLLECTION = "0:" + "22" * 32
 OWNER = "0:" + "33" * 32
 OTHER = "0:" + "44" * 32
+
+
+def _address_cell_boc(address: str) -> str:
+    return base64.b64encode(
+        TonAddress(address).to_cell().to_boc()
+    ).decode("ascii")
+
+
+def _get_nft_data_response(
+    *,
+    owner: str = OWNER,
+    collection: str = COLLECTION,
+    index: int = 7,
+) -> dict[str, object]:
+    return {
+        "exit_code": 0,
+        "stack": [
+            {"type": "num", "value": "-0x1"},
+            {"type": "num", "value": hex(index)},
+            {"type": "cell", "value": _address_cell_boc(collection)},
+            {"type": "cell", "value": _address_cell_boc(owner)},
+            {"type": "cell", "value": _address_cell_boc(collection)},
+        ],
+    }
+
+
+def _get_item_address_response(address: str = ITEM) -> dict[str, object]:
+    return {
+        "exit_code": 0,
+        "stack": [{"type": "cell", "value": _address_cell_boc(address)}],
+    }
 
 
 def snapshot(**changes: object) -> NFTItemSnapshot:
@@ -133,14 +168,25 @@ async def test_collectionless_item_skips_index_lookup() -> None:
 
 
 @pytest.mark.asyncio
-async def test_toncenter_provider_parses_item_and_queries_collection_index() -> None:
+async def test_toncenter_provider_reads_contract_state_and_collection_index() -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
+        if request.method == "POST":
+            body = json.loads(request.content)
+            if body["method"] == "get_nft_data":
+                return httpx.Response(200, json=_get_nft_data_response())
+            if body["method"] == "get_nft_address_by_index":
+                assert body["stack"] == [{"type": "num", "value": "7"}]
+                return httpx.Response(200, json=_get_item_address_response())
         row = {
-            "address": ITEM, "owner_address": OWNER, "collection_address": COLLECTION,
-            "index": "7", "init": True, "content": {"metadata": {"name": "NFT"}},
+            "address": ITEM,
+            "owner_address": OWNER,
+            "collection_address": COLLECTION,
+            "index": "7",
+            "init": True,
+            "content": {"metadata": {"name": "NFT"}},
         }
         return httpx.Response(200, json={"nft_items": [row]})
 
@@ -149,13 +195,60 @@ async def test_toncenter_provider_parses_item_and_queries_collection_index() -> 
     )
     config = TONCenterV3Config(base_url="https://mock.test/api/v3")
     provider = TONCenterV3Provider(config, client=client)
-    parsed = await provider.get_item(ITEM)
+    parsed = await provider.get_item_with_metadata(ITEM)
     resolved = await provider.get_item_address_by_index(COLLECTION, 7)
-    assert parsed is not None and parsed.metadata.name == "NFT"
+
+    assert parsed is not None
+    assert parsed.owner_address == OWNER
+    assert parsed.collection_address == COLLECTION
+    assert parsed.index == 7
+    assert parsed.metadata.name == "NFT"
     assert resolved == ITEM
-    assert requests[0].url.path == "/api/v3/nft/items"
-    assert requests[1].url.params["collection_address"] == COLLECTION
-    assert requests[1].url.params["index"] == "7"
+    assert requests[0].method == "POST"
+    assert requests[0].url.path == "/api/v3/runGetMethod"
+    assert requests[1].url.path == "/api/v3/nft/items"
+    assert requests[2].method == "POST"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_stale_indexer_owner_cannot_override_contract_owner() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            body = json.loads(request.content)
+            if body["method"] == "get_nft_data":
+                return httpx.Response(
+                    200,
+                    json=_get_nft_data_response(owner=OTHER),
+                )
+            if body["method"] == "get_nft_address_by_index":
+                return httpx.Response(200, json=_get_item_address_response())
+        # Simulate an indexer row that still reports the old wallet as owner.
+        return httpx.Response(
+            200,
+            json={
+                "nft_items": [{
+                    "address": ITEM,
+                    "owner_address": OWNER,
+                    "collection_address": COLLECTION,
+                    "index": "7",
+                    "init": True,
+                }]
+            },
+        )
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://mock.test/api/v3",
+    )
+    provider = TONCenterV3Provider(
+        TONCenterV3Config(base_url="https://mock.test/api/v3"),
+        client=client,
+    )
+    result = await TONNFTVerifier(provider).verify(ITEM, OWNER)
+
+    assert result.status is VerificationStatus.OWNER_MISMATCH
+    assert result.owner_address == OTHER
     await client.aclose()
 
 
@@ -247,17 +340,20 @@ async def test_provider_timeout_maps_to_unavailable() -> None:
 
 
 @pytest.mark.asyncio
-async def test_malformed_provider_item_maps_to_invalid_data() -> None:
+async def test_malformed_contract_get_method_maps_to_invalid_data() -> None:
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(
-            lambda _: httpx.Response(200, json={"nft_items": [{"address": ITEM}]})
+            lambda _: httpx.Response(
+                200,
+                json={"exit_code": 0, "stack": [{"type": "num", "value": "0x1"}]},
+            )
         ),
         base_url="https://mock.test/api/v3",
     )
     provider = TONCenterV3Provider(
         TONCenterV3Config(base_url="https://mock.test/api/v3"), client=client
     )
-    with pytest.raises(InvalidProviderData):
+    with pytest.raises(InvalidProviderData, match="fewer than five"):
         await provider.get_item(ITEM)
     await client.aclose()
 
@@ -604,7 +700,7 @@ async def test_owner_inventory_enriches_metadata_and_verification_reuses_cache(
     )
 
     page = await provider.get_items_by_owner(OWNER, limit=1, offset=0)
-    verified_snapshot = await provider.get_item(ITEM)
+    verified_snapshot = await provider.get_item_with_metadata(ITEM)
 
     assert page.items[0].metadata.name == "On-chain name"
     assert page.items[0].metadata.description == "Off-chain description"
@@ -616,7 +712,7 @@ async def test_owner_inventory_enriches_metadata_and_verification_reuses_cache(
     assert verified_snapshot.metadata == page.items[0].metadata
     assert fetch_calls == ["https://metadata.example/item.json"]
     assert requests[0].url.params["owner_address"] == OWNER
-    assert requests[1].url.params["address"] == ITEM
+    assert requests[2].url.params["address"] == ITEM
     await client.aclose()
 
 
@@ -657,7 +753,8 @@ async def test_exact_item_metadata_lookup_uses_requested_item_address(
     item = await provider.get_item_with_metadata(ITEM)
 
     assert item is not None and item.metadata.name == "Exact NFT"
-    assert requests[0].url.params["address"] == ITEM
+    assert requests[0].method == "POST"
+    assert requests[1].url.params["address"] == ITEM
     await client.aclose()
 
 
@@ -676,7 +773,9 @@ async def test_metadata_failure_does_not_fail_item_or_ownership_verification(
         "content": {"uri": "https://metadata.example/unavailable.json"},
     }
 
-    def ton_handler(_request: httpx.Request) -> httpx.Response:
+    def ton_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(200, json=_get_nft_data_response())
         return httpx.Response(200, json={"nft_items": [row]})
 
     async def unavailable(_uri: str, *, ipfs_gateway_url: str) -> None:
@@ -906,7 +1005,7 @@ async def test_provider_retries_a_transient_dns_connect_error() -> None:
                 "Name or service not known",
                 request=request,
             )
-        return httpx.Response(200, json={"nft_items": []})
+        return httpx.Response(200, json=_get_nft_data_response())
 
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(handler),
@@ -917,7 +1016,8 @@ async def test_provider_retries_a_transient_dns_connect_error() -> None:
         client=client,
     )
 
-    assert await provider.get_item(ITEM) is None
+    item = await provider.get_item(ITEM)
+    assert item is not None and item.owner_address == OWNER
     assert attempts == 2
     await client.aclose()
 
@@ -930,7 +1030,7 @@ async def test_provider_retries_a_transient_http_503_response() -> None:
         attempts += 1
         if attempts == 1:
             return httpx.Response(503, json={"detail": "temporarily unavailable"})
-        return httpx.Response(200, json={"nft_items": []})
+        return httpx.Response(200, json=_get_nft_data_response())
 
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(handler),
@@ -941,7 +1041,8 @@ async def test_provider_retries_a_transient_http_503_response() -> None:
         client=client,
     )
 
-    assert await provider.get_item(ITEM) is None
+    item = await provider.get_item(ITEM)
+    assert item is not None and item.owner_address == OWNER
     assert attempts == 2
     await client.aclose()
 
