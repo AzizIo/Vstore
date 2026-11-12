@@ -164,7 +164,7 @@ test.describe("Telegram deep links", () => {
 
     await expect(page.getByRole("heading", { name: "Lifecycle" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Moon Lantern" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Orders" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Orders", exact: true })).toHaveAttribute("aria-pressed", "true");
     expect(requests).toContain(`GET /api/orders/${orderId}`);
   });
 
