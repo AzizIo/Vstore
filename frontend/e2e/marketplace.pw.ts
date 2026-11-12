@@ -175,7 +175,7 @@ test.describe("Telegram deep links", () => {
     await page.goto(`/?startapp=${startParam}`);
 
     await expect(page.getByRole("heading", { name: moonLantern.title })).toBeVisible();
-    await expect(page.getByText("Open this Mini App in Telegram to sign in and place an order.")).toBeVisible();
+    await expect(page.getByText("Open VILTARA in Telegram to place an order.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Place order" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Catalog", exact: true })).toHaveAttribute("aria-pressed", "true");
     expect(requests).toContain(`GET /api/listings/${listingIds.moon}`);
@@ -218,14 +218,14 @@ test.describe("navigation and unauthenticated access", () => {
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
 
     await page.getByRole("button", { name: "My NFT" }).click();
-    await expect(page.getByRole("heading", { name: "Sign in to view your inventory" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Your NFTs" })).toBeVisible();
 
     await page.getByRole("button", { name: "My Listings" }).click();
     await expect(page.getByRole("heading", { name: "My Listings" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Open VILTARA in Telegram" })).toBeVisible();
 
     await page.getByRole("button", { name: "Orders" }).click();
-    await expect(page.getByRole("heading", { name: "Sign in to view orders" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "View your orders" })).toBeVisible();
 
     await page.getByRole("button", { name: "Catalog" }).click();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
