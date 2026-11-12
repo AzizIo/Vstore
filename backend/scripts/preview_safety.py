@@ -22,6 +22,7 @@ from app.core.config import get_settings
 _PREVIEW_DB = "viltara_preview"
 _PREVIEW_USER = "viltara_preview"
 _PREVIEW_REDIS_DB = "/0"
+_MIGRATIONS_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 
 def should_validate_preview_migrations(database_url: str, preview_mode: str | None) -> bool:
@@ -126,8 +127,7 @@ async def assert_preview_dependencies() -> None:
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
             current = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-        config_path = Path(__file__).resolve().parents[1] / "alembic.ini"
-        migration_config = Config(str(config_path))
+        migration_config = Config(_MIGRATIONS_CONFIG_PATH)
         script = ScriptDirectory.from_config(migration_config)
         heads = set(script.get_heads())
         if not current or heads != {current}:
