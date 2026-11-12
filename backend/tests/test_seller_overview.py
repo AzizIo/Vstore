@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -88,7 +88,7 @@ def test_seller_overview_merges_activity_streams_by_recency_and_caps_results() -
         first_name="Seller",
         is_blocked=False,
     )
-    now = datetime(2026, 11, 12, tzinfo=timezone.utc)
+    now = datetime(2026, 11, 12, tzinfo=UTC)
     listings = [
         (
             SimpleNamespace(
