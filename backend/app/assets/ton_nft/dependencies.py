@@ -30,6 +30,7 @@ def build_ton_nft_verifier() -> TONNFTVerifier:
                 base_url=base_url,
                 api_key=api_key,
                 timeout_seconds=settings.ton_center_timeout_seconds,
+                ipfs_gateway_url=settings.ton_metadata_ipfs_gateway_url,
             )
         ),
         network=network,
