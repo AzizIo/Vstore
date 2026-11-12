@@ -162,6 +162,8 @@ test(
     await restoreDialog.getByLabel("Explanation (5–500 characters)").fill("Ownership rechecked for restoration");
     await restoreDialog.getByRole("button", { name: "Confirm restore" }).click();
     await expect(moderationCard.getByText("active", { exact: true })).toBeVisible();
+    await sellerPage.goto("/");
+    await expect(sellerPage.getByRole("button", { name: "Orders", exact: true })).toBeVisible();
     await sellerPage.getByRole("button", { name: "Orders", exact: true }).click();
 
 

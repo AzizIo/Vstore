@@ -13,8 +13,6 @@ import { MyListings } from "./listings/MyListings";
 import { MyInventory } from "./inventory/MyInventory";
 import { Orders } from "./orders/Orders";
 import { WalletConnection } from "./wallet/WalletConnection";
-import { AdminCenter } from "./admin/AdminCenter";
-import { fetchAdminAccess } from "./admin/api";
 
 const assetTypeLabels: Record<AssetType, string> = {
   ton_nft: "TON NFT",
@@ -294,8 +292,7 @@ function MarketplaceApp() {
   const session = useSession();
   const startParam = useRef(getTelegramStartParam()).current;
   const [initialOrderId, setInitialOrderId] = useState<string | null>(null);
-  const [section, setSection] = useState<"catalog" | "my-listings" | "my-nft" | "orders" | "admin">("catalog");
-  const [adminAccess, setAdminAccess] = useState(false);
+  const [section, setSection] = useState<"catalog" | "my-listings" | "my-nft" | "orders">("catalog");
   const [listings, setListings] = useState<Listing[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -311,13 +308,6 @@ function MarketplaceApp() {
   const requestVersion = useRef(0);
   const loadingMoreRef = useRef(false);
   const loadMoreController = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    if (session.status !== "authenticated") { setAdminAccess(false); return; }
-    const controller = new AbortController();
-    void fetchAdminAccess(session.accessToken, controller.signal).then(setAdminAccess).catch(() => setAdminAccess(false));
-    return () => controller.abort();
-  }, [session.status, session.status === "authenticated" ? session.accessToken : null]);
 
   useEffect(() => {
     if (!startParam) return;
@@ -466,9 +456,6 @@ function MarketplaceApp() {
         >
           My Listings
         </button>
-        {session.status === "authenticated" && adminAccess && (
-          <button className="navigation-tab" type="button" aria-pressed={section === "admin"} onClick={() => { setListingId(null); setSection("admin"); }}>Admin Center</button>
-        )}
         <button
           className="navigation-tab"
           type="button"
@@ -482,9 +469,7 @@ function MarketplaceApp() {
         </button>
       </nav>
 
-      {section === "admin" && session.status === "authenticated" && adminAccess ? (
-        <AdminCenter accessToken={session.accessToken} active={section === "admin"} />
-      ) : section === "orders" ? (
+      {section === "orders" ? (
         session.status === "authenticated" ? (
           <Orders accessToken={session.accessToken} userId={session.user.id} initialOrderId={initialOrderId} onCatalog={() => setSection("catalog")} />
         ) : (
