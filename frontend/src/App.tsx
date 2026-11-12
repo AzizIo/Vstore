@@ -539,11 +539,11 @@ function MarketplaceApp() {
               </label>
               <label className="price-control">
                 <span className="sr-only">Minimum price</span>
-                <input aria-label="Minimum price" type="number" min="0" step="0.000000001" placeholder="Min price" value={minPrice} onChange={(event) => setMinPrice(event.target.value)} />
+                <input aria-label="Minimum price" type="number" min="0" step="0.000000001" placeholder="Min price" disabled={currency === "all"} value={minPrice} onChange={(event) => setMinPrice(event.target.value)} />
               </label>
               <label className="price-control">
                 <span className="sr-only">Maximum price</span>
-                <input aria-label="Maximum price" type="number" min="0" step="0.000000001" placeholder="Max price" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} />
+                <input aria-label="Maximum price" type="number" min="0" step="0.000000001" placeholder="Max price" disabled={currency === "all"} value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} />
               </label>
               <label className="select-control">
                 <span className="sr-only">Sort listings</span>
