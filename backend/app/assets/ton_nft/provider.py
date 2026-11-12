@@ -1,4 +1,4 @@
-"""TON Center API v3 read-only provider adapter (indexed data, not proof)."""
+"""TON Center adapter for indexed candidate discovery and TEP-62 contract reads."""
 
 from __future__ import annotations
 
@@ -315,7 +315,6 @@ class TONCenterV3Provider:
             return [cast(dict[str, Any], row) for row in raw_rows]
 
         raise ProviderUnavailable("TON Center NFT indexer is temporarily unavailable")
-
 
 
     async def _run_get_method(
