@@ -88,7 +88,7 @@ def _normalize_http_url(value: object) -> str | None:
             not ascii_host
             or len(ascii_host) > 253
             or ascii_host in {"localhost"}
-            or ascii_host.endswith((".localhost", ".local", ".internal", ".test"))
+            or ascii_host.endswith((".localhost", ".local", ".internal"))
             or any(not _DNS_LABEL_RE.fullmatch(label) for label in ascii_host.split("."))
         ):
             return None
@@ -286,6 +286,8 @@ async def _read_response_body(
         raise ValueError("Compressed metadata responses are not supported")
 
     transfer_encoding = headers.get("transfer-encoding", "").lower()
+    if transfer_encoding and "content-length" in headers:
+        raise ValueError("Ambiguous metadata response framing")
     if transfer_encoding:
         if transfer_encoding != "chunked":
             raise ValueError("Unsupported metadata transfer encoding")
