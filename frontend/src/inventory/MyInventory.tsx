@@ -280,8 +280,29 @@ export function MyInventory({
         </div>
       ) : assets.length === 0 ? (
         <div className="inventory-message" role="status">
-          <h2>No verified NFTs found</h2>
-          <p>This wallet returned no assets that could be confirmed as currently owned by you.</p>
+          {hasMore ? (
+            <>
+              <h2>No verified NFTs on this page</h2>
+              <p>
+                None of the items on this page could be confirmed as currently owned by you.
+                More inventory pages are available and may contain verified NFTs.
+              </p>
+              {loadMoreError && <p role="alert">{loadMoreError}</p>}
+              <button
+                className="load-more-button"
+                type="button"
+                onClick={() => void loadMore()}
+                disabled={loading || loadingMore || !hasMore}
+              >
+                {loadingMore ? "Loading more..." : loadMoreError ? "Retry loading more" : "Load more NFTs"}
+              </button>
+            </>
+          ) : (
+            <>
+              <h2>No verified NFTs found</h2>
+              <p>This wallet returned no assets that could be confirmed as currently owned by you.</p>
+            </>
+          )}
         </div>
       ) : (
         <>
