@@ -145,9 +145,17 @@ test(
     await sellerPage.getByRole("button", { name: "Confirm publish", exact: true }).click();
     await expect(sellerPage.locator(".listing-status-active")).toHaveText("Active");
 
-    // Moderation runs against the same FastAPI session and PostgreSQL-backed audit log.
-    await expect(sellerPage.getByRole("button", { name: "Admin Center", exact: true })).toBeVisible();
-    await sellerPage.getByRole("button", { name: "Admin Center", exact: true }).click();
+    const queueResponse = await sellerContext.request.get(
+      "http://127.0.0.1:8000/api/admin/moderation",
+      { headers: { Authorization: "Bearer " + bootstrapSession.access_token } },
+    );
+    const queueBody = await queueResponse.json() as { items: Array<{ title: string | null }>; total: number; detail?: string };
+    expect(queueResponse.status(), JSON.stringify(queueBody)).toBe(200);
+    expect(queueBody.items.some((item) => item.title === "E2E Published NFT"), JSON.stringify(queueBody)).toBe(true);
+
+    // Open the isolated admin route; marketplace navigation remains untouched.
+    await sellerPage.goto("/admin");
+    await expect(sellerPage.getByRole("heading", { name: "Moderation & Audit" })).toBeVisible();
     const moderationCard = sellerPage.locator(".admin-listing").filter({ hasText: "E2E Published NFT" });
     await expect(moderationCard).toBeVisible();
     await moderationCard.getByRole("button", { name: "Suspend", exact: true }).click();
