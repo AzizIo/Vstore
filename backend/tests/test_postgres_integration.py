@@ -83,6 +83,18 @@ def migrated_database(test_database_url: str):
         alembic_config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
         command.upgrade(alembic_config, "head")
         yield
+        # This is a disposable TEST_DATABASE_URL. Clear only the feature-owned
+        # review rows before downgrade; the migration itself still refuses to
+        # discard review provenance in any non-test database.
+        async def clear_test_reviews() -> None:
+            engine = create_async_engine(test_database_url, pool_pre_ping=True)
+            try:
+                async with engine.begin() as connection:
+                    await connection.execute(text("DELETE FROM seller_reviews"))
+            finally:
+                await engine.dispose()
+
+        asyncio.run(clear_test_reviews())
         command.downgrade(alembic_config, "base")
     finally:
         if previous_url is None:
@@ -252,7 +264,7 @@ async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
         engine = create_async_engine(test_database_url, pool_pre_ping=True)
         async with engine.connect() as connection:
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0009_admin_moderation_audit"
+            assert revision == "0010_seller_reviews"
 
         async with engine.begin() as connection:
             await connection.execute(
