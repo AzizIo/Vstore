@@ -1,15 +1,15 @@
 # Stage B architecture: NFT delivery confirmation and order lifecycle
 
-- **Status:** Stage B implementation tracker. B1, B2 and B3 are merged; B4 is proposed in [Draft PR #92](https://github.com/AzizIo/Vstore/pull/92) and is not yet in main.
+- **Status:** B1–B6 implementation is present on `main`; B5 transactional delivery notifications and B6 seller wallet UX are covered by Issue #98. Live TON Connect/testnet acceptance remains a separate manual gate.
 - **Issue:** [#46 — implement non-custodial NFT transfer confirmation lifecycle](https://github.com/AzizIo/Vstore/issues/46); decomposition: [#56](https://github.com/AzizIo/Vstore/issues/56).
-- **Baseline reviewed:** main through migration 0006 (delivery observer leases); Draft PR #92 adds migration 0007 and seller delivery APIs.
+- **Baseline reviewed:** main includes delivery observer leases (0006), delivery preparation idempotency (0007), seller prepare/submit/read APIs, delivery notifications (0008), and wallet-driven frontend flow.
 - **Scope boundary:** TON NFT (TEP-62) transfer confirmation after reservation. This is not a payment, escrow, guarantee, custody, refund, or payout design.
 
 ## 1. Executive summary
 
-The current main branch can reserve an active listing, snapshot its price and currency, cancel or expire the reservation, and verify seller ownership at reservation time. B1 (PR #63) adds read-only, fail-closed TON transfer evidence; B2 (PR #85) adds the forward migration from `pending_payment` to `reserved` and immutable delivery-attempt snapshots; B3 (PR #86) adds the leased observer and atomic finalization from exact finalized evidence. B4 is in Draft PR #92: it adds seller preparation, candidate submission and participant read APIs plus persisted preparation idempotency. Until PR #92 merges, main cannot create delivery attempts through the API, so no live order can enter the delivery workflow from a client request.
+The current implementation supports the full non-custodial delivery path. B1 (PR #63) adds read-only, fail-closed TON transfer evidence; B2 (PR #85) adds the forward migration from `pending_payment` to `reserved` and immutable delivery-attempt snapshots; B3 (PRs #86 and #90) adds the leased observer, lease fencing and atomic finalization from exact finalized evidence; B4 (PR #92) adds seller preparation, candidate submission and participant read APIs with persisted idempotency; B5–B6 (PR #101) complete transactional lifecycle notifications and the seller TON Connect wallet flow. Live testnet/Tonkeeper acceptance remains a separate manual gate.
 
-Stage B should add a server-observed delivery lifecycle for a direct, non-custodial TON NFT transfer. The seller authorizes any transfer in their own wallet. The backend stores a buyer-wallet snapshot and checks chain/provider evidence independently. A submitted transaction hash is only a lookup hint, and a client callback, screenshot, Tonkeeper screen, wallet connection, or current-owner response without transaction correlation is not sufficient proof of delivery.
+Stage B provides a server-observed delivery lifecycle for a direct, non-custodial TON NFT transfer. The seller authorizes any transfer in their own wallet. The backend stores a buyer-wallet snapshot and checks chain/provider evidence independently. A submitted transaction hash is only a lookup hint, and a client callback, screenshot, Tonkeeper screen, wallet connection, or current-owner response without transaction correlation is not sufficient proof of delivery.
 
 **Implementation baseline:** the maintainer recorded the Stage B technical decisions in the 2026-11-11 comment on Issue #46. Use those fail-closed defaults: buyer wallet snapshot at delivery preparation (not reservation), fresh seller ownership recheck, a separate 15-minute preparation window, finalized masterchain evidence, and audited manual reconciliation for ambiguous outcomes. Keep payments/escrow out of Stage B.
 
@@ -21,29 +21,34 @@ Stage B should add a server-observed delivery lifecycle for a direct, non-custod
 |---|---|
 | Listing | A Listing stores a mandatory positive price and currency; active listings are unique per NFT across active/reserved states. |
 | Reservation | POST /api/orders accepts listing_id and Idempotency-Key; the service reads an identity snapshot, checks the seller's verified wallet(s) through the TEP-62 verifier, then locks and revalidates listing → wallet → asset before creating the order. |
-| Reservation snapshot | Order stores buyer, seller, listing, price/currency, idempotency key and expires_at. B2 adds an immutable `OrderDeliveryAttempt` snapshot; B4 in Draft PR #92 adds preparation idempotency and the API that creates it. |
-| Order schema states (B2) | `reserved`, `awaiting_transfer`, `observing_transfer`, `completed`, `cancelled`, `expired`. B3 observer can move a prepared attempt into observation and atomically complete only exact finalized evidence. B4 APIs are not merged yet. Listing: draft, active, reserved, sold, cancelled, expired. |
-| Events | OrderEvent records from/to status and actor; B2 widens constraints to the delivery vocabulary and permits seller actors. B3 writes the system completion event transactionally with listing/order/asset updates; B4 writes the seller preparation/submission transition events. |
+| Reservation snapshot | Order stores buyer, seller, listing, price/currency, idempotency key and expires_at. `OrderDeliveryAttempt` stores the immutable item/network/source/destination/query/deadline snapshot; B4 (PR #92) adds preparation idempotency and the API that creates it. |
+| Order schema states (B2) | `reserved`, `awaiting_transfer`, `observing_transfer`, `completed`, `cancelled`, `expired`. B3 observer can move a prepared attempt into observation and atomically complete only exact finalized evidence. B4 APIs expose preparation, candidate submission and participant-scoped reads. Listing: draft, active, reserved, sold, cancelled, expired. |
+| Events | OrderEvent records from/to status and actor; B2 widens constraints to the delivery vocabulary and permits seller actors. B3 writes the system completion event transactionally with listing/order/asset updates; B4 writes seller preparation/submission transition events. |
 | Expiry/cancel | Cancellation and the expiry worker lock listing → asset → order; the release helper will not republish an asset that is locally stale/unverified. |
 | Ownership loss | A fresh affirmative owner mismatch invalidates the listing and pending order; provider outage/inconclusive data is not treated as proof that the NFT was transferred. |
 | Notifications | Order events enqueue Telegram outbox entries within the database transaction; a separate worker retries sends. |
-| TON adapter | TONNFTVerifier reads TEP-62 item state and checks the expected current owner through the configured provider. The verifier currently has no order-delivery watcher or transfer-proof API. |
+| TON adapter | TONNFTVerifier reads TEP-62 item state and checks the expected current owner through the configured provider. The separate delivery evidence adapter and leased observer correlate the exact persisted transfer intent with provider transfer/trace data; the wallet UI cannot complete an order. |
 
-### Remaining for Stage B
+### Remaining acceptance work
 
-- B4 seller prepare/submit/read APIs are in Draft PR #92, not merged. That PR verifies the selected seller wallet against fresh on-chain ownership, snapshots the buyer's verified primary wallet, persists a 15-minute preparation window and idempotency key, and prevents buyer cancellation once preparation has committed.
-- B5: enqueue delivery lifecycle notifications in the transactional outbox in the same transaction as accepted delivery state changes. The current outbox vocabulary covers reservation/cancel/expiry only.
-- B6: integrate the seller's wallet-driven transfer initiation and candidate-hash submission plus buyer/seller delivery status UI. Do not let the server sign or broadcast the transfer.
-- Testnet/manual acceptance: prove TON Connect signing, the item transfer message and provider finality behavior against known testnet transactions before any mainnet pilot.
-- Expand fault/concurrency coverage for prepare vs cancellation, submit vs observer claim, expiry/deadline races, duplicate candidates and provider disagreement.
+- Run live TON Connect signing on the configured Telegram Mini App origin against testnet wallets and known TEP-62 test items.
+- Validate the TON Center provider's indexed finality behavior against known successful, aborted, wrong-recipient and delayed-indexing testnet transfers.
+- Keep mainnet transfers, production deployment, VPS changes and live database migrations out of automated acceptance.
+- Continue concurrency/fault coverage for preparation expiry, duplicate submissions, provider disagreement and manual reconciliation.
 
-## 3. Proposed state machine
+B4 preparation and submission APIs are implemented: the service rechecks seller ownership, snapshots the buyer's verified primary wallet, persists a 15-minute preparation window and idempotency key, and prevents buyer cancellation once preparation has committed.
 
-B2 in PR #85 adds these values to the database/API type vocabulary and migrates legacy rows in place. They are schema states, not a claim that the current services already execute delivery transitions.
+B5 is implemented: preparation, accepted submission, verified completion and manual-review notices are inserted into the transactional outbox in the same transaction as their lifecycle transition. Recipient roles are explicit and event dedupe keys are stable.
+
+B6 is implemented: seller-side preparation, exact TEP-62 transfer payload construction from persisted snapshots, wallet signing/broadcast through TON Connect, untrusted wallet-reference submission, and participant-visible progress/deadline/source/destination. The frontend never marks completion optimistically.
+
+## 3. Implemented state machine
+
+The database/API vocabulary and service transitions below are implemented. `manual_review` remains an attempt status; ambiguous delivery does not reopen the listing or complete the order.
 
 ### Order states and target transitions
 
-| Proposed state | Meaning | Allowed next states |
+| Order state | Meaning | Allowed next states |
 |---|---|---|
 | reserved | Current listing reservation exists; seller has not obtained a delivery intent | awaiting_transfer, cancelled, expired |
 | awaiting_transfer | Buyer destination and seller source are snapshotted; seller can request/sign a transfer using their own wallet | observing_transfer, cancelled only if the system proves no transfer could have been submitted, expired only after reconciliation |
@@ -123,26 +128,26 @@ Do not hardcode an arbitrary number of confirmations in the implementation PR. S
 
 The policy should be configurable and documented. Before policy decisions are made, automated delivery should remain disabled.
 
-## 5. API contracts — proposal only
+## 5. API contracts — implemented
 
-Keep the existing reservation endpoints and contracts intact in the first implementation step. Add delivery-specific endpoints rather than repurposing create/cancel or introducing payment semantics.
+The delivery-specific endpoints below are implemented alongside the existing reservation endpoints. They do not repurpose create/cancel or introduce payment semantics.
 
-| Proposed method/route | Actor | Purpose | Important behavior |
+| Method/route | Actor | Purpose | Important behavior |
 |---|---|---|---|
 | POST /api/orders/{order_id}/delivery/prepare | Seller | Atomically create a delivery intent and snapshot source/destination wallet addresses, item, network and deadline | Requires verified seller wallet, verified buyer wallet on the same network and fresh seller ownership recheck; idempotent request key; does not send a transaction. |
 | POST /api/orders/{order_id}/delivery/submissions | Seller | Submit a candidate transaction hash or wallet attempt reference | Hint only. Validate format/size, persist idempotently, enqueue observer; never change to completed in this handler. |
 | GET /api/orders/{order_id}/delivery | Buyer or seller | Read current delivery state, deadline and safe public evidence summary | Same order visibility authorization as GET order; do not expose provider credentials or internal logs. |
 | Internal worker operation (not public API) | Worker | Poll/reconcile item and transaction state and finalize only on verified evidence | Bounded retries, lease/claim, idempotent writes and outbox in one DB transaction. |
 
-Questions to settle before implementation:
-- Does seller preparation require the buyer's verified wallet at reservation time, or allow the buyer to connect/verify it just before delivery? Recommendation: snapshot only at explicit prepare/start time, before any seller transfer is enabled; buyer must sign/verify the destination wallet via TON Connect Proof.
-- Should an order allow buyer destination changes before transfer begins? Recommendation: yes only before a delivery intent exists; after prepare, destination is immutable for that attempt.
-- What is the exact timeout for reservation versus delivery? They should be separate concepts, with explicitly approved configuration values.
-- What safe retry operation is permitted after the observer proves no transaction was submitted/accepted?
+Resolved implementation decisions:
+- The buyer's verified primary wallet is required and snapshotted at explicit seller preparation time, not at reservation.
+- The seller source wallet is rechecked against current on-chain ownership before preparation; source and destination addresses are immutable for the attempt.
+- Reservation expiry and the 15-minute delivery-preparation window are separate. Expiry does not release a listing while a transfer outcome is ambiguous.
+- After a wallet result is uncertain, the UI may retry submission of the same reference but must not request a second signature. Reconciliation/manual review is required before any new transfer intent.
 
 Do not add a public endpoint accepting arbitrary status or arbitrary buyer address. Seller/buyer IDs, listing, item and price must be derived from persisted order/listing rows.
 
-## 6. Database and event contracts — proposal only
+## 6. Database and event contracts — implemented
 
 ### Existing tables to preserve
 
@@ -152,25 +157,21 @@ Do not add a public endpoint accepting arbitrary status or arbitrary buyer addre
 - OrderEvent stores status changes and actor.
 - TelegramNotificationOutbox gives transactional, deduplicated notification enqueueing.
 
-### Proposed additions
+### Implemented delivery additions
 
-**Order delivery snapshot (either columns on Order or a dedicated one-to-one intent table):**
-- order_id (unique FK), network, item_address, seller_wallet_id (nullable FK for historical retention), seller_address_snapshot, buyer_wallet_id (nullable FK for historical retention), buyer_address_snapshot;
-- prepared_at, delivery_deadline, current attempt id, observed/final transaction reference, verified_at, verifier version/source and a compact evidence digest.
-- Snapshot addresses should remain readable if a user later unlinks a wallet. Store raw normalized addresses and network as immutable order evidence; wallet rows are references, not the sole historical record.
-
-**OrderDeliveryAttempt (recommended if retries or multiple candidate transactions are allowed):**
-- id, order_id, attempt_number, state, candidate_hash (optional/untrusted), verified item transaction identity, network, source/destination/item snapshots, provider first-seen time, observation/check timestamps, finality evidence, reason code and created/updated timestamps.
-- Unique (order_id, attempt_number); unique network + verified item transaction identity to prevent accepting one transfer for two orders; index states/next-check time for worker claims.
-- Never persist credentials or private keys. Bound raw provider payload retention; store only what is required for audits and diagnostics.
+**OrderDeliveryAttempt** is the persisted per-order delivery record:
+- order/attempt identity, status, selected network and exact NFT item;
+- seller/buyer wallet references and immutable normalized address snapshots;
+- unsigned 64-bit TEP-62 `query_id`, preparation timestamp/deadline, untrusted candidate reference, verified transaction/trace identity, masterchain sequence, verification timestamp/source and retry/lease metadata;
+- wallet references may be nulled when a wallet is unlinked; immutable address snapshots remain available for verification/audit. No credentials, private keys or seed phrases are stored.
 
 **OrderEvent extension:**
 - Expand allowed transition values only through a migration that updates OrderStatus, OrderEvent from/to constraints and partial indexes/checks. Add explicit actor types for seller/system/worker only if required and constrained.
 - Record old/new state, actor, attempt_id/correlation_id, event time and reason code. Keep this append-only and transactional with state transition/outbox changes.
 
 **Migration and compatibility:**
-- B2 in PR #85 adds a forward migration from `pending_payment` to `reserved`, preserving order/event IDs and all price, currency, idempotency and timestamp data. It updates Order/OrderEvent constraints, the partial unique index, backend/frontend types and fixtures together.
-- The migration adds `order_delivery_attempts` with immutable seller/buyer address snapshots and database uniqueness/check constraints. Its downgrade refuses to remove recorded attempts or newer delivery states.
+- B2 (PR #85) adds the forward migration from `pending_payment` to `reserved`, preserving order/event IDs and all price, currency, idempotency and timestamp data. It updates Order/OrderEvent constraints, the partial unique index, backend/frontend types and fixtures together.
+- B2 adds `order_delivery_attempts` with immutable seller/buyer address snapshots and database uniqueness/check constraints. Later migrations add observer leases (0006), preparation idempotency (0007), and delivery notification event types (0008). Downgrades refuse to discard persisted delivery state/history.
 - Do not run this migration against production/VPS until the PR is merged, reviewed, and a separate deployment/backup plan is approved.
 
 ## 7. Concurrency and idempotency invariants
@@ -270,21 +271,21 @@ Do not add a public endpoint accepting arbitrary status or arbitrary buyer addre
 - UI stays pending until backend observer verifies the chain evidence; client success callback alone never displays delivered/completed.
 - Outage, wrong recipient, switching account/network, repeated event and timeout display non-success states and never relist an NFT with uncertain ownership.
 
-## 11. Suggested implementation work breakdown
+## 11. Implementation work breakdown and status
 
-These are proposed tasks to create or map onto existing Issues after maintainer review; this document intentionally does not create or close issues.
+B1–B6 are implemented. B7 is the remaining live testnet pilot, operational alerts/reconciliation and security review; this document records the implementation sequence and remaining acceptance work.
 
 | Order | Work item | Owner area | Depends on | Acceptance |
 |---|---|---|---|---|
 | B1 | Read-only transaction/trace evidence adapter for TEP-62 transfer correlation | Backend | Maintainer baseline | Implemented in [PR #63](https://github.com/AzizIo/Vstore/pull/63): bounded TON Center v3 correlation, typed outcomes and fail-closed checks. Indexed-provider trust assumptions are documented. |
 | B2 | Delivery-attempt persistence, state migration and immutable snapshots | Backend + DB | B1 | Implemented in [PR #85](https://github.com/AzizIo/Vstore/pull/85): preserves historical reservations/events, adds database constraints and uniqueness. |
 | B3 | Leased observer/reconciliation worker and deterministic provider polling | Backend | B1, B2 | Implemented in [PR #86](https://github.com/AzizIo/Vstore/pull/86): leased PostgreSQL claims, bounded concurrent provider polling, exact B1 evidence correlation, fail-closed manual review and atomic finalization across attempt/order/listing/asset/event. |
-| B4 | Delivery preparation/submission/read APIs with auth, locks and idempotency | Backend | B2, B3 | Snapshot verified buyer destination and freshly verified seller source; client-supplied hashes/addresses never establish completion. |
-| B5 | Transactional transfer outbox events/notifications and PostgreSQL concurrency/fault-injection tests | Backend + QA | B3, B4 | Duplicate/out-of-order events are idempotent; failure cases fail closed. |
-| B6 | Buyer destination confirmation, seller TON Connect transaction request and status UI | Frontend | B4 API contract | UI shows delivered only from backend persisted verification; no payments UI. |
+| B4 | Delivery preparation/submission/read APIs with auth, locks and idempotency | Backend | B2, B3 | Implemented in [PR #92](https://github.com/AzizIo/Vstore/pull/92): verified buyer/seller wallet snapshots, fresh seller ownership recheck, 15-minute preparation window, idempotency and participant-scoped APIs. |
+| B5 | Transactional transfer outbox events/notifications and PostgreSQL concurrency/fault-injection tests | Backend + QA | B3, B4 | Implemented in [PR #101](https://github.com/AzizIo/Vstore/pull/101): buyer/seller-targeted notices share state-transition transactions and use stable dedupe keys; failures remain retryable. |
+| B6 | Buyer destination confirmation, seller TON Connect transaction request and status UI | Frontend | B4 API contract | Implemented in [PR #101](https://github.com/AzizIo/Vstore/pull/101): seller wallet signs the exact prepared TEP-62 payload; the backend observer alone controls completion. |
 | B7 | Manual testnet pilot, operational alerts/reconciliation and security review | QA + Maintainer | B1–B6 | Checklist signed off before any mainnet rollout. |
 
-The maintainer has recorded the Stage B technical baseline in Issue #46. Continue with the staged sequence above; do not expose transfer actions in the UI until the B3/B4 backend contract exists. Map work onto existing issues before opening duplicates.
+The maintainer's Stage B technical baseline in Issue #46 is implemented across B1–B6. Keep live testnet use behind the separate manual acceptance and operational review gate; do not interpret CI's isolated provider/wallet fixtures as live-chain acceptance.
 
 ## 12. Maintainer decision baseline (2026-11-11)
 
@@ -318,7 +319,7 @@ These defaults authorize the staged B1–B7 technical work only. They do not aut
 
 ## 14. B3 observer implementation notes
 
-The B3 observer is a backend-only worker. It does not expose an API, ask the seller to sign a transfer, broadcast a transaction, or accept client-supplied evidence as proof.
+The B3 observer itself is a backend-only worker. B4 exposes the participant-scoped APIs and B6 provides the seller wallet action; the observer does not ask the seller to sign, broadcast a transaction, or accept client-supplied evidence as proof.
 
 - Claims due prepared/observing attempts in bounded batches with PostgreSQL FOR UPDATE SKIP LOCKED.
 - Uses a persisted random lease token and a timeout-aware lease deadline. Bounded concurrent polling keeps claims inside the lease window; expired leases are reclaimable and a stale worker cannot write after another worker has reclaimed the attempt.

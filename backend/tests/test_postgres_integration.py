@@ -11,7 +11,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.api.assets import _upsert_verified_asset
@@ -34,6 +34,7 @@ from app.db.models import (
     AssetVerificationStatus,
     Listing,
     ListingStatus,
+    ModerationAuditLog,
     NFTAsset,
     Order,
     OrderDeliveryAttempt,
@@ -41,6 +42,7 @@ from app.db.models import (
     OrderEvent,
     OrderStatus,
     PriceCurrency,
+    TelegramNotificationOutbox,
     User,
     Wallet,
 )
@@ -51,6 +53,7 @@ from app.listings.service import (
 )
 from app.orders.service import (
     OrderConflict,
+    _enqueue_order_notifications,
     cancel_order,
     create_order,
     expire_pending_orders,
@@ -151,7 +154,49 @@ ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0007_delivery_prepare_key"
+    assert revision == "0009_admin_moderation_audit"
+
+
+
+
+async def test_moderation_audit_log_rejects_update_and_delete(db_session: AsyncSession) -> None:
+    seller = await make_user(db_session, telegram_id=719199001)
+    asset = await make_asset(db_session, seller)
+    listing = make_listing(seller, asset, ListingStatus.ACTIVE)
+    db_session.add(listing)
+    await db_session.flush()
+    audit = ModerationAuditLog(
+        actor_id=seller.id,
+        target_type="listing",
+        target_id=listing.id,
+        action="suspended",
+        reason_code="other",
+        reason="Integration immutability check",
+        before_snapshot={"status": "active"},
+        after_snapshot={"status": "suspended"},
+        idempotency_key="immutable-test-" + uuid4().hex,
+    )
+    db_session.add(audit)
+    await db_session.flush()
+
+    with pytest.raises(DBAPIError, match="moderation audit log is append-only"):
+        async with db_session.begin_nested():
+            await db_session.execute(
+                text("UPDATE moderation_audit_log SET reason = 'tampered' WHERE id = :id"),
+                {"id": audit.id},
+            )
+
+    with pytest.raises(DBAPIError, match="moderation audit log is append-only"):
+        async with db_session.begin_nested():
+            await db_session.execute(
+                text("DELETE FROM moderation_audit_log WHERE id = :id"),
+                {"id": audit.id},
+            )
+
+    with pytest.raises(DBAPIError, match="moderation audit log is append-only"):
+        async with db_session.begin_nested():
+            await db_session.execute(text("TRUNCATE TABLE moderation_audit_log"))
+
 
 
 async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
@@ -207,7 +252,7 @@ async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
         engine = create_async_engine(test_database_url, pool_pre_ping=True)
         async with engine.connect() as connection:
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0007_delivery_prepare_key"
+            assert revision == "0009_admin_moderation_audit"
 
         async with engine.begin() as connection:
             await connection.execute(
@@ -616,7 +661,7 @@ async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
                 )
             ).one()
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0007_delivery_prepare_key"
+            assert revision == "0009_admin_moderation_audit"
             assert order.status == "reserved"
             assert order.price_amount == Decimal("12.500000000")
             assert order.price_currency == "TON"
@@ -1694,6 +1739,11 @@ async def _cleanup_observer_fixture(
 ) -> None:
     async with session_factory.begin() as session:
         await session.execute(
+            TelegramNotificationOutbox.__table__.delete().where(
+                TelegramNotificationOutbox.order_id == order_id
+            )
+        )
+        await session.execute(
             OrderEvent.__table__.delete().where(OrderEvent.order_id == order_id)
         )
         await session.execute(
@@ -1817,6 +1867,17 @@ async def test_delivery_prepare_snapshots_verified_wallets_and_submission_is_ide
             assert attempt.buyer_address_snapshot == buyer_address
             assert int(attempt.query_id) >= 0
             assert attempt.deadline > attempt.prepared_at
+            prepared_notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order_id,
+                        TelegramNotificationOutbox.event_type == "delivery_prepared",
+                    )
+                )
+            ).all()
+            assert len(prepared_notices) == 2
+            assert {notice.recipient_role for notice in prepared_notices} == {"buyer", "seller"}
+            assert len({notice.dedupe_key for notice in prepared_notices}) == 2
             late_submission_at = attempt.deadline + timedelta(seconds=1)
 
         async with session_factory() as session:
@@ -1859,6 +1920,16 @@ async def test_delivery_prepare_snapshots_verified_wallets_and_submission_is_ide
             assert attempt.status is OrderDeliveryAttemptStatus.OBSERVING
             assert attempt.candidate_transaction_hash == candidate_hash
             assert attempt.submitted_at is not None
+            submitted_notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order_id,
+                        TelegramNotificationOutbox.event_type == "delivery_submitted",
+                    )
+                )
+            ).all()
+            assert len(submitted_notices) == 2
+            assert {notice.recipient_role for notice in submitted_notices} == {"buyer", "seller"}
 
         async with session_factory() as session:
             with pytest.raises(OrderConflict, match="cannot be cancelled"):
@@ -1940,6 +2011,23 @@ async def test_delivery_observer_verifies_and_completes_only_exact_finalized_evi
                 )
             ).all()
             assert len(completed_events) == 1
+            confirmed_notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order.id,
+                        TelegramNotificationOutbox.event_type == "delivery_confirmed",
+                    )
+                )
+            ).all()
+            assert len(confirmed_notices) == 2
+            assert {notice.recipient_role for notice in confirmed_notices} == {"buyer", "seller"}
+        # A repeated observer pass cannot re-complete or enqueue duplicate notices.
+        repeated = await run_delivery_observer_pass(
+            session_factory,
+            now=now + timedelta(seconds=5),
+            provider_factory=lambda _network: _FinalizedProvider(),
+        )
+        assert repeated.claimed == 0
     finally:
         await _cleanup_observer_fixture(
             session_factory,
@@ -2206,6 +2294,82 @@ async def test_delivery_observer_quarantines_failed_transfer_without_releasing_l
             assert persisted_attempt is not None
             assert persisted_attempt.status is OrderDeliveryAttemptStatus.MANUAL_REVIEW
             assert persisted_attempt.reason_code == "transfer_mismatch_or_failed"
+            review_notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order.id,
+                        TelegramNotificationOutbox.event_type == "delivery_manual_review",
+                    )
+                )
+            ).all()
+            assert len(review_notices) == 2
+            assert {notice.recipient_role for notice in review_notices} == {"buyer", "seller"}
+    finally:
+        await _cleanup_observer_fixture(
+            session_factory,
+            seller_id=seller.id,
+            buyer_id=buyer.id,
+            asset_id=asset.id,
+            listing_id=listing.id,
+            order_id=order.id,
+            attempt_id=attempt.id,
+        )
+        await engine.dispose()
+
+
+async def test_delivery_state_and_outbox_roll_back_atomically(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        (
+            seller,
+            buyer,
+            asset,
+            listing,
+            order,
+            attempt,
+            _now,
+        ) = await _create_observer_fixture(session)
+    try:
+        with pytest.raises(RuntimeError, match="force transaction rollback"):
+            async with session_factory() as session:
+                async with session.begin():
+                    order_to_complete = await session.get(Order, order.id)
+                    assert order_to_complete is not None
+                    previous_status = order_to_complete.status
+                    order_to_complete.status = OrderStatus.COMPLETED
+                    session.add(
+                        OrderEvent(
+                            order_id=order.id,
+                            from_status=previous_status,
+                            to_status=OrderStatus.COMPLETED,
+                            actor_id=None,
+                            actor_type="system",
+                        )
+                    )
+                    await _enqueue_order_notifications(
+                        session,
+                        order=order_to_complete,
+                        event_type="delivery_confirmed",
+                        recipients={buyer.id: "buyer", seller.id: "seller"},
+                    )
+                    raise RuntimeError("force transaction rollback")
+
+        async with session_factory() as session:
+            persisted_order = await session.get(Order, order.id)
+            assert persisted_order is not None
+            assert persisted_order.status is OrderStatus.AWAITING_TRANSFER
+            notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order.id,
+                        TelegramNotificationOutbox.event_type == "delivery_confirmed",
+                    )
+                )
+            ).all()
+            assert notices == []
     finally:
         await _cleanup_observer_fixture(
             session_factory,

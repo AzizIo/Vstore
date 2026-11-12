@@ -17,6 +17,9 @@ def validate_e2e_targets() -> None:
     if os.getenv("E2E_MODE") != "1":
         raise RuntimeError("E2E_MODE=1 is required for API-backed E2E operations.")
 
+    if os.getenv("PREVIEW_MODE") == "1":
+        raise RuntimeError("E2E_MODE and PREVIEW_MODE cannot be enabled together.")
+
     settings = get_settings()
     database = urlsplit(settings.database_url)
     if (

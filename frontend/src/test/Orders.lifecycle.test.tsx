@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+
+vi.mock("@tonconnect/ui-react", () => ({
+  CHAIN: { MAINNET: "-239", TESTNET: "-3" },
+  TonConnectUIProvider: ({ children }: { children: ReactNode }) => children,
+  useTonWallet: () => null,
+  useTonConnectUI: () => [{ sendTransaction: vi.fn(), openModal: vi.fn() }],
+}));
 
 import type { MarketplaceOrder, OrderStatus } from "../api/orders";
 import { Orders } from "../orders/Orders";
