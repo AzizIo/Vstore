@@ -6,6 +6,7 @@ import {
   type InventoryAsset,
   type InventorySyncResponse,
 } from "../api/assets";
+import type { WalletRecord } from "../wallet/api";
 
 const PAGE_SIZE = 24;
 
@@ -54,10 +55,15 @@ function InventoryArtwork({ asset }: { asset: InventoryAsset }) {
   );
 }
 
-export function MyInventory({ accessToken }: { accessToken: string }) {
+export function MyInventory({
+  accessToken,
+  selectedWallet,
+}: {
+  accessToken: string;
+  selectedWallet: WalletRecord | null;
+}) {
   const [initialLoadRetry, setInitialLoadRetry] = useState(0);
   const [assets, setAssets] = useState<InventoryAsset[]>([]);
-  const [walletId, setWalletId] = useState<string | null>(null);
   const [nextOffset, setNextOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [syncResult, setSyncResult] = useState<InventorySyncResponse | null>(null);
@@ -70,31 +76,41 @@ export function MyInventory({ accessToken }: { accessToken: string }) {
   const requestVersion = useRef(0);
   const loadingMoreFlag = useRef(false);
 
+  const selectedWalletId = selectedWallet?.id ?? null;
+  const selectedWalletNetwork = selectedWallet?.network ?? null;
+  const selectedWalletAddress = selectedWallet?.address ?? null;
+
   useEffect(() => {
     const version = ++requestVersion.current;
     const controller = new AbortController();
-    setLoading(true);
+
+    activeControllerRef.current?.abort();
+    activeControllerRef.current = null;
+    loadMoreRef.current?.abort();
+    loadMoreRef.current = null;
+    loadingMoreFlag.current = false;
+    setLoadingMore(false);
     setError("");
     setLoadMoreError("");
     setAssets([]);
-    setWalletId(null);
     setNextOffset(0);
     setHasMore(false);
     setSyncResult(null);
-    setLoadingMore(false);
-    loadingMoreFlag.current = false;
-    loadMoreRef.current?.abort();
-    loadMoreRef.current = null;
 
+    if (!selectedWalletId) {
+      setLoading(false);
+      return () => controller.abort();
+    }
+
+    setLoading(true);
     fetchMyInventory(
       accessToken,
-      { limit: PAGE_SIZE, offset: 0 },
+      { limit: PAGE_SIZE, offset: 0, walletId: selectedWalletId },
       controller.signal,
     )
       .then((page) => {
         if (controller.signal.aborted || version !== requestVersion.current) return;
         setAssets(page.items);
-        setWalletId(page.wallet_id);
         setNextOffset(page.next_offset);
         setHasMore(page.has_more);
       })
@@ -112,14 +128,21 @@ export function MyInventory({ accessToken }: { accessToken: string }) {
     return () => {
       controller.abort();
       activeControllerRef.current?.abort();
+      activeControllerRef.current = null;
       loadMoreRef.current?.abort();
       loadMoreRef.current = null;
       loadingMoreFlag.current = false;
     };
-  }, [accessToken, initialLoadRetry]);
+  }, [
+    accessToken,
+    initialLoadRetry,
+    selectedWalletId,
+    selectedWalletNetwork,
+    selectedWalletAddress,
+  ]);
 
   async function runSync() {
-    if (loading || loadingMoreFlag.current) return;
+    if (loading || loadingMoreFlag.current || !selectedWalletId) return;
     const version = ++requestVersion.current;
     const controller = new AbortController();
     activeControllerRef.current?.abort();
@@ -137,17 +160,19 @@ export function MyInventory({ accessToken }: { accessToken: string }) {
     setHasMore(false);
 
     try {
-      const sync = await syncMyInventory(accessToken, walletId ?? undefined, controller.signal);
+      const sync = await syncMyInventory(accessToken, selectedWalletId, controller.signal);
       if (controller.signal.aborted || version !== requestVersion.current) return;
+      if (sync.wallet_id !== selectedWalletId) {
+        throw new Error("The inventory sync returned a different wallet.");
+      }
       setSyncResult(sync);
       const page = await fetchMyInventory(
         accessToken,
-        { limit: PAGE_SIZE, offset: 0, walletId: sync.wallet_id },
+        { limit: PAGE_SIZE, offset: 0, walletId: selectedWalletId },
         controller.signal,
       );
       if (controller.signal.aborted || version !== requestVersion.current) return;
       setAssets(page.items);
-      setWalletId(page.wallet_id);
       setNextOffset(page.next_offset);
       setHasMore(page.has_more);
     } catch (reason) {
@@ -163,7 +188,7 @@ export function MyInventory({ accessToken }: { accessToken: string }) {
   }
 
   async function loadMore() {
-    if (!hasMore || loading || loadingMoreFlag.current || !walletId) return;
+    if (!hasMore || loading || loadingMoreFlag.current || !selectedWalletId) return;
     const version = requestVersion.current;
     const controller = new AbortController();
     loadMoreRef.current = controller;
@@ -173,7 +198,7 @@ export function MyInventory({ accessToken }: { accessToken: string }) {
     try {
       const page = await fetchMyInventory(
         accessToken,
-        { limit: PAGE_SIZE, offset: nextOffset, walletId },
+        { limit: PAGE_SIZE, offset: nextOffset, walletId: selectedWalletId },
         controller.signal,
       );
       if (controller.signal.aborted || version !== requestVersion.current) return;
@@ -204,14 +229,21 @@ export function MyInventory({ accessToken }: { accessToken: string }) {
           <p className="eyebrow">COLLECTOR SPACE</p>
           <h1 id="inventory-title">My NFT inventory</h1>
           <p className="inventory-intro">
-            NFTs are shown only after the backend rechecks current on-chain ownership.
+            {selectedWallet ? (
+              <>
+                Showing verified NFTs for {selectedWallet.address.slice(0, 8)}…
+                {selectedWallet.address.slice(-5)} · {selectedWallet.network}
+              </>
+            ) : (
+              "Connect and verify a TON wallet to view its NFT inventory. A different primary wallet is never selected automatically."
+            )}
           </p>
         </div>
         <button
           className="text-button"
           type="button"
           onClick={() => void runSync()}
-          disabled={loading || loadingMore}
+          disabled={loading || loadingMore || !selectedWalletId}
         >
           {loading ? "Loading..." : "Sync inventory"}
         </button>
@@ -228,7 +260,12 @@ export function MyInventory({ accessToken }: { accessToken: string }) {
 
       {loading ? (
         <div className="inventory-message" role="status" aria-busy="true">
-          Syncing your verified wallets and checking NFT ownership...
+          Checking the selected verified wallet and its NFT ownership...
+        </div>
+      ) : !selectedWallet ? (
+        <div className="inventory-message" role="status">
+          <h2>Connect and verify a wallet</h2>
+          <p>Connect the wallet you want to inspect and complete TON Proof verification. No primary-wallet fallback is used.</p>
         </div>
       ) : error ? (
         <div className="inventory-message" role="alert">
