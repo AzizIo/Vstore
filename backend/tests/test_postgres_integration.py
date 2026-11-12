@@ -90,7 +90,11 @@ def migrated_database(test_database_url: str):
             engine = create_async_engine(test_database_url, pool_pre_ping=True)
             try:
                 async with engine.begin() as connection:
-                    await connection.execute(text("DELETE FROM seller_reviews"))
+                    has_reviews_table = await connection.scalar(
+                        text("SELECT to_regclass('public.seller_reviews') IS NOT NULL")
+                    )
+                    if has_reviews_table:
+                        await connection.execute(text("DELETE FROM seller_reviews"))
             finally:
                 await engine.dispose()
 
@@ -673,7 +677,7 @@ async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
                 )
             ).one()
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0009_admin_moderation_audit"
+            assert revision == "0010_seller_reviews"
             assert order.status == "reserved"
             assert order.price_amount == Decimal("12.500000000")
             assert order.price_currency == "TON"
