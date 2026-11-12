@@ -944,8 +944,12 @@ async def test_verifier_still_proves_owner_when_metadata_is_unavailable(
     }
 
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.params.get("collection_address") == COLLECTION:
-            return httpx.Response(200, json={"nft_items": [rows]})
+        if request.method == "POST":
+            body = json.loads(request.content)
+            if body["method"] == "get_nft_data":
+                return httpx.Response(200, json=_get_nft_data_response())
+            if body["method"] == "get_nft_address_by_index":
+                return httpx.Response(200, json=_get_item_address_response())
         return httpx.Response(200, json={"nft_items": [rows]})
 
     client = httpx.AsyncClient(
