@@ -83,14 +83,12 @@ async def _public_listing(
 async def _verified_review(
     session: AsyncSession, seller: User, buyer: User, *, rating: int, comment: str | None
 ) -> SellerReview:
-    asset, _ = await _public_listing(
+    asset, sold_listing = await _public_listing(
         session, seller, status=ListingStatus.SOLD, owner=buyer
     )
     now = datetime.now(UTC)
     order = Order(
-        listing_id=(await session.scalar(
-            select(Listing.id).where(Listing.asset_id == asset.id)
-        )),
+        listing_id=sold_listing.id,
         buyer_id=buyer.id,
         seller_id=seller.id,
         idempotency_key=uuid4().hex,
