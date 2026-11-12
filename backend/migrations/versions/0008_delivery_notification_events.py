@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "0008_delivery_notification_events"
+revision: str = "0008_delivery_notif_events"
 down_revision: str | None = "0007_delivery_prepare_key"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
