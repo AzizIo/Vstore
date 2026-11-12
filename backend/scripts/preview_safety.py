@@ -24,6 +24,11 @@ _PREVIEW_USER = "viltara_preview"
 _PREVIEW_REDIS_DB = "/0"
 
 
+def should_validate_preview_migrations(database_url: str, preview_mode: str | None) -> bool:
+    """Never let a Preview DB or explicit Preview mode bypass the migration guard."""
+    return preview_mode is not None or urlsplit(database_url).path == f"/{_PREVIEW_DB}"
+
+
 def validate_preview_targets() -> None:
     """Reject ambiguous/non-Preview targets before migrations or data writes."""
     if os.getenv("PREVIEW_MODE") != "1":
