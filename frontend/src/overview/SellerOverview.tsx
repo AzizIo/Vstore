@@ -6,6 +6,7 @@ interface Props {
   accessToken: string;
   onOpenOrders: (orderId?: string) => void;
   onOpenListing: (listingId: string) => void;
+  onManageListings: () => void;
 }
 
 function formatDate(value: string) {
@@ -64,7 +65,7 @@ function ActivityRow({
   );
 }
 
-export function SellerOverview({ accessToken, onOpenOrders, onOpenListing }: Props) {
+export function SellerOverview({ accessToken, onOpenOrders, onOpenListing, onManageListings }: Props) {
   const [overview, setOverview] = useState<SellerOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -129,7 +130,7 @@ export function SellerOverview({ accessToken, onOpenOrders, onOpenListing }: Pro
       <section className="seller-overview-section" aria-labelledby="seller-listings-heading">
         <div className="seller-overview-section-heading">
           <h2 id="seller-listings-heading">Listings</h2>
-          <button className="text-button" type="button" onClick={() => onOpenListing("")}>Manage listings ↗</button>
+          <button className="text-button" type="button" onClick={onManageListings}>Manage listings ↗</button>
         </div>
         <div className="seller-overview-grid">
           {listingCards.map((card) => (
