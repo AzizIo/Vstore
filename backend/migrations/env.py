@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.core.config import get_settings
 from app.db.models import Base
 from scripts.e2e_safety import assert_e2e_environment
+from scripts.preview_safety import validate_preview_targets
 
 config = context.config
 if config.config_file_name is not None:
@@ -19,6 +20,10 @@ target_metadata = Base.metadata
 # Explicit opt-in guard for the isolated API-backed E2E migration path.
 if os.getenv("E2E_MODE") == "1":
     asyncio.run(assert_e2e_environment())
+
+# Preview migrations are allowed only against the explicitly isolated Preview DB.
+if os.getenv("PREVIEW_MODE") == "1":
+    validate_preview_targets()
 config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 
 
