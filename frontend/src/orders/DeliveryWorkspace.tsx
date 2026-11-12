@@ -208,7 +208,7 @@ function DeliveryPanel({
         throw new Error("The 15-minute delivery preparation window has expired. Refresh status before taking action.");
       }
 
-      const { Address } = await import("@ton/core");
+      const { Address } = await loadTonCore();
       if (Address.parse(wallet.account.address).toRawString() !== Address.parse(attempt.seller_address).toRawString()) {
         throw new Error("The connected wallet does not match the snapshotted seller source.");
       }
