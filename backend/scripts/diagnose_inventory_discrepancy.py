@@ -109,15 +109,23 @@ async def run(wallet_id: UUID, limit: int, offset: int) -> dict[str, object]:
                 candidates.append(
                     {
                         "item_suffix": suffix(candidate.address),
-                        "provider_owner_suffix": suffix(candidate.owner_address),
+                        "page_owner_suffix": suffix(candidate.owner_address),
                         "provider_index": candidate.index,
                         "verifier_status": (
                             result.status.value
                             if isinstance(result.status, VerificationStatus)
                             else str(result.status)
                         ),
-                        "expected_owner_matches": (
-                            result.expected_owner_address == normalize_address(wallet.address)
+                        "verifier_owner_suffix": suffix(result.owner_address),
+                        "verifier_owner_matches_selected_wallet": (
+                            normalize_address(result.owner_address) == normalize_address(wallet.address)
+                            if result.owner_address
+                            else None
+                        ),
+                        "verifier_expected_owner_matches_selected_wallet": (
+                            normalize_address(result.expected_owner_address) == normalize_address(wallet.address)
+                            if result.expected_owner_address
+                            else None
                         ),
                         "db_rows": db_rows,
                         "upsert": "not_executed_read_only",
