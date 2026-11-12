@@ -235,6 +235,10 @@ export async function mockMarketplaceApi(
         : fulfillJson({ detail: "Listing not found." }, 404);
     }
 
+    if (path === "/api/orders" && method === "POST" && options.authenticated) {
+      return fulfillJson(linkedOrder, 201);
+    }
+
     if (path === `/api/orders/${orderId}/cancel` && method === "POST" && options.authenticated) {
       return fulfillJson({
         ...linkedOrder,

@@ -107,6 +107,35 @@ test.describe("listing details", () => {
 });
 
 
+  test("confirms a reservation from listing detail on a 320px viewport and navigates to Orders", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 740 });
+    const requests = await mockMarketplaceApi(page, { authenticated: true });
+    await page.goto("/");
+    await page.getByRole("button", { name: /Moon Lantern/ }).click();
+
+    await expect(page.getByRole("heading", { name: "Moon Lantern" })).toBeVisible();
+    const detailLayout = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(detailLayout.scrollWidth).toBeLessThanOrEqual(detailLayout.clientWidth);
+
+    await page.getByRole("button", { name: "Place order" }).click();
+    const dialog = page.getByRole("dialog", { name: "Reserve this listing?" });
+    await expect(dialog).toContainText("Moon Lantern");
+    await expect(dialog).toContainText("12.5 TON");
+    await expect(dialog).toContainText("Ari (@collector)");
+    await expect(dialog).toContainText("Payment is not enabled and no funds will be collected");
+    expect(requests.some((request) => request === "POST /api/orders")).toBe(false);
+
+    await dialog.getByRole("button", { name: "Confirm reservation" }).click();
+    await expect(page.getByRole("dialog", { name: "Reservation confirmed" })).toBeVisible();
+    expect(requests.filter((request) => request === "POST /api/orders")).toHaveLength(1);
+
+    await page.getByRole("dialog").getByRole("button", { name: "View Orders" }).click();
+    await expect(page.getByRole("heading", { name: "Order workspace" })).toBeVisible();
+  });
+
 test.describe("order workspace", () => {
   test("filters, opens details, confirms cancellation, and captures desktop/mobile views", async ({ page }) => {
     const requests = await mockMarketplaceApi(page, { authenticated: true });
