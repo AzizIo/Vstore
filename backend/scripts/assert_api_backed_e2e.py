@@ -43,7 +43,10 @@ async def assert_journey() -> None:
         listings = list(
             (
                 await session.scalars(
-                    select(Listing).where(Listing.seller_id == seller.id)
+                    select(Listing).where(
+                        Listing.seller_id == seller.id,
+                        Listing.title == "E2E Published NFT",
+                    )
                 )
             ).all()
         )
