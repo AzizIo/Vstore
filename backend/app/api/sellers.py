@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.listings import ListingResponse, _listing_query, _purchasable_conditions
@@ -51,16 +51,24 @@ class PublicSellerProfileResponse(BaseModel):
     reviews_has_more: bool
 
 
-def _verified_review_conditions():
-    """Exactly the eligibility evidence enforced by reviews.create_review."""
-    return (
-        Order.status == OrderStatus.COMPLETED,
-        Order.seller_id == SellerReview.seller_id,
-        Order.buyer_id == SellerReview.buyer_id,
-        OrderDeliveryAttempt.order_id == Order.id,
-        OrderDeliveryAttempt.status == OrderDeliveryAttemptStatus.VERIFIED,
-        OrderDeliveryAttempt.transaction_hash.is_not(None),
-        OrderDeliveryAttempt.verified_at.is_not(None),
+def _has_verified_completed_order():
+    """Match reviews._verified_attempt/create_review without multiplying rows."""
+    return exists(
+        select(1)
+        .select_from(Order)
+        .join(
+            OrderDeliveryAttempt,
+            OrderDeliveryAttempt.order_id == Order.id,
+        )
+        .where(
+            Order.id == SellerReview.order_id,
+            Order.status == OrderStatus.COMPLETED,
+            Order.seller_id == SellerReview.seller_id,
+            Order.buyer_id == SellerReview.buyer_id,
+            OrderDeliveryAttempt.status == OrderDeliveryAttemptStatus.VERIFIED,
+            OrderDeliveryAttempt.transaction_hash.is_not(None),
+            OrderDeliveryAttempt.verified_at.is_not(None),
+        )
     )
 
 
@@ -88,19 +96,15 @@ async def get_public_seller_profile(
     if seller is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Seller not found")
 
-    # One aggregate query over the exact completed + delivery-verified review
-    # provenance required by the existing review creation service.
+    eligible_review = _has_verified_completed_order()
     rating_row = (
         await session.execute(
             select(
-                func.count(func.distinct(SellerReview.id)),
+                func.count(SellerReview.id),
                 func.coalesce(func.avg(SellerReview.rating), 0),
-            )
-            .join(Order, Order.id == SellerReview.order_id)
-            .join(OrderDeliveryAttempt, OrderDeliveryAttempt.order_id == Order.id)
-            .where(
+            ).where(
                 SellerReview.seller_id == seller_id,
-                *_verified_review_conditions(),
+                eligible_review,
             )
         )
     ).one()
@@ -129,16 +133,11 @@ async def get_public_seller_profile(
         ListingResponse.model_validate(row) for row in listing_items[:listings_limit]
     ]
 
-    # Reviews use the same public item DTO as GET /reviews/sellers/{seller_id}.
-    # Joining verified attempts prevents old/manually inserted or otherwise
-    # ineligible rows from contributing to either count or public display.
     review_rows = await session.scalars(
         select(SellerReview)
-        .join(Order, Order.id == SellerReview.order_id)
-        .join(OrderDeliveryAttempt, OrderDeliveryAttempt.order_id == Order.id)
         .where(
             SellerReview.seller_id == seller_id,
-            *_verified_review_conditions(),
+            _has_verified_completed_order(),
         )
         .order_by(SellerReview.created_at.desc(), SellerReview.id.desc())
         .offset(reviews_offset)
