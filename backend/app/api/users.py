@@ -1,13 +1,22 @@
-from typing import Annotated
+from decimal import Decimal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
-from app.db.models import Listing, ListingStatus, Order, OrderStatus, User, Wallet
+from app.db.models import (
+    Listing,
+    ListingStatus,
+    NFTAsset,
+    Order,
+    OrderStatus,
+    User,
+    Wallet,
+)
 from app.db.session import get_db_session
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -102,3 +111,158 @@ async def remove_wallet(
 
     await session.delete(wallet)
     await session.commit()
+
+
+class ListingOverviewCounts(BaseModel):
+    draft: int = 0
+    active: int = 0
+    reserved: int = 0
+    sold: int = 0
+    cancelled: int = 0
+    expired: int = 0
+    total: int = 0
+
+
+class OrderOverviewCounts(BaseModel):
+    reserved: int = 0
+    awaiting_transfer: int = 0
+    observing_transfer: int = 0
+    completed: int = 0
+    cancelled: int = 0
+    expired: int = 0
+    total: int = 0
+
+
+class SellerActivityItem(BaseModel):
+    id: UUID
+    kind: Literal["listing", "order"]
+    role: Literal["buyer", "seller"] | None = None
+    listing_id: UUID
+    title: str
+    status: str
+    created_at: object
+    price_amount: Decimal
+    price_currency: str
+
+
+class SellerOverviewResponse(BaseModel):
+    listings: ListingOverviewCounts
+    orders_as_seller: OrderOverviewCounts
+    orders_as_buyer: OrderOverviewCounts
+    reserved_order_snapshot_value: Decimal
+    completed_order_snapshot_value: Decimal
+    recent_activity: list[SellerActivityItem]
+
+
+def _count_statuses(rows: list[tuple[object, int]], status_values: tuple[str, ...]) -> dict[str, int]:
+    counts = {value: 0 for value in status_values}
+    for value, count in rows:
+        key = value.value if hasattr(value, "value") else str(value)
+        if key in counts:
+            counts[key] = int(count)
+    counts["total"] = sum(counts.values())
+    return counts
+
+
+@router.get("/me/overview", response_model=SellerOverviewResponse)
+async def get_my_overview(
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> SellerOverviewResponse:
+    listing_statuses = ("draft", "active", "reserved", "sold", "cancelled", "expired")
+    order_statuses = (
+        "reserved",
+        "awaiting_transfer",
+        "observing_transfer",
+        "completed",
+        "cancelled",
+        "expired",
+    )
+
+    listing_rows = await session.execute(
+        select(Listing.status, func.count(Listing.id))
+        .where(Listing.seller_id == user.id)
+        .group_by(Listing.status)
+    )
+    seller_order_rows = await session.execute(
+        select(Order.status, func.count(Order.id))
+        .where(Order.seller_id == user.id)
+        .group_by(Order.status)
+    )
+    buyer_order_rows = await session.execute(
+        select(Order.status, func.count(Order.id))
+        .where(Order.buyer_id == user.id)
+        .group_by(Order.status)
+    )
+
+    reserved_value = await session.scalar(
+        select(func.coalesce(func.sum(Order.price_amount), Decimal("0"))).where(
+            Order.seller_id == user.id,
+            Order.status.in_(OrderStatus.LIVE_STATUSES),
+        )
+    )
+    completed_value = await session.scalar(
+        select(func.coalesce(func.sum(Order.price_amount), Decimal("0"))).where(
+            Order.seller_id == user.id,
+            Order.status == OrderStatus.COMPLETED,
+        )
+    )
+
+    recent_listing_rows = await session.execute(
+        select(Listing, NFTAsset.name)
+        .join(NFTAsset, NFTAsset.id == Listing.asset_id)
+        .where(Listing.seller_id == user.id)
+        .order_by(Listing.updated_at.desc(), Listing.id.desc())
+        .limit(8)
+    )
+    recent_order_rows = await session.execute(
+        select(Order, Listing.title, NFTAsset.name)
+        .join(Listing, Listing.id == Order.listing_id)
+        .join(NFTAsset, NFTAsset.id == Listing.asset_id)
+        .where(or_(Order.buyer_id == user.id, Order.seller_id == user.id))
+        .order_by(Order.updated_at.desc(), Order.id.desc())
+        .limit(8)
+    )
+
+    activity: list[SellerActivityItem] = []
+    for listing, asset_name in recent_listing_rows.all():
+        activity.append(
+            SellerActivityItem(
+                id=listing.id,
+                kind="listing",
+                listing_id=listing.id,
+                title=listing.title or asset_name or "Untitled asset",
+                status=listing.status.value,
+                created_at=listing.created_at,
+                price_amount=listing.price_amount,
+                price_currency=listing.price_currency.value,
+            )
+        )
+    for order, listing_title, asset_name in recent_order_rows.all():
+        activity.append(
+            SellerActivityItem(
+                id=order.id,
+                kind="order",
+                role="buyer" if order.buyer_id == user.id else "seller",
+                listing_id=order.listing_id,
+                title=listing_title or asset_name or "Untitled asset",
+                status=order.status.value,
+                created_at=order.updated_at,
+                price_amount=order.price_amount,
+                price_currency=order.price_currency.value,
+            )
+        )
+    activity.sort(key=lambda item: (item.created_at, str(item.id)), reverse=True)
+
+    return SellerOverviewResponse(
+        listings=ListingOverviewCounts(**_count_statuses(listing_rows.all(), listing_statuses)),
+        orders_as_seller=OrderOverviewCounts(
+            **_count_statuses(seller_order_rows.all(), order_statuses)
+        ),
+        orders_as_buyer=OrderOverviewCounts(
+            **_count_statuses(buyer_order_rows.all(), order_statuses)
+        ),
+        reserved_order_snapshot_value=reserved_value or Decimal("0"),
+        completed_order_snapshot_value=completed_value or Decimal("0"),
+        recent_activity=activity[:10],
+    )
