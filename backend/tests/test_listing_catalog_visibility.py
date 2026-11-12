@@ -215,3 +215,49 @@ def api_client():
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()
+
+def test_catalog_requires_currency_for_price_sort_and_range(api_client) -> None:
+    missing_sort_currency = api_client.get("/api/listings?sort=price_asc")
+    missing_range_currency = api_client.get("/api/listings?min_price=1.25")
+
+    assert missing_sort_currency.status_code == 422
+    assert missing_range_currency.status_code == 422
+    assert "Select a price currency" in missing_sort_currency.json()["detail"]
+
+
+def test_catalog_rejects_inverted_price_range(api_client) -> None:
+    response = api_client.get(
+        "/api/listings?currency=TON&min_price=5&max_price=2"
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Minimum price cannot exceed maximum price"
+
+
+@pytest.mark.parametrize(
+    ("currency", "min_price", "max_price"),
+    [("TON", "1.250000001", "12.5"), ("XTR", "10", "100")],
+)
+def test_catalog_applies_currency_scoped_price_range(
+    api_client, currency: str, min_price: str, max_price: str
+) -> None:
+    seller = User(id=uuid4(), telegram_id=555020, first_name="Seller")
+    asset = make_asset(seller)
+    session = catalog_session([make_listing(seller, asset)])
+
+    install_session(session)
+    try:
+        response = api_client.get(
+            f"/api/listings?currency={currency}&min_price={min_price}&max_price={max_price}&sort=price_asc"
+        )
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+
+    assert response.status_code == 200
+    statement = session.scalars.await_args.args[0]
+    rendered = str(statement)
+    assert "listings.price_currency" in rendered
+    assert "listings.price_amount >=" in rendered
+    assert "listings.price_amount <=" in rendered
+    assert "listings.price_amount ASC" in rendered
+    assert session.scalar.await_args.args[0] is not None
