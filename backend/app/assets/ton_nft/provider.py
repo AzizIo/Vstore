@@ -275,6 +275,8 @@ class TONCenterV3Provider:
         # TEP-64 semi-chain metadata: on-chain fields take precedence on collisions.
         merged: dict[str, Any] = dict(document)
         merged.update(onchain)
+        if "image_url" in onchain and "image" not in onchain:
+            merged["image"] = onchain["image_url"]
         return _metadata_fields(
             merged,
             ipfs_gateway_url=self.config.ipfs_gateway_url,
