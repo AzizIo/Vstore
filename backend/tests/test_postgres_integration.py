@@ -54,6 +54,8 @@ from app.orders.service import (
     cancel_order,
     create_order,
     expire_pending_orders,
+    prepare_delivery,
+    submit_delivery_candidate,
 )
 
 pytestmark = pytest.mark.integration
@@ -149,7 +151,7 @@ ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0006_delivery_observer_leases"
+    assert revision == "0007_delivery_prepare_key"
 
 
 async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
@@ -205,7 +207,7 @@ async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
         engine = create_async_engine(test_database_url, pool_pre_ping=True)
         async with engine.connect() as connection:
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0006_delivery_observer_leases"
+            assert revision == "0007_delivery_prepare_key"
 
         async with engine.begin() as connection:
             await connection.execute(
@@ -614,7 +616,7 @@ async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
                 )
             ).one()
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0006_delivery_observer_leases"
+            assert revision == "0007_delivery_prepare_key"
             assert order.status == "reserved"
             assert order.price_amount == Decimal("12.500000000")
             assert order.price_currency == "TON"
@@ -1703,6 +1705,175 @@ async def _cleanup_observer_fixture(
         await session.execute(Listing.__table__.delete().where(Listing.id == listing_id))
         await session.execute(NFTAsset.__table__.delete().where(NFTAsset.id == asset_id))
         await session.execute(User.__table__.delete().where(User.id.in_([seller_id, buyer_id])))
+
+
+async def test_delivery_prepare_snapshots_verified_wallets_and_submission_is_idempotent(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    item_address = "0:" + "d1" * 32
+    seller_address = "0:" + "d2" * 32
+    buyer_address = "0:" + "d3" * 32
+    async with session_factory.begin() as session:
+        seller = await make_user(session, telegram_id=750_000_000 + uuid4().int % 100_000_000)
+        buyer = await make_user(session, telegram_id=760_000_000 + uuid4().int % 100_000_000)
+        asset = await make_asset(
+            session, seller, external_id=item_address, item_address=item_address
+        )
+        seller_wallet = Wallet(
+            user_id=seller.id,
+            address=seller_address,
+            network="mainnet",
+            is_verified=True,
+            is_primary=True,
+        )
+        buyer_wallet = Wallet(
+            user_id=buyer.id,
+            address=buyer_address,
+            network="mainnet",
+            is_verified=True,
+            is_primary=True,
+        )
+        session.add_all([seller_wallet, buyer_wallet])
+        listing = make_listing(seller, asset, ListingStatus.RESERVED)
+        session.add(listing)
+        await session.flush()
+        now = datetime.now(UTC)
+        order = Order(
+            listing_id=listing.id,
+            buyer_id=buyer.id,
+            seller_id=seller.id,
+            idempotency_key=f"prepare-{uuid4()}",
+            status=OrderStatus.RESERVED,
+            price_amount=Decimal("1.25"),
+            price_currency=PriceCurrency.TON,
+            expires_at=now + timedelta(minutes=30),
+        )
+        session.add(order)
+        await session.flush()
+        ids = (seller.id, buyer.id, asset.id, listing.id, order.id, seller_wallet.id)
+
+    seller_id, buyer_id, asset_id, listing_id, order_id, seller_wallet_id = ids
+
+    class _OwnerVerifier:
+        network = "mainnet"
+
+        async def verify(self, item: str, expected_owner: str) -> VerificationResult:
+            assert item == item_address
+            assert expected_owner == seller_address
+            return VerificationResult(
+                status=VerificationStatus.VERIFIED,
+                item_address=item_address,
+                owner_address=seller_address,
+                expected_owner_address=seller_address,
+            )
+
+    try:
+        async with session_factory() as session:
+            attempt_id = await prepare_delivery(
+                session,
+                order_id=order_id,
+                seller_id=seller_id,
+                seller_wallet_id=seller_wallet_id,
+                idempotency_key="prepare-request-001",
+                verifier=_OwnerVerifier(),
+            )
+        # A retry with the same key and same seller wallet returns the same
+        # delivery attempt without creating another intent or calling the provider.
+        async with session_factory() as session:
+            repeated_id = await prepare_delivery(
+                session,
+                order_id=order_id,
+                seller_id=seller_id,
+                seller_wallet_id=seller_wallet_id,
+                idempotency_key="prepare-request-001",
+                verifier=_OwnerVerifier(),
+            )
+        assert repeated_id == attempt_id
+
+        async with session_factory() as session:
+            with pytest.raises(OrderConflict, match="another seller wallet"):
+                await prepare_delivery(
+                    session,
+                    order_id=order_id,
+                    seller_id=seller_id,
+                    seller_wallet_id=uuid4(),
+                    idempotency_key="prepare-request-001",
+                    verifier=_OwnerVerifier(),
+                )
+
+        async with session_factory() as session:
+            persisted_order = await session.get(Order, order_id)
+            attempt = await session.get(OrderDeliveryAttempt, attempt_id)
+            assert persisted_order is not None
+            assert persisted_order.status is OrderStatus.AWAITING_TRANSFER
+            assert attempt is not None
+            assert attempt.status is OrderDeliveryAttemptStatus.PREPARED
+            assert attempt.prepare_idempotency_key == "prepare-request-001"
+            assert attempt.network == "mainnet"
+            assert attempt.item_address == item_address
+            assert attempt.seller_address_snapshot == seller_address
+            assert attempt.buyer_address_snapshot == buyer_address
+            assert int(attempt.query_id) >= 0
+            assert attempt.deadline > attempt.prepared_at
+            late_submission_at = attempt.deadline + timedelta(seconds=1)
+
+        async with session_factory() as session:
+            with pytest.raises(OrderConflict, match="preparation window has expired"):
+                await submit_delivery_candidate(
+                    session,
+                    order_id=order_id,
+                    seller_id=seller_id,
+                    transaction_hash="ef" * 32,
+                    now=late_submission_at,
+                )
+
+        candidate_hash = "ef" * 32
+        async with session_factory() as session:
+            submitted_id = await submit_delivery_candidate(
+                session,
+                order_id=order_id,
+                seller_id=seller_id,
+                transaction_hash=candidate_hash,
+            )
+        async with session_factory() as session:
+            repeated_submission_id = await submit_delivery_candidate(
+                session,
+                order_id=order_id,
+                seller_id=seller_id,
+                transaction_hash=candidate_hash,
+            )
+        assert submitted_id == attempt_id
+        assert repeated_submission_id == attempt_id
+
+        async with session_factory() as session:
+            persisted_order = await session.get(Order, order_id)
+            persisted_listing = await session.get(Listing, listing_id)
+            attempt = await session.get(OrderDeliveryAttempt, attempt_id)
+            assert persisted_order is not None
+            assert persisted_order.status is OrderStatus.OBSERVING_TRANSFER
+            assert persisted_listing is not None
+            assert persisted_listing.status is ListingStatus.RESERVED
+            assert attempt is not None
+            assert attempt.status is OrderDeliveryAttemptStatus.OBSERVING
+            assert attempt.candidate_transaction_hash == candidate_hash
+            assert attempt.submitted_at is not None
+
+        async with session_factory() as session:
+            with pytest.raises(OrderConflict, match="cannot be cancelled"):
+                await cancel_order(session, order_id=order_id, buyer_id=buyer_id)
+    finally:
+        await _cleanup_observer_fixture(
+            session_factory,
+            seller_id=seller_id,
+            buyer_id=buyer_id,
+            asset_id=asset_id,
+            listing_id=listing_id,
+            order_id=order_id,
+            attempt_id=attempt_id,
+        )
+        await engine.dispose()
 
 
 async def test_delivery_observer_verifies_and_completes_only_exact_finalized_evidence(

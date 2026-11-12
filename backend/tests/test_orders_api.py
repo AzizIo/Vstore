@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -7,7 +9,13 @@ from fastapi.testclient import TestClient
 from app.api import orders as orders_api
 from app.assets.ton_nft.dependencies import get_ton_nft_verifier
 from app.auth.dependencies import get_current_user
-from app.db.models import User
+from app.db.models import (
+    Order,
+    OrderDeliveryAttempt,
+    OrderDeliveryAttemptStatus,
+    OrderStatus,
+    User,
+)
 from app.db.session import get_db_session
 from app.main import app
 from app.orders.service import OrderConflict, OrderVerificationUnavailable
@@ -112,3 +120,95 @@ def test_create_order_passes_the_server_side_verifier(api_client, monkeypatch) -
     )
 
     assert create.await_args.kwargs["verifier"] is not None
+
+def _delivery_state_fixture():
+    now = datetime.now(UTC)
+    order = Order(id=uuid4(), status=OrderStatus.AWAITING_TRANSFER)
+    attempt = OrderDeliveryAttempt(
+        id=uuid4(),
+        order_id=order.id,
+        attempt_number=1,
+        status=OrderDeliveryAttemptStatus.PREPARED,
+        network="mainnet",
+        item_address="0:" + "11" * 32,
+        seller_address_snapshot="0:" + "22" * 32,
+        buyer_address_snapshot="0:" + "33" * 32,
+        query_id=Decimal("42"),
+        prepared_at=now,
+        deadline=now + timedelta(minutes=15),
+    )
+    return order, attempt
+
+
+def test_prepare_delivery_route_returns_public_transfer_snapshot(api_client, buyer, monkeypatch):
+    order, attempt = _delivery_state_fixture()
+    prepare = AsyncMock(return_value=attempt.id)
+    state = AsyncMock(return_value=(order, attempt))
+    monkeypatch.setattr(orders_api, "prepare_delivery", prepare)
+    monkeypatch.setattr(orders_api, "get_order_delivery_state", state)
+
+    response = api_client.post(
+        f"/api/orders/{order.id}/delivery/prepare",
+        json={"seller_wallet_id": str(uuid4())},
+        headers={"Idempotency-Key": "prepare-api-test"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["order_status"] == "awaiting_transfer"
+    assert payload["attempt"]["id"] == str(attempt.id)
+    assert payload["attempt"]["query_id"] == "42"
+    assert payload["attempt"]["buyer_address"] == attempt.buyer_address_snapshot
+    assert "observer_lease_token" not in payload["attempt"]
+    assert prepare.await_args.kwargs["seller_id"] == buyer.id
+    assert prepare.await_args.kwargs["idempotency_key"] == "prepare-api-test"
+
+
+def test_prepare_delivery_route_maps_provider_outage_to_503(api_client, monkeypatch):
+    monkeypatch.setattr(
+        orders_api,
+        "prepare_delivery",
+        AsyncMock(side_effect=OrderVerificationUnavailable("provider unavailable")),
+    )
+
+    response = api_client.post(
+        f"/api/orders/{uuid4()}/delivery/prepare",
+        json={"seller_wallet_id": str(uuid4())},
+        headers={"Idempotency-Key": "prepare-api-outage"},
+    )
+
+    assert response.status_code == 503
+
+
+def test_delivery_submission_route_persists_candidate_hint(api_client, monkeypatch):
+    order, attempt = _delivery_state_fixture()
+    submit = AsyncMock(return_value=attempt.id)
+    state = AsyncMock(return_value=(order, attempt))
+    monkeypatch.setattr(orders_api, "submit_delivery_candidate", submit)
+    monkeypatch.setattr(orders_api, "get_order_delivery_state", state)
+
+    response = api_client.post(
+        f"/api/orders/{order.id}/delivery/submissions",
+        json={"transaction_hash": "ab" * 32},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["attempt"]["status"] == "prepared"
+    assert submit.await_args.kwargs["transaction_hash"] == "ab" * 32
+
+
+def test_delivery_read_route_hides_non_participant(api_client, monkeypatch):
+    monkeypatch.setattr(orders_api, "get_order_delivery_state", AsyncMock(return_value=None))
+
+    response = api_client.get(f"/api/orders/{uuid4()}/delivery")
+
+    assert response.status_code == 404
+
+
+def test_delivery_submission_rejects_malformed_transaction_hash(api_client):
+    response = api_client.post(
+        f"/api/orders/{uuid4()}/delivery/submissions",
+        json={"transaction_hash": "not-a-ton-hash"},
+    )
+    assert response.status_code == 422
+

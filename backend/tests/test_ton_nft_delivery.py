@@ -10,6 +10,7 @@ from app.assets.ton_nft.delivery import (
     TEP62TransferIntent,
     TONCenterDeliveryConfig,
     TONCenterDeliveryEvidenceProvider,
+    normalize_transaction_hash,
 )
 from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable
 
@@ -402,3 +403,13 @@ async def test_transfer_lookup_paginates_before_matching_query_id() -> None:
 
     assert result.status is DeliveryEvidenceStatus.VERIFIED_FINALIZED
     assert requested_offsets == [0, 1000]
+
+def test_normalize_transaction_hash_accepts_hex_and_preserves_base64_case() -> None:
+    assert normalize_transaction_hash("0x" + "AB" * 32) == "ab" * 32
+    encoded_hash = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+    assert normalize_transaction_hash(encoded_hash) == encoded_hash
+
+
+def test_normalize_transaction_hash_rejects_malformed_values() -> None:
+    with pytest.raises(InvalidProviderData, match="transaction_hash"):
+        normalize_transaction_hash("not-a-ton-hash")

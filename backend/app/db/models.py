@@ -400,6 +400,15 @@ class OrderDeliveryAttempt(TimestampMixin, Base):
             "network", "item_address", "query_id",
             name="uq_order_delivery_attempt_item_query",
         ),
+        UniqueConstraint(
+            "order_id",
+            "prepare_idempotency_key",
+            name="uq_order_delivery_attempt_prepare_idempotency",
+        ),
+        CheckConstraint(
+            "prepare_idempotency_key IS NULL OR length(prepare_idempotency_key) > 0",
+            name="ck_order_delivery_attempt_prepare_key_nonempty",
+        ),
         Index(
             "uq_order_delivery_attempt_active_order",
             "order_id",
@@ -465,6 +474,7 @@ class OrderDeliveryAttempt(TimestampMixin, Base):
     )
     observer_lease_token: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     observer_lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    prepare_idempotency_key: Mapped[str | None] = mapped_column(String(128))
 
     order: Mapped[Order] = relationship(back_populates="delivery_attempts")
 

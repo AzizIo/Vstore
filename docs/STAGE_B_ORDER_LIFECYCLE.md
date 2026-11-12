@@ -1,13 +1,13 @@
 # Stage B architecture: NFT delivery confirmation and order lifecycle
 
-- **Status:** proposal for review; no runtime code, API contract, or database schema is changed by this document.
-- **Issue:** [#56 — decompose NFT delivery confirmation and post-reservation order lifecycle](https://github.com/AzizIo/Vstore/issues/56).
-- **Baseline reviewed:** current main, models and migrations through 0004, order/listing services, API schemas, TON NFT verifier and notification outbox.
+- **Status:** Stage B implementation tracker. B1, B2 and B3 are merged; B4 is proposed in [Draft PR #92](https://github.com/AzizIo/Vstore/pull/92) and is not yet in main.
+- **Issue:** [#46 — implement non-custodial NFT transfer confirmation lifecycle](https://github.com/AzizIo/Vstore/issues/46); decomposition: [#56](https://github.com/AzizIo/Vstore/issues/56).
+- **Baseline reviewed:** main through migration 0006 (delivery observer leases); Draft PR #92 adds migration 0007 and seller delivery APIs.
 - **Scope boundary:** TON NFT (TEP-62) transfer confirmation after reservation. This is not a payment, escrow, guarantee, custody, refund, or payout design.
 
 ## 1. Executive summary
 
-The current application can reserve an active listing, snapshot its price and currency, cancel or expire the reservation, and verify that the seller still owns the NFT at reservation time. B1 adds read-only, fail-closed TON transfer evidence. B2 (implemented in PR #85) adds the forward migration from `pending_payment` to `reserved`, delivery-attempt snapshots and database constraints. There is still no prepare/submit API, observer, or active order transition into delivery states. No delivery is currently completed by the application.
+The current main branch can reserve an active listing, snapshot its price and currency, cancel or expire the reservation, and verify seller ownership at reservation time. B1 (PR #63) adds read-only, fail-closed TON transfer evidence; B2 (PR #85) adds the forward migration from `pending_payment` to `reserved` and immutable delivery-attempt snapshots; B3 (PR #86) adds the leased observer and atomic finalization from exact finalized evidence. B4 is in Draft PR #92: it adds seller preparation, candidate submission and participant read APIs plus persisted preparation idempotency. Until PR #92 merges, main cannot create delivery attempts through the API, so no live order can enter the delivery workflow from a client request.
 
 Stage B should add a server-observed delivery lifecycle for a direct, non-custodial TON NFT transfer. The seller authorizes any transfer in their own wallet. The backend stores a buyer-wallet snapshot and checks chain/provider evidence independently. A submitted transaction hash is only a lookup hint, and a client callback, screenshot, Tonkeeper screen, wallet connection, or current-owner response without transaction correlation is not sufficient proof of delivery.
 
@@ -21,22 +21,21 @@ Stage B should add a server-observed delivery lifecycle for a direct, non-custod
 |---|---|
 | Listing | A Listing stores a mandatory positive price and currency; active listings are unique per NFT across active/reserved states. |
 | Reservation | POST /api/orders accepts listing_id and Idempotency-Key; the service reads an identity snapshot, checks the seller's verified wallet(s) through the TEP-62 verifier, then locks and revalidates listing → wallet → asset before creating the order. |
-| Reservation snapshot | Order stores buyer, seller, listing, price/currency, idempotency key and expires_at. B2 adds a separate `OrderDeliveryAttempt` with immutable seller/buyer address, item/network, query_id and deadline snapshots; no endpoint creates an attempt yet. |
-| Order schema states (B2) | `reserved`, `awaiting_transfer`, `observing_transfer`, `completed`, `cancelled`, `expired`. Runtime order service still creates/cancels/expires only `reserved` orders; delivery states are not yet entered. Listing: draft, active, reserved, sold, cancelled, expired. |
-| Events | OrderEvent records from/to status and actor; B2 widens constraints to the delivery vocabulary and permits a future seller actor. The current service still writes reservation/cancel/expiry events only. |
+| Reservation snapshot | Order stores buyer, seller, listing, price/currency, idempotency key and expires_at. B2 adds an immutable `OrderDeliveryAttempt` snapshot; B4 in Draft PR #92 adds preparation idempotency and the API that creates it. |
+| Order schema states (B2) | `reserved`, `awaiting_transfer`, `observing_transfer`, `completed`, `cancelled`, `expired`. B3 observer can move a prepared attempt into observation and atomically complete only exact finalized evidence. B4 APIs are not merged yet. Listing: draft, active, reserved, sold, cancelled, expired. |
+| Events | OrderEvent records from/to status and actor; B2 widens constraints to the delivery vocabulary and permits seller actors. B3 writes the system completion event transactionally with listing/order/asset updates; B4 writes the seller preparation/submission transition events. |
 | Expiry/cancel | Cancellation and the expiry worker lock listing → asset → order; the release helper will not republish an asset that is locally stale/unverified. |
 | Ownership loss | A fresh affirmative owner mismatch invalidates the listing and pending order; provider outage/inconclusive data is not treated as proof that the NFT was transferred. |
 | Notifications | Order events enqueue Telegram outbox entries within the database transaction; a separate worker retries sends. |
 | TON adapter | TONNFTVerifier reads TEP-62 item state and checks the expected current owner through the configured provider. The verifier currently has no order-delivery watcher or transfer-proof API. |
 
-### Missing for Stage B
+### Remaining for Stage B
 
-- API logic that requires a verified buyer destination and creates a B2 immutable snapshot for the exact order/network at delivery preparation.
-- The seller prepare/submit/read API and lock/idempotency rules.
-- A server-side observer/reconciliation worker that correlates finalized TEP-62 evidence with the exact order, seller, buyer snapshot, item and network.
-- Provider polling/recovery after downtime, duplicate/replayed evidence handling, and safe retry/manual-review transitions.
-- Transactional completion of order/listing/event/outbox only after finalized evidence.
-- Tests for simultaneous buyer cancellation, seller transfer, expiry, duplicated events, and provider disagreement.
+- B4 seller prepare/submit/read APIs are in Draft PR #92, not merged. That PR verifies the selected seller wallet against fresh on-chain ownership, snapshots the buyer's verified primary wallet, persists a 15-minute preparation window and idempotency key, and prevents buyer cancellation once preparation has committed.
+- B5: enqueue delivery lifecycle notifications in the transactional outbox in the same transaction as accepted delivery state changes. The current outbox vocabulary covers reservation/cancel/expiry only.
+- B6: integrate the seller's wallet-driven transfer initiation and candidate-hash submission plus buyer/seller delivery status UI. Do not let the server sign or broadcast the transfer.
+- Testnet/manual acceptance: prove TON Connect signing, the item transfer message and provider finality behavior against known testnet transactions before any mainnet pilot.
+- Expand fault/concurrency coverage for prepare vs cancellation, submit vs observer claim, expiry/deadline races, duplicate candidates and provider disagreement.
 
 ## 3. Proposed state machine
 

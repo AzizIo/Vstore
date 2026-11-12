@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     auth_secret_key: str | None = None
     auth_token_ttl_seconds: int = 3600
     order_pending_ttl_seconds: int = Field(default=900, gt=0)
+    delivery_preparation_ttl_seconds: int = Field(default=900, gt=0)
     order_expiration_poll_seconds: int = Field(default=30, gt=0)
     delivery_observer_poll_seconds: int = Field(default=5, gt=0)
     delivery_observer_batch_size: int = Field(default=10, gt=0, le=100)
