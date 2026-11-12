@@ -118,12 +118,14 @@ async def run(wallet_id: UUID, limit: int, offset: int) -> dict[str, object]:
                         ),
                         "verifier_owner_suffix": suffix(result.owner_address),
                         "verifier_owner_matches_selected_wallet": (
-                            normalize_address(result.owner_address) == normalize_address(wallet.address)
+                            normalize_address(result.owner_address)
+                            == normalize_address(wallet.address)
                             if result.owner_address
                             else None
                         ),
                         "verifier_expected_owner_matches_selected_wallet": (
-                            normalize_address(result.expected_owner_address) == normalize_address(wallet.address)
+                            normalize_address(result.expected_owner_address)
+                            == normalize_address(wallet.address)
                             if result.expected_owner_address
                             else None
                         ),
@@ -157,8 +159,10 @@ async def run(wallet_id: UUID, limit: int, offset: int) -> dict[str, object]:
                     "This is an indexed-provider observation, not a blockchain snapshot.",
                     "Provider read and DB reads are not transactionally atomic.",
                     "No upsert was attempted; open-listing status is shown as a potential guard only.",
-                    "Capture the UI/API response separately with timestamp and query params; "
-                    "the GET route may persist verified rows.",
+                    (
+                        "Capture the UI/API response separately with timestamp and query "
+                        "params; the GET route may persist verified rows."
+                    ),
                 ],
             }
     finally:
