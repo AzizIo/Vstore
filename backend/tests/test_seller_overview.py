@@ -1,4 +1,6 @@
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -76,3 +78,74 @@ def test_seller_overview_returns_private_counts_and_currency_safe_snapshots() ->
         statement = call.args[0]
         compiled_values = statement.compile().params.values()
         assert user.id in compiled_values
+
+
+def test_seller_overview_merges_activity_streams_by_recency_and_caps_results() -> None:
+    user = User(
+        id=uuid4(),
+        telegram_id=123456789,
+        username="seller",
+        first_name="Seller",
+        is_blocked=False,
+    )
+    now = datetime(2026, 11, 12, tzinfo=timezone.utc)
+    listings = [
+        (
+            SimpleNamespace(
+                id=uuid4(),
+                title=f"Listing {index}",
+                status=ListingStatus.ACTIVE,
+                created_at=now - timedelta(days=30 - index),
+                updated_at=now - timedelta(days=30 - index),
+                price_amount=Decimal("1"),
+                price_currency=PriceCurrency.TON,
+            ),
+            f"Asset {index}",
+        )
+        for index in range(10)
+    ]
+    orders = [
+        (
+            SimpleNamespace(
+                id=uuid4(),
+                buyer_id=user.id,
+                seller_id=uuid4(),
+                listing_id=uuid4(),
+                status=OrderStatus.COMPLETED,
+                updated_at=now - timedelta(minutes=10 - index),
+                price_amount=Decimal("2"),
+                price_currency=PriceCurrency.TON,
+            ),
+            f"Order listing {index}",
+            f"Order asset {index}",
+        )
+        for index in range(10)
+    ]
+    session = AsyncMock()
+    session.execute.side_effect = [
+        Rows([]),
+        Rows([]),
+        Rows([]),
+        Rows([]),
+        Rows([]),
+        Rows(listings),
+        Rows(orders),
+    ]
+
+    async def override_session():
+        yield session
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db_session] = override_session
+    try:
+        with TestClient(app) as client:
+            response = client.get("/api/users/me/overview")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    activity = response.json()["recent_activity"]
+    assert len(activity) == 10
+    assert all(item["kind"] == "order" for item in activity)
+    assert all(item["role"] == "buyer" for item in activity)
+    assert activity[0]["id"] == str(orders[-1][0].id)
