@@ -880,7 +880,11 @@ async def test_onchain_image_url_wins_over_offchain_image(
             "init": True,
             "content": {
                 "uri": "https://metadata.example/item.json",
-                "metadata": {"image_url": "ipfs://bafybeigdyrzt5sfp7udm7hu76uh2yltop2wyklgdnzbz3u7zvy3gq/onchain.png"},
+                "metadata": {
+                    "image_url": (
+                        "ipfs://bafybeigdyrzt5sfp7udm7hu76uh2yltop2wyklgdnzbz3u7zvy3gq/onchain.png"
+                    )
+                },
             },
         }
     )
