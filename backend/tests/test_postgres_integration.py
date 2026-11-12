@@ -193,6 +193,11 @@ async def test_moderation_audit_log_rejects_update_and_delete(db_session: AsyncS
                 {"id": audit.id},
             )
 
+    with pytest.raises(DBAPIError, match="moderation audit log is append-only"):
+        async with db_session.begin_nested():
+            await db_session.execute(text("TRUNCATE TABLE moderation_audit_log"))
+
+
 
 async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
     test_database_url: str,

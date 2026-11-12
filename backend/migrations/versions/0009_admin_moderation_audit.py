@@ -71,6 +71,11 @@ def upgrade() -> None:
         BEFORE UPDATE OR DELETE ON moderation_audit_log
         FOR EACH ROW EXECUTE FUNCTION reject_moderation_audit_mutation()
     """)
+    op.execute("""
+        CREATE TRIGGER trg_moderation_audit_no_truncate
+        BEFORE TRUNCATE ON moderation_audit_log
+        FOR EACH STATEMENT EXECUTE FUNCTION reject_moderation_audit_mutation()
+    """)
 
 
 def downgrade() -> None:
@@ -87,6 +92,7 @@ def downgrade() -> None:
         raise RuntimeError(
             "Cannot downgrade while moderation audit records exist; preserve the audit trail."
         )
+    op.execute("DROP TRIGGER IF EXISTS trg_moderation_audit_no_truncate ON moderation_audit_log")
     op.execute("DROP TRIGGER IF EXISTS trg_moderation_audit_immutable ON moderation_audit_log")
     op.execute("DROP FUNCTION IF EXISTS reject_moderation_audit_mutation()")
     op.drop_index("ix_moderation_audit_actor_time", table_name="moderation_audit_log")
