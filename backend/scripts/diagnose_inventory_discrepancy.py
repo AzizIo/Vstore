@@ -50,8 +50,8 @@ async def run(wallet_id: UUID, limit: int, offset: int) -> dict[str, object]:
             )
             if wallet is None:
                 raise SystemExit(
-                "Selected verified wallet was not found; no addresses printed."
-            )
+                    "Selected verified wallet was not found; no addresses printed."
+                )
             if wallet.network != verifier.network:
                 raise SystemExit(
                     f"Network mismatch: wallet={wallet.network}, provider={verifier.network}; "
