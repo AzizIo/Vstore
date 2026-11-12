@@ -230,6 +230,63 @@ describe("My NFT inventory", () => {
     );
   });
 
+  it("continues through consecutive empty verified pages for the selected wallet", async () => {
+    inventoryApi.fetchMyInventory.mockReset()
+      .mockResolvedValueOnce({
+        ...firstPage,
+        items: [],
+        offset: 0,
+        next_offset: 24,
+        has_more: true,
+      })
+      .mockResolvedValueOnce({
+        ...firstPage,
+        items: [],
+        offset: 24,
+        next_offset: 48,
+        has_more: true,
+      })
+      .mockResolvedValueOnce({
+        ...lastPage,
+        items: [asset],
+        offset: 48,
+        next_offset: 49,
+        has_more: false,
+      });
+
+    render(
+      <MyInventory accessToken="session-token" selectedWallet={selectedWallet} />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "No verified NFTs on this page" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more NFTs" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "No verified NFTs on this page" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Moon Lantern NFT")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more NFTs" }));
+
+    expect(await screen.findByText("Moon Lantern NFT")).toBeInTheDocument();
+    expect(inventoryApi.fetchMyInventory).toHaveBeenNthCalledWith(
+      2,
+      "session-token",
+      { limit: 24, offset: 24, walletId: selectedWallet.id },
+      expect.any(AbortSignal),
+    );
+    expect(inventoryApi.fetchMyInventory).toHaveBeenNthCalledWith(
+      3,
+      "session-token",
+      { limit: 24, offset: 48, walletId: selectedWallet.id },
+      expect.any(AbortSignal),
+    );
+    expect(screen.queryByText("No verified NFTs found")).not.toBeInTheDocument();
+  });
+
   it("shows empty inventory after a successful sync", async () => {
     inventoryApi.fetchMyInventory.mockReset().mockResolvedValue({
       ...firstPage,
