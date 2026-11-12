@@ -220,7 +220,7 @@ async def get_my_overview(
         .join(NFTAsset, NFTAsset.id == Listing.asset_id)
         .where(Listing.seller_id == user.id)
         .order_by(Listing.updated_at.desc(), Listing.id.desc())
-        .limit(8)
+        .limit(10)
     )
     recent_order_rows = await session.execute(
         select(Order, Listing.title, NFTAsset.name)
