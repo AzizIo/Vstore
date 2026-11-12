@@ -21,6 +21,7 @@ Product boundaries and decisions approved for the current MVP are recorded in [d
 | TON Connect frontend challenge → proof → backend verification and manifest | Implemented in main via [PR #51](https://github.com/AzizIo/Vstore/pull/51); live Telegram/Tonkeeper acceptance remains open in [Issue #43](https://github.com/AzizIo/Vstore/issues/43) |
 | Full inventory reconciliation/sync and dedicated My NFT screen | Implemented in main via [PR #58](https://github.com/AzizIo/Vstore/pull/58); live testnet/provider acceptance remains open in [Issue #44](https://github.com/AzizIo/Vstore/issues/44) |
 | Server-side verification that a reserved NFT was delivered to the buyer | B1–B6 implemented on `main`: read-only evidence adapter, immutable attempt snapshots, leased observer, preparation/submission APIs, wallet-driven transfer UX, transactional delivery notifications. Live testnet acceptance remains outstanding; see [Issue #46](https://github.com/AzizIo/Vstore/issues/46). |
+| Order-verified seller reviews and reputation | Implemented; immutable reviews require backend-confirmed completed NFT delivery and expose safe aggregates |
 | Telegram Gifts adapter, deal chat, admin panel | Not implemented |
 | Payments, checkout, escrow/guarantee, refunds, commissions and seller payouts | Not implemented |
 

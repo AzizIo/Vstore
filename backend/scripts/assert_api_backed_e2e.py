@@ -17,6 +17,7 @@ from app.db.models import (
     Order,
     OrderEvent,
     OrderStatus,
+    SellerReview,
     TelegramNotificationOutbox,
     User,
 )
@@ -157,6 +158,22 @@ async def assert_journey() -> None:
         }
         assert len({item.dedupe_key for item in outbox}) == 8
         assert {item.status for item in outbox} == {"pending"}
+
+        reviews = list(
+            (
+                await session.scalars(
+                    select(SellerReview).where(SellerReview.order_id == order.id)
+                )
+            ).all()
+        )
+        assert len(reviews) == 1, f"Expected one immutable seller review, got {len(reviews)}."
+        review = reviews[0]
+        assert review.buyer_id == buyer.id
+        assert review.seller_id == seller.id
+        assert review.rating == 5
+        assert review.comment == "Verified transfer"
+        assert review.order_id == order.id
+
         assert {item.recipient_telegram_id for item in outbox} == {
             E2E_SELLER_TELEGRAM_ID,
             E2E_BUYER_TELEGRAM_ID,

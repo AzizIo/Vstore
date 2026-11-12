@@ -83,6 +83,22 @@ def migrated_database(test_database_url: str):
         alembic_config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
         command.upgrade(alembic_config, "head")
         yield
+        # This is a disposable TEST_DATABASE_URL. Clear only the feature-owned
+        # review rows before downgrade; the migration itself still refuses to
+        # discard review provenance in any non-test database.
+        async def clear_test_reviews() -> None:
+            engine = create_async_engine(test_database_url, pool_pre_ping=True)
+            try:
+                async with engine.begin() as connection:
+                    has_reviews_table = await connection.scalar(
+                        text("SELECT to_regclass('public.seller_reviews') IS NOT NULL")
+                    )
+                    if has_reviews_table:
+                        await connection.execute(text("DELETE FROM seller_reviews"))
+            finally:
+                await engine.dispose()
+
+        asyncio.run(clear_test_reviews())
         command.downgrade(alembic_config, "base")
     finally:
         if previous_url is None:
@@ -154,7 +170,7 @@ ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0009_admin_moderation_audit"
+    assert revision == "0010_seller_reviews"
 
 
 
@@ -252,7 +268,7 @@ async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
         engine = create_async_engine(test_database_url, pool_pre_ping=True)
         async with engine.connect() as connection:
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0009_admin_moderation_audit"
+            assert revision == "0010_seller_reviews"
 
         async with engine.begin() as connection:
             await connection.execute(
@@ -661,7 +677,7 @@ async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
                 )
             ).one()
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0009_admin_moderation_audit"
+            assert revision == "0010_seller_reviews"
             assert order.status == "reserved"
             assert order.price_amount == Decimal("12.500000000")
             assert order.price_currency == "TON"

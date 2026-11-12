@@ -480,6 +480,39 @@ class OrderDeliveryAttempt(TimestampMixin, Base):
     order: Mapped[Order] = relationship(back_populates="delivery_attempts")
 
 
+class SellerReview(Base):
+    """Immutable buyer feedback tied to one server-verified completed order."""
+
+    __tablename__ = "seller_reviews"
+    __table_args__ = (
+        CheckConstraint("rating BETWEEN 1 AND 5", name="ck_seller_reviews_rating_range"),
+        CheckConstraint(
+            "comment IS NULL OR length(comment) <= 2000",
+            name="ck_seller_reviews_comment_length",
+        ),
+        CheckConstraint("buyer_id <> seller_id", name="ck_seller_reviews_not_self"),
+        UniqueConstraint("order_id", name="uq_seller_reviews_order"),
+        Index("ix_seller_reviews_seller_created", "seller_id", "created_at", "id"),
+        Index("ix_seller_reviews_buyer_order", "buyer_id", "order_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False
+    )
+    buyer_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    seller_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    comment: Mapped[str | None] = mapped_column(String(2000))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class TelegramNotificationOutbox(Base):
     __tablename__ = "telegram_notification_outbox"
     __table_args__ = (

@@ -8,6 +8,8 @@ import {
   type OrderRole,
   type OrderStatus,
 } from "../api/orders";
+import { ReviewForm } from "../reviews/ReviewForm";
+
 import { DeliveryWorkspace } from "./DeliveryWorkspace";
 
 type StatusFilter = "all" | "active" | "completed" | "closed";
@@ -216,6 +218,13 @@ function OrderDetails({
               </ol>
             ) : <p className="workspace-muted">No lifecycle events are available yet.</p>}
           </section>
+          {role === "buyer" && order.status === "completed" && (
+            <ReviewForm
+              orderId={order.id}
+              accessToken={accessToken}
+              onSubmitted={onRefreshOrder}
+            />
+          )}
           <DeliveryWorkspace
             order={order}
             role={role}
