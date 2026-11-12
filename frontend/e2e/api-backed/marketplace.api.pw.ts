@@ -145,6 +145,26 @@ test(
     await sellerPage.getByRole("button", { name: "Confirm publish", exact: true }).click();
     await expect(sellerPage.locator(".listing-status-active")).toHaveText("Active");
 
+    // Moderation runs against the same FastAPI session and PostgreSQL-backed audit log.
+    await expect(sellerPage.getByRole("button", { name: "Admin Center", exact: true })).toBeVisible();
+    await sellerPage.getByRole("button", { name: "Admin Center", exact: true }).click();
+    const moderationCard = sellerPage.locator(".admin-listing").filter({ hasText: "E2E Published NFT" });
+    await expect(moderationCard).toBeVisible();
+    await moderationCard.getByRole("button", { name: "Suspend", exact: true }).click();
+    const suspendDialog = sellerPage.getByRole("dialog", { name: "Suspend listing" });
+    await suspendDialog.getByLabel("Explanation (5–500 characters)").fill("API-backed moderation acceptance");
+    await suspendDialog.getByRole("button", { name: "Confirm suspend" }).click();
+    await expect(moderationCard.getByText("suspended", { exact: true })).toBeVisible();
+    await moderationCard.getByRole("button", { name: "Audit history" }).click();
+    await expect(moderationCard.getByText("suspended", { exact: true }).first()).toBeVisible();
+    await moderationCard.getByRole("button", { name: "Restore", exact: true }).click();
+    const restoreDialog = sellerPage.getByRole("dialog", { name: "Restore listing" });
+    await restoreDialog.getByLabel("Explanation (5–500 characters)").fill("Ownership rechecked for restoration");
+    await restoreDialog.getByRole("button", { name: "Confirm restore" }).click();
+    await expect(moderationCard.getByText("active", { exact: true })).toBeVisible();
+    await sellerPage.getByRole("button", { name: "Orders", exact: true }).click();
+
+
     // The buyer's separate browser context will prove public catalog visibility
     // from a fresh API request after the seller has published the listing.
 
@@ -155,6 +175,12 @@ test(
     );
     expect(buyerBootstrap.status()).toBe(200);
     const buyerSession = await buyerBootstrap.json() as { access_token: string };
+    const forbiddenAdminQueue = await buyerContext.request.get(
+      "http://127.0.0.1:5173/api/admin/moderation",
+      { headers: { Authorization: "Bearer " + buyerSession.access_token } },
+    );
+    expect(forbiddenAdminQueue.status()).toBe(403);
+
     await buyerPage.goto("/");
     await expect(buyerPage.getByText(/Signed in as E2E Buyer/)).toBeVisible();
 

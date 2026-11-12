@@ -61,6 +61,7 @@ class ListingStatus(str, enum.Enum):
     SOLD = "sold"
     CANCELLED = "cancelled"
     EXPIRED = "expired"
+    SUSPENDED = "suspended"
 
 
 class PriceCurrency(str, enum.Enum):
@@ -530,5 +531,50 @@ class TelegramNotificationOutbox(Base):
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ModerationAuditLog(Base):
+    """Append-only, privacy-safe record of administrative listing decisions."""
+
+    __tablename__ = "moderation_audit_log"
+    __table_args__ = (
+        CheckConstraint("target_type = 'listing'", name="ck_moderation_audit_target_type"),
+        CheckConstraint(
+            "action IN ('approved', 'rejected', 'suspended', 'restored')",
+            name="ck_moderation_audit_action",
+        ),
+        CheckConstraint(
+            "reason_code IN ('policy_violation', 'ownership_unverified', "
+            "'misleading_metadata', 'duplicate_listing', 'other')",
+            name="ck_moderation_audit_reason_code",
+        ),
+        CheckConstraint("length(reason) BETWEEN 5 AND 500", name="ck_moderation_audit_reason_length"),
+        CheckConstraint(
+            "length(idempotency_key) BETWEEN 8 AND 128",
+            name="ck_moderation_audit_idempotency_key_length",
+        ),
+        UniqueConstraint("actor_id", "idempotency_key", name="uq_moderation_audit_actor_idempotency"),
+        Index("ix_moderation_audit_target_time", "target_type", "target_id", "occurred_at"),
+        Index("ix_moderation_audit_actor_time", "actor_id", "occurred_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    actor_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False, server_default="listing")
+    target_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("listings.id", ondelete="RESTRICT"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    before_snapshot: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    after_snapshot: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    request_id: Mapped[str | None] = mapped_column(String(100))
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

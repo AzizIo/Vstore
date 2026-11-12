@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     bot_token: str | None = None
     auth_secret_key: str | None = None
     auth_token_ttl_seconds: int = 3600
+    # Server-side allowlist; an empty list disables admin access.
+    admin_telegram_ids: list[int] = Field(default_factory=list)
     order_pending_ttl_seconds: int = Field(default=900, gt=0)
     delivery_preparation_ttl_seconds: int = Field(default=900, gt=0)
     order_expiration_poll_seconds: int = Field(default=30, gt=0)
