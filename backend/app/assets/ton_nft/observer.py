@@ -85,6 +85,23 @@ class DeliveryObserverPassResult:
     lease_lost: int = 0
 
 
+def _owns_unexpired_lease(
+    attempt: OrderDeliveryAttempt | None,
+    claim: DeliveryObservationClaim,
+    *,
+    checked_at: datetime,
+) -> bool:
+    """Fence results from workers whose lease expired while provider I/O ran."""
+
+    return (
+        attempt is not None
+        and attempt.observer_lease_token == claim.lease_token
+        and attempt.status is OrderDeliveryAttemptStatus.OBSERVING
+        and attempt.observer_lease_until is not None
+        and attempt.observer_lease_until > checked_at
+    )
+
+
 def _build_provider(network: str) -> TONCenterDeliveryEvidenceProvider:
     settings = get_settings()
     if network == "mainnet":
@@ -293,11 +310,12 @@ async def _mark_manual_review(
             )
             .with_for_update()
         )
-        if attempt is None:
+        checked_at = max(now, datetime.now(UTC))
+        if not _owns_unexpired_lease(attempt, claim, checked_at=checked_at):
             return False
         attempt.status = OrderDeliveryAttemptStatus.MANUAL_REVIEW
         attempt.reason_code = reason_code[:64]
-        attempt.last_checked_at = now
+        attempt.last_checked_at = checked_at
         attempt.next_check_at = None
         attempt.observer_lease_token = None
         attempt.observer_lease_until = None
@@ -322,14 +340,15 @@ async def _schedule_retry(
             )
             .with_for_update()
         )
-        if attempt is None:
+        checked_at = max(now, datetime.now(UTC))
+        if not _owns_unexpired_lease(attempt, claim, checked_at=checked_at):
             return "lease_lost"
 
-        attempt.last_checked_at = now
+        attempt.last_checked_at = checked_at
         attempt.reason_code = reason_code[:64]
         attempt.observer_lease_token = None
         attempt.observer_lease_until = None
-        if now >= attempt.deadline or (
+        if checked_at >= attempt.deadline or (
             attempt.observer_attempt_count >= settings.delivery_observer_max_attempts
         ):
             attempt.status = OrderDeliveryAttemptStatus.MANUAL_REVIEW
@@ -342,7 +361,7 @@ async def _schedule_retry(
             settings.delivery_observer_retry_max_seconds,
         )
         attempt.status = OrderDeliveryAttemptStatus.OBSERVING
-        attempt.next_check_at = now + timedelta(seconds=delay)
+        attempt.next_check_at = checked_at + timedelta(seconds=delay)
         return "retried"
 
 
@@ -372,11 +391,8 @@ async def _apply_verified_evidence(
             .where(OrderDeliveryAttempt.id == claim.attempt_id)
             .with_for_update()
         )
-        if (
-            attempt is None
-            or attempt.observer_lease_token != claim.lease_token
-            or attempt.status is not OrderDeliveryAttemptStatus.OBSERVING
-        ):
+        checked_at = max(now, datetime.now(UTC))
+        if not _owns_unexpired_lease(attempt, claim, checked_at=checked_at):
             return "lease_lost"
 
         try:
@@ -436,7 +452,7 @@ async def _apply_verified_evidence(
             attempt.reason_code = (
                 "evidence_mismatch" if not evidence_matches else "state_changed"
             )
-            attempt.last_checked_at = now
+            attempt.last_checked_at = checked_at
             attempt.next_check_at = None
             attempt.observer_lease_token = None
             attempt.observer_lease_until = None
@@ -454,7 +470,7 @@ async def _apply_verified_evidence(
         if duplicate is not None:
             attempt.status = OrderDeliveryAttemptStatus.MANUAL_REVIEW
             attempt.reason_code = "transfer_already_used"
-            attempt.last_checked_at = now
+            attempt.last_checked_at = checked_at
             attempt.next_check_at = None
             attempt.observer_lease_token = None
             attempt.observer_lease_until = None
@@ -467,8 +483,8 @@ async def _apply_verified_evidence(
         attempt.masterchain_seqno = evidence.masterchain_seqno
         attempt.provider_source = evidence.evidence_source[:32]
         attempt.reason_code = "finalized_transfer_verified"
-        attempt.verified_at = now
-        attempt.last_checked_at = now
+        attempt.verified_at = checked_at
+        attempt.last_checked_at = checked_at
         attempt.next_check_at = None
         attempt.observer_lease_token = None
         attempt.observer_lease_until = None
@@ -477,7 +493,7 @@ async def _apply_verified_evidence(
         listing.status = ListingStatus.SOLD
         asset.owner_id = order.buyer_id
         asset.verification_status = AssetVerificationStatus.VERIFIED
-        asset.verified_at = now
+        asset.verified_at = checked_at
         session.add(
             OrderEvent(
                 order_id=order.id,
@@ -557,9 +573,9 @@ async def run_delivery_observer_pass(
                     )
                 )
                 async with session_factory() as session:
-                    return await apply_delivery_observation(
-                        session, claim, evidence, now=current_time
-                    )
+                    # Use a fresh clock after provider I/O; apply_delivery_observation
+                    # checks the lease again after acquiring the database locks.
+                    return await apply_delivery_observation(session, claim, evidence)
             except (ProviderUnavailable, InvalidProviderData):
                 logger.warning(
                     "Delivery evidence provider returned an unavailable or invalid response "
@@ -571,7 +587,7 @@ async def run_delivery_observer_pass(
                     return await _schedule_retry(
                         session,
                         claim,
-                        now=current_time,
+                        now=datetime.now(UTC),
                         reason_code="provider_unavailable_or_invalid",
                     )
             except asyncio.CancelledError:
@@ -586,7 +602,7 @@ async def run_delivery_observer_pass(
                         return await _schedule_retry(
                             session,
                             claim,
-                            now=current_time,
+                            now=datetime.now(UTC),
                             reason_code="observer_internal_error",
                         )
                 except Exception:
