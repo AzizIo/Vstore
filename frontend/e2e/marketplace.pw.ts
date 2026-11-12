@@ -45,12 +45,32 @@ test.describe("public catalog", () => {
     await mockMarketplaceApi(page);
     await page.goto("/");
 
+    await page.getByRole("combobox", { name: "Price currency" }).selectOption("TON");
     await page.getByRole("combobox", { name: "Sort listings" }).selectOption("price_desc");
 
-    const catalogCards = page.getByRole("region", { name: "Marketplace catalog" }).getByRole("button");
-    await expect(catalogCards.first()).toContainText("Rose Bouquet");
-    await expect(catalogCards.nth(1)).toContainText("Moon Lantern");
-    await expect(catalogCards.nth(2)).toContainText("Dragon Egg");
+    const catalogCards = page.getByRole("region", { name: "Marketplace catalog" }).locator(".listing-card");
+    await expect(catalogCards).toHaveCount(2);
+    await expect(catalogCards.first()).toContainText("Moon Lantern");
+    await expect(catalogCards.nth(1)).toContainText("Dragon Egg");
+  });
+
+  test("filters price ranges within the selected currency and clears filters", async ({ page }) => {
+    await mockMarketplaceApi(page);
+    await page.goto("/");
+
+    await page.getByRole("combobox", { name: "Price currency" }).selectOption("XTR");
+    await page.getByRole("spinbutton", { name: "Minimum price" }).fill("15");
+    await page.getByRole("spinbutton", { name: "Maximum price" }).fill("25");
+
+    await expect(page.getByRole("button", { name: /Rose Bouquet/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Moon Lantern/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Dragon Egg/ })).toHaveCount(0);
+    await expect(page.getByText("1 item")).toBeVisible();
+
+    await page.getByRole("button", { name: "Clear filters" }).click();
+    await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Dragon Egg/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Rose Bouquet/ })).toBeVisible();
   });
 
   test("shows the empty state when search has no matches", async ({ page }) => {

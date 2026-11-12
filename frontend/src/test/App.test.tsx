@@ -182,12 +182,43 @@ describe("marketplace catalog", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: "Search listings" }), { target: { value: "lantern" } });
     await waitFor(() => expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("search=lantern"));
     fireEvent.change(screen.getByRole("combobox", { name: "Asset type" }), { target: { value: "telegram_gift" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Price currency" }), { target: { value: "TON" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Sort listings" }), { target: { value: "price_desc" } });
     await waitFor(() => {
       const requestUrl = String(vi.mocked(fetch).mock.calls.at(-1)?.[0]);
       expect(requestUrl).toContain("asset_type=telegram_gift");
+      expect(requestUrl).toContain("currency=TON");
       expect(requestUrl).toContain("sort=price_desc");
     });
+  });
+
+  it("applies a currency-scoped price range and clears all catalog filters", async () => {
+    renderMarketplace();
+    await screen.findByText("Moon Lantern");
+
+    expect(screen.getByRole("combobox", { name: "Sort listings" }).querySelector('option[value="price_asc"]')).toBeDisabled();
+    expect(screen.getByRole("spinbutton", { name: "Minimum price" })).toBeDisabled();
+    fireEvent.change(screen.getByRole("combobox", { name: "Price currency" }), { target: { value: "XTR" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Minimum price" }), { target: { value: "10" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Maximum price" }), { target: { value: "50" } });
+
+    await waitFor(() => {
+      const url = new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost");
+      expect(url.searchParams.get("currency")).toBe("XTR");
+      expect(url.searchParams.get("min_price")).toBe("10");
+      expect(url.searchParams.get("max_price")).toBe("50");
+      expect(url.searchParams.get("offset")).toBe("0");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    await waitFor(() => {
+      const url = new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost");
+      expect(url.searchParams.has("currency")).toBe(false);
+      expect(url.searchParams.has("min_price")).toBe(false);
+      expect(url.searchParams.has("max_price")).toBe(false);
+      expect(url.searchParams.get("sort")).toBe("newest");
+    });
+    expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument();
   });
 
   it("loads successive server pages, removes duplicate IDs, and hides Load more at total", async () => {
@@ -237,6 +268,8 @@ describe("marketplace catalog", () => {
 
     fireEvent.change(screen.getByRole("combobox", { name: "Asset type" }), { target: { value: "telegram_gift" } });
     await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0"));
+    fireEvent.change(screen.getByRole("combobox", { name: "Price currency" }), { target: { value: "XTR" } });
+    await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("currency")).toBe("XTR"));
     fireEvent.change(screen.getByRole("combobox", { name: "Sort listings" }), { target: { value: "price_desc" } });
     await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0"));
 

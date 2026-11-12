@@ -193,6 +193,9 @@ export async function mockMarketplaceApi(
 
       const search = (url.searchParams.get("search") ?? "").trim().toLowerCase();
       const assetType = url.searchParams.get("asset_type");
+      const currency = url.searchParams.get("currency");
+      const minPrice = url.searchParams.get("min_price");
+      const maxPrice = url.searchParams.get("max_price");
       const sort = url.searchParams.get("sort") ?? "newest";
       const limit = Number(url.searchParams.get("limit") ?? 24);
       const offset = Number(url.searchParams.get("offset") ?? 0);
@@ -206,6 +209,15 @@ export async function mockMarketplaceApi(
       }
       if (assetType) {
         items = items.filter((listing) => listing.asset.asset_type === assetType);
+      }
+      if (currency) {
+        items = items.filter((listing) => listing.price_currency === currency);
+      }
+      if (minPrice) {
+        items = items.filter((listing) => Number(listing.price_amount) >= Number(minPrice));
+      }
+      if (maxPrice) {
+        items = items.filter((listing) => Number(listing.price_amount) <= Number(maxPrice));
       }
       if (sort === "price_asc") {
         items.sort((a, b) => Number(a.price_amount) - Number(b.price_amount));

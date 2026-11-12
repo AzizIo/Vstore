@@ -56,6 +56,7 @@ describe("listing API client", () => {
     await expect(fetchListings({
       search: "  lantern  ",
       assetType: "telegram_gift",
+      currency: "TON",
       sort: "price_desc",
     })).resolves.toEqual(page);
 
@@ -67,8 +68,26 @@ describe("listing API client", () => {
     expect(parsed.searchParams.get("search")).toBe("lantern");
     expect(parsed.searchParams.get("asset_type")).toBe("telegram_gift");
     expect(parsed.searchParams.get("sort")).toBe("price_desc");
-    expect(parsed.searchParams.has("currency")).toBe(false);
+    expect(parsed.searchParams.get("currency")).toBe("TON");
     expect(options?.signal).toBeUndefined();
+  });
+
+  it("serializes currency and inclusive price bounds without losing decimal precision", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(page));
+
+    await fetchListings({
+      search: "",
+      assetType: "all",
+      currency: "TON",
+      minPrice: "0.000000001",
+      maxPrice: "12.500000001",
+      sort: "price_asc",
+    });
+
+    const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]), "http://localhost");
+    expect(parsed.searchParams.get("currency")).toBe("TON");
+    expect(parsed.searchParams.get("min_price")).toBe("0.000000001");
+    expect(parsed.searchParams.get("max_price")).toBe("12.500000001");
   });
 
   it("omits blank search and the all-assets filter", async () => {

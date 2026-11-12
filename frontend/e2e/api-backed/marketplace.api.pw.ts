@@ -145,6 +145,31 @@ test(
     await sellerPage.getByRole("button", { name: "Confirm publish", exact: true }).click();
     await expect(sellerPage.locator(".listing-status-active")).toHaveText("Active");
 
+    // Exercise the real catalog endpoint after publication: price ranges and
+    // sorting must remain isolated to one currency, never TON vs XTR together.
+    const catalogFilterResults = await sellerPage.evaluate(async () => {
+      const [tonResponse, xtrResponse, unscopedSortResponse] = await Promise.all([
+        fetch("/api/listings?currency=TON&min_price=15&max_price=16&sort=price_asc"),
+        fetch("/api/listings?currency=XTR&min_price=15&max_price=16"),
+        fetch("/api/listings?sort=price_asc"),
+      ]);
+      const ton = await tonResponse.json() as { items: Array<{ title: string | null }> };
+      const xtr = await xtrResponse.json() as { items: unknown[] };
+      return {
+        tonStatus: tonResponse.status,
+        tonTitles: ton.items.map((item) => item.title),
+        xtrStatus: xtrResponse.status,
+        xtrCount: xtr.items.length,
+        unscopedSortStatus: unscopedSortResponse.status,
+      };
+    });
+    expect(catalogFilterResults.tonStatus).toBe(200);
+    expect(catalogFilterResults.tonTitles).toContain("E2E Published NFT");
+    expect(catalogFilterResults.xtrStatus).toBe(200);
+    expect(catalogFilterResults.xtrCount).toBe(0);
+    expect(catalogFilterResults.unscopedSortStatus).toBe(422);
+
+
     // The buyer's separate browser context will prove public catalog visibility
     // from a fresh API request after the seller has published the listing.
 

@@ -294,15 +294,21 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .catalog-heading { display: flex; align-items: baseline; gap: 12px; margin-bottom: 17px; }
 .catalog-heading h2 { margin: 0; font-size: 18px; font-weight: 600; }
 .result-count { color: var(--muted); font-size: 12px; }
-.catalog-controls { display: flex; gap: 10px; margin-bottom: 26px; }
-.search-control, .select-control { min-height: 44px; border: 1px solid var(--line); background: var(--surface); }
-.search-control { flex: 1 1 300px; display: flex; align-items: center; gap: 10px; padding: 0 13px; color: var(--muted); }
+.catalog-controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.search-control, .select-control, .price-control { min-height: 44px; border: 1px solid var(--line); background: var(--surface); }
+.search-control { flex: 1 1 260px; display: flex; align-items: center; gap: 10px; padding: 0 13px; color: var(--muted); }
 .search-control > span:not(.sr-only) { font-size: 21px; line-height: 1; }
 .search-control input { width: 100%; border: 0; outline: 0; background: transparent; color: inherit; font-size: 13px; }
 .search-control input::placeholder { color: #8d938b; }
 .select-control { display: flex; align-items: center; padding: 0 12px; }
 .select-control select { min-width: 120px; border: 0; outline: 0; background: transparent; font-size: 12px; cursor: pointer; }
 .select-control option { background: #191c19; }
+.price-control { display: flex; align-items: center; width: 112px; padding: 0 10px; }
+.price-control input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #f3f0e9; font: inherit; font-size: 12px; }
+.price-control input::placeholder { color: var(--muted); }
+.clear-filters-button { min-height: 44px; padding: 0 12px; border: 1px solid var(--line); background: transparent; color: var(--accent); font-size: 11px; cursor: pointer; }
+.clear-filters-button:hover { border-color: var(--accent); }
+.filter-hint { margin: -5px 0 18px; color: var(--muted); font-size: 11px; }
 .listing-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px 16px; }
 .listing-card { min-width: 0; padding: 0; overflow: hidden; border: 1px solid transparent; background: transparent; text-align: left; cursor: pointer; transition: border-color 160ms ease, transform 160ms ease; }
 .listing-card:hover { border-color: var(--line); transform: translateY(-2px); }
@@ -409,6 +415,8 @@ footer span { padding: 0 6px; color: var(--accent); }
   .search-control { grid-column: 1 / -1; }
   .select-control select { width: 100%; min-width: 0; }
   .select-control { min-width: 0; }
+  .price-control { width: auto; min-width: 0; }
+  .price-control input { font-size: 11px; }
   .listing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px 10px; }
   .listing-card-content { padding: 10px 7px 12px; }
   .listing-card-title { font-size: 16px; }
