@@ -169,14 +169,31 @@ async def get_listings(
     offset: Annotated[int, Query(ge=0)] = 0,
     asset_type: AssetType | None = None,
     currency: PriceCurrency | None = None,
+    min_price: Annotated[Decimal | None, Query(gt=0, max_digits=24, decimal_places=9)] = None,
+    max_price: Annotated[Decimal | None, Query(gt=0, max_digits=24, decimal_places=9)] = None,
     search: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
     sort: Annotated[str, Query(pattern="^(newest|price_asc|price_desc)$")] = "newest",
 ) -> ListingPageResponse:
+    if (min_price is not None or max_price is not None or sort != "newest") and currency is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Select a price currency before filtering or sorting by price",
+        )
+    if min_price is not None and max_price is not None and min_price > max_price:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Minimum price cannot exceed maximum price",
+        )
+
     conditions = _purchasable_conditions()
     if asset_type is not None:
         conditions.append(NFTAsset.asset_type == asset_type)
     if currency is not None:
         conditions.append(Listing.price_currency == currency)
+    if min_price is not None:
+        conditions.append(Listing.price_amount >= min_price)
+    if max_price is not None:
+        conditions.append(Listing.price_amount <= max_price)
     if search:
         pattern = f"%{search.strip()}%"
         conditions.append(or_(Listing.title.ilike(pattern), NFTAsset.name.ilike(pattern)))
