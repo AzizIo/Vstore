@@ -271,6 +271,31 @@ async def test_provider_retries_a_transient_dns_connect_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_provider_retries_a_transient_http_503_response() -> None:
+    attempts = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            return httpx.Response(503, json={"detail": "temporarily unavailable"})
+        return httpx.Response(200, json={"nft_items": []})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://mock.test/api/v3",
+    )
+    provider = TONCenterV3Provider(
+        TONCenterV3Config(base_url="https://mock.test/api/v3"),
+        client=client,
+    )
+
+    assert await provider.get_item(ITEM) is None
+    assert attempts == 2
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_provider_bounds_persistent_dns_connect_failures() -> None:
     attempts = 0
 
