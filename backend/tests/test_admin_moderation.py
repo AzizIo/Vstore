@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from app.admin.moderation import DecisionRequest
 from app.auth.dependencies import get_current_user
 from app.core.config import get_settings
-from app.db.models import User
+from app.db.models import ListingStatus, User
 from app.db.session import get_db_session
 from app.main import app
 

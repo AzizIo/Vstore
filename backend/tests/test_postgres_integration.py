@@ -11,7 +11,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.api.assets import _upsert_verified_asset
