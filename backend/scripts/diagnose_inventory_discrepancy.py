@@ -17,7 +17,14 @@ from sqlalchemy import or_, select
 from app.assets.ton_nft.address import normalize_address
 from app.assets.ton_nft.dependencies import build_ton_nft_verifier
 from app.assets.ton_nft.models import VerificationStatus
-from app.db.models import AssetType, AssetVerificationStatus, Listing, ListingStatus, NFTAsset, Wallet
+from app.db.models import (
+    AssetType,
+    AssetVerificationStatus,
+    Listing,
+    ListingStatus,
+    NFTAsset,
+    Wallet,
+)
 from app.db.session import async_session_factory
 
 
@@ -42,7 +49,9 @@ async def run(wallet_id: UUID, limit: int, offset: int) -> dict[str, object]:
                 )
             )
             if wallet is None:
-                raise SystemExit("Selected verified wallet was not found; no addresses printed.")
+                raise SystemExit(
+                "Selected verified wallet was not found; no addresses printed."
+            )
             if wallet.network != verifier.network:
                 raise SystemExit(
                     f"Network mismatch: wallet={wallet.network}, provider={verifier.network}; "
@@ -107,7 +116,9 @@ async def run(wallet_id: UUID, limit: int, offset: int) -> dict[str, object]:
                             if isinstance(result.status, VerificationStatus)
                             else str(result.status)
                         ),
-                        "expected_owner_matches": result.expected_owner_address == normalize_address(wallet.address),
+                        "expected_owner_matches": (
+                            result.expected_owner_address == normalize_address(wallet.address)
+                        ),
                         "db_rows": db_rows,
                         "upsert": "not_executed_read_only",
                     }
@@ -129,14 +140,17 @@ async def run(wallet_id: UUID, limit: int, offset: int) -> dict[str, object]:
                     "has_more": page.has_more,
                 },
                 "verified_candidate_count": sum(
-                    1 for item in candidates if item["verifier_status"] == VerificationStatus.VERIFIED.value
+                    1
+                    for item in candidates
+                    if item["verifier_status"] == VerificationStatus.VERIFIED.value
                 ),
                 "candidates": candidates,
                 "notes": [
                     "This is an indexed-provider observation, not a blockchain snapshot.",
                     "Provider read and DB reads are not transactionally atomic.",
                     "No upsert was attempted; open-listing status is shown as a potential guard only.",
-                    "Capture the UI/API response separately with timestamp and query params; the GET route may persist verified rows.",
+                    "Capture the UI/API response separately with timestamp and query params; "
+                    "the GET route may persist verified rows.",
                 ],
             }
     finally:
