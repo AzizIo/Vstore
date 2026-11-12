@@ -307,12 +307,11 @@ function DeliveryPanel({
   return (
     <section className="workspace-section delivery-workspace" aria-labelledby="delivery-workspace-title">
       <div className="workspace-section-heading">
-        <div><p className="eyebrow">NON-CUSTODIAL DELIVERY</p><h2 id="delivery-workspace-title">NFT transfer</h2></div>
+        <div><p className="eyebrow">NFT TRANSFER</p><h2 id="delivery-workspace-title">Transfer</h2></div>
         <span className={`order-status order-status-${order.status}`}>{deliveryStatus(attempt, order.status)}</span>
       </div>
       <p className="order-guidance">
-        The seller signs the TEP-62 transfer in their own wallet. The submitted reference is untrusted;
-        only the backend observer can confirm delivery from finalized on-chain evidence.
+        The seller sends the NFT from their own wallet. VILTARA checks the transfer on TON before the order is marked complete.
       </p>
       {loading && <p className="workspace-muted" role="status">Loading delivery details…</p>}
       {error && <p className="orders-error" role="alert">{error}</p>}
@@ -382,7 +381,7 @@ export function DeliveryWorkspace({
   const manifestUrl = configuredManifestUrl ||
     (typeof window !== "undefined" ? `${window.location.origin}/tonconnect-manifest.json` : "");
   if (!manifestUrl) {
-    return <section className="workspace-section" aria-label="NFT transfer"><p className="eyebrow">NON-CUSTODIAL DELIVERY</p><h2>NFT transfer</h2><p className="workspace-muted">Delivery status is unavailable in this environment.</p></section>;
+    return <section className="workspace-section" aria-label="NFT transfer"><p className="eyebrow">NFT TRANSFER</p><h2>Transfer</h2><p className="workspace-muted">Delivery status is unavailable in this environment.</p></section>;
   }
 
   return (

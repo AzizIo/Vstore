@@ -171,8 +171,8 @@ export function CreateListing({
   if (createdListing) {
     return (
       <section className="create-listing-view" aria-labelledby="create-listing-title">
-        <p className="eyebrow">SELLER SPACE</p>
-        <h1 id="create-listing-title">Draft created</h1>
+        <p className="eyebrow">NEW LISTING</p>
+        <h1 id="create-listing-title">Draft saved</h1>
         <div className="creation-success" role="status">
           <span className="listing-status listing-status-draft">Draft — not published</span>
           <h2>{createdListing.title || createdListing.asset.name || "TON NFT listing"}</h2>
@@ -188,9 +188,9 @@ export function CreateListing({
       <button className="text-button back-button" type="button" onClick={selectedAsset ? () => setSelectedAsset(null) : onCancel}>
         <span aria-hidden="true">←</span> {selectedAsset ? "Back to inventory" : "Back to My Listings"}
       </button>
-      <p className="eyebrow">SELLER SPACE</p>
-      <h1 id="create-listing-title">Create listing draft</h1>
-      <p className="create-listing-note">Drafts are private and are not published to the marketplace.</p>
+      <p className="eyebrow">NEW LISTING</p>
+      <h1 id="create-listing-title">New listing</h1>
+      <p className="create-listing-note">Your draft stays private until you publish it.</p>
 
       {selectedAsset ? (
         <form className="draft-form" onSubmit={submitDraft}>
@@ -233,19 +233,19 @@ export function CreateListing({
               value={expiresAt}
               onChange={(event) => setExpiresAt(event.target.value)}
             />
-            <small>Leave empty for no automatic expiry.</small>
+            <small>Leave blank to keep the listing active until you cancel it.</small>
           </label>
           {submitError && <p className="creation-error" role="alert">{submitError}</p>}
           <button className="load-more-button" type="submit" disabled={submitting}>
-            {submitting ? "Creating draft..." : "Create private draft"}
+            {submitting ? "Creating draft..." : "Save draft"}
           </button>
         </form>
       ) : loading ? (
-        <div className="my-listings-message" role="status">Checking verified TON NFT inventory...</div>
+        <div className="my-listings-message" role="status">Loading your verified NFTs...</div>
       ) : error.includes("verified TON wallet is required") ? (
         <div className="my-listings-message" role="alert">
           <h2>Verify a wallet first</h2>
-          <p>A TON wallet must be verified before its NFTs can be listed. Connecting a wallet alone does not prove ownership.</p>
+          <p>Verify your TON wallet before creating a listing. A connection by itself does not confirm NFT ownership.</p>
           <a className="text-button" href="#wallet-connect">Open wallet connection</a>
           <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Check again</button>
         </div>
@@ -258,7 +258,7 @@ export function CreateListing({
       ) : assets.length === 0 && !hasMore ? (
         <div className="my-listings-message" role="status">
           <h2>No eligible TON NFTs found</h2>
-          <p>Only NFTs currently owned by a verified wallet can be used for a listing draft.</p>
+          <p>Only NFTs confirmed as yours by TON can be listed.</p>
         </div>
       ) : (
         <>

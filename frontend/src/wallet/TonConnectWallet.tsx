@@ -264,7 +264,7 @@ function WalletControls({ accessToken }: { accessToken: string }) {
         <span className="wallet-address">{shortAddress}</span>
         <span className="wallet-network">{networkLabel}</span>
         <span className="wallet-disclaimer">
-          {verified ? "Wallet verified by VILTARA" : "Connected only · proof verification required"}
+          {verified ? "Verified for this account" : "Connected · ownership not verified"}
         </span>
       </span>
       <button

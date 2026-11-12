@@ -50,9 +50,15 @@ function ListingCard({ listing, onOpen }: { listing: Listing; onOpen: () => void
     <button className="listing-card" type="button" onClick={onOpen}>
       <AssetArtwork imageUrl={listing.asset.image_url} name={title} />
       <span className="listing-card-content">
-        <span className="listing-card-type">{assetTypeLabels[listing.asset.asset_type]}</span>
+        <span className="listing-card-topline">
+          <span className="listing-card-type">{assetTypeLabels[listing.asset.asset_type]}</span>
+          {listing.asset.collection?.name && <span className="listing-card-collection">{listing.asset.collection.name}</span>}
+        </span>
         <span className="listing-card-title">{title}</span>
-        <span className="listing-card-price">{formatPrice(listing.price_amount, listing.price_currency)}</span>
+        <span className="listing-card-footer">
+          <span className="listing-card-price">{formatPrice(listing.price_amount, listing.price_currency)}</span>
+          <span className="listing-card-seller">{listing.seller.username ? "@" + listing.seller.username : listing.seller.first_name}</span>
+        </span>
       </span>
     </button>
   );
@@ -187,7 +193,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
               {orderError && !confirmationOpen && <p role="alert">{orderError}</p>}
               {orderCreated && (
                 <div className="reservation-success" role="status">
-                  <p>Reservation created for {title}. Payment is not enabled and no funds were collected. No NFT transfer has happened.</p>
+                  <p>This listing is reserved. No payment was taken and the NFT has not moved.</p>
                   <button className="primary-button" type="button" onClick={onOrders}>View Orders</button>
                 </div>
               )}
@@ -195,7 +201,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
           ) : session.status === "authenticated" ? (
             <p className="detail-description">You cannot order your own listing.</p>
           ) : (
-            <p className="detail-description">Open this Mini App in Telegram to sign in and place an order.</p>
+            <p className="detail-description">Open VILTARA in Telegram to place an order.</p>
           )}
           {confirmationOpen && (
             <div className="reservation-dialog-backdrop">
@@ -204,7 +210,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
                   <>
                     <p className="eyebrow">RESERVATION CREATED</p>
                     <h2 id="reservation-dialog-title">Reservation confirmed</h2>
-                    <p id="reservation-dialog-description">The order reservation was created for {title}. Payment is not enabled, no funds were collected, and no NFT transfer has happened.</p>
+                    <p id="reservation-dialog-description">Your reservation is in Orders. No payment was taken and the NFT is still with the seller.</p>
                     <button className="primary-button" type="button" onClick={onOrders}>View Orders</button>
                   </>
                 ) : (
@@ -216,7 +222,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
                       <div><dt>Price</dt><dd>{formatPrice(listing.price_amount, listing.price_currency)}</dd></div>
                       <div><dt>Seller</dt><dd>{seller}{listing.seller.username ? ` (@${listing.seller.username})` : ""}</dd></div>
                     </dl>
-                    <p id="reservation-dialog-description" className="reservation-disclaimer">This creates a reservation/order only. Payment is not enabled and no funds will be collected. No NFT transfer happens as part of this action.</p>
+                    <p id="reservation-dialog-description" className="reservation-disclaimer">This reserves the listing only. Payments are not enabled, no funds will be collected and the NFT stays with the seller.</p>
                     {orderError && <p className="reservation-error" role="alert">{orderError} Your reservation request may have reached the server; retrying uses the same idempotency key.</p>}
                     <div className="reservation-dialog-actions">
                       <button className="text-button" type="button" disabled={ordering} onClick={() => { setConfirmationOpen(false); setOrderError(""); window.setTimeout(() => reserveTriggerRef.current?.focus(), 0); }}>Cancel</button>
@@ -476,8 +482,8 @@ function MarketplaceApp() {
           <Orders accessToken={session.accessToken} userId={session.user.id} initialOrderId={initialOrderId} onCatalog={() => setSection("catalog")} />
         ) : (
           <div className="orders-message" role="status">
-            <h2>Sign in to view orders</h2>
-            <p>Order history is private and requires a verified Telegram session.</p>
+            <h2>View your orders</h2>
+            <p>Open VILTARA in Telegram to see your purchases and sales.</p>
           </div>
         )
       ) : section === "my-listings" ? (
@@ -487,8 +493,8 @@ function MarketplaceApp() {
           <MyInventory accessToken={session.accessToken} />
         ) : (
           <div className="inventory-message" role="status">
-            <h2>Sign in to view your inventory</h2>
-            <p>Your NFT inventory requires a verified Telegram session and a TON wallet confirmed by backend proof.</p>
+            <h2>Your NFTs</h2>
+            <p>Open VILTARA in Telegram, then connect and verify a TON wallet to see the NFTs it owns.</p>
           </div>
         )
       ) : listingId ? (
@@ -496,20 +502,20 @@ function MarketplaceApp() {
       ) : (
         <>
           <section className="catalog-intro" id="catalog">
-            <p className="eyebrow">DIGITAL COLLECTIBLES · TON</p>
-            <h1>Find your next<br /><span>favorite thing.</span></h1>
-            <p className="intro-copy">A live catalog of listed digital collectibles.</p>
+            <p className="eyebrow">VILTARA / TON MARKETPLACE</p>
+            <h1>Collectibles<br /><span>on TON.</span></h1>
+            <p className="intro-copy">NFTs and Telegram gifts, listed by their owners.</p>
           </section>
           <section className="catalog" aria-label="Marketplace catalog">
             <div className="catalog-heading">
-              <h2>Explore listings</h2>
+              <h2>For sale</h2>
               {!loading && !error && <span className="result-count">{total} {total === 1 ? "item" : "items"}</span>}
             </div>
             <form className="catalog-controls" onSubmit={(event) => event.preventDefault()}>
               <label className="search-control">
                 <span className="sr-only">Search listings</span>
                 <span aria-hidden="true">⌕</span>
-                <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search collectibles" />
+                <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name" />
               </label>
               <label className="select-control">
                 <span className="sr-only">Asset type</span>

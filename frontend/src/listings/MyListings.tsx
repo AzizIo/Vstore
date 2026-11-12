@@ -422,7 +422,7 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
     <section className="my-listings" aria-labelledby="my-listings-title">
       <div className="my-listings-heading">
         <div>
-          <p className="eyebrow">SELLER SPACE</p>
+          <p className="eyebrow">LISTINGS</p>
           <h1 id="my-listings-title">My Listings</h1>
         </div>
         {!loading && !error && <span className="my-listings-count">{listings.length} total</span>}
@@ -454,7 +454,7 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
       )}
 
       {loading ? (
-        <div className="my-listings-message" role="status">Loading your listings...</div>
+        <div className="my-listings-message" role="status">Loading listings...</div>
       ) : error ? (
         <div className="my-listings-message" role="alert">
           <h2>Listings unavailable</h2>
@@ -464,7 +464,7 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
       ) : listings.length === 0 ? (
         <div className="my-listings-message" role="status">
           <h2>No listings yet</h2>
-          <p>Your own listings will appear here.</p>
+          <p>Listings you create will appear here.</p>
         </div>
       ) : filteredListings.length === 0 ? (
         <div className="my-listings-message" role="status">
@@ -507,12 +507,12 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
 export function MyListings() {
   const session = useSession();
   if (session.status === "loading") {
-    return <section className="my-listings-message" role="status">Waiting for Telegram session verification...</section>;
+    return <section className="my-listings-message" role="status">Checking Telegram session...</section>;
   }
   if (session.status === "unauthenticated") {
     return (
       <section className="my-listings-gate" aria-labelledby="my-listings-title">
-        <p className="eyebrow">SELLER SPACE</p>
+        <p className="eyebrow">LISTINGS</p>
         <h1 id="my-listings-title">My Listings</h1>
         <div className="my-listings-message" role="status">
           <h2>Open VILTARA in Telegram</h2>
@@ -524,10 +524,10 @@ export function MyListings() {
   if (session.status === "error") {
     return (
       <section className="my-listings-gate" aria-labelledby="my-listings-title">
-        <p className="eyebrow">SELLER SPACE</p>
+        <p className="eyebrow">LISTINGS</p>
         <h1 id="my-listings-title">My Listings</h1>
         <div className="my-listings-message" role="alert">
-          <h2>Session unavailable</h2>
+          <h2>Could not verify your session</h2>
           <p>{session.message}</p>
         </div>
       </section>

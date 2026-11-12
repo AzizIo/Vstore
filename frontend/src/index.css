@@ -905,3 +905,104 @@ button:disabled {
     transform: none;
   }
 }
+
+
+/* VILTARA visual system */
+:root { --surface:#1b201b; --line:#343b32; --muted:#a6ab9f; --accent:#c7c998; --serif:"Iowan Old Style","Baskerville","Times New Roman",serif; }
+body { color:#f2f0e8; background:radial-gradient(ellipse at 52% -20%,rgb(199 201 152 / 8%),transparent 48%),#111411; }
+.app-shell { width:min(100% - 72px,1240px); }
+.topbar { min-height:78px; border-color:rgb(166 171 159 / 18%); }
+.brand-mark { border-radius:9px; font-size:20px; font-style:italic; }
+.brand-name { letter-spacing:.2em; }
+.session-banner { padding:10px 0; border-color:rgb(166 171 159 / 14%); font-size:11px; }
+.app-navigation { gap:28px; border-color:rgb(166 171 159 / 18%); }
+.navigation-tab { min-height:48px; font-size:12px; transition:color 160ms ease; }
+.catalog-intro { position:relative; isolation:isolate; overflow:hidden; padding:76px 0 58px; border-bottom:1px solid rgb(166 171 159 / 15%); }
+.catalog-intro::after { position:absolute; z-index:-1; top:12%; right:5%; width:min(29vw,320px); aspect-ratio:1; border:1px solid rgb(199 201 152 / 16%); border-radius:50%; background:radial-gradient(circle at 50% 50%,transparent 0 38%,rgb(199 201 152 / 5%) 38.5% 39%,transparent 39.5% 58%,rgb(199 201 152 / 8%) 58.5% 59%,transparent 59.5%),radial-gradient(circle at 50% 50%,rgb(199 201 152 / 5%),transparent 68%); box-shadow:inset 0 0 70px rgb(199 201 152 / 5%); content:""; pointer-events:none; }
+.catalog-intro .eyebrow { margin-bottom:22px; color:#c7c998; letter-spacing:.14em; }
+.catalog-intro h1 { position:relative; max-width:760px; font-size:clamp(54px,7.2vw,88px); line-height:.98; letter-spacing:-.045em; }
+.catalog-intro h1 span { color:#c7c998; font-style:italic; }
+.intro-copy { max-width:420px; margin-top:22px; color:#b2b7aa; font-size:14px; line-height:1.65; }
+.catalog { padding-top:30px; padding-bottom:84px; }
+.catalog-heading { align-items:center; justify-content:space-between; margin-bottom:18px; }
+.catalog-heading h2 { font:400 28px/1.1 var(--serif); letter-spacing:-.02em; }
+.result-count { font-size:11px; font-variant-numeric:tabular-nums; }
+.catalog-controls { display:grid; grid-template-columns:minmax(220px,1.6fr) repeat(3,minmax(130px,.8fr)); gap:9px; margin-bottom:28px; }
+.search-control,.select-control { min-width:0; min-height:46px; border:1px solid #343b32; border-radius:8px; background:linear-gradient(145deg,#1b201b,#171b17); }
+.search-control { flex-basis:auto; }
+.search-control input,.select-control select { color:#f2f0e8; font-size:12px; }
+.search-control input::placeholder { color:#81897e; }
+.select-control { justify-content:space-between; }
+.select-control select { width:100%; min-width:0; cursor:pointer; }
+.search-control:focus-within,.select-control:focus-within { border-color:#9da47d; box-shadow:0 0 0 3px rgb(199 201 152 / 9%); }
+.select-control:hover { border-color:#58614e; }
+.listing-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:20px 14px; }
+.listing-card { display:block; min-width:0; border:1px solid #30372e; border-radius:10px; background:#191e19; box-shadow:0 4px 18px rgb(0 0 0 / 10%); text-align:left; transition:border-color 180ms ease,transform 180ms ease,box-shadow 180ms ease; }
+.listing-card:hover { border-color:#707b5b; box-shadow:0 14px 30px rgb(0 0 0 / 22%); transform:translateY(-3px); }
+.artwork { position:relative; aspect-ratio:1 / 1.02; background:#242a23; }
+.artwork img { transition:transform 260ms ease; }
+.listing-card:hover .artwork img { transform:scale(1.035); }
+.artwork-placeholder { background:radial-gradient(circle at 50% 35%,rgb(199 201 152 / 13%),transparent 46%),#20261f; }
+.artwork-placeholder span { color:#b7be91; font-size:66px; }
+.listing-card-content { display:flex; min-height:116px; align-items:stretch; gap:10px; padding:13px 13px 14px; }
+.listing-card-topline,.listing-card-footer { display:flex; min-width:0; align-items:center; justify-content:space-between; gap:8px; }
+.listing-card-type,.listing-card-collection { min-width:0; overflow:hidden; color:#929b8d; font-size:9px; letter-spacing:.09em; text-overflow:ellipsis; text-transform:uppercase; white-space:nowrap; }
+.listing-card-collection { max-width:52%; color:#838d7f; font-size:8px; letter-spacing:.04em; text-transform:none; }
+.listing-card-title { display:-webkit-box; overflow:hidden; color:#f0eee5; font:19px/1.18 var(--serif); overflow-wrap:anywhere; text-overflow:ellipsis; white-space:normal; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.listing-card-footer { margin-top:auto; align-items:baseline; }
+.listing-card-price { color:#d1d2a2; font-size:12px; font-weight:650; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.listing-card-seller { min-width:0; overflow:hidden; color:#858d81; font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+.listing-card:focus-visible,.my-listing-card:focus-visible,.inventory-card:focus-visible,.workspace-order-card:focus-visible { outline:2px solid #c7c998; outline-offset:3px; }
+.my-listings-heading h1,.create-listing-view > h1,.inventory-heading h1,.workspace-page-heading h1,.my-listing-detail-copy h1 { letter-spacing:-.035em; }
+.my-listing-card,.inventory-card,.workspace-section,.workspace-order-card,.order-detail-hero,.expiry-card,.cancel-order-card,.reservation-dialog { border-radius:10px; }
+.my-listing-card { border-color:#343b32; background:#191e19; transition:border-color 160ms ease,transform 160ms ease,box-shadow 160ms ease; }
+.my-listing-card:hover,.inventory-card:hover { border-color:#707b5b; box-shadow:0 12px 28px rgb(0 0 0 / 16%); transform:translateY(-2px); }
+.inventory-card { background:#191e19; border-color:#343b32; }
+.workspace-section { border-color:#343b32; background:linear-gradient(145deg,#1b201b,#171b17); }
+.workspace-order-card { border-color:#343b32; border-radius:10px; background:linear-gradient(145deg,#20261f,#181d18); }
+.workspace-order-card:hover { border-color:#707b5b; transform:translateY(-2px); }
+.workspace-role-tabs { border-radius:9px; }
+.workspace-role-tabs button { border-radius:6px; }
+.workspace-role-tabs button[aria-selected="true"] { border-color:#59634a; background:#242b22; }
+.workspace-filter { border-radius:7px; }
+.workspace-filter.is-active { border-color:#78815e; background:rgb(199 201 152 / 10%); }
+.primary-button { border-radius:7px; border-color:#c7c998; background:#c7c998; color:#171b16; }
+.primary-button:hover:not(:disabled) { border-color:#d7d9b0; background:#d7d9b0; }
+.secondary-button,.danger-button,.load-more-button,.wallet-button { border-radius:7px; }
+.secondary-button:hover:not(:disabled),.load-more-button:hover:not(:disabled) { border-color:#78815e; }
+.text-button { font-weight:600; }
+.listing-status,.order-status { border-radius:5px; }
+.reservation-dialog { border-color:#414a3d; background:#1a201a; }
+.reservation-disclaimer,.payment-disclaimer { border-radius:6px; background:#23291f; }
+.delivery-snapshot { border-radius:8px; }
+footer { color:#858d81; letter-spacing:.1em; }
+button:disabled { cursor:not-allowed; }
+@media (max-width:900px) { .catalog-controls { grid-template-columns:minmax(190px,1.5fr) repeat(2,minmax(130px,1fr)); } .catalog-controls .search-control { grid-column:1 / -1; } }
+@media (max-width:640px) {
+  .app-shell { width:min(100% - 32px,1240px); }
+  .catalog-intro { padding:52px 0 38px; }
+  .catalog-intro::after { top:20%; right:-18%; width:220px; opacity:.65; }
+  .catalog-intro h1 { max-width:340px; font-size:clamp(47px,13vw,64px); }
+  .intro-copy { max-width:290px; font-size:12px; }
+  .catalog { padding-top:22px; padding-bottom:56px; }
+  .catalog-heading h2 { font-size:25px; }
+  .catalog-controls { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-bottom:20px; }
+  .catalog-controls .search-control { grid-column:1 / -1; }
+  .catalog-controls .select-control:last-child { grid-column:1 / -1; }
+  .listing-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 9px; }
+  .listing-card { border-radius:8px; }
+  .listing-card-content { min-height:110px; gap:8px; padding:10px 9px 11px; }
+  .listing-card-title { font-size:16px; }
+  .listing-card-collection,.listing-card-seller { display:none; }
+  .listing-card-price { font-size:11px; }
+  .app-navigation { gap:18px; overflow-x:auto; scrollbar-width:none; }
+  .app-navigation::-webkit-scrollbar { display:none; }
+  .navigation-tab { flex:0 0 auto; }
+  .header-actions { min-width:0; }
+  .wallet-control { flex-wrap:wrap; }
+  .workspace-page-heading h1 { letter-spacing:-.04em; }
+}
+@media (hover:none) {
+  .listing-card:hover,.my-listing-card:hover,.inventory-card:hover,.workspace-order-card:hover { box-shadow:none; transform:none; }
+  .listing-card:hover .artwork img { transform:none; }
+}

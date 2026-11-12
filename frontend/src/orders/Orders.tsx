@@ -160,7 +160,7 @@ function OrderDetails({
     <section className="order-detail-panel" aria-labelledby="order-detail-title">
       <div className="order-detail-toolbar">
         <button className="text-button" type="button" onClick={onClose}>← Back to orders</button>
-        <span className="workspace-asset-type">ORDER DETAILS</span>
+        <span className="workspace-asset-type">ORDER</span>
       </div>
       <div className="order-detail-hero">
         <div className="order-detail-symbol" aria-hidden="true">{order.asset_type === "ton_nft" ? "◇" : "✳"}</div>
@@ -176,7 +176,7 @@ function OrderDetails({
         <div className="order-detail-main">
           <section className="workspace-section" aria-labelledby="lifecycle-heading">
             <div className="workspace-section-heading">
-              <div><p className="eyebrow">ORDER JOURNEY</p><h2 id="lifecycle-heading">Lifecycle</h2></div>
+              <div><p className="eyebrow">STATUS</p><h2 id="lifecycle-heading">Order status</h2></div>
               <span className={`order-status order-status-${order.status}`}>{statusLabel(order.status)}</span>
             </div>
             {isTerminal ? (
@@ -203,7 +203,7 @@ function OrderDetails({
           </section>
 
           <section className="workspace-section" aria-labelledby="timeline-heading">
-            <div className="workspace-section-heading"><div><p className="eyebrow">AUDIT TRAIL</p><h2 id="timeline-heading">Event timeline</h2></div><span className="workspace-count">{order.events.length} events</span></div>
+            <div className="workspace-section-heading"><div><p className="eyebrow">UPDATES</p><h2 id="timeline-heading">History</h2></div><span className="workspace-count">{order.events.length} events</span></div>
             {order.events.length ? (
               <ol className="event-timeline">
                 {[...order.events].sort((a, b) => getTimestamp(a.created_at) - getTimestamp(b.created_at)).map((event, index) => (
@@ -233,7 +233,7 @@ function OrderDetails({
             </section>
           )}
           <section className="workspace-section order-facts">
-            <p className="eyebrow">ORDER INFORMATION</p>
+            <p className="eyebrow">DETAILS</p>
             <dl>
               <div><dt>Your role</dt><dd>{role === "buyer" ? "Buyer · Purchase" : "Seller · Sale"}</dd></div>
               <div><dt>Order ID</dt><dd className="order-id-value"><code>{order.id}</code><button className="copy-id-button" type="button" onClick={() => void copyOrderId()} aria-label="Copy order ID">{copied ? "Copied" : "Copy ID"}</button></dd></div>
@@ -408,7 +408,7 @@ export function Orders({
   return (
     <section className="orders-view" aria-labelledby="orders-title">
       <div className="workspace-page-heading">
-        <div><p className="eyebrow">YOUR MARKETPLACE ACTIVITY</p><h1 id="orders-title">Order workspace</h1><p className="workspace-subtitle">Track reservations, transfers and completed orders in one place.</p></div>
+        <div><p className="eyebrow">ACCOUNT</p><h1 id="orders-title">Orders</h1><p className="workspace-subtitle">Purchases and sales, with the latest status for each one.</p></div>
         <button className="secondary-button refresh-button" type="button" disabled={loading} onClick={() => { setRefreshing(true); setRetry((value) => value + 1); }}><span aria-hidden="true">↻</span> {refreshing ? "Refreshing…" : "Refresh"}</button>
       </div>
 
@@ -436,10 +436,10 @@ export function Orders({
       ) : error ? (
         <div className="orders-message workspace-empty" role="alert"><span className="workspace-empty-icon" aria-hidden="true">!</span><h2>Orders unavailable</h2><p>{error}</p><button className="primary-button" type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button></div>
       ) : visibleOrders.length === 0 ? (
-        <div className="orders-message workspace-empty" role="status"><span className="workspace-empty-icon" aria-hidden="true">◇</span><h2>{search || filter !== "all" ? "No matching orders" : `No ${role === "buyer" ? "purchases" : "sales"} yet`}</h2><p>{search || filter !== "all" ? "Try another search or status filter." : "When you reserve a listing or sell an asset, your order activity will appear here."}</p>{search || filter !== "all" ? <button className="secondary-button" type="button" onClick={() => { setSearch(""); setFilter("all"); }}>Clear filters</button> : onCatalog ? <button className="primary-button" type="button" onClick={onCatalog}>Explore catalog</button> : null}</div>
+        <div className="orders-message workspace-empty" role="status"><span className="workspace-empty-icon" aria-hidden="true">◇</span><h2>{search || filter !== "all" ? "No matching orders" : `No ${role === "buyer" ? "purchases" : "sales"} yet`}</h2><p>{search || filter !== "all" ? "Try another search or status filter." : "Orders will appear here when you reserve a listing or make a sale."}</p>{search || filter !== "all" ? <button className="secondary-button" type="button" onClick={() => { setSearch(""); setFilter("all"); }}>Clear filters</button> : onCatalog ? <button className="primary-button" type="button" onClick={onCatalog}>Explore catalog</button> : null}</div>
       ) : (
         <>
-          <div className="workspace-results-heading"><span>{visibleOrders.length} {visibleOrders.length === 1 ? "order" : "orders"}</span><span>Updated from your account</span></div>
+          <div className="workspace-results-heading"><span>{visibleOrders.length} {visibleOrders.length === 1 ? "order" : "orders"}</span><span>Purchases and sales</span></div>
           <div className="workspace-order-grid">{visibleOrders.map((order) => <OrderCard key={order.id} order={order} role={role} highlighted={order.id === linkedOrder?.id} onOpen={() => void openOrder(order)} />)}</div>
         </>
       )}

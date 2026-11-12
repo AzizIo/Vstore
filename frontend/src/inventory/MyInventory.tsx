@@ -201,10 +201,10 @@ export function MyInventory({ accessToken }: { accessToken: string }) {
     <section className="inventory-view" aria-labelledby="inventory-title">
       <div className="inventory-heading">
         <div>
-          <p className="eyebrow">COLLECTOR SPACE</p>
-          <h1 id="inventory-title">My NFT inventory</h1>
+          <p className="eyebrow">YOUR COLLECTION</p>
+          <h1 id="inventory-title">My NFTs</h1>
           <p className="inventory-intro">
-            NFTs are shown only after the backend rechecks current on-chain ownership.
+            Only NFTs confirmed as yours on TON appear here.
           </p>
         </div>
         <button
@@ -268,7 +268,7 @@ export function MyInventory({ accessToken }: { accessToken: string }) {
                     <span>Item address</span>
                     <code>{asset.item_address}</code>
                   </p>
-                  <p className="inventory-card-note">Current owner checked on-chain. Eligible for draft listing.</p>
+                  <p className="inventory-card-note">Ownership checked on TON · Ready to list</p>
                 </div>
               </article>
             ))}
