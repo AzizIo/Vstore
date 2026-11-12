@@ -1870,7 +1870,7 @@ async def test_delivery_prepare_snapshots_verified_wallets_and_submission_is_ide
             persisted_listing = await session.get(Listing, listing_id)
             attempt = await session.get(OrderDeliveryAttempt, attempt_id)
             assert persisted_order is not None
-            assert persisted_order.status is OrderStatus.OBSERVING_TRANSFER
+            assert persisted_order.status is OrderStatus.AWAITING_TRANSFER
             assert persisted_listing is not None
             assert persisted_listing.status is ListingStatus.RESERVED
             assert attempt is not None
