@@ -56,6 +56,7 @@ describe("listing API client", () => {
     await expect(fetchListings({
       search: "  lantern  ",
       assetType: "telegram_gift",
+      currency: "TON",
       sort: "price_desc",
     })).resolves.toEqual(page);
 
@@ -67,7 +68,7 @@ describe("listing API client", () => {
     expect(parsed.searchParams.get("search")).toBe("lantern");
     expect(parsed.searchParams.get("asset_type")).toBe("telegram_gift");
     expect(parsed.searchParams.get("sort")).toBe("price_desc");
-    expect(parsed.searchParams.has("currency")).toBe(false);
+    expect(parsed.searchParams.get("currency")).toBe("TON");
     expect(options?.signal).toBeUndefined();
   });
 
