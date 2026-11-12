@@ -150,7 +150,7 @@ Frontend:
 
 Frontend CI runs Vitest, TypeScript checks and a production Vite build. Use the CI result for the exact commit you intend to review.
 
-The API-backed Playwright suite runs the real React app against FastAPI, disposable PostgreSQL/Redis and a loopback TON provider fixture. It validates real API persistence and is being extended for delivery lifecycle coverage; wallet signing is external and must be mocked only at the TON Connect boundary in tests. A testnet wallet/provider acceptance remains required before claiming live transfer support. See [docs/API_BACKED_E2E.md](docs/API_BACKED_E2E.md).
+The API-backed Playwright suite runs the real React app against FastAPI, disposable PostgreSQL/Redis and a loopback TON provider fixture. It exercises reservation, seller delivery preparation, a mocked TON Connect wallet boundary, reference submission, independent observer completion, and completed status in both participant views. The wallet and provider are simulated only at their external boundaries; backend API calls and persistence are real. Live testnet wallet/provider acceptance remains required before claiming live transfer support. See [docs/API_BACKED_E2E.md](docs/API_BACKED_E2E.md).
 
 ## Roadmap
 
