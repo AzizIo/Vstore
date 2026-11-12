@@ -1,3 +1,4 @@
+import "./DeliveryWorkspace.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CHAIN,
@@ -98,6 +99,9 @@ function DeliveryPanel({
     try {
       const state = await fetchDeliveryState(order.id, accessToken);
       setDelivery(state);
+      if (state.attempt && state.attempt.status !== "prepared") {
+        setWalletResultUncertain(false);
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Delivery status is unavailable.");
     } finally {
@@ -152,6 +156,7 @@ function DeliveryPanel({
     setBusy(true);
     setError("");
     setMessage("");
+    let walletRequestStarted = false;
     try {
       const attempt = delivery.attempt;
       if (attempt.status !== "prepared") {
@@ -177,6 +182,8 @@ function DeliveryPanel({
         bounceable: true,
         testOnly: attempt.network === "testnet",
       });
+      walletRequestStarted = true;
+      setWalletResultUncertain(true);
       const result = await tonConnectUI.sendTransaction({
         validUntil: Math.floor(Date.parse(attempt.deadline) / 1000),
         network: attempt.network === "testnet" ? CHAIN.TESTNET : CHAIN.MAINNET,
@@ -189,17 +196,26 @@ function DeliveryPanel({
         const submitted = await submitDeliveryCandidate(order.id, reference, accessToken);
         setDelivery(submitted);
         setRetryReference("");
+        setWalletResultUncertain(false);
         setMessage("Reference submitted. The backend observer is checking the exact on-chain transfer; do not send it again.");
         onRefreshOrder();
       } catch (reason) {
+        setWalletResultUncertain(true);
         setError(reason instanceof Error ? reason.message : "Reference submission failed.");
         setMessage("The wallet may already have broadcast the transfer. Retry submitting this same reference; do not sign another transfer.");
       }
     } catch (reason) {
-      // Once sendTransaction has returned, a later failure must not cause a new
-      // transfer request. Errors before a successful wallet response are safe to
-      // show as a wallet/request failure but never as delivery success.
-      setError(reason instanceof Error ? reason.message : "Wallet request did not complete.");
+      const walletError = reason && typeof reason === "object"
+        ? reason as { code?: number; message?: string }
+        : null;
+      const rejected = walletError?.code === 300 || /reject|cancel/i.test(walletError?.message ?? "");
+      if (walletRequestStarted && !rejected) setWalletResultUncertain(true);
+      if (rejected) {
+        setWalletResultUncertain(false);
+        setError("The wallet request was rejected or cancelled. No delivery success was recorded; you can review the request and try again.");
+      } else {
+        setError(reason instanceof Error ? reason.message : "Wallet result is uncertain. Refresh delivery status and check wallet activity before retrying.");
+      }
     } finally {
       actionLockRef.current = false;
       setBusy(false);
@@ -215,6 +231,7 @@ function DeliveryPanel({
       const submitted = await submitDeliveryCandidate(order.id, retryReference, accessToken);
       setDelivery(submitted);
       setRetryReference("");
+      setWalletResultUncertain(false);
       setMessage("Reference submitted. Wait for independent on-chain verification.");
       onRefreshOrder();
     } catch (reason) {
@@ -274,7 +291,7 @@ function DeliveryPanel({
         </button>
       )}
       {canRequestTransfer && (
-        <button className="primary-button" type="button" disabled={busy || loading || walletResultUncertain} onClick={() => void requestWalletTransfer()}>
+        <button className="primary-button" type="button" disabled={busy || loading || walletResultUncertain || Boolean(retryReference)} onClick={() => void requestWalletTransfer()}>
           {busy ? "Waiting for wallet…" : "Review and sign in wallet"}
         </button>
       )}
@@ -288,7 +305,7 @@ function DeliveryPanel({
           Delivery needs reconciliation. Do not send another NFT transfer; completion has not been confirmed.
         </p>
       )}
-      {(order.status === "observing_transfer" || order.status === "completed" || attempt?.status === "manual_review") && (
+      {attempt && (
         <button className="secondary-button" type="button" disabled={loading} onClick={() => { void refreshDelivery(); onRefreshOrder(); }}>
           Refresh verification status
         </button>
