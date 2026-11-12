@@ -90,7 +90,6 @@ class InventorySyncResponse(BaseModel):
 
 
 
-
 def _merge_metadata(primary: NFTMetadata, fallback: NFTMetadata) -> NFTMetadata:
     """Prefer exact-item metadata while retaining page metadata if a field is absent."""
     return NFTMetadata(
