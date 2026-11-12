@@ -21,10 +21,14 @@ target_metadata = Base.metadata
 if os.getenv("E2E_MODE") == "1":
     asyncio.run(assert_e2e_environment())
 
-# Preview migrations are allowed only against the explicitly isolated Preview DB.
-if os.getenv("PREVIEW_MODE") == "1":
+# A Preview target must never bypass its guard by omitting PREVIEW_MODE.
+# Also reject any explicitly supplied but invalid opt-in value.
+settings = get_settings()
+preview_mode = os.getenv("PREVIEW_MODE")
+database_name = settings.database_url.rsplit("/", 1)[-1].split("?", 1)[0]
+if preview_mode is not None or database_name == "viltara_preview":
     validate_preview_targets()
-config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:
