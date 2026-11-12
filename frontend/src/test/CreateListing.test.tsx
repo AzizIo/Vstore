@@ -115,7 +115,7 @@ describe("CreateListing seller flow", () => {
 
     expect(await screen.findByText("Verify a wallet first")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open wallet connection" })).toHaveAttribute("href", "#wallet-connect");
-    expect(screen.getByText(/Connecting a wallet alone does not prove ownership/)).toBeInTheDocument();
+    expect(screen.getByText(/A connection by itself does not confirm NFT ownership/)).toBeInTheDocument();
   });
 
   it("shows an empty inventory state without enabling a draft", async () => {

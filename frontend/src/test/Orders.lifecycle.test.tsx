@@ -137,7 +137,7 @@ describe("delivery lifecycle order UI contract", () => {
         await screen.findByText(label, { selector: ".order-status" }),
       ).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: /Open order Moon Lantern/ }));
-      expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Order status" })).toBeInTheDocument();
       expect(await screen.findByText(explanation, { selector: ".order-guidance" })).toBeInTheDocument();
 
       if (canCancel) {

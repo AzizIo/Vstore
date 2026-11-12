@@ -616,7 +616,7 @@ describe("Buyer orders", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm reservation" }));
 
     expect(await screen.findByRole("heading", { name: "Reservation confirmed" })).toBeInTheDocument();
-    expect(screen.getByRole("dialog")).toHaveTextContent("Payment is not enabled, no funds were collected");
+    expect(screen.getByRole("dialog")).toHaveTextContent("No payment was taken and the NFT is still with the seller");
     const orderRequest = vi.mocked(fetch).mock.calls.find(([input, init]) =>
       String(input).endsWith("/api/orders") && init?.method === "POST"
     );
@@ -934,7 +934,7 @@ describe("My Listings dashboard", () => {
     renderMarketplace();
     await openMyListings();
 
-    expect(screen.getByText("Waiting for Telegram session verification...")).toBeInTheDocument();
+    expect(screen.getByText("Checking Telegram session...")).toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/listings/me"))).toBe(false);
   });
 

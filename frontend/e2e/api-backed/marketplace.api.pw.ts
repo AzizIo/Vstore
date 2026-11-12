@@ -126,7 +126,7 @@ test(
 
     await sellerPage.getByRole("button", { name: "My Listings", exact: true }).click();
     await sellerPage.getByRole("button", { name: "Create listing", exact: true }).click();
-    await expect(sellerPage.getByRole("heading", { name: "Create listing draft" })).toBeVisible();
+    await expect(sellerPage.getByRole("heading", { name: "New listing" })).toBeVisible();
 
     const inventoryAsset = sellerPage.getByRole("button", { name: /E2E Verified NFT/ });
     await expect(inventoryAsset).toBeVisible();
@@ -166,12 +166,12 @@ test(
     await expect(reservationDialog).toContainText("E2E Published NFT");
     await expect(reservationDialog).toContainText("15.75 TON");
     await expect(reservationDialog).toContainText("E2E Seller");
-    await expect(reservationDialog).toContainText("Payment is not enabled and no funds will be collected");
+    await expect(reservationDialog).toContainText("Payments are not enabled, no funds will be collected and the NFT stays with the seller");
     expect(buyerApiRequests.some((item) => item === "POST /api/orders")).toBe(false);
 
     await reservationDialog.getByRole("button", { name: "Confirm reservation" }).click();
     const reservationSuccess = buyerPage.getByRole("dialog", { name: "Reservation confirmed" });
-    await expect(reservationSuccess).toContainText("Payment is not enabled, no funds were collected");
+    await expect(reservationSuccess).toContainText("No payment was taken and the NFT is still with the seller");
     await reservationSuccess.getByRole("button", { name: "View Orders" }).click();
 
     await expect(buyerPage.getByRole("heading", { name: "Orders" })).toBeVisible();
