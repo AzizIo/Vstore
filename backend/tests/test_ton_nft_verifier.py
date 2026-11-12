@@ -671,6 +671,8 @@ async def test_owner_inventory_enriches_metadata_and_verification_reuses_cache(
 
     def ton_handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
+        if request.method == "POST":
+            return httpx.Response(200, json=_get_nft_data_response())
         return httpx.Response(200, json={"nft_items": [row]})
 
     async def fetch(uri: str, *, ipfs_gateway_url: str) -> dict[str, object]:
@@ -734,6 +736,8 @@ async def test_exact_item_metadata_lookup_uses_requested_item_address(
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
+        if request.method == "POST":
+            return httpx.Response(200, json=_get_nft_data_response())
         return httpx.Response(200, json={"nft_items": [row]})
 
     async def fetch(uri: str, *, ipfs_gateway_url: str) -> dict[str, object]:
