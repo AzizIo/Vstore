@@ -56,7 +56,6 @@ describe("listing API client", () => {
     await expect(fetchListings({
       search: "  lantern  ",
       assetType: "telegram_gift",
-      currency: "XTR",
       sort: "price_desc",
     })).resolves.toEqual(page);
 
@@ -68,19 +67,18 @@ describe("listing API client", () => {
     expect(parsed.searchParams.get("search")).toBe("lantern");
     expect(parsed.searchParams.get("asset_type")).toBe("telegram_gift");
     expect(parsed.searchParams.get("sort")).toBe("price_desc");
-    expect(parsed.searchParams.get("currency")).toBe("XTR");
+    expect(parsed.searchParams.has("currency")).toBe(false);
     expect(options?.signal).toBeUndefined();
   });
 
   it("omits blank search and the all-assets filter", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...page, items: [] }));
 
-    await fetchListings({ search: "   ", assetType: "all", currency: "all", sort: "newest" });
+    await fetchListings({ search: "   ", assetType: "all", sort: "newest" });
 
     const parsed = new URL(String(vi.mocked(fetch).mock.calls[0][0]), "http://localhost");
     expect(parsed.searchParams.has("search")).toBe(false);
     expect(parsed.searchParams.has("asset_type")).toBe(false);
-    expect(parsed.searchParams.has("currency")).toBe(false);
   });
 
   it("passes the abort signal through to fetch", async () => {

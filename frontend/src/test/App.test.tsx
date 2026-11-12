@@ -193,12 +193,10 @@ describe("marketplace catalog", () => {
     await waitFor(() => expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("search=lantern"));
     fireEvent.change(screen.getByRole("combobox", { name: "Asset type" }), { target: { value: "telegram_gift" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Sort listings" }), { target: { value: "price_desc" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "Price currency" }), { target: { value: "XTR" } });
     await waitFor(() => {
       const requestUrl = String(vi.mocked(fetch).mock.calls.at(-1)?.[0]);
       expect(requestUrl).toContain("asset_type=telegram_gift");
       expect(requestUrl).toContain("sort=price_desc");
-      expect(requestUrl).toContain("currency=XTR");
     });
   });
 
@@ -206,7 +204,7 @@ describe("marketplace catalog", () => {
   it("clears active catalog filters from the no-results state", async () => {
     vi.mocked(fetch).mockImplementation(async (input) => {
       const requestUrl = new URL(String(input), "http://localhost");
-      if (requestUrl.searchParams.get("currency") === "XTR") {
+      if (requestUrl.searchParams.get("search") === "nothing") {
         return jsonResponse({ ...page, items: [], total: 0 });
       }
       return jsonResponse(page);
@@ -214,14 +212,14 @@ describe("marketplace catalog", () => {
 
     renderMarketplace();
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("combobox", { name: "Price currency" }), { target: { value: "XTR" } });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search listings" }), { target: { value: "nothing" } });
     expect(await screen.findByText("No listings found")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
 
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Price currency" })).toHaveValue("all");
+    expect(screen.getByRole("searchbox", { name: "Search listings" })).toHaveValue("");
     const resetUrl = new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost");
-    expect(resetUrl.searchParams.has("currency")).toBe(false);
+    expect(resetUrl.searchParams.has("search")).toBe(false);
   });
 
   it("loads successive server pages, removes duplicate IDs, and hides Load more at total", async () => {
@@ -247,12 +245,12 @@ describe("marketplace catalog", () => {
     expect(pageRequests.map((url) => url.searchParams.get("offset"))).toEqual(["0", "24"]);
   });
 
-  it("resets catalog results and offset to zero when search, type, currency, or sort changes", async () => {
+  it("resets catalog results and offset to zero when search, type, or sort changes", async () => {
     const initialListings = makeListings(24, "initial");
     const filteredListing = { ...listing, id: "filtered", title: "Filtered result" };
     vi.mocked(fetch).mockImplementation(async (input) => {
       const requestUrl = new URL(String(input), "http://localhost");
-      if (requestUrl.searchParams.has("search") || requestUrl.searchParams.has("asset_type") || requestUrl.searchParams.has("currency") || requestUrl.searchParams.get("sort") !== "newest") {
+      if (requestUrl.searchParams.has("search") || requestUrl.searchParams.has("asset_type") || requestUrl.searchParams.get("sort") !== "newest") {
         return jsonResponse({ items: [filteredListing], total: 1, limit: 24, offset: 0 });
       }
       if (requestUrl.searchParams.get("offset") === "24") {
@@ -270,8 +268,6 @@ describe("marketplace catalog", () => {
     expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0");
 
     fireEvent.change(screen.getByRole("combobox", { name: "Asset type" }), { target: { value: "telegram_gift" } });
-    await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0"));
-    fireEvent.change(screen.getByRole("combobox", { name: "Price currency" }), { target: { value: "TON" } });
     await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0"));
     fireEvent.change(screen.getByRole("combobox", { name: "Sort listings" }), { target: { value: "price_desc" } });
     await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0"));

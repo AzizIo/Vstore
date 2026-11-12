@@ -5,7 +5,6 @@ import {
   type AssetType,
   type Listing,
   type ListingSort,
-  type PriceCurrency,
 } from "./api/listings";
 import { createOrder } from "./api/orders";
 import { SessionProvider, useRetrySession, useSession } from "./auth/SessionProvider";
@@ -304,7 +303,6 @@ function MarketplaceApp() {
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [assetType, setAssetType] = useState<AssetType | "all">("all");
-  const [currency, setCurrency] = useState<PriceCurrency | "all">("all");
   const [sort, setSort] = useState<ListingSort>("newest");
   const [listingId, setListingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -346,7 +344,7 @@ function MarketplaceApp() {
     setListings([]);
     setTotal(0);
     setNextOffset(0);
-    fetchListings({ search, assetType, currency, sort, limit: CATALOG_PAGE_SIZE, offset: 0 }, controller.signal)
+    fetchListings({ search, assetType, sort, limit: CATALOG_PAGE_SIZE, offset: 0 }, controller.signal)
       .then((page) => {
         if (controller.signal.aborted || version !== requestVersion.current) return;
         setListings(page.items);
@@ -370,7 +368,7 @@ function MarketplaceApp() {
       loadingMoreRef.current = false;
       if (requestVersion.current === version) requestVersion.current += 1;
     };
-  }, [search, assetType, currency, sort, retry]);
+  }, [search, assetType, sort, retry]);
 
   const hasMore = listings.length < total && nextOffset < total;
 
@@ -526,14 +524,6 @@ function MarketplaceApp() {
                 </select>
               </label>
               <label className="select-control">
-                <span className="sr-only">Price currency</span>
-                <select value={currency} onChange={(event) => setCurrency(event.target.value as PriceCurrency | "all")}>
-                  <option value="all">All currencies</option>
-                  <option value="TON">TON</option>
-                  <option value="XTR">Telegram Stars</option>
-                </select>
-              </label>
-              <label className="select-control">
                 <span className="sr-only">Sort listings</span>
                 <select value={sort} onChange={(event) => setSort(event.target.value as ListingSort)}>
                   <option value="newest">Newest</option>
@@ -557,14 +547,13 @@ function MarketplaceApp() {
             ) : listings.length === 0 ? (
               <div className="catalog-message" role="status">
                 <h3>No listings found</h3><p>Try changing your search or filters.</p>
-                {(search.trim() || assetType !== "all" || currency !== "all" || sort !== "newest") && (
+                {(search.trim() || assetType !== "all" || sort !== "newest") && (
                   <button
                     className="text-button"
                     type="button"
                     onClick={() => {
                       setSearch("");
                       setAssetType("all");
-                      setCurrency("all");
                       setSort("newest");
                     }}
                   >
