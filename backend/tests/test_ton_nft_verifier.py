@@ -243,6 +243,85 @@ async def test_provider_timeout_maps_to_unavailable() -> None:
 
 
 @pytest.mark.asyncio
+async def test_provider_retries_a_transient_dns_connect_error() -> None:
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise httpx.ConnectError(
+                "Name or service not known",
+                request=request,
+            )
+        return httpx.Response(200, json={"nft_items": []})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://mock.test/api/v3",
+    )
+    provider = TONCenterV3Provider(
+        TONCenterV3Config(base_url="https://mock.test/api/v3"),
+        client=client,
+    )
+
+    assert await provider.get_item(ITEM) is None
+    assert attempts == 2
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_provider_bounds_persistent_dns_connect_failures() -> None:
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        raise httpx.ConnectError(
+            "Name or service not known",
+            request=request,
+        )
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://mock.test/api/v3",
+    )
+    provider = TONCenterV3Provider(
+        TONCenterV3Config(base_url="https://mock.test/api/v3"),
+        client=client,
+    )
+
+    with pytest.raises(ProviderUnavailable, match="temporarily unavailable"):
+        await provider.get_item(ITEM)
+    assert attempts == 2
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_provider_does_not_retry_non_retryable_auth_configuration_errors() -> None:
+    attempts = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(401, json={"detail": "invalid api key"})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://mock.test/api/v3",
+    )
+    provider = TONCenterV3Provider(
+        TONCenterV3Config(base_url="https://mock.test/api/v3"),
+        client=client,
+    )
+
+    with pytest.raises(InvalidProviderData, match="rejected"):
+        await provider.get_item(ITEM)
+    assert attempts == 1
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_malformed_provider_item_maps_to_invalid_data() -> None:
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(
