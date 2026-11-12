@@ -415,6 +415,8 @@ footer span { padding: 0 6px; color: var(--accent); }
   .search-control { grid-column: 1 / -1; }
   .select-control select { width: 100%; min-width: 0; }
   .select-control { min-width: 0; }
+  .price-control { width: auto; min-width: 0; }
+  .price-control input { font-size: 11px; }
   .listing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px 10px; }
   .listing-card-content { padding: 10px 7px 12px; }
   .listing-card-title { font-size: 16px; }
