@@ -32,9 +32,9 @@ The B2 migration renames historical `pending_payment` order/event rows to `reser
 2. NFT inventory is sourced from backend-verified TON wallets. The My NFT screen uses the server-side inventory sync and TEP-62 ownership rechecks; wallet connection alone is not proof of wallet control, and client-supplied NFT metadata is not proof of ownership.
 3. A seller creates a draft for an eligible, verified asset. Publishing rechecks on-chain ownership immediately before making the listing active.
 4. A buyer reserves an active listing. The backend checks seller/asset state, takes a snapshot of price and currency, and uses idempotency/concurrency protections. The order expires or can be cancelled; the reservation does not lock the NFT on-chain.
-5. The current product has **no automated NFT delivery confirmation**. The service must not display a reservation as paid, completed, or delivered.
+5. The seller can prepare and sign a direct TEP-62 transfer through their own TON Connect wallet. The backend observer independently checks the exact item, network, seller, buyer, query ID and finalized provider evidence before marking the order completed. A reservation is not payment, and a wallet callback is not delivery proof.
 
-The Stage B architecture is documented in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md). The maintainer's technical baseline is recorded in [Issue #46](https://github.com/AzizIo/Vstore/issues/46). B1 read-only transfer evidence is merged; B2 persistence/state migration is in [PR #85](https://github.com/AzizIo/Vstore/pull/85). A transaction hash, screenshot, client callback, or current-owner read alone is not sufficient proof of delivery.
+The Stage B implementation is documented in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md), and the technical baseline is recorded in [Issue #46](https://github.com/AzizIo/Vstore/issues/46). B1–B6 are implemented across the delivery PRs, including [PR #101](https://github.com/AzizIo/Vstore/pull/101). A transaction hash, screenshot, client callback, or current-owner read alone is not sufficient proof of delivery.
 
 ## Direct NFT transfer flow (Stage B B1–B6 implemented; testnet acceptance remains open)
 
@@ -42,12 +42,12 @@ The non-custodial flow is implemented as follows. Completion still depends on in
 
 1. The buyer connects and proves control of a TON wallet through the backend-verified TON Connect Proof flow.
 2. The buyer reserves an active listing. Reservation records the order and price/currency snapshot; it does not transfer or lock the NFT.
-3. Before the seller is asked to transfer, the delivery-preparation flow is intended to snapshot the verified seller wallet, buyer destination wallet, exact NFT item and network for that order.
+3. Before the seller is asked to transfer, delivery preparation snapshots the verified seller wallet, buyer destination wallet, exact NFT item and network for that order.
 4. The seller initiates and signs the TEP-62 NFT transfer directly from the seller's own wallet to the snapshotted buyer address. The marketplace never receives private keys or takes custody of the NFT.
 5. The application submits a wallet-returned message reference only as an untrusted lookup hint; the observer independently correlates the persisted item, network, source, destination and query ID with provider evidence and the finality policy.
 6. Only after server-side verification may the order be marked completed. Provider outages, incomplete evidence, wrong recipients or ambiguous transfers remain pending/manual-review states and require reconciliation.
 
-The state machine, proposed API/database contracts, failure handling and decisions required before implementation are described in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md). See [Issue #46](https://github.com/AzizIo/Vstore/issues/46) for the implementation work. No payment, escrow, refund or seller-payout behavior is part of this flow.
+The implemented state machine, API/database contracts and failure handling are described in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md). See [Issue #46](https://github.com/AzizIo/Vstore/issues/46) for the implementation history and remaining live acceptance work. No payment, escrow, refund or seller-payout behavior is part of this flow.
 
 ## Supported assets and wallet security
 
