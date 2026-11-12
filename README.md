@@ -131,7 +131,7 @@ Example current API routes (authenticate with a backend Bearer token where indic
 
 For the exact contract, inspect routes, schemas and tests under backend/app/api/ and backend/tests/; do not infer additional endpoints from the roadmap.
 
-Before a customer or investor walkthrough, run the read-only [live demo preflight](docs/DEMO_PREFLIGHT.md) against the public API and Mini App origins. It checks API readiness, TON Connect proof configuration and exact hostname allowlisting, the Mini App HTML, and the TON Connect manifest/icon without changing the deployment. For the isolated Preview stack and a safe seller-to-buyer demo sequence, follow the [Preview demo runbook](docs/PREVIEW_DEMO_RUNBOOK.md).
+Before a customer or investor walkthrough, run the isolated Preview target/dependency checks from `backend/` (`python -m scripts.preview_safety guard` before migrations, then `python -m scripts.preview_safety preflight` after API startup). These fail closed unless the explicit Preview mode points to the dedicated Preview PostgreSQL/Redis services, migrations are current, and testnet, manifest, CORS and proof-domain settings align. Then run the read-only [live demo preflight](docs/DEMO_PREFLIGHT.md) against the public API and Mini App origins. It checks API readiness, TON Connect proof configuration and exact hostname allowlisting, the Mini App HTML, and the TON Connect manifest/icon without changing the deployment. For the isolated Preview stack and a safe seller-to-buyer demo sequence, follow the [Preview demo runbook](docs/PREVIEW_DEMO_RUNBOOK.md).
 
 ## Quality checks
 
