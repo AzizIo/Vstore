@@ -112,7 +112,7 @@ export function SellerOverview({ accessToken, onOpenOrders, onOpenListing, onMan
   const orderCards = [
     { label: "Orders received", value: overview.orders_as_seller.total },
     { label: "Orders placed", value: overview.orders_as_buyer.total },
-    { label: "Awaiting transfer", value: overview.orders_as_seller.awaiting_transfer + overview.orders_as_seller.reserved + overview.orders_as_seller.observing_transfer },
+    { label: "Orders in progress", value: overview.orders_as_seller.awaiting_transfer + overview.orders_as_seller.reserved + overview.orders_as_seller.observing_transfer },
     { label: "Completed transfers", value: overview.orders_as_seller.completed },
   ];
 
