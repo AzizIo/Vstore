@@ -9,7 +9,7 @@ import socket
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Protocol, cast
-from urllib.parse import unquote, urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -100,7 +100,7 @@ def _safe_image_url(value: object, gateway: str = IPFS_GATEWAY) -> str | None:
     return _normalize_uri(value, gateway)
 
 
-def _metadata_fields(data: dict[str, Any]) -> NFTMetadata:
+def _metadata_fields(data: dict[str, Any], gateway: str = IPFS_GATEWAY) -> NFTMetadata:
     attrs = data.get("attributes")
     safe_attrs = (
         tuple(
@@ -118,7 +118,7 @@ def _metadata_fields(data: dict[str, Any]) -> NFTMetadata:
     return NFTMetadata(
         name=name[:200] if isinstance(name, str) else None,
         description=description[:2000] if isinstance(description, str) else None,
-        image=_safe_image_url(image),
+        image=_safe_image_url(image, gateway),
         attributes=safe_attrs,
     )
 
@@ -134,7 +134,7 @@ class TONCenterV3Provider:
             timeout=httpx.Timeout(self.config.timeout_seconds), follow_redirects=False,
         )
         self._owns_client = client is None
-        self._metadata_cache: dict[str, NFTMetadata] = {}
+        self._metadata_cache: dict[str, dict[str, Any]] = {}
         self._metadata_lock = asyncio.Lock()
 
     async def aclose(self) -> None:
@@ -178,14 +178,15 @@ class TONCenterV3Provider:
         return [cast(dict[str, Any], row) for row in raw_rows]
 
     @staticmethod
-    def _inline_metadata(raw: dict[str, Any]) -> tuple[NFTMetadata, str | None, dict[str, Any]]:
+    def _inline_metadata(raw: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
         content = raw.get("content")
         content = content if isinstance(content, dict) else {}
         nested = content.get("metadata")
         data = nested if isinstance(nested, dict) else {
             key: value for key, value in content.items() if key != "uri"
         }
-        return _metadata_fields(data), content.get("uri") if isinstance(content.get("uri"), str) else None, data
+        uri = content.get("uri")
+        return data, uri if isinstance(uri, str) else None
 
     async def _fetch_metadata_json(self, uri: str) -> dict[str, Any] | None:
         current = _normalize_uri(uri, self.config.ipfs_gateway)
@@ -194,7 +195,6 @@ class TONCenterV3Provider:
         for redirect_count in range(MAX_REDIRECTS + 1):
             parsed = urlparse(current)
             try:
-                # Re-resolve before every request/redirect; redirects are disabled in httpx.
                 port = parsed.port or 443
                 if not _resolve_public_host(parsed.hostname or "", port):
                     return None
@@ -224,38 +224,29 @@ class TONCenterV3Provider:
                             body.extend(chunk)
                 payload = json.loads(body)
                 return payload if isinstance(payload, dict) else None
-            except (httpx.HTTPError, OSError, ValueError, json.JSONDecodeError):
+            except (httpx.HTTPError, OSError, ValueError, json.JSONDecodeError, InvalidProviderData):
                 return None
         return None
 
     async def _metadata(self, raw: dict[str, Any]) -> NFTMetadata:
-        inline, uri, inline_data = self._inline_metadata(raw)
-        # Full on-chain data requires no network access and takes precedence.
+        inline_data, uri = self._inline_metadata(raw)
+        inline = _metadata_fields(inline_data, self.config.ipfs_gateway)
         if not uri:
             return inline
         normalized_uri = _normalize_uri(uri, self.config.ipfs_gateway)
         if normalized_uri is None:
             return inline
         async with self._metadata_lock:
-            remote = self._metadata_cache.get(normalized_uri)
-        if remote is None:
-            remote_json = await self._fetch_metadata_json(normalized_uri)
-            if remote_json is None:
+            remote_data = self._metadata_cache.get(normalized_uri)
+        if remote_data is None:
+            remote_data = await self._fetch_metadata_json(normalized_uri)
+            if remote_data is None:
                 return inline
-            remote = _metadata_fields(remote_json)
             async with self._metadata_lock:
-                self._metadata_cache[normalized_uri] = remote
-        # TEP-64 semi-chain: inline on-chain values win conflicts.
-        merged = dict(remote_json) if (remote_json := await self._cached_metadata_json(normalized_uri)) else {}
-        merged.update(inline_data)
-        if not merged:
-            return remote
-        return _metadata_fields(merged)
-
-    async def _cached_metadata_json(self, uri: str) -> dict[str, Any] | None:
-        # Cache metadata fields only; the raw JSON is fetched once by _metadata below.
-        # Kept as an explicit hook so tests can replace remote fetching deterministically.
-        return None
+                self._metadata_cache[normalized_uri] = remote_data
+        # TEP-64 semi-chain: values supplied on-chain override off-chain collisions.
+        merged = {**remote_data, **inline_data}
+        return _metadata_fields(merged, self.config.ipfs_gateway)
 
     @classmethod
     def _parse_item(cls, raw: dict[str, Any]) -> NFTItemSnapshot:
@@ -278,7 +269,11 @@ class TONCenterV3Provider:
 
     async def _parse_item_with_metadata(self, raw: dict[str, Any]) -> NFTItemSnapshot:
         item = self._parse_item(raw)
-        metadata = await self._metadata(raw)
+        try:
+            metadata = await self._metadata(raw)
+        except Exception:
+            # Metadata is optional display enrichment, never an ownership signal.
+            metadata = _metadata_fields(self._inline_metadata(raw)[0], self.config.ipfs_gateway)
         return NFTItemSnapshot(
             address=item.address, initialized=item.initialized, index=item.index,
             collection_address=item.collection_address, owner_address=item.owner_address,
