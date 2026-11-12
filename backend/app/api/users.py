@@ -240,7 +240,7 @@ async def get_my_overview(
                 listing_id=listing.id,
                 title=listing.title or asset_name or "Untitled asset",
                 status=listing.status.value,
-                created_at=listing.created_at,
+                created_at=listing.updated_at,
                 price_amount=listing.price_amount,
                 price_currency=listing.price_currency.value,
             )
