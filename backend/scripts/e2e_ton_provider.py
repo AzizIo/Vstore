@@ -95,7 +95,9 @@ class Handler(BaseHTTPRequestHandler):
         with _delivery_lock:
             fixture = dict(_delivery_fixture) if _delivery_fixture is not None else None
         if parsed.path == "/api/v3/nft/transfers":
-            if fixture and query.get("item_address") == [fixture["item_address"]] and query.get("owner_address") == [fixture["seller_address"]]:
+            matches_item = fixture and query.get("item_address") == [fixture["item_address"]]
+            matches_seller = fixture and query.get("owner_address") == [fixture["seller_address"]]
+            if matches_item and matches_seller:
                 row = {
                     "nft_address": fixture["item_address"],
                     "query_id": str(fixture["query_id"]),
