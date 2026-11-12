@@ -144,7 +144,9 @@ async def test_toncenter_provider_parses_item_and_queries_collection_index() -> 
         }
         return httpx.Response(200, json={"nft_items": [row]})
 
-    client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://mock.test/api/v3")
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://mock.test/api/v3"
+    )
     config = TONCenterV3Config(base_url="https://mock.test/api/v3")
     provider = TONCenterV3Provider(config, client=client)
     parsed = await provider.get_item(ITEM)
@@ -287,7 +289,7 @@ async def test_unsupported_asset_has_distinct_status() -> None:
     ("image", "expected"),
     [
         ("https://cdn.example.test/nft.png", "https://cdn.example.test/nft.png"),
-        ("http://cdn.example.test/nft.png", None),
+        ("http://cdn.example.test/nft.png", "http://cdn.example.test/nft.png"),
         ("javascript:alert(1)", None),
         ("data:image/png;base64,AA==", None),
         ("https://user:pass@cdn.example.test/nft.png", None),
@@ -759,3 +761,98 @@ async def test_malformed_offchain_json_is_optional_display_data(
     assert item.owner_address == OWNER
     assert item.metadata.name is None
     await provider.aclose()
+
+
+@pytest.mark.asyncio
+async def test_dns_resolver_fails_closed_for_mixed_public_and_private_answers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    import socket
+
+    from app.assets.ton_nft.metadata import UnsafeMetadataURI, _resolve_public_ip
+
+    async def mixed_getaddrinfo(
+        self: asyncio.AbstractEventLoop,
+        host: str,
+        port: int,
+        **_kwargs: object,
+    ) -> list[tuple[object, ...]]:
+        return [
+            (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.216.34", port)),
+            (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("10.0.0.8", port)),
+        ]
+
+    monkeypatch.setattr(asyncio.BaseEventLoop, "getaddrinfo", mixed_getaddrinfo)
+    with pytest.raises(UnsafeMetadataURI):
+        await _resolve_public_ip("metadata.example", 443)
+
+
+@pytest.mark.asyncio
+async def test_metadata_timeout_covers_a_slow_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    from app.assets.ton_nft import metadata as metadata_module
+
+    async def slow_response(_url: str) -> tuple[int, dict[str, str], bytes]:
+        await asyncio.sleep(0.05)
+        return 200, {"content-type": "application/json"}, b'{"name":"late"}'
+
+    monkeypatch.setattr(metadata_module, "_request_pinned", slow_response)
+    assert await metadata_module.fetch_metadata_json(
+        "https://metadata.example/item.json", timeout_seconds=0.001
+    ) is None
+
+
+def test_metadata_fields_support_image_url_and_ipfs_media() -> None:
+    from app.assets.ton_nft.provider import _metadata_fields
+
+    metadata = _metadata_fields(
+        {
+            "image_url": (
+                "ipfs://bafybeigdyrzt5sfp7udm7hu76uh2yltop2wyklgdnzbz3u7zvy3gq/cover.png"
+            )
+        }
+    )
+    assert metadata.image == (
+        "https://ipfs.io/ipfs/"
+        "bafybeigdyrzt5sfp7udm7hu76uh2yltop2wyklgdnzbz3u7zvy3gq/cover.png"
+    )
+
+
+@pytest.mark.asyncio
+async def test_verifier_still_proves_owner_when_metadata_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.assets.ton_nft.provider import TONCenterV3Provider
+    from app.assets.ton_nft.verifier import TONNFTVerifier
+
+    rows = {
+        "address": ITEM,
+        "owner_address": OWNER,
+        "collection_address": COLLECTION,
+        "index": "7",
+        "init": True,
+        "content": {"uri": "https://metadata.example/offline.json"},
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.params.get("collection_address") == COLLECTION:
+            return httpx.Response(200, json={"nft_items": [rows]})
+        return httpx.Response(200, json={"nft_items": [rows]})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://mock.toncenter.test/api/v3",
+    )
+    provider = TONCenterV3Provider(
+        TONCenterV3Config(base_url="https://mock.toncenter.test/api/v3"),
+        client=client,
+    )
+    result = await TONNFTVerifier(provider).verify(ITEM, OWNER)
+
+    assert result.status is VerificationStatus.VERIFIED
+    assert result.metadata.name is None
+    await client.aclose()
