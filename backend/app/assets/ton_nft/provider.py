@@ -15,12 +15,15 @@ from app.assets.ton_nft.address import AddressError, normalize_address
 from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable
 from app.assets.ton_nft.metadata import (
     DEFAULT_IPFS_GATEWAY_URL,
-    fetch_metadata_json as _fetch_metadata_json,
+    fetch_metadata_json,
     normalize_media_uri,
-    normalize_metadata_uri as _normalize_uri,
+    normalize_metadata_uri,
     validate_ipfs_gateway_url,
 )
 from app.assets.ton_nft.models import NFTInventoryPage, NFTItemSnapshot, NFTMetadata
+
+_fetch_metadata_json = fetch_metadata_json
+_normalize_uri = normalize_metadata_uri
 
 MAX_PROVIDER_RESPONSE_BYTES = 2_000_000
 MAX_PROVIDER_PAGE_SIZE = 1000
