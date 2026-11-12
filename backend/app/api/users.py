@@ -228,7 +228,7 @@ async def get_my_overview(
         .join(NFTAsset, NFTAsset.id == Listing.asset_id)
         .where(or_(Order.buyer_id == user.id, Order.seller_id == user.id))
         .order_by(Order.updated_at.desc(), Order.id.desc())
-        .limit(8)
+        .limit(10)
     )
 
     activity: list[SellerActivityItem] = []
