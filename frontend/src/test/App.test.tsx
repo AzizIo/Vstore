@@ -934,7 +934,7 @@ describe("My Listings dashboard", () => {
     renderMarketplace();
     await openMyListings();
 
-    expect(screen.getByText("Checking Telegram session...")).toBeInTheDocument();
+    expect(screen.getByText("Checking Telegram session...", { selector: ".my-listings-message" })).toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/listings/me"))).toBe(false);
   });
 
