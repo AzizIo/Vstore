@@ -235,7 +235,9 @@ async def test_provider_timeout_maps_to_unavailable() -> None:
     def handler(_: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("timed out")
 
-    client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://mock.test/api/v3")
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://mock.test/api/v3"
+    )
     provider = TONCenterV3Provider(
         TONCenterV3Config(base_url="https://mock.test/api/v3"), client=client
     )
