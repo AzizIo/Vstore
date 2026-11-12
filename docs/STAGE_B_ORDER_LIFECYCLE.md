@@ -1,8 +1,8 @@
 # Stage B architecture: NFT delivery confirmation and order lifecycle
 
-- **Status:** Stage B implementation tracker. B1, B2 and B3 are merged; B4 is proposed in [Draft PR #92](https://github.com/AzizIo/Vstore/pull/92) and is not yet in main.
+- **Status:** B1–B6 implementation is present on `main`; B5 transactional delivery notifications and B6 seller wallet UX are covered by Issue #98. Live TON Connect/testnet acceptance remains a separate manual gate.
 - **Issue:** [#46 — implement non-custodial NFT transfer confirmation lifecycle](https://github.com/AzizIo/Vstore/issues/46); decomposition: [#56](https://github.com/AzizIo/Vstore/issues/56).
-- **Baseline reviewed:** main through migration 0006 (delivery observer leases); Draft PR #92 adds migration 0007 and seller delivery APIs.
+- **Baseline reviewed:** main includes delivery observer leases (0006), delivery preparation idempotency (0007), seller prepare/submit/read APIs, delivery notifications (0008), and wallet-driven frontend flow.
 - **Scope boundary:** TON NFT (TEP-62) transfer confirmation after reservation. This is not a payment, escrow, guarantee, custody, refund, or payout design.
 
 ## 1. Executive summary
@@ -29,13 +29,18 @@ Stage B should add a server-observed delivery lifecycle for a direct, non-custod
 | Notifications | Order events enqueue Telegram outbox entries within the database transaction; a separate worker retries sends. |
 | TON adapter | TONNFTVerifier reads TEP-62 item state and checks the expected current owner through the configured provider. The verifier currently has no order-delivery watcher or transfer-proof API. |
 
-### Remaining for Stage B
+### Remaining acceptance work
 
-- B4 seller prepare/submit/read APIs are in Draft PR #92, not merged. That PR verifies the selected seller wallet against fresh on-chain ownership, snapshots the buyer's verified primary wallet, persists a 15-minute preparation window and idempotency key, and prevents buyer cancellation once preparation has committed.
-- B5: enqueue delivery lifecycle notifications in the transactional outbox in the same transaction as accepted delivery state changes. The current outbox vocabulary covers reservation/cancel/expiry only.
-- B6: integrate the seller's wallet-driven transfer initiation and candidate-hash submission plus buyer/seller delivery status UI. Do not let the server sign or broadcast the transfer.
-- Testnet/manual acceptance: prove TON Connect signing, the item transfer message and provider finality behavior against known testnet transactions before any mainnet pilot.
-- Expand fault/concurrency coverage for prepare vs cancellation, submit vs observer claim, expiry/deadline races, duplicate candidates and provider disagreement.
+- Run live TON Connect signing on the configured Telegram Mini App origin against testnet wallets and known TEP-62 test items.
+- Validate the TON Center provider's indexed finality behavior against known successful, aborted, wrong-recipient and delayed-indexing testnet transfers.
+- Keep mainnet transfers, production deployment, VPS changes and live database migrations out of automated acceptance.
+- Continue concurrency/fault coverage for preparation expiry, duplicate submissions, provider disagreement and manual reconciliation.
+
+B4 preparation and submission APIs are implemented: the service rechecks seller ownership, snapshots the buyer's verified primary wallet, persists a 15-minute preparation window and idempotency key, and prevents buyer cancellation once preparation has committed.
+
+B5 is implemented: preparation, accepted submission, verified completion and manual-review notices are inserted into the transactional outbox in the same transaction as their lifecycle transition. Recipient roles are explicit and event dedupe keys are stable.
+
+B6 is implemented: seller-side preparation, exact TEP-62 transfer payload construction from persisted snapshots, wallet signing/broadcast through TON Connect, untrusted wallet-reference submission, and participant-visible progress/deadline/source/destination. The frontend never marks completion optimistically.
 
 ## 3. Proposed state machine
 
