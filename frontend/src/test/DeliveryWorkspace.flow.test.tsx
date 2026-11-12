@@ -179,6 +179,22 @@ describe("DeliveryWorkspace", () => {
     expect(onRefreshOrder).toHaveBeenCalled();
   });
 
+  it("keeps the seller wallet action available when the observer starts before submission", async () => {
+    const watchingAttempt = attempt({ status: "observing" });
+    mocks.fetchDeliveryState.mockResolvedValue(deliveryState("observing_transfer", watchingAttempt));
+    render(
+      <DeliveryWorkspace
+        order={order("observing_transfer")}
+        role="seller"
+        accessToken="test-token"
+        onRefreshOrder={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("Watching chain · awaiting seller wallet action")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Review and sign in wallet" })).toBeEnabled();
+  });
+
   it("does not submit a candidate when the seller rejects the wallet request", async () => {
     mocks.sendTransaction.mockRejectedValue(Object.assign(new Error("User rejected the request"), { code: 300 }));
     render(
