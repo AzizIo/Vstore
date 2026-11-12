@@ -155,7 +155,9 @@ class SellerOverviewResponse(BaseModel):
     recent_activity: list[SellerActivityItem]
 
 
-def _count_statuses(rows: list[tuple[object, int]], status_values: tuple[str, ...]) -> dict[str, int]:
+def _count_statuses(
+    rows: list[tuple[object, int]], status_values: tuple[str, ...]
+) -> dict[str, int]:
     counts = {value: 0 for value in status_values}
     for value, count in rows:
         key = value.value if hasattr(value, "value") else str(value)
