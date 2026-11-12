@@ -133,11 +133,18 @@ test(
     await expect(buyerPage.getByRole("heading", { name: "E2E Published NFT" })).toBeVisible();
     await expect(buyerPage.getByText(/^15\.75(?:0+)? TON$/)).toBeVisible();
     await buyerPage.getByRole("button", { name: "Place order", exact: true }).click();
-    await expect(
-      buyerPage.getByText("Order created. Payment is not enabled; check its status in Orders."),
-    ).toBeVisible();
+    const reservationDialog = buyerPage.getByRole("dialog", { name: "Reserve this listing?" });
+    await expect(reservationDialog).toContainText("E2E Published NFT");
+    await expect(reservationDialog).toContainText("15.75 TON");
+    await expect(reservationDialog).toContainText("E2E Seller");
+    await expect(reservationDialog).toContainText("Payment is not enabled and no funds will be collected");
+    expect(buyerApiRequests.some((item) => item === "POST /api/orders")).toBe(false);
 
-    await buyerPage.getByRole("button", { name: "Orders", exact: true }).click();
+    await reservationDialog.getByRole("button", { name: "Confirm reservation" }).click();
+    const reservationSuccess = buyerPage.getByRole("dialog", { name: "Reservation confirmed" });
+    await expect(reservationSuccess).toContainText("Payment is not enabled, no funds were collected");
+    await reservationSuccess.getByRole("button", { name: "View Orders" }).click();
+
     await expect(buyerPage.getByRole("heading", { name: "Order workspace" })).toBeVisible();
     await expect(buyerPage.getByText("Reservation pending", { exact: true })).toBeVisible();
     await expect(buyerPage.getByText(/^15\.75(?:0+)? TON$/)).toBeVisible();
