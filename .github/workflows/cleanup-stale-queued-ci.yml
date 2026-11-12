@@ -29,9 +29,9 @@ jobs:
     steps:
       - name: Preview or cancel stale queued CI runs
         env:
-          GH_TOKEN: \${{ github.token }}
-          MAX_AGE_MINUTES: \${{ inputs.max_age_minutes }}
-          DRY_RUN: \${{ inputs.dry_run }}
+          GH_TOKEN: ${{ github.token }}
+          MAX_AGE_MINUTES: ${{ inputs.max_age_minutes }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
 
@@ -45,7 +45,7 @@ jobs:
           trap 'rm -f "$runs_file"' EXIT
 
           gh api --paginate \
-            "repos/\${GITHUB_REPOSITORY}/actions/runs?status=queued&per_page=100" \
+            "repos/${GITHUB_REPOSITORY}/actions/runs?status=queued&per_page=100" \
             --jq '.workflow_runs[]
               | select((.name == "Backend CI" or .name == "Frontend CI")
                 and (.event == "push" or .event == "pull_request")
@@ -67,7 +67,7 @@ jobs:
 
               if [[ "$DRY_RUN" == "false" ]]; then
                 gh api --method POST \
-                  "repos/\${GITHUB_REPOSITORY}/actions/runs/\${run_id}/cancel" \
+                  "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" \
                   >/dev/null
                 cancelled=$((cancelled + 1))
               fi
