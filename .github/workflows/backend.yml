@@ -2,6 +2,8 @@ name: Backend CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "backend/**"
       - "docker-compose.yml"
@@ -15,6 +17,11 @@ on:
       - "docker-compose.preview.yml"
       - ".env.example"
       - ".github/workflows/backend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
