@@ -116,7 +116,13 @@ function DeliveryPanel({
     try {
       const state = await fetchDeliveryState(order.id, accessToken);
       setDelivery(state);
-      if (state.attempt && state.attempt.status !== "prepared") {
+      if (
+        state.attempt &&
+        state.attempt.status !== "prepared" &&
+        (state.attempt.status !== "observing" ||
+          state.attempt.candidate_transaction_hash !== null ||
+          state.attempt.submitted_at !== null)
+      ) {
         setWalletResultUncertain(false);
       }
     } catch (reason) {
