@@ -20,7 +20,8 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "zustand": "^5.0.5",
-    "@ton/core": "^0.63.1"
+    "@ton/core": "^0.63.1",
+    "buffer": "^6.0.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.0",
