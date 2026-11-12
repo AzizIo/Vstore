@@ -53,6 +53,9 @@ export interface ListingPage {
 export interface ListingFilters {
   search: string;
   assetType: AssetType | "all";
+  currency: PriceCurrency | "all";
+  minPrice: string;
+  maxPrice: string;
   sort: ListingSort;
   limit?: number;
   offset?: number;
@@ -134,6 +137,9 @@ export async function fetchListings(filters: ListingFilters, signal?: AbortSigna
   const search = filters.search.trim();
   if (search) params.set("search", search);
   if (filters.assetType !== "all") params.set("asset_type", filters.assetType);
+  if (filters.currency !== "all") params.set("currency", filters.currency);
+  if (filters.minPrice.trim()) params.set("min_price", filters.minPrice.trim());
+  if (filters.maxPrice.trim()) params.set("max_price", filters.maxPrice.trim());
   const page = await requestJson<unknown>(`${API_BASE_URL}/api/listings?${params}`, signal);
   if (
     !page || typeof page !== "object" || !Array.isArray((page as Partial<ListingPage>).items) ||
