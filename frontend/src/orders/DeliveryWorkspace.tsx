@@ -19,6 +19,25 @@ import {
 } from "../api/orders";
 import { fetchMyWallets } from "../wallet/api";
 
+type LocalTonConnectTestBoundary = {
+  wallet?: { account: { address: string; chain: string } } | null;
+  sendTransaction?: (request: {
+    validUntil: number;
+    network: string;
+    messages: Array<{ address: string; amount: string; payload: string }>;
+  }) => Promise<{ boc: string }>;
+};
+
+function localTonConnectTestBoundary(): LocalTonConnectTestBoundary | null {
+  // This loopback-only seam mocks the external wallet boundary in API-backed
+  // E2E. Its callback/reference is never trusted by the API or observer.
+  if (typeof window === "undefined" || !["127.0.0.1", "localhost"].includes(window.location.hostname)) {
+    return null;
+  }
+  return (window as Window & { __VILTARA_TON_CONNECT_TEST__?: LocalTonConnectTestBoundary })
+    .__VILTARA_TON_CONNECT_TEST__ ?? null;
+}
+
 function rawAddress(value: string): string {
   return Address.parse(value).toRawString();
 }
@@ -81,7 +100,9 @@ function DeliveryPanel({
   accessToken: string;
   onRefreshOrder: () => void;
 }) {
-  const wallet = useTonWallet();
+  const connectedWallet = useTonWallet();
+  const testWalletBoundary = localTonConnectTestBoundary();
+  const wallet = connectedWallet ?? testWalletBoundary?.wallet ?? null;
   const [tonConnectUI] = useTonConnectUI();
   const [delivery, setDelivery] = useState<OrderDeliveryState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -184,11 +205,14 @@ function DeliveryPanel({
       });
       walletRequestStarted = true;
       setWalletResultUncertain(true);
-      const result = await tonConnectUI.sendTransaction({
+      const walletRequest = {
         validUntil: Math.floor(Date.parse(attempt.deadline) / 1000),
         network: attempt.network === "testnet" ? CHAIN.TESTNET : CHAIN.MAINNET,
         messages: [{ address: item, amount: "50000000", payload }],
-      });
+      };
+      const result = testWalletBoundary?.sendTransaction
+        ? await testWalletBoundary.sendTransaction(walletRequest)
+        : await tonConnectUI.sendTransaction(walletRequest);
       const reference = await walletReference(result.boc);
       setRetryReference(reference);
       setMessage("Wallet returned a signed message. Sending its reference for lookup; this is not proof of delivery.");
