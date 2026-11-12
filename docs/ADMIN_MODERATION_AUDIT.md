@@ -1,6 +1,6 @@
 # Admin Moderation & Audit Center
 
-The moderation API is mounted under `/api/admin`. It uses the existing verified bearer session, then assigns the administrator role from the server-side `ADMIN_TELEGRAM_IDS` allowlist. The allowlist defaults to empty, which denies all admin access. Never send a role, actor ID, or Telegram ID in a moderation request.
+The moderation API is mounted under `/api/admin`. It uses the existing verified bearer session, then assigns the administrator role from the server-side `ADMIN_TELEGRAM_IDS` allowlist. The allowlist defaults to empty, which denies all admin access. For the current Docker Compose API service, add a JSON array of numeric Telegram user IDs to the root `.env`, for example `ADMIN_TELEGRAM_IDS=[123456789]`; do not commit real administrator IDs. The `api` service receives this file through Compose `env_file`. Open the separate moderation workspace at the Mini App origin plus `/admin`; the route checks the verified Telegram session and the API allowlist. Never send a role, actor ID, or Telegram ID in a moderation request.
 
 ## Endpoints
 
@@ -19,7 +19,7 @@ The moderation API is mounted under `/api/admin`. It uses the existing verified 
 
 ## Audit guarantees
 
-Each successful decision and its listing status update commit in the same database transaction. The unique actor/idempotency-key constraint prevents duplicate events; replaying the same key and payload returns the original event, while reusing it for a different decision returns 409. A PostgreSQL trigger rejects every UPDATE or DELETE against `moderation_audit_log`. Downgrade refuses to drop a populated log.
+Each successful decision and its listing status update commit in the same database transaction. The unique actor/idempotency-key constraint prevents duplicate events; replaying the same key and payload returns the original event, while reusing it for a different decision returns 409. A PostgreSQL trigger rejects every UPDATE, DELETE or TRUNCATE against `moderation_audit_log`. Downgrade refuses to drop a populated log.
 
 Audit snapshots contain only listing ID/status/title/price/currency, seller UUID, asset verification status and a boolean ownership-match signal. Telegram IDs, wallet/item addresses, credentials, tokens and provider payloads are not recorded. Audit reads and all decisions require the admin allowlist check on every request. Bearer authentication is header-based (not cookie-based), so browser ambient-cookie CSRF is not used; CORS remains governed by the existing configured origins.
 
