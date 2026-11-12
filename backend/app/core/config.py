@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     ton_center_mainnet_base_url: str = "https://toncenter.com/api/v3"
     ton_center_testnet_base_url: str = "https://testnet.toncenter.com/api/v3"
     ton_center_timeout_seconds: float = Field(default=8.0, gt=0, le=60)
+    ton_metadata_ipfs_gateway_url: str = "https://ipfs.io/ipfs"
     cors_allowed_origins: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
