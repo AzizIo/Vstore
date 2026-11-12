@@ -79,7 +79,8 @@ function deliveryStatus(attempt: DeliveryAttempt | null, orderStatus: Marketplac
   if (orderStatus === "completed" || attempt?.status === "verified") return "Transfer independently verified";
   if (attempt?.status === "manual_review") return "Manual review required";
   if (attempt?.status === "failed") return "Transfer not verified";
-  if (orderStatus === "observing_transfer" || attempt?.status === "observing") return "Transfer submitted · verifying";
+  if (attempt?.candidate_transaction_hash || attempt?.submitted_at) return "Transfer submitted · verifying";
+  if (orderStatus === "observing_transfer" || attempt?.status === "observing") return "Watching chain · awaiting seller wallet action";
   if (attempt?.status === "prepared" || orderStatus === "awaiting_transfer") return "Awaiting seller wallet action";
   return "Delivery not prepared";
 }
@@ -177,7 +178,10 @@ function DeliveryPanel({
     let walletRequestStarted = false;
     try {
       const attempt = delivery.attempt;
-      if (attempt.status !== "prepared") {
+      const waitingForSellerTransfer =
+        attempt.status === "prepared" ||
+        (attempt.status === "observing" && !attempt.candidate_transaction_hash && !attempt.submitted_at);
+      if (!waitingForSellerTransfer) {
         throw new Error("This delivery intent is no longer waiting for a wallet transfer.");
       }
       const connectedNetwork = wallet ? networkForChain(wallet.account.chain) : null;
@@ -278,7 +282,11 @@ function DeliveryPanel({
 
   const attempt = delivery?.attempt ?? null;
   const canPrepare = role === "seller" && order.status === "reserved" && !attempt;
-  const canRequestTransfer = role === "seller" && order.status === "awaiting_transfer" && attempt?.status === "prepared";
+  const canRequestTransfer = role === "seller" &&
+    ["awaiting_transfer", "observing_transfer"].includes(order.status) &&
+    Boolean(attempt) &&
+    (attempt.status === "prepared" ||
+      (attempt.status === "observing" && !attempt.candidate_transaction_hash && !attempt.submitted_at));
   const showDetails = Boolean(attempt);
 
   return (
