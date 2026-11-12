@@ -1,0 +1,25 @@
+.seller-reviews,
+.review-form { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--line, #ddd); }
+.reviews-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
+.reviews-heading h2, .review-form h3 { margin: 0; }
+.reviews-summary { white-space: nowrap; }
+.reviews-summary strong { font-size: 1.4rem; }
+.reviews-state, .review-form-state { color: var(--muted, #666); }
+.review-list { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: .75rem; }
+.review-item { padding: 1rem; border: 1px solid var(--line, #ddd); border-radius: .75rem; overflow-wrap: anywhere; }
+.review-item-heading { display: flex; justify-content: space-between; gap: .75rem; }
+.review-item-heading span { color: #a66b00; letter-spacing: .08em; }
+.review-item-heading time, .review-item small { color: var(--muted, #666); font-size: .8rem; }
+.review-item p { margin: .6rem 0; }
+.reviews-load-more { margin-top: 1rem; }
+.reviews-inline-error, .review-form-error { color: #9b2c2c; }
+.review-form > p { color: var(--muted, #666); }
+.review-form fieldset { border: 0; padding: 0; margin: 1rem 0; }
+.review-rating-options { display: flex; flex-wrap: wrap; gap: .5rem; }
+.review-rating-options label { cursor: pointer; padding: .55rem .7rem; border: 1px solid var(--line, #ddd); border-radius: .5rem; }
+.review-rating-options input { margin-right: .35rem; }
+.review-comment-label { display: grid; gap: .4rem; }
+.review-comment-label textarea { width: 100%; box-sizing: border-box; resize: vertical; padding: .7rem; border: 1px solid var(--line, #ddd); border-radius: .5rem; font: inherit; }
+.review-submit-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-top: .75rem; color: var(--muted, #666); }
+.review-form-success { color: #276749; }
+@media (max-width: 640px) { .reviews-heading, .review-item-heading, .review-submit-row { align-items: flex-start; flex-direction: column; } .reviews-summary { white-space: normal; } .review-rating-options label { min-height: 2.75rem; box-sizing: border-box; } }

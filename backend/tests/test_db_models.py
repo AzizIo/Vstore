@@ -20,6 +20,7 @@ def test_marketplace_tables_are_registered() -> None:
         "order_delivery_attempts",
         "telegram_notification_outbox",
         "moderation_audit_log",
+        "seller_reviews",
     }
 
 

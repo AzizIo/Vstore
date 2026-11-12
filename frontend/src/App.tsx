@@ -12,6 +12,7 @@ import { getTelegramStartParam } from "./auth/telegram";
 import { MyListings } from "./listings/MyListings";
 import { MyInventory } from "./inventory/MyInventory";
 import { Orders } from "./orders/Orders";
+import { SellerReviews } from "./reviews/SellerReviews";
 import { WalletConnection } from "./wallet/WalletConnection";
 
 const assetTypeLabels: Record<AssetType, string> = {
@@ -242,6 +243,10 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
             <div><dt>Asset ID</dt><dd>{listing.asset.external_id}</dd></div>
             <div><dt>Verification</dt><dd>{listing.asset.verification_status}</dd></div>
           </dl>
+          <SellerReviews
+            sellerId={listing.seller.id}
+            accessToken={session.status === "authenticated" ? session.accessToken : null}
+          />
         </div>
       </div>
     </section>
