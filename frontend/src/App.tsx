@@ -5,6 +5,7 @@ import {
   type AssetType,
   type Listing,
   type ListingSort,
+  type PriceCurrency,
 } from "./api/listings";
 import { createOrder } from "./api/orders";
 import { SessionProvider, useRetrySession, useSession } from "./auth/SessionProvider";
@@ -297,6 +298,9 @@ function MarketplaceApp() {
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [assetType, setAssetType] = useState<AssetType | "all">("all");
+  const [currency, setCurrency] = useState<PriceCurrency | "all">("all");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
   const [sort, setSort] = useState<ListingSort>("newest");
   const [listingId, setListingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -338,7 +342,7 @@ function MarketplaceApp() {
     setListings([]);
     setTotal(0);
     setNextOffset(0);
-    fetchListings({ search, assetType, sort, limit: CATALOG_PAGE_SIZE, offset: 0 }, controller.signal)
+    fetchListings({ search, assetType, currency, minPrice, maxPrice, sort, limit: CATALOG_PAGE_SIZE, offset: 0 }, controller.signal)
       .then((page) => {
         if (controller.signal.aborted || version !== requestVersion.current) return;
         setListings(page.items);
@@ -362,7 +366,7 @@ function MarketplaceApp() {
       loadingMoreRef.current = false;
       if (requestVersion.current === version) requestVersion.current += 1;
     };
-  }, [search, assetType, sort, retry]);
+  }, [search, assetType, currency, minPrice, maxPrice, sort, retry]);
 
   const hasMore = listings.length < total && nextOffset < total;
 
@@ -378,7 +382,7 @@ function MarketplaceApp() {
 
     try {
       const page = await fetchListings(
-        { search, assetType, sort, limit: CATALOG_PAGE_SIZE, offset: nextOffset },
+        { search, assetType, currency, minPrice, maxPrice, sort, limit: CATALOG_PAGE_SIZE, offset: nextOffset },
         controller.signal,
       );
       if (controller.signal.aborted || version !== requestVersion.current) return;
@@ -518,14 +522,63 @@ function MarketplaceApp() {
                 </select>
               </label>
               <label className="select-control">
-                <span className="sr-only">Sort listings</span>
-                <select value={sort} onChange={(event) => setSort(event.target.value as ListingSort)}>
-                  <option value="newest">Newest</option>
-                  <option value="price_asc">Price: low to high</option>
-                  <option value="price_desc">Price: high to low</option>
+                <span className="sr-only">Price currency</span>
+                <select
+                  aria-label="Price currency"
+                  value={currency}
+                  onChange={(event) => {
+                    const value = event.target.value as PriceCurrency | "all";
+                    setCurrency(value);
+                    if (value === "all") setSort("newest");
+                  }}
+                >
+                  <option value="all">All currencies</option>
+                  <option value="TON">TON</option>
+                  <option value="XTR">Stars (XTR)</option>
                 </select>
               </label>
+              <label className="price-control">
+                <span className="sr-only">Minimum price</span>
+                <input aria-label="Minimum price" type="number" min="0" step="0.000000001" placeholder="Min price" value={minPrice} onChange={(event) => setMinPrice(event.target.value)} />
+              </label>
+              <label className="price-control">
+                <span className="sr-only">Maximum price</span>
+                <input aria-label="Maximum price" type="number" min="0" step="0.000000001" placeholder="Max price" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} />
+              </label>
+              <label className="select-control">
+                <span className="sr-only">Sort listings</span>
+                <select
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value as ListingSort)}
+                >
+                  <option value="newest">Newest</option>
+                  <option value="price_asc" disabled={currency === "all"}>Price: low to high</option>
+                  <option value="price_desc" disabled={currency === "all"}>Price: high to low</option>
+                </select>
+              </label>
+              {(search || assetType !== "all" || currency !== "all" || minPrice || maxPrice || sort !== "newest") && (
+                <button
+                  className="clear-filters-button"
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setAssetType("all");
+                    setCurrency("all");
+                    setMinPrice("");
+                    setMaxPrice("");
+                    setSort("newest");
+                  }}
+                >
+                  Clear filters
+                </button>
+              )}
             </form>
+            {(minPrice || maxPrice) && currency === "all" && (
+              <p className="filter-hint" role="status">Choose TON or Stars to apply a price range.</p>
+            )}
+            {currency === "all" && sort !== "newest" && (
+              <p className="filter-hint" role="status">Choose a currency to compare prices fairly.</p>
+            )}
 
             {loading ? (
               <div className="listing-grid" aria-label="Listings loading" aria-busy="true">
