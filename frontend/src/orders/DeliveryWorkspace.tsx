@@ -97,11 +97,13 @@ function DeliveryPanel({
   role,
   accessToken,
   onRefreshOrder,
+  walletActionsEnabled,
 }: {
   order: MarketplaceOrder;
   role: OrderRole;
   accessToken: string;
   onRefreshOrder: () => void;
+  walletActionsEnabled: boolean;
 }) {
   const connectedWallet = useTonWallet();
   const testWalletBoundary = localTonConnectTestBoundary();
@@ -294,8 +296,8 @@ function DeliveryPanel({
   }
 
   const attempt = delivery?.attempt ?? null;
-  const canPrepare = role === "seller" && order.status === "reserved" && !attempt;
-  const canRequestTransfer = role === "seller" &&
+  const canPrepare = walletActionsEnabled && role === "seller" && order.status === "reserved" && !attempt;
+  const canRequestTransfer = walletActionsEnabled && role === "seller" &&
     ["awaiting_transfer", "observing_transfer"].includes(order.status) &&
     attempt !== null &&
     (attempt.status === "prepared" ||
@@ -328,8 +330,11 @@ function DeliveryPanel({
           {attempt.verified_at && <div><dt>Verified at</dt><dd>{new Date(attempt.verified_at).toLocaleString()}</dd></div>}
         </dl>
       )}
-      {role === "seller" && !wallet && order.status !== "completed" && (
+      {walletActionsEnabled && role === "seller" && !wallet && order.status !== "completed" && (
         <button className="secondary-button" type="button" onClick={() => void openWallet()}>Connect seller wallet</button>
+      )}
+      {role === "seller" && !walletActionsEnabled && (
+        <p className="workspace-muted" role="status">TON Connect is not configured for this Mini App. Wallet signing is disabled.</p>
       )}
       {canPrepare && (
         <button className="primary-button" type="button" disabled={busy || loading} onClick={() => void prepare()}>
@@ -375,16 +380,20 @@ export function DeliveryWorkspace({
   const configuredManifestUrl = import.meta.env.VITE_TONCONNECT_MANIFEST_URL?.trim();
   const testBoundary = localTonConnectTestBoundary();
   const manifestUrl = configuredManifestUrl ||
-    (testBoundary && typeof window !== "undefined"
-      ? `${window.location.origin}/tonconnect-manifest.json`
-      : "");
+    (typeof window !== "undefined" ? `${window.location.origin}/tonconnect-manifest.json` : "");
   if (!manifestUrl) {
-    return <section className="workspace-section" aria-label="NFT transfer"><p className="eyebrow">NON-CUSTODIAL DELIVERY</p><h2>NFT transfer</h2><p className="workspace-muted">TON Connect is not configured for this Mini App. No wallet transfer can be initiated here.</p></section>;
+    return <section className="workspace-section" aria-label="NFT transfer"><p className="eyebrow">NON-CUSTODIAL DELIVERY</p><h2>NFT transfer</h2><p className="workspace-muted">Delivery status is unavailable in this environment.</p></section>;
   }
 
   return (
     <TonConnectUIProvider manifestUrl={manifestUrl}>
-      <DeliveryPanel order={order} role={role} accessToken={accessToken} onRefreshOrder={onRefreshOrder} />
+      <DeliveryPanel
+        order={order}
+        role={role}
+        accessToken={accessToken}
+        onRefreshOrder={onRefreshOrder}
+        walletActionsEnabled={Boolean(configuredManifestUrl || testBoundary)}
+      />
     </TonConnectUIProvider>
   );
 }
