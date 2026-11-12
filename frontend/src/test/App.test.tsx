@@ -594,7 +594,7 @@ describe("Buyer orders", () => {
       updated_at: "2026-01-01T00:00:00Z",
       events: [{ from_status: null, to_status: "reserved", actor_type: "buyer", created_at: "2026-01-01T00:00:00Z" }],
     };
-    vi.mocked(fetch).mockImplementation(async (input) => {
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
       if (url.endsWith("/api/users/me")) return jsonResponse(profile);
