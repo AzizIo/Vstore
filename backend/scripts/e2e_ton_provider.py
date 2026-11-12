@@ -8,6 +8,10 @@ from __future__ import annotations
 
 import json
 import threading
+
+from pytoniq_core.boc.address import Address
+from pytoniq_core.boc.builder import Builder
+from pytoniq_core.boc.cell import Cell
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
@@ -19,6 +23,31 @@ _delivery_fixture: dict[str, object] | None = None
 E2E_SELLER_TELEGRAM_ID = 990000001
 E2E_BUYER_TELEGRAM_ID = 990000002
 E2E_NFT_NAME = "E2E Verified NFT"
+
+
+
+
+def _cell_boc(cell: Cell) -> str:
+    import base64
+
+    return base64.b64encode(cell.to_boc()).decode("ascii")
+
+
+def _address_stack(address: str) -> dict[str, str]:
+    return {"type": "cell", "value": _cell_boc(Address(address).to_cell())}
+
+
+def _nft_data_stack(owner_address: str) -> list[dict[str, str]]:
+    # TEP-62: initialized, index, collection address, owner address, content.
+    # The E2E NFT is intentionally collection-less.
+    no_collection = Builder().store_bits("00").end_cell()
+    return [
+        {"type": "num", "value": "-0x1"},
+        {"type": "num", "value": "0x0"},
+        {"type": "cell", "value": _cell_boc(no_collection)},
+        _address_stack(owner_address),
+        {"type": "cell", "value": _cell_boc(Cell.empty())},
+    ]
 
 
 def _item() -> dict[str, object]:
@@ -52,6 +81,39 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         global _delivery_fixture
         parsed = urlsplit(self.path)
+
+        if parsed.path == "/api/v3/runGetMethod":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 16_384:
+                    self.send_error(413)
+                    return
+                payload = json.loads(self.rfile.read(length))
+            except (ValueError, json.JSONDecodeError):
+                self.send_error(400)
+                return
+            if not isinstance(payload, dict):
+                self.send_error(400)
+                return
+            if payload.get("method") != "get_nft_data":
+                self._send_json({"exit_code": 11, "stack": []})
+                return
+            if payload.get("address") != E2E_NFT_ITEM_ADDRESS:
+                self._send_json({"exit_code": 11, "stack": []})
+                return
+            with _delivery_lock:
+                fixture = dict(_delivery_fixture) if _delivery_fixture is not None else None
+            owner = (
+                str(fixture["buyer_address"])
+                if fixture and fixture.get("item_address") == E2E_NFT_ITEM_ADDRESS
+                else E2E_SELLER_WALLET_ADDRESS
+            )
+            self._send_json({
+                "exit_code": 0,
+                "stack": _nft_data_stack(owner),
+            })
+            return
+
         if parsed.path != "/__e2e__/delivery":
             self.send_error(404)
             return
