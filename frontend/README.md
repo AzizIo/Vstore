@@ -27,6 +27,14 @@ npm test -- src/test/Orders.test.tsx
 
 The Orders tests cover the buyer/seller workspace, filtering/search, order details and cancellation flow.
 
+Run the focused delivery lifecycle UI contract tests:
+
+```bash
+npm test -- src/test/Orders.lifecycle.test.tsx
+```
+
+These tests cover the six order lifecycle states and verify that cancellation is available only while an order is reserved.
+
 ## Playwright E2E
 
 Install the Chromium browser used by the configured project:
