@@ -529,7 +529,11 @@ function MarketplaceApp() {
                   onChange={(event) => {
                     const value = event.target.value as PriceCurrency | "all";
                     setCurrency(value);
-                    if (value === "all") setSort("newest");
+                    if (value === "all") {
+                      setSort("newest");
+                      setMinPrice("");
+                      setMaxPrice("");
+                    }
                   }}
                 >
                   <option value="all">All currencies</option>
