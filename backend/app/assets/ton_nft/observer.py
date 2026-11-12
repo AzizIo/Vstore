@@ -41,6 +41,7 @@ from app.db.models import (
     OrderEvent,
     OrderStatus,
 )
+from app.orders.service import _enqueue_order_notifications
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,21 @@ class DeliveryEvidenceProvider(Protocol):
 
 
 ProviderFactory = Callable[[str], DeliveryEvidenceProvider]
+
+
+async def _enqueue_delivery_notification(
+    session: AsyncSession, *, order_id: uuid.UUID, event_type: str
+) -> None:
+    """Enqueue a participant notice inside the observer's state transaction."""
+    order = await session.scalar(select(Order).where(Order.id == order_id))
+    if order is None:
+        return
+    await _enqueue_order_notifications(
+        session,
+        order=order,
+        event_type=event_type,
+        recipients={order.buyer_id: "buyer", order.seller_id: "seller"},
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,6 +335,9 @@ async def _mark_manual_review(
         attempt.next_check_at = None
         attempt.observer_lease_token = None
         attempt.observer_lease_until = None
+        await _enqueue_delivery_notification(
+            session, order_id=claim.order_id, event_type="delivery_manual_review"
+        )
     return True
 
 
@@ -353,6 +372,9 @@ async def _schedule_retry(
         ):
             attempt.status = OrderDeliveryAttemptStatus.MANUAL_REVIEW
             attempt.next_check_at = None
+            await _enqueue_delivery_notification(
+                session, order_id=claim.order_id, event_type="delivery_manual_review"
+            )
             return "manual_review"
 
         exponent = min(max(attempt.observer_attempt_count - 1, 0), 30)
@@ -456,6 +478,9 @@ async def _apply_verified_evidence(
             attempt.next_check_at = None
             attempt.observer_lease_token = None
             attempt.observer_lease_until = None
+            await _enqueue_delivery_notification(
+                session, order_id=claim.order_id, event_type="delivery_manual_review"
+            )
             return "manual_review"
 
         duplicate = await session.scalar(
@@ -474,6 +499,9 @@ async def _apply_verified_evidence(
             attempt.next_check_at = None
             attempt.observer_lease_token = None
             attempt.observer_lease_until = None
+            await _enqueue_delivery_notification(
+                session, order_id=claim.order_id, event_type="delivery_manual_review"
+            )
             return "manual_review"
 
         previous_status = order.status
@@ -502,6 +530,9 @@ async def _apply_verified_evidence(
                 actor_id=None,
                 actor_type="system",
             )
+        )
+        await _enqueue_delivery_notification(
+            session, order_id=order.id, event_type="delivery_confirmed"
         )
     return "verified"
 
