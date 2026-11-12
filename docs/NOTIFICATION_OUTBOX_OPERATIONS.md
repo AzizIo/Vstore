@@ -49,7 +49,7 @@ The JSON document contains:
 - `thresholds.max_due_age_seconds`;
 - `counts`: total and counts by outbox status;
 - `due_pending_count` and `expired_processing_lease_count`;
-- `oldest_due_pending_age_seconds` and `oldest_failed_age_seconds` (null when absent);
+- `oldest_due_pending_age_seconds` and `oldest_failed_age_seconds` (seconds since creation of the oldest failed row, null when absent);
 - `degraded_reasons`: stable reason codes.
 
 This command is operational visibility only. It does not introduce an automatic retry, manual redrive, message deletion or payment behavior.

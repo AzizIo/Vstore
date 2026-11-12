@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -78,6 +78,8 @@ def _format_utc(value: datetime) -> str:
 def _age_seconds(now: datetime, occurred_at: datetime | None) -> int | None:
     if occurred_at is None:
         return None
+    if occurred_at.tzinfo is None:
+        occurred_at = occurred_at.replace(tzinfo=UTC)
     age = int((now - occurred_at).total_seconds())
     return max(0, age)
 
@@ -114,9 +116,9 @@ async def inspect_notification_outbox(
         func.min(TelegramNotificationOutbox.created_at)
         .filter(due_pending)
         .label("oldest_due_pending_created_at"),
-        func.min(TelegramNotificationOutbox.updated_at)
+        func.min(TelegramNotificationOutbox.created_at)
         .filter(failed)
-        .label("oldest_failed_updated_at"),
+        .label("oldest_failed_created_at"),
     )
 
     row = (await session.execute(statement)).one()
@@ -133,6 +135,6 @@ async def inspect_notification_outbox(
             sampled_at, row.oldest_due_pending_created_at
         ),
         oldest_failed_age_seconds=_age_seconds(
-            sampled_at, row.oldest_failed_updated_at
+            sampled_at, row.oldest_failed_created_at
         ),
     )

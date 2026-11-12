@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import json
 import sys
-from typing import Sequence
+from collections.abc import Sequence
 
 from app.db.session import async_session_factory, dispose_engine
 from app.notifications.diagnostics import (

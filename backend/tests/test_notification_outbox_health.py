@@ -61,7 +61,7 @@ class _FakeResult:
             due_pending_count=0,
             expired_processing_lease_count=0,
             oldest_due_pending_created_at=None,
-            oldest_failed_updated_at=None,
+            oldest_failed_created_at=None,
         )
 
 
@@ -164,7 +164,14 @@ def test_json_document_has_stable_aggregate_only_schema() -> None:
         "expired_processing_leases_present",
         "due_pending_backlog_too_old",
     ]
-    for forbidden in ("telegram_id", "recipient", "order_id", "wallet", "last_error", "DATABASE_URL"):
+    for forbidden in (
+        "telegram_id",
+        "recipient",
+        "order_id",
+        "wallet",
+        "last_error",
+        "DATABASE_URL",
+    ):
         assert forbidden.lower() not in serialized.lower()
 
 
@@ -293,8 +300,14 @@ async def test_postgres_diagnostic_reports_persisted_states_without_mutating_row
     outbox_health_session: AsyncSession,
 ) -> None:
     now = datetime.now(UTC)
-    buyer = User(telegram_id=910_000_000 + uuid4().int % 80_000_000, first_name="Buyer")
-    seller = User(telegram_id=920_000_000 + uuid4().int % 80_000_000, first_name="Seller")
+    buyer = User(
+        telegram_id=910_000_000 + uuid4().int % 80_000_000,
+        first_name="Buyer",
+    )
+    seller = User(
+        telegram_id=920_000_000 + uuid4().int % 80_000_000,
+        first_name="Seller",
+    )
     outbox_health_session.add_all([buyer, seller])
     await outbox_health_session.flush()
 
@@ -344,7 +357,6 @@ async def test_postgres_diagnostic_reports_persisted_states_without_mutating_row
             attempt_count=1,
             next_attempt_at=now - timedelta(seconds=100),
             created_at=now - timedelta(seconds=500),
-            updated_at=now - timedelta(seconds=500),
         ),
         TelegramNotificationOutbox(
             dedupe_key=f"scheduled-{uuid4()}",
@@ -356,7 +368,6 @@ async def test_postgres_diagnostic_reports_persisted_states_without_mutating_row
             attempt_count=1,
             next_attempt_at=now + timedelta(seconds=180),
             created_at=now - timedelta(seconds=20),
-            updated_at=now - timedelta(seconds=20),
         ),
         TelegramNotificationOutbox(
             dedupe_key=f"expired-processing-{uuid4()}",
@@ -370,7 +381,6 @@ async def test_postgres_diagnostic_reports_persisted_states_without_mutating_row
             locked_until=now - timedelta(seconds=10),
             claim_token=uuid4(),
             created_at=now - timedelta(seconds=80),
-            updated_at=now - timedelta(seconds=10),
         ),
         TelegramNotificationOutbox(
             dedupe_key=f"active-processing-{uuid4()}",
@@ -384,7 +394,6 @@ async def test_postgres_diagnostic_reports_persisted_states_without_mutating_row
             locked_until=now + timedelta(seconds=120),
             claim_token=uuid4(),
             created_at=now - timedelta(seconds=30),
-            updated_at=now - timedelta(seconds=5),
         ),
         TelegramNotificationOutbox(
             dedupe_key=f"delivered-{uuid4()}",
@@ -397,7 +406,6 @@ async def test_postgres_diagnostic_reports_persisted_states_without_mutating_row
             next_attempt_at=now,
             delivered_at=now - timedelta(seconds=2),
             created_at=now - timedelta(seconds=15),
-            updated_at=now - timedelta(seconds=2),
         ),
         TelegramNotificationOutbox(
             dedupe_key=f"failed-{uuid4()}",
@@ -409,8 +417,7 @@ async def test_postgres_diagnostic_reports_persisted_states_without_mutating_row
             attempt_count=8,
             next_attempt_at=now,
             last_error="synthetic failure text must not be exposed",
-            created_at=now - timedelta(seconds=50),
-            updated_at=now - timedelta(seconds=25),
+            created_at=now - timedelta(seconds=25),
         ),
     ]
     outbox_health_session.add_all(rows)
