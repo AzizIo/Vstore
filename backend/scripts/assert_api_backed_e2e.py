@@ -50,7 +50,8 @@ async def assert_journey() -> None:
         assert len(listings) == 1, f"Expected one seller listing, got {len(listings)}."
         listing = listings[0]
         assert listing.status is ListingStatus.SOLD, (
-            f"Expected sold listing after independently verified delivery, got {listing.status.value}."
+            "Expected sold listing after independently verified delivery, "
+            f"got {listing.status.value}."
         )
         assert listing.price_amount == Decimal("15.75")
         assert listing.price_currency.value == "TON"
@@ -85,7 +86,10 @@ async def assert_journey() -> None:
             OrderStatus.AWAITING_TRANSFER,
             OrderStatus.OBSERVING_TRANSFER,
             OrderStatus.COMPLETED,
-        ], f"Unexpected delivery lifecycle event history: {[event.to_status.value for event in events]}."
+        ], (
+            "Unexpected delivery lifecycle event history: "
+            f"{[event.to_status.value for event in events]}."
+        )
         assert events[0].from_status is None
         assert events[0].actor_id == buyer.id
         assert events[0].actor_type == "buyer"
@@ -105,7 +109,10 @@ async def assert_journey() -> None:
                 )
             ).all()
         )
-        assert len(outbox) == 8, f"Expected four lifecycle events for buyer and seller, got {len(outbox)}."
+        assert len(outbox) == 8, (
+            "Expected four lifecycle events for buyer and seller, "
+            f"got {len(outbox)}."
+        )
         assert {item.recipient_role for item in outbox} == {"buyer", "seller"}
         assert {item.event_type for item in outbox} == {
             "order_created",
