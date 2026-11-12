@@ -70,17 +70,21 @@ class NotificationOutboxHealth:
         }
 
 
+def _normalize_utc(value: datetime) -> datetime:
+    """Interpret naive database/test timestamps as UTC and normalize aware values."""
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
 def _format_utc(value: datetime) -> str:
-    normalized = value.astimezone(UTC)
-    return normalized.isoformat().replace("+00:00", "Z")
+    return _normalize_utc(value).isoformat().replace("+00:00", "Z")
 
 
 def _age_seconds(now: datetime, occurred_at: datetime | None) -> int | None:
     if occurred_at is None:
         return None
-    if occurred_at.tzinfo is None:
-        occurred_at = occurred_at.replace(tzinfo=UTC)
-    age = int((now - occurred_at).total_seconds())
+    age = int((_normalize_utc(now) - _normalize_utc(occurred_at)).total_seconds())
     return max(0, age)
 
 
@@ -94,7 +98,7 @@ async def inspect_notification_outbox(
     if max_due_age_seconds < 0:
         raise ValueError("max_due_age_seconds must be non-negative")
 
-    sampled_at = now or datetime.now(UTC)
+    sampled_at = _normalize_utc(now or datetime.now(UTC))
     state = TelegramNotificationOutbox.status
     pending = state == "pending"
     processing = state == "processing"

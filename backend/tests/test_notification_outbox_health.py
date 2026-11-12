@@ -53,22 +53,28 @@ def _summary(**overrides: object) -> NotificationOutboxHealth:
 
 
 class _FakeResult:
+    def __init__(self, **overrides: object) -> None:
+        values: dict[str, object] = {
+            "pending_count": 0,
+            "processing_count": 0,
+            "delivered_count": 0,
+            "failed_count": 0,
+            "due_pending_count": 0,
+            "expired_processing_lease_count": 0,
+            "oldest_due_pending_created_at": None,
+            "oldest_failed_created_at": None,
+        }
+        values.update(overrides)
+        self.row = SimpleNamespace(**values)
+
     def one(self):
-        return SimpleNamespace(
-            pending_count=0,
-            processing_count=0,
-            delivered_count=0,
-            failed_count=0,
-            due_pending_count=0,
-            expired_processing_lease_count=0,
-            oldest_due_pending_created_at=None,
-            oldest_failed_created_at=None,
-        )
+        return self.row
 
 
 class _FakeSession:
-    def __init__(self) -> None:
+    def __init__(self, result: _FakeResult | None = None) -> None:
         self.statements: list[str] = []
+        self.result = result or _FakeResult()
 
     @property
     def no_autoflush(self):
@@ -82,7 +88,7 @@ class _FakeSession:
             )
         )
         self.statements.append(compiled)
-        return _FakeResult()
+        return self.result
 
 
 def test_empty_queue_is_healthy() -> None:
@@ -195,6 +201,30 @@ async def test_diagnostic_uses_one_select_without_row_locking_or_mutation() -> N
     assert "FOR UPDATE" not in statement
     assert "UPDATE " not in statement
     assert "DELETE " not in statement
+
+
+@pytest.mark.asyncio
+async def test_naive_timestamps_are_interpreted_as_utc() -> None:
+    naive_sampled_at = datetime(2026, 11, 12, 12, 0)
+    naive_created_at = naive_sampled_at - timedelta(seconds=450)
+    session = _FakeSession(
+        _FakeResult(
+            pending_count=1,
+            due_pending_count=1,
+            oldest_due_pending_created_at=naive_created_at,
+        )
+    )
+
+    summary = await inspect_notification_outbox(
+        session,
+        now=naive_sampled_at,
+        max_due_age_seconds=300,
+    )
+
+    assert summary.sampled_at == naive_sampled_at.replace(tzinfo=UTC)
+    assert summary.oldest_due_pending_age_seconds == 450
+    assert summary.status == "degraded"
+    assert summary.to_dict()["sampled_at"] == "2026-11-12T12:00:00Z"
 
 
 @pytest.mark.asyncio
