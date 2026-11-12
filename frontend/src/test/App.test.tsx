@@ -201,27 +201,6 @@ describe("marketplace catalog", () => {
   });
 
 
-  it("clears active catalog filters from the no-results state", async () => {
-    vi.mocked(fetch).mockImplementation(async (input) => {
-      const requestUrl = new URL(String(input), "http://localhost");
-      if (requestUrl.searchParams.get("search") === "nothing") {
-        return jsonResponse({ ...page, items: [], total: 0 });
-      }
-      return jsonResponse(page);
-    });
-
-    renderMarketplace();
-    expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search listings" }), { target: { value: "nothing" } });
-    expect(await screen.findByText("No listings found")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-
-    expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
-    expect(screen.getByRole("searchbox", { name: "Search listings" })).toHaveValue("");
-    const resetUrl = new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost");
-    expect(resetUrl.searchParams.has("search")).toBe(false);
-  });
-
   it("loads successive server pages, removes duplicate IDs, and hides Load more at total", async () => {
     const firstPage = makeListings(24, "first");
     const finalListing = { ...listing, id: "last-listing", title: "Last server listing" };
@@ -488,6 +467,28 @@ describe("marketplace catalog", () => {
     expect(queryClient.getQueryData(["public-preview"])).toBe("public");
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
   });
+
+  it("clears active catalog filters from the no-results state", async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const requestUrl = new URL(String(input), "http://localhost");
+      if (requestUrl.searchParams.get("search") === "nothing") {
+        return jsonResponse({ ...page, items: [], total: 0 });
+      }
+      return jsonResponse(page);
+    });
+
+    renderMarketplace();
+    expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search listings" }), { target: { value: "nothing" } });
+    expect(await screen.findByText("No listings found")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+
+    expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Search listings" })).toHaveValue("");
+    const resetUrl = new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost");
+    expect(resetUrl.searchParams.has("search")).toBe(false);
+  });
+
 });
 
 describe("Buyer orders", () => {
