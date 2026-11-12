@@ -29,7 +29,7 @@ function networkForChain(chain: string): "mainnet" | "testnet" | null {
   return null;
 }
 
-function getTransferPayload(attempt: DeliveryAttempt): string {
+export function getTransferPayload(attempt: DeliveryAttempt): string {
   const queryId = BigInt(attempt.query_id);
   if (queryId < 0n || queryId > 0xffffffffffffffffn) {
     throw new Error("The prepared transfer contains an invalid query ID.");
