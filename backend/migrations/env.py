@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.core.config import get_settings
 from app.db.models import Base
 from scripts.e2e_safety import assert_e2e_environment
-from scripts.preview_safety import validate_preview_targets
+from scripts.preview_safety import should_validate_preview_migrations, validate_preview_targets
 
 config = context.config
 if config.config_file_name is not None:
@@ -25,8 +25,7 @@ if os.getenv("E2E_MODE") == "1":
 # Also reject any explicitly supplied but invalid opt-in value.
 settings = get_settings()
 preview_mode = os.getenv("PREVIEW_MODE")
-database_name = settings.database_url.rsplit("/", 1)[-1].split("?", 1)[0]
-if preview_mode is not None or database_name == "viltara_preview":
+if should_validate_preview_migrations(settings.database_url, preview_mode):
     validate_preview_targets()
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
