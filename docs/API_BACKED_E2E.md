@@ -11,7 +11,7 @@ The Playwright browser signs Telegram `initData` with the same HMAC-SHA-256 algo
 
 A seeded seller has a database-backed verified wallet and NFT record. A loopback TON Center v3 fixture returns that exact NFT and owner, so the normal inventory, draft-creation, publish and buyer-reservation checks execute without contacting a public chain provider. A second browser context authenticates a buyer and creates a real order through the API.
 
-After Playwright exits, a database assertion checks that PostgreSQL contains the published/reserved listing, the buyer's order with its exact price/currency snapshot, the order event and both pending notification-outbox rows.
+After Playwright exits, a database assertion checks that PostgreSQL contains the sold listing, completed order with its exact price/currency snapshot, the four lifecycle events, buyer ownership snapshot update and eight pending outbox rows across reservation, preparation, submission and verified completion.
 
 ## CI isolation
 
@@ -77,4 +77,4 @@ cd backend
 python -m scripts.assert_api_backed_e2e
 ```
 
-The current Playwright API-backed journey still stops at reservation. PostgreSQL integration tests cover real delivery preparation/submission persistence, observer completion/manual review, and transactional outbox targeting/dedupe/rollback. Frontend TON Connect boundary tests cover the exact transfer payload, seller preparation, wallet rejection/disconnect, and uncertain results. These automated checks do not claim live TON Connect or public testnet acceptance.
+The API-backed Playwright journey now continues through delivery: seller prepares from the verified wallet, the loopback-only TON Connect boundary returns a mock wallet response, the app submits its untrusted reference, the isolated TON Center fixture returns exact transfer evidence, and the backend observer independently completes the order. Both buyer and seller refresh and see verified completion. PostgreSQL integration tests additionally cover manual review, outbox targeting/dedupe and rollback. These automated checks do not claim live TON Connect or public testnet acceptance.
