@@ -220,19 +220,25 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
         status = "Awaiting seller transfer"
     elif delivery.event_type == "delivery_submitted":
         description = (
-            "A transfer reference was submitted. The backend is independently checking on-chain evidence."
+            "A transfer reference was submitted. The backend is independently "
+            "checking on-chain evidence."
             if delivery.recipient_role == "buyer"
-            else "Your transfer reference was received. Wait for independent on-chain verification."
+            else (
+                "Your transfer reference was received. Wait for independent "
+                "on-chain verification."
+            )
         )
         status = "Verification in progress"
     elif delivery.event_type == "delivery_confirmed":
         description = (
-            "The backend independently confirmed the exact NFT transfer to the snapshotted buyer wallet."
+            "The backend independently confirmed the exact NFT transfer "
+            "to the snapshotted buyer wallet."
         )
         status = "Transfer verified"
     elif delivery.event_type == "delivery_manual_review":
         description = (
-            "Delivery needs manual review. Do not assume the NFT was delivered or submit another transfer."
+            "Delivery needs manual review. Do not assume the NFT was "
+            "delivered or submit another transfer."
         )
         status = "Manual review required"
     else:
