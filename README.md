@@ -124,7 +124,10 @@ Example current API routes (authenticate with a backend Bearer token where indic
 | POST | /api/listings/{listing_id}/publish | Publish after a fresh ownership check |
 | POST | /api/orders | Reserve listing (requires Idempotency-Key; **not payment**) |
 | GET | /api/orders | Buyer's or seller's orders |
-| POST | /api/orders/{order_id}/cancel | Cancel an eligible reservation before delivery preparation |\n| POST | /api/orders/{order_id}/delivery/prepare | Snapshot buyer/seller wallets and prepare a time-limited direct transfer |\n| POST | /api/orders/{order_id}/delivery/submissions | Submit an untrusted transaction reference for observer lookup |\n| GET | /api/orders/{order_id}/delivery | Read the participant-scoped delivery attempt and verification status |
+| POST | /api/orders/{order_id}/cancel | Cancel an eligible reservation before delivery preparation |
+| POST | /api/orders/{order_id}/delivery/prepare | Snapshot buyer/seller wallets and prepare a time-limited direct transfer |
+| POST | /api/orders/{order_id}/delivery/submissions | Submit an untrusted transaction reference for observer lookup |
+| GET | /api/orders/{order_id}/delivery | Read the participant-scoped delivery attempt and verification status |
 
 For the exact contract, inspect routes, schemas and tests under backend/app/api/ and backend/tests/; do not infer additional endpoints from the roadmap.
 
