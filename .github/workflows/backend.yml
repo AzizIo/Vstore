@@ -17,6 +17,7 @@ on:
       - "docker-compose.preview.yml"
       - ".env.example"
       - ".github/workflows/backend.yml"
+
   workflow_dispatch:
 
 concurrency:
@@ -73,6 +74,7 @@ jobs:
         env:
           PREVIEW_DB_PASSWORD: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
           PREVIEW_TON_CONNECT_ALLOWED_DOMAINS: '["viltara-ci.example"]'
+          PREVIEW_CORS_ALLOWED_ORIGINS: '["https://viltara-ci.example"]'
           PREVIEW_TON_CONNECT_NETWORK: testnet
           PREVIEW_AUTH_SECRET_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef
           PREVIEW_BOT_TOKEN: 123456:ci-test-token
@@ -94,6 +96,8 @@ jobs:
           api_env = services["api"]["environment"]
           bot_env = services["bot"]["environment"]
           assert api_env["DATABASE_URL"] == bot_env["DATABASE_URL"], "API and bot must share Preview DB"
+          assert api_env["PREVIEW_MODE"] == "1", "Preview migration guard must be enabled"
+          assert api_env["CORS_ALLOWED_ORIGINS"] == json.dumps(["https://viltara-ci.example"]), "Preview CORS must match its origin"
           assert "viltara_preview" in api_env["DATABASE_URL"], "Preview must use its dedicated database"
           assert api_env["AUTH_SECRET_KEY"] == bot_env["AUTH_SECRET_KEY"]
           assert api_env["BOT_TOKEN"] == bot_env["BOT_TOKEN"]

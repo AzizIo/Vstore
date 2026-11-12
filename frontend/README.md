@@ -11,6 +11,30 @@ npm run dev
 
 The Mini App can run with the public catalog without Telegram authentication. The Playwright E2E suite stubs the Telegram WebApp bridge and every `/api/**` request; it does not connect to a real Telegram account, backend, database, wallet or production secret.
 
+## Unit tests
+
+Run all component and API-client tests:
+
+```bash
+npm test
+```
+
+Run the focused Orders component suite:
+
+```bash
+npm test -- src/test/Orders.test.tsx
+```
+
+The Orders tests cover the buyer/seller workspace, filtering/search, order details and cancellation flow.
+
+Run the focused delivery lifecycle UI contract tests:
+
+```bash
+npm test -- src/test/Orders.lifecycle.test.tsx
+```
+
+These tests cover the six order lifecycle states and verify that cancellation is available only while an order is reserved.
+
 ## Playwright E2E
 
 Install the Chromium browser used by the configured project:

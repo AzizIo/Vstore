@@ -55,6 +55,7 @@ jobs:
 
           considered=0
           cancelled=0
+          skipped=0
 
           while IFS=$'\t' read -r run_id workflow branch event created_at; do
             [[ -n "$run_id" ]] || continue
@@ -66,6 +67,33 @@ jobs:
                 "$run_id" "$workflow" "$branch" "$event" "$created_at"
 
               if [[ "$DRY_RUN" == "false" ]]; then
+                # A queued run can start after the initial list was fetched.
+                # Re-fetch immediately before cancellation so we do not cancel
+                # a run that is no longer a stale, eligible queue candidate.
+                current_run="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}")"
+                current_status="$(jq -r '.status // ""' <<< "$current_run")"
+                current_workflow="$(jq -r '.name // ""' <<< "$current_run")"
+                current_branch="$(jq -r '.head_branch // ""' <<< "$current_run")"
+                current_event="$(jq -r '.event // ""' <<< "$current_run")"
+                current_created_at="$(jq -r '.created_at // ""' <<< "$current_run")"
+
+                if [[ "$current_status" != "queued" ]] ||
+                   [[ "$current_workflow" != "Backend CI" && "$current_workflow" != "Frontend CI" ]] ||
+                   [[ "$current_branch" == "main" || "$current_branch" != "$branch" ]] ||
+                   [[ "$current_event" != "push" && "$current_event" != "pull_request" ]] ||
+                   [[ -z "$current_created_at" ]]; then
+                  echo "Skip run=$run_id: it is no longer an eligible queued CI run."
+                  skipped=$((skipped + 1))
+                  continue
+                fi
+
+                current_created_epoch="$(date -u -d "$current_created_at" +%s)"
+                if (( current_created_epoch > cutoff_epoch )); then
+                  echo "Skip run=$run_id: it no longer meets the stale-age threshold."
+                  skipped=$((skipped + 1))
+                  continue
+                fi
+
                 gh api --method POST \
                   "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" \
                   >/dev/null
@@ -80,4 +108,5 @@ jobs:
             echo "Run again with dry_run=false to cancel these queued candidates."
           else
             echo "Cancellation requests sent: $cancelled"
+            echo "Candidates skipped after recheck: $skipped"
           fi

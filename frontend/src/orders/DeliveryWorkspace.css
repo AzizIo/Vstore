@@ -1,0 +1,47 @@
+.delivery-workspace {
+  min-width: 0;
+}
+
+.delivery-snapshot {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.delivery-snapshot > div {
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.22));
+  border-radius: 0.75rem;
+  background: var(--surface-soft, rgba(148, 163, 184, 0.05));
+}
+
+.delivery-snapshot dt {
+  margin-bottom: 0.35rem;
+  color: var(--text-muted, #8b95a7);
+  font-size: 0.75rem;
+}
+
+.delivery-snapshot dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}
+
+.delivery-snapshot code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.delivery-workspace > button {
+  margin: 0.4rem 0.5rem 0.4rem 0;
+}
+
+@media (max-width: 560px) {
+  .delivery-snapshot {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

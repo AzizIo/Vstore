@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 
 import { expect, test } from "@playwright/test";
+import { Address, Cell } from "@ton/core";
 
 interface TelegramTestUser {
   id: number;
@@ -27,6 +28,27 @@ function signedTelegramInitData(user: TelegramTestUser): string {
   const hash = createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
   params.set("hash", hash);
   return params.toString();
+}
+
+async function installTonConnectTestBoundary(
+  page: import("@playwright/test").Page,
+  walletAddress: string,
+): Promise<void> {
+  await page.addInitScript((address) => {
+    const boundary = {
+      wallet: { account: { address, chain: "-239" } },
+      sendTransaction: async (request: {
+        validUntil: number;
+        network: string;
+        messages: Array<{ address: string; amount: string; payload: string }>;
+      }) => {
+        localStorage.setItem("viltara-e2e-wallet-request", JSON.stringify(request));
+        return { boc: btoa("isolated-e2e-signed-external-message") };
+      },
+    };
+    (window as Window & { __VILTARA_TON_CONNECT_TEST__?: typeof boundary })
+      .__VILTARA_TON_CONNECT_TEST__ = boundary;
+  }, walletAddress);
 }
 
 async function installTelegramBridge(
@@ -85,6 +107,7 @@ test(
 
   try {
     const sellerInitData = await installTelegramBridge(sellerPage, seller);
+    await installTonConnectTestBoundary(sellerPage, "0:" + "11".repeat(32));
     const bootstrapAuth = await sellerContext.request.post(
       "http://127.0.0.1:5173/api/auth/telegram",
       { data: { init_data: sellerInitData } },
@@ -125,7 +148,13 @@ test(
     // The buyer's separate browser context will prove public catalog visibility
     // from a fresh API request after the seller has published the listing.
 
-    await installTelegramBridge(buyerPage, buyer);
+    const buyerInitData = await installTelegramBridge(buyerPage, buyer);
+    const buyerBootstrap = await buyerContext.request.post(
+      "http://127.0.0.1:5173/api/auth/telegram",
+      { data: { init_data: buyerInitData } },
+    );
+    expect(buyerBootstrap.status()).toBe(200);
+    const buyerSession = await buyerBootstrap.json() as { access_token: string };
     await buyerPage.goto("/");
     await expect(buyerPage.getByText(/Signed in as E2E Buyer/)).toBeVisible();
 
@@ -133,15 +162,113 @@ test(
     await expect(buyerPage.getByRole("heading", { name: "E2E Published NFT" })).toBeVisible();
     await expect(buyerPage.getByText(/^15\.75(?:0+)? TON$/)).toBeVisible();
     await buyerPage.getByRole("button", { name: "Place order", exact: true }).click();
-    await expect(
-      buyerPage.getByText("Order created. Payment is not enabled; check its status in Orders."),
-    ).toBeVisible();
+    const reservationDialog = buyerPage.getByRole("dialog", { name: "Reserve this listing?" });
+    await expect(reservationDialog).toContainText("E2E Published NFT");
+    await expect(reservationDialog).toContainText("15.75 TON");
+    await expect(reservationDialog).toContainText("E2E Seller");
+    await expect(reservationDialog).toContainText("Payment is not enabled and no funds will be collected");
+    expect(buyerApiRequests.some((item) => item === "POST /api/orders")).toBe(false);
 
-    await buyerPage.getByRole("button", { name: "Orders", exact: true }).click();
-    await expect(buyerPage.getByRole("heading", { name: "My Orders" })).toBeVisible();
+    await reservationDialog.getByRole("button", { name: "Confirm reservation" }).click();
+    const reservationSuccess = buyerPage.getByRole("dialog", { name: "Reservation confirmed" });
+    await expect(reservationSuccess).toContainText("Payment is not enabled, no funds were collected");
+    await reservationSuccess.getByRole("button", { name: "View Orders" }).click();
+
+    await expect(buyerPage.getByRole("heading", { name: "Order workspace" })).toBeVisible();
     await expect(buyerPage.getByText("Reservation pending", { exact: true })).toBeVisible();
     await expect(buyerPage.getByText(/^15\.75(?:0+)? TON$/)).toBeVisible();
+    await buyerPage.getByRole("button", { name: /Open order E2E Published NFT/ }).click();
+    await expect(buyerPage.getByRole("heading", { name: "Lifecycle" })).toBeVisible();
     await expect(buyerPage.getByText(/Payments are not enabled/)).toBeVisible();
+
+    // Continue through the real delivery APIs. Only the external TON Connect
+    // wallet boundary and loopback TON Center provider are simulated.
+    const buyerOrdersResponse = await buyerContext.request.get(
+      "http://127.0.0.1:5173/api/orders?role=buyer&limit=100",
+      { headers: { Authorization: `Bearer ${buyerSession.access_token}` } },
+    );
+    expect(buyerOrdersResponse.status()).toBe(200);
+    const buyerOrders = await buyerOrdersResponse.json() as {
+      items: Array<{ id: string; title: string | null }>;
+    };
+    const persistedOrder = buyerOrders.items.find((item) => item.title === "E2E Published NFT");
+    expect(persistedOrder).toBeTruthy();
+    const orderId = persistedOrder!.id;
+
+    await sellerPage.getByRole("button", { name: "Orders", exact: true }).click();
+    await sellerPage.getByRole("tab", { name: /Sales/ }).click();
+    await sellerPage.getByRole("button", { name: /Open order E2E Published NFT/ }).click();
+    await expect(sellerPage.getByRole("heading", { name: "NFT transfer" })).toBeVisible();
+    await sellerPage.getByRole("button", { name: "Prepare transfer" }).click();
+    await expect(sellerPage.getByRole("button", { name: "Review and sign in wallet" })).toBeVisible();
+
+    const deliveryStateResponse = await sellerContext.request.get(
+      `http://127.0.0.1:5173/api/orders/${orderId}/delivery`,
+      { headers: { Authorization: `Bearer ${bootstrapSession.access_token}` } },
+    );
+    expect(deliveryStateResponse.status()).toBe(200);
+    const deliveryState = await deliveryStateResponse.json() as {
+      attempt: {
+        item_address: string;
+        seller_address: string;
+        buyer_address: string;
+        query_id: string;
+        network: string;
+        deadline: string;
+      };
+    };
+    const preparedAttempt = deliveryState.attempt;
+    expect(preparedAttempt.network).toBe("mainnet");
+
+    const submissionResponsePromise = sellerPage.waitForResponse((response) =>
+      response.url().includes(`/api/orders/${orderId}/delivery/submissions`) &&
+      response.request().method() === "POST",
+    );
+    await sellerPage.getByRole("button", { name: "Review and sign in wallet" }).click();
+    const submissionResponse = await submissionResponsePromise;
+    expect(submissionResponse.status()).toBe(200);
+
+    const walletRequest = await sellerPage.evaluate(() => JSON.parse(
+      localStorage.getItem("viltara-e2e-wallet-request") ?? "null",
+    ) as {
+      validUntil: number;
+      network: string;
+      messages: Array<{ address: string; amount: string; payload: string }>;
+    } | null);
+    expect(walletRequest).toBeTruthy();
+    expect(walletRequest!.network).toBe("-239");
+    expect(walletRequest!.validUntil).toBe(Math.floor(Date.parse(preparedAttempt.deadline) / 1000));
+    expect(walletRequest!.messages).toHaveLength(1);
+    expect(walletRequest!.messages[0].address).toBe(Address.parse(preparedAttempt.item_address).toString({
+      urlSafe: true, bounceable: true, testOnly: false,
+    }));
+    expect(walletRequest!.messages[0].amount).toBe("50000000");
+    const transfer = Cell.fromBase64(walletRequest!.messages[0].payload).beginParse();
+    expect(transfer.loadUint(32)).toBe(0x5fcc3d14);
+    expect(transfer.loadUintBig(64)).toBe(BigInt(preparedAttempt.query_id));
+    expect(transfer.loadAddress()?.toRawString()).toBe(Address.parse(preparedAttempt.buyer_address).toRawString());
+    expect(transfer.loadAddress()?.toRawString()).toBe(Address.parse(preparedAttempt.seller_address).toRawString());
+
+    const providerFixture = await sellerContext.request.post(
+      "http://127.0.0.1:8999/__e2e__/delivery",
+      { data: preparedAttempt },
+    );
+    expect(providerFixture.status()).toBe(200);
+
+    await expect.poll(async () => {
+      const response = await sellerContext.request.get(
+        `http://127.0.0.1:5173/api/orders/${orderId}`,
+        { headers: { Authorization: `Bearer ${bootstrapSession.access_token}` } },
+      );
+      const order = await response.json() as { status: string };
+      return order.status;
+    }, { timeout: 45_000, intervals: [500, 1000, 2000] }).toBe("completed");
+
+    await sellerPage.getByRole("button", { name: "Refresh verification status" }).click();
+    await expect(sellerPage.getByText("Transfer independently verified", { exact: true })).toBeVisible();
+    await buyerPage.getByRole("button", { name: "Refresh verification status" }).click();
+    await expect(buyerPage.getByText("Transfer independently verified", { exact: true })).toBeVisible();
+    await expect(buyerPage.getByText("Completed", { exact: true }).first()).toBeVisible();
 
     expect(sellerApiRequests).toContain("POST /api/auth/telegram");
     expect(sellerApiRequests).toContain("GET /api/assets/me");

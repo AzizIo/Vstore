@@ -19,6 +19,7 @@ def test_marketplace_tables_are_registered() -> None:
         "order_events",
         "order_delivery_attempts",
         "telegram_notification_outbox",
+        "moderation_audit_log",
     }
 
 
@@ -38,6 +39,7 @@ def test_listing_lifecycle_and_price_currencies_are_explicit() -> None:
         "sold",
         "cancelled",
         "expired",
+        "suspended",
     }
     assert {item.value for item in PriceCurrency} == {"TON", "XTR"}
 

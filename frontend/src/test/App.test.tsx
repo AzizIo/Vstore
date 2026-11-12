@@ -498,7 +498,8 @@ describe("Buyer orders", () => {
 
     renderMarketplace();
 
-    expect(await screen.findByText("OPENED FROM TELEGRAM NOTIFICATION")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: listing.title })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Orders" })).toHaveAttribute("aria-pressed", "true");
     expect(vi.mocked(fetch).mock.calls.some(([input]) =>
       String(input).endsWith(`/api/orders/${orderId}`)
@@ -564,6 +565,7 @@ describe("Buyer orders", () => {
       const url = String(input);
       if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
       if (url.endsWith("/api/users/me")) return jsonResponse(profile);
+      if (url.endsWith("/api/wallets/me")) return jsonResponse([]);
       if (url.endsWith(`/api/listings/${listing.id}`)) return jsonResponse(listing);
       if (url.endsWith("/api/orders") && init?.method === "POST") return jsonResponse(pendingOrder, 201);
       if (url.includes("/api/orders?")) return jsonResponse({ items: [pendingOrder] });
@@ -572,8 +574,16 @@ describe("Buyer orders", () => {
     renderMarketplace();
     fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Place order" }));
+    const confirmation = await screen.findByRole("dialog", { name: "Reserve this listing?" });
+    expect(confirmation).toHaveTextContent("Moon Lantern");
+    expect(confirmation).toHaveTextContent("12.5 TON");
+    expect(confirmation).toHaveTextContent("Ari (@collector)");
+    expect(confirmation).toHaveTextContent("Payment is not enabled and no funds will be collected");
+    expect(vi.mocked(fetch).mock.calls.some(([input, init]) => String(input).endsWith("/api/orders") && init?.method === "POST")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm reservation" }));
 
-    expect(await screen.findByText(/Order created\. Payment is not enabled/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Reservation confirmed" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveTextContent("Payment is not enabled, no funds were collected");
     const orderRequest = vi.mocked(fetch).mock.calls.find(([input, init]) =>
       String(input).endsWith("/api/orders") && init?.method === "POST"
     );
@@ -581,8 +591,92 @@ describe("Buyer orders", () => {
     expect(JSON.parse(String(orderRequest?.[1]?.body))).toEqual({ listing_id: listing.id });
     expect(new Headers(orderRequest?.[1]?.headers).get("Idempotency-Key")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Orders" }));
+    fireEvent.click(screen.getByRole("dialog").querySelector("button")!);
     expect(await screen.findByText("Reservation pending")).toBeInTheDocument();
+  });
+
+  it("cancels reservation confirmation without calling the orders API and supports Escape", async () => {
+    setTelegramInitData();
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
+      if (url.endsWith("/api/users/me")) return jsonResponse(profile);
+      if (url.endsWith(`/api/listings/${listing.id}`)) return jsonResponse(listing);
+      return jsonResponse(page);
+    });
+    renderMarketplace();
+    fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
+    const trigger = await screen.findByRole("button", { name: "Place order" });
+    fireEvent.click(trigger);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+    fireEvent.click(trigger);
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(vi.mocked(fetch).mock.calls.some(([input, init]) => String(input).endsWith("/api/orders") && init?.method === "POST")).toBe(false);
+  });
+
+  it("blocks rapid repeated confirmation clicks while the reservation request is active", async () => {
+    setTelegramInitData();
+    const pendingOrder = { id: "order-duplicate", listing_id: listing.id, buyer_id: profile.id, seller_id: listing.seller.id, status: "reserved", price_amount: "12.5", price_currency: "TON", title: listing.title, asset_name: listing.asset.name, asset_type: listing.asset.asset_type, expires_at: "2026-01-01T00:15:00Z", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", events: [] };
+    let resolvePost: ((response: Response) => void) | undefined;
+    let postCount = 0;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
+      if (url.endsWith("/api/users/me")) return jsonResponse(profile);
+      if (url.endsWith(`/api/listings/${listing.id}`)) return jsonResponse(listing);
+      if (url.endsWith("/api/orders") && init?.method === "POST") {
+        postCount += 1;
+        return await new Promise<Response>((resolve) => { resolvePost = resolve; });
+      }
+      return jsonResponse(page);
+    });
+    renderMarketplace();
+    fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Place order" }));
+    const confirm = await screen.findByRole("button", { name: "Confirm reservation" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    expect(postCount).toBe(1);
+    expect(confirm).toBeDisabled();
+    resolvePost?.(jsonResponse(pendingOrder, 201));
+    expect(await screen.findByRole("heading", { name: "Reservation confirmed" })).toBeInTheDocument();
+    expect(postCount).toBe(1);
+  });
+
+  it("reuses the idempotency key after an uncertain reservation failure", async () => {
+    setTelegramInitData();
+    const pendingOrder = { id: "order-retry", listing_id: listing.id, buyer_id: profile.id, seller_id: listing.seller.id, status: "reserved", price_amount: "12.5", price_currency: "TON", title: listing.title, asset_name: listing.asset.name, asset_type: listing.asset.asset_type, expires_at: "2026-01-01T00:15:00Z", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z", events: [] };
+    let postCount = 0;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/telegram")) return jsonResponse(authResponse);
+      if (url.endsWith("/api/users/me")) return jsonResponse(profile);
+      if (url.endsWith("/api/wallets/me")) return jsonResponse([]);
+      if (url.endsWith(`/api/listings/${listing.id}`)) return jsonResponse(listing);
+      if (url.endsWith("/api/orders") && init?.method === "POST") {
+        postCount += 1;
+        if (postCount === 1) throw new Error("Network request failed");
+        return jsonResponse(pendingOrder, 201);
+      }
+      if (url.includes("/api/orders?")) return jsonResponse({ items: [pendingOrder] });
+      return jsonResponse(page);
+    });
+    renderMarketplace();
+    fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Place order" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm reservation" }));
+    expect(await screen.findByText(/Could not connect to orders/)).toBeInTheDocument();
+    const firstRequest = vi.mocked(fetch).mock.calls.find(([input, init]) => String(input).endsWith("/api/orders") && init?.method === "POST");
+    const firstKey = new Headers(firstRequest?.[1]?.headers).get("Idempotency-Key");
+    fireEvent.click(screen.getByRole("button", { name: "Confirm reservation" }));
+    expect(await screen.findByRole("heading", { name: "Reservation confirmed" })).toBeInTheDocument();
+    const postRequests = vi.mocked(fetch).mock.calls.filter(([input, init]) => String(input).endsWith("/api/orders") && init?.method === "POST");
+    expect(postRequests).toHaveLength(2);
+    expect(new Headers(postRequests[1][1]?.headers).get("Idempotency-Key")).toBe(firstKey);
   });
 });
 

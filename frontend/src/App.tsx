@@ -69,7 +69,7 @@ function appendUniqueListings(current: Listing[], nextPage: Listing[]) {
   return merged;
 }
 
-function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () => void }) {
+function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onBack: () => void; onOrders: () => void }) {
   const session = useSession();
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,7 +78,12 @@ function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () =>
   const [ordering, setOrdering] = useState(false);
   const [orderError, setOrderError] = useState("");
   const [orderCreated, setOrderCreated] = useState(false);
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
   const idempotencyKey = useRef<string | null>(null);
+  const submittingRef = useRef(false);
+  const reserveTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dialogRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -97,6 +102,30 @@ function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () =>
     return () => controller.abort();
   }, [listingId, retry]);
 
+  useEffect(() => {
+    if (!confirmationOpen) return;
+    confirmButtonRef.current?.focus();
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !submittingRef.current && !orderCreated) {
+        setConfirmationOpen(false);
+        window.setTimeout(() => reserveTriggerRef.current?.focus(), 0);
+        return;
+      }
+      if (event.key === "Tab") {
+        const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+          "button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex=\"-1\"])",
+        );
+        if (!focusable?.length) { event.preventDefault(); return; }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [confirmationOpen, orderCreated]);
+
   if (loading) return <p className="detail-message" role="status">Loading listing...</p>;
   if (error || !listing) {
     return (
@@ -112,16 +141,19 @@ function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () =>
   const canOrder = session.status === "authenticated" && session.user.id !== listing.seller.id;
 
   async function handleOrder() {
-    if (session.status !== "authenticated") return;
+    if (session.status !== "authenticated" || submittingRef.current || orderCreated) return;
+    submittingRef.current = true;
     setOrdering(true);
     setOrderError("");
     try {
+      // Keep this key for retries after an uncertain network result: one intent, one key.
       idempotencyKey.current ??= crypto.randomUUID();
       await createOrder(listingId, session.accessToken, idempotencyKey.current);
       setOrderCreated(true);
     } catch (reason) {
-      setOrderError(reason instanceof Error ? reason.message : "Unable to create this order.");
+      setOrderError(reason instanceof Error ? reason.message : "Unable to create this reservation. Please retry.");
     } finally {
+      submittingRef.current = false;
       setOrdering(false);
     }
   }
@@ -148,18 +180,51 @@ function ListingDetail({ listingId, onBack }: { listingId: string; onBack: () =>
           </section>
           {canOrder ? (
             <div className="order-action">
-              <button className="primary-button" type="button" disabled={ordering || orderCreated} onClick={() => void handleOrder()}>
-                {ordering ? "Reserving listing..." : orderCreated ? "Order created" : "Place order"}
+              <button ref={reserveTriggerRef} className="primary-button" type="button" disabled={ordering || orderCreated} onClick={() => { setOrderError(""); setConfirmationOpen(true); }}>
+                {ordering ? "Reserving listing..." : orderCreated ? "Reservation created" : "Place order"}
               </button>
-              {orderError && <p role="alert">{orderError}</p>}
+              {orderError && !confirmationOpen && <p role="alert">{orderError}</p>}
               {orderCreated && (
-                <p role="status">Order created. Payment is not enabled; check its status in Orders.</p>
+                <div className="reservation-success" role="status">
+                  <p>Reservation created for {title}. Payment is not enabled and no funds were collected. No NFT transfer has happened.</p>
+                  <button className="primary-button" type="button" onClick={onOrders}>View Orders</button>
+                </div>
               )}
             </div>
           ) : session.status === "authenticated" ? (
             <p className="detail-description">You cannot order your own listing.</p>
           ) : (
             <p className="detail-description">Open this Mini App in Telegram to sign in and place an order.</p>
+          )}
+          {confirmationOpen && (
+            <div className="reservation-dialog-backdrop">
+              <section ref={dialogRef} className="reservation-dialog" role="dialog" aria-modal="true" aria-labelledby="reservation-dialog-title" aria-describedby="reservation-dialog-description">
+                {orderCreated ? (
+                  <>
+                    <p className="eyebrow">RESERVATION CREATED</p>
+                    <h2 id="reservation-dialog-title">Reservation confirmed</h2>
+                    <p id="reservation-dialog-description">The order reservation was created for {title}. Payment is not enabled, no funds were collected, and no NFT transfer has happened.</p>
+                    <button className="primary-button" type="button" onClick={onOrders}>View Orders</button>
+                  </>
+                ) : (
+                  <>
+                    <p className="eyebrow">REVIEW RESERVATION</p>
+                    <h2 id="reservation-dialog-title">Reserve this listing?</h2>
+                    <dl className="reservation-summary">
+                      <div><dt>Listing</dt><dd>{title}</dd></div>
+                      <div><dt>Price</dt><dd>{formatPrice(listing.price_amount, listing.price_currency)}</dd></div>
+                      <div><dt>Seller</dt><dd>{seller}{listing.seller.username ? ` (@${listing.seller.username})` : ""}</dd></div>
+                    </dl>
+                    <p id="reservation-dialog-description" className="reservation-disclaimer">This creates a reservation/order only. Payment is not enabled and no funds will be collected. No NFT transfer happens as part of this action.</p>
+                    {orderError && <p className="reservation-error" role="alert">{orderError} Your reservation request may have reached the server; retrying uses the same idempotency key.</p>}
+                    <div className="reservation-dialog-actions">
+                      <button className="text-button" type="button" disabled={ordering} onClick={() => { setConfirmationOpen(false); setOrderError(""); window.setTimeout(() => reserveTriggerRef.current?.focus(), 0); }}>Cancel</button>
+                      <button ref={confirmButtonRef} className="primary-button" type="button" disabled={ordering} onClick={() => void handleOrder()}>{ordering ? "Creating reservation…" : "Confirm reservation"}</button>
+                    </div>
+                  </>
+                )}
+              </section>
+            </div>
           )}
           {listing.description && <p className="detail-description">{listing.description}</p>}
           {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
@@ -406,7 +471,7 @@ function MarketplaceApp() {
 
       {section === "orders" ? (
         session.status === "authenticated" ? (
-          <Orders accessToken={session.accessToken} userId={session.user.id} initialOrderId={initialOrderId} />
+          <Orders accessToken={session.accessToken} userId={session.user.id} initialOrderId={initialOrderId} onCatalog={() => setSection("catalog")} />
         ) : (
           <div className="orders-message" role="status">
             <h2>Sign in to view orders</h2>
@@ -425,7 +490,7 @@ function MarketplaceApp() {
           </div>
         )
       ) : listingId ? (
-        <ListingDetail listingId={listingId} onBack={() => setListingId(null)} />
+        <ListingDetail listingId={listingId} onBack={() => setListingId(null)} onOrders={() => { setListingId(null); setInitialOrderId(null); setSection("orders"); }} />
       ) : (
         <>
           <section className="catalog-intro" id="catalog">

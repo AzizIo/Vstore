@@ -211,6 +211,36 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
     elif delivery.event_type == "order_expired":
         description = "The order reservation expired automatically."
         status = "Expired"
+    elif delivery.event_type == "delivery_prepared":
+        description = (
+            "The seller prepared the direct NFT transfer. The NFT has not been confirmed delivered."
+            if delivery.recipient_role == "buyer"
+            else "Action required: review and sign the exact NFT transfer in your own TON wallet."
+        )
+        status = "Awaiting seller transfer"
+    elif delivery.event_type == "delivery_submitted":
+        description = (
+            "A transfer reference was submitted. The backend is independently "
+            "checking on-chain evidence."
+            if delivery.recipient_role == "buyer"
+            else (
+                "Your transfer reference was received. Wait for independent "
+                "on-chain verification."
+            )
+        )
+        status = "Verification in progress"
+    elif delivery.event_type == "delivery_confirmed":
+        description = (
+            "The backend independently confirmed the exact NFT transfer "
+            "to the snapshotted buyer wallet."
+        )
+        status = "Transfer verified"
+    elif delivery.event_type == "delivery_manual_review":
+        description = (
+            "Delivery needs manual review. Do not assume the NFT was "
+            "delivered or submit another transfer."
+        )
+        status = "Manual review required"
     else:
         raise UnsupportedNotificationEvent(
             f"Unsupported Telegram notification event_type: {delivery.event_type!r}"

@@ -45,11 +45,12 @@ PREVIEW_TELEGRAM_MINI_APP_DIRECT_LINK=https://t.me/<preview_bot_username>/<app_s
 PREVIEW_VITE_TONCONNECT_APP_URL=https://<stable-public-mini-app-host>
 PREVIEW_VITE_TONCONNECT_MANIFEST_URL=https://<stable-public-mini-app-host>/tonconnect-manifest.json
 PREVIEW_TON_CONNECT_ALLOWED_DOMAINS=["<stable-public-mini-app-host>"]
+PREVIEW_CORS_ALLOWED_ORIGINS=["https://<stable-public-mini-app-host>"]
 PREVIEW_TON_CONNECT_NETWORK=testnet
 PREVIEW_TON_CENTER_API_KEY=<optional-preview-provider-api-key>
 ```
 
-Use a stable hostname that will remain the same across rebuilds. Configure that exact hostname for the preview bot's Mini App in @BotFather. The hostname in `PREVIEW_TON_CONNECT_ALLOWED_DOMAINS` must be exact: no scheme, port, path, or trailing slash. The preview stack maps these preview-specific values to the API's `TON_CONNECT_ALLOWED_DOMAINS`, `TON_CONNECT_NETWORK`, `TON_CENTER_API_KEY`, and TON Center provider URLs; it does not inherit the existing dev stack's TON domain/network or provider API key. If no preview API key is supplied, the preview uses the provider's unauthenticated rate limits. `PREVIEW_TON_CONNECT_NETWORK` defaults to `testnet`; use a disposable test wallet and testnet provider for the preview. Only switch the preview to mainnet deliberately and with a separately reviewed plan. The two `VITE_TONCONNECT_*` values are build-time inputs for the static frontend, so changing them requires rebuilding the `miniapp` image.
+Use a stable hostname that will remain the same across rebuilds. Configure that exact hostname for the preview bot's Mini App in @BotFather. The hostname in `PREVIEW_TON_CONNECT_ALLOWED_DOMAINS` must be exact: no scheme, port, path, or trailing slash. `PREVIEW_CORS_ALLOWED_ORIGINS` must be a JSON array containing the exact HTTPS origin, including scheme and without a path. The Preview target guard blocks a mismatched CORS origin or proof hostname. The preview stack maps these preview-specific values to the API's `TON_CONNECT_ALLOWED_DOMAINS`, `TON_CONNECT_NETWORK`, `TON_CENTER_API_KEY`, and TON Center provider URLs; it does not inherit the existing dev stack's TON domain/network or provider API key. If no preview API key is supplied, the preview uses the provider's unauthenticated rate limits. `PREVIEW_TON_CONNECT_NETWORK` defaults to `testnet`; use a disposable test wallet and testnet provider for the preview. Only switch the preview to mainnet deliberately and with a separately reviewed plan. The two `VITE_TONCONNECT_*` values are build-time inputs for the static frontend, so changing them requires rebuilding the `miniapp` image.
 
 `PREVIEW_VITE_TONCONNECT_APP_URL` and `PREVIEW_TELEGRAM_MINI_APP_URL` must use the same public HTTPS Mini App origin. The first is baked into the frontend manifest; the second is used by `/start` and `/app` as the inline Web App button URL. `PREVIEW_TELEGRAM_MINI_APP_DIRECT_LINK` is a separate optional Telegram `t.me/<bot>/<app>` direct link used in order notification messages with an `order_<id>` start parameter.
 
@@ -77,6 +78,12 @@ Start only its database and cache first:
 docker compose -f docker-compose.preview.yml up -d db redis
 ```
 
+Before migration, run the fail-closed target guard. It requires `PREVIEW_MODE=1`, the exact `viltara_preview` database/user on Compose service `db`, the isolated Redis service/database, testnet, and matching Mini App/manifest/CORS/proof settings. It does not print secrets or DSNs:
+
+```bash
+docker compose -f docker-compose.preview.yml run --rm --build api python -m scripts.preview_safety guard
+```
+
 Apply migrations to the **preview database only** by using the API image as a one-off migration container:
 
 ```bash
@@ -95,7 +102,13 @@ Start the optional bot/outbox worker only after configuring the BotFather values
 docker compose -f docker-compose.preview.yml --profile bot up -d --build bot
 ```
 
-Inspect status:
+After the API starts, validate DB/Redis availability and migration head:
+
+```bash
+docker compose -f docker-compose.preview.yml exec api python -m scripts.preview_safety preflight
+```
+
+Then inspect status:
 
 ```bash
 docker compose -f docker-compose.preview.yml ps

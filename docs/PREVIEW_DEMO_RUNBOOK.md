@@ -35,6 +35,7 @@ PREVIEW_TELEGRAM_MINI_APP_DIRECT_LINK=https://t.me/<preview_bot_username>/<app_s
 PREVIEW_VITE_TONCONNECT_APP_URL=https://<stable-public-mini-app-host>
 PREVIEW_VITE_TONCONNECT_MANIFEST_URL=https://<stable-public-mini-app-host>/tonconnect-manifest.json
 PREVIEW_TON_CONNECT_ALLOWED_DOMAINS=["<stable-public-mini-app-host>"]
+PREVIEW_CORS_ALLOWED_ORIGINS=["https://<stable-public-mini-app-host>"]
 PREVIEW_TON_CONNECT_NETWORK=testnet
 ```
 
@@ -45,11 +46,11 @@ The two HTTPS website URL settings must use the same stable public Mini App host
 
 PREVIEW_TELEGRAM_MINI_APP_DIRECT_LINK is a separate optional Telegram t.me/<bot>/<app> link used for order-specific notification links; it is not a website URL.
 
-The TON proof allowlist is a JSON array containing the hostname only: no scheme, port, path, or trailing slash. Keep PREVIEW_TON_CONNECT_NETWORK=testnet and use a disposable testnet wallet and TEP-62 test NFT. Do not switch to mainnet for a Preview walkthrough.
+The TON proof allowlist is a JSON array containing the hostname only: no scheme, port, path, or trailing slash. PREVIEW_CORS_ALLOWED_ORIGINS is a JSON array containing the exact HTTPS origin (including scheme, without a path); it must match the Preview hostname. Keep PREVIEW_TON_CONNECT_NETWORK=testnet and use a disposable testnet wallet and TEP-62 test NFT. Do not switch to mainnet for a Preview walkthrough.
 
 Use a dedicated BotFather bot. PREVIEW_BOT_TOKEN is required by the API to verify Telegram initData, even when the separate bot container is not running. Start the optional polling bot only once for that token; two polling processes using the same Telegram bot token conflict. Users must open the bot at least once before Telegram will allow it to send them messages.
 
-The PREVIEW_* values are deliberately separate from the development stack's normal BOT_TOKEN, AUTH_SECRET_KEY, DATABASE_URL, REDIS_URL, and TON settings. Do not copy production secrets into Preview.
+The PREVIEW_* values are deliberately separate from the development stack's normal BOT_TOKEN, AUTH_SECRET_KEY, DATABASE_URL, REDIS_URL, and TON settings. Do not copy production secrets into Preview. Preview migrations fail closed unless PREVIEW_MODE=1 and the configured target is exactly the isolated viltara_preview database on the Compose db service, with the dedicated Preview Redis target. The polling bot is optional, but PREVIEW_BOT_TOKEN is required by API-side Telegram initData verification.
 
 ## 2. Start the isolated stack and migrate its database
 
@@ -59,11 +60,25 @@ Start only the Preview database and cache:
 docker compose -f docker-compose.preview.yml up -d db redis
 ```
 
+Validate the Preview target before any migration or seed operation. This guard does not print the DSN or secrets:
+
+```bash
+docker compose -f docker-compose.preview.yml run --rm --build api python -m scripts.preview_safety guard
+```
+
 Apply migrations through a one-off container that uses the Preview service configuration:
 
 ```bash
 docker compose -f docker-compose.preview.yml run --rm --build api alembic upgrade head
 ```
+
+After starting the API, run the local dependency/migration preflight:
+
+```bash
+docker compose -f docker-compose.preview.yml exec api python -m scripts.preview_safety preflight
+```
+
+This verifies the exact Preview DB/Redis targets, PostgreSQL and Redis reachability, current Alembic head, testnet-only configuration, manifest URL, Telegram origin, CORS origin and proof-domain alignment. A failure is a hard stop; do not bypass the guard or point it at another database.
 
 Start the API and static Mini App:
 
@@ -115,7 +130,7 @@ A successful preflight verifies public reachability and configuration only. It d
 
 ## 4. Rehearse the supported marketplace journey
 
-Use two dedicated Telegram test accounts, a disposable testnet wallet for the seller, and a real TEP-62 testnet NFT that the configured TON Center provider can verify.
+Use two dedicated Telegram test accounts, disposable testnet wallets for buyer and seller, and a real TEP-62 testnet NFT that the configured TON Center provider can verify. Run the local Preview preflight and the public HTTPS preflight before opening the app. Do not insert synthetic verified wallet/NFT rows into Preview: the only automated seed that creates verified inventory is `scripts.seed_api_backed_e2e`, which is guarded to the disposable loopback `viltara_e2e` database and local TON provider fixture.
 
 1. Start the dedicated Preview bot and send it /start from both Telegram test accounts. Confirm the **Открыть VILTARA SHOP** button opens the Preview hostname.
 2. Open the Mini App as the seller. Complete Telegram authentication.
@@ -125,6 +140,9 @@ Use two dedicated Telegram test accounts, a disposable testnet wallet for the se
 6. Open the Mini App as the second Telegram account. Find the public listing and reserve it.
 7. Open the buyer's orders and confirm the UI says **Reservation pending**. The seller should also see the reservation in their orders.
 8. When the optional bot worker is running and both users have started the bot, check that the order notification outbox is processed and Telegram notifications are received.
+9. Open the seller's order and start the implemented delivery preparation flow. Confirm the displayed source, destination, item, network and deadline match the expected testnet wallets and NFT.
+10. Have the seller approve the TEP-62 transfer in the wallet. Confirm that the UI reports observing/pending until the backend observer independently confirms finalized provider evidence; a wallet callback or submitted reference alone must never mark the order completed.
+11. In a separate isolated CI/API-backed E2E run, exercise wallet rejection, uncertain submit, provider outage, wrong destination and manual-review behavior. Do not fabricate these states in the live Preview database.
 
 ### Demo data and safety
 
@@ -138,11 +156,10 @@ If a suitable testnet NFT is not available or the TON provider cannot verify it,
 
 - Creating an order reserves a listing; it does not collect payment.
 - There is no checkout, Telegram Stars payment, escrow, custody, refund, commission, or seller payout flow.
-- The seller-to-buyer NFT transfer is not automated by VILTARA.
-- Independent on-chain delivery observation and the order completed transition are not implemented.
+- B1–B6 non-custodial delivery is implemented: the seller wallet signs directly, and the backend observer independently verifies finalized evidence before completion. Live testnet/Tonkeeper acceptance remains a manual gate; CI fixtures are not live-chain proof.
 - A public preflight pass is not a substitute for live Telegram/Tonkeeper acceptance.
 
-Never request or store a seed phrase or private key. Wallet proof is a signature challenge; it is not a payment or an NFT transfer.
+Never request or store a seed phrase or private key. Wallet proof is a signature challenge; it is not a payment or an NFT transfer. Reservations remain non-payment records; no checkout, Stars payment, escrow, custody, refunds, commissions or payouts are enabled.
 
 ## 6. Stop the Preview safely
 

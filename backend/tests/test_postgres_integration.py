@@ -11,7 +11,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.api.assets import _upsert_verified_asset
@@ -34,6 +34,7 @@ from app.db.models import (
     AssetVerificationStatus,
     Listing,
     ListingStatus,
+    ModerationAuditLog,
     NFTAsset,
     Order,
     OrderDeliveryAttempt,
@@ -41,6 +42,7 @@ from app.db.models import (
     OrderEvent,
     OrderStatus,
     PriceCurrency,
+    TelegramNotificationOutbox,
     User,
     Wallet,
 )
@@ -51,9 +53,12 @@ from app.listings.service import (
 )
 from app.orders.service import (
     OrderConflict,
+    _enqueue_order_notifications,
     cancel_order,
     create_order,
     expire_pending_orders,
+    prepare_delivery,
+    submit_delivery_candidate,
 )
 
 pytestmark = pytest.mark.integration
@@ -149,7 +154,49 @@ ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0006_delivery_observer_leases"
+    assert revision == "0009_admin_moderation_audit"
+
+
+
+
+async def test_moderation_audit_log_rejects_update_and_delete(db_session: AsyncSession) -> None:
+    seller = await make_user(db_session, telegram_id=719199001)
+    asset = await make_asset(db_session, seller)
+    listing = make_listing(seller, asset, ListingStatus.ACTIVE)
+    db_session.add(listing)
+    await db_session.flush()
+    audit = ModerationAuditLog(
+        actor_id=seller.id,
+        target_type="listing",
+        target_id=listing.id,
+        action="suspended",
+        reason_code="other",
+        reason="Integration immutability check",
+        before_snapshot={"status": "active"},
+        after_snapshot={"status": "suspended"},
+        idempotency_key="immutable-test-" + uuid4().hex,
+    )
+    db_session.add(audit)
+    await db_session.flush()
+
+    with pytest.raises(DBAPIError, match="moderation audit log is append-only"):
+        async with db_session.begin_nested():
+            await db_session.execute(
+                text("UPDATE moderation_audit_log SET reason = 'tampered' WHERE id = :id"),
+                {"id": audit.id},
+            )
+
+    with pytest.raises(DBAPIError, match="moderation audit log is append-only"):
+        async with db_session.begin_nested():
+            await db_session.execute(
+                text("DELETE FROM moderation_audit_log WHERE id = :id"),
+                {"id": audit.id},
+            )
+
+    with pytest.raises(DBAPIError, match="moderation audit log is append-only"):
+        async with db_session.begin_nested():
+            await db_session.execute(text("TRUNCATE TABLE moderation_audit_log"))
+
 
 
 async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
@@ -205,7 +252,7 @@ async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
         engine = create_async_engine(test_database_url, pool_pre_ping=True)
         async with engine.connect() as connection:
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0006_delivery_observer_leases"
+            assert revision == "0009_admin_moderation_audit"
 
         async with engine.begin() as connection:
             await connection.execute(
@@ -614,7 +661,7 @@ async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
                 )
             ).one()
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0006_delivery_observer_leases"
+            assert revision == "0009_admin_moderation_audit"
             assert order.status == "reserved"
             assert order.price_amount == Decimal("12.500000000")
             assert order.price_currency == "TON"
@@ -1692,6 +1739,11 @@ async def _cleanup_observer_fixture(
 ) -> None:
     async with session_factory.begin() as session:
         await session.execute(
+            TelegramNotificationOutbox.__table__.delete().where(
+                TelegramNotificationOutbox.order_id == order_id
+            )
+        )
+        await session.execute(
             OrderEvent.__table__.delete().where(OrderEvent.order_id == order_id)
         )
         await session.execute(
@@ -1703,6 +1755,196 @@ async def _cleanup_observer_fixture(
         await session.execute(Listing.__table__.delete().where(Listing.id == listing_id))
         await session.execute(NFTAsset.__table__.delete().where(NFTAsset.id == asset_id))
         await session.execute(User.__table__.delete().where(User.id.in_([seller_id, buyer_id])))
+
+
+async def test_delivery_prepare_snapshots_verified_wallets_and_submission_is_idempotent(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    item_address = "0:" + "d1" * 32
+    seller_address = "0:" + "d2" * 32
+    buyer_address = "0:" + "d3" * 32
+    async with session_factory.begin() as session:
+        seller = await make_user(session, telegram_id=750_000_000 + uuid4().int % 100_000_000)
+        buyer = await make_user(session, telegram_id=760_000_000 + uuid4().int % 100_000_000)
+        asset = await make_asset(
+            session, seller, external_id=item_address, item_address=item_address
+        )
+        seller_wallet = Wallet(
+            user_id=seller.id,
+            address=seller_address,
+            network="mainnet",
+            is_verified=True,
+            is_primary=True,
+        )
+        buyer_wallet = Wallet(
+            user_id=buyer.id,
+            address=buyer_address,
+            network="mainnet",
+            is_verified=True,
+            is_primary=True,
+        )
+        session.add_all([seller_wallet, buyer_wallet])
+        listing = make_listing(seller, asset, ListingStatus.RESERVED)
+        session.add(listing)
+        await session.flush()
+        now = datetime.now(UTC)
+        order = Order(
+            listing_id=listing.id,
+            buyer_id=buyer.id,
+            seller_id=seller.id,
+            idempotency_key=f"prepare-{uuid4()}",
+            status=OrderStatus.RESERVED,
+            price_amount=Decimal("1.25"),
+            price_currency=PriceCurrency.TON,
+            expires_at=now + timedelta(minutes=30),
+        )
+        session.add(order)
+        await session.flush()
+        ids = (seller.id, buyer.id, asset.id, listing.id, order.id, seller_wallet.id)
+
+    seller_id, buyer_id, asset_id, listing_id, order_id, seller_wallet_id = ids
+
+    class _OwnerVerifier:
+        network = "mainnet"
+
+        async def verify(self, item: str, expected_owner: str) -> VerificationResult:
+            assert item == item_address
+            assert expected_owner == seller_address
+            return VerificationResult(
+                status=VerificationStatus.VERIFIED,
+                item_address=item_address,
+                owner_address=seller_address,
+                expected_owner_address=seller_address,
+            )
+
+    try:
+        async with session_factory() as session:
+            attempt_id = await prepare_delivery(
+                session,
+                order_id=order_id,
+                seller_id=seller_id,
+                seller_wallet_id=seller_wallet_id,
+                idempotency_key="prepare-request-001",
+                verifier=_OwnerVerifier(),
+            )
+        # A retry with the same key and same seller wallet returns the same
+        # delivery attempt without creating another intent or calling the provider.
+        async with session_factory() as session:
+            repeated_id = await prepare_delivery(
+                session,
+                order_id=order_id,
+                seller_id=seller_id,
+                seller_wallet_id=seller_wallet_id,
+                idempotency_key="prepare-request-001",
+                verifier=_OwnerVerifier(),
+            )
+        assert repeated_id == attempt_id
+
+        async with session_factory() as session:
+            with pytest.raises(OrderConflict, match="another seller wallet"):
+                await prepare_delivery(
+                    session,
+                    order_id=order_id,
+                    seller_id=seller_id,
+                    seller_wallet_id=uuid4(),
+                    idempotency_key="prepare-request-001",
+                    verifier=_OwnerVerifier(),
+                )
+
+        async with session_factory() as session:
+            persisted_order = await session.get(Order, order_id)
+            attempt = await session.get(OrderDeliveryAttempt, attempt_id)
+            assert persisted_order is not None
+            assert persisted_order.status is OrderStatus.AWAITING_TRANSFER
+            assert attempt is not None
+            assert attempt.status is OrderDeliveryAttemptStatus.PREPARED
+            assert attempt.prepare_idempotency_key == "prepare-request-001"
+            assert attempt.network == "mainnet"
+            assert attempt.item_address == item_address
+            assert attempt.seller_address_snapshot == seller_address
+            assert attempt.buyer_address_snapshot == buyer_address
+            assert int(attempt.query_id) >= 0
+            assert attempt.deadline > attempt.prepared_at
+            prepared_notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order_id,
+                        TelegramNotificationOutbox.event_type == "delivery_prepared",
+                    )
+                )
+            ).all()
+            assert len(prepared_notices) == 2
+            assert {notice.recipient_role for notice in prepared_notices} == {"buyer", "seller"}
+            assert len({notice.dedupe_key for notice in prepared_notices}) == 2
+            late_submission_at = attempt.deadline + timedelta(seconds=1)
+
+        async with session_factory() as session:
+            with pytest.raises(OrderConflict, match="preparation window has expired"):
+                await submit_delivery_candidate(
+                    session,
+                    order_id=order_id,
+                    seller_id=seller_id,
+                    transaction_hash="ef" * 32,
+                    now=late_submission_at,
+                )
+
+        candidate_hash = "ef" * 32
+        async with session_factory() as session:
+            submitted_id = await submit_delivery_candidate(
+                session,
+                order_id=order_id,
+                seller_id=seller_id,
+                transaction_hash=candidate_hash,
+            )
+        async with session_factory() as session:
+            repeated_submission_id = await submit_delivery_candidate(
+                session,
+                order_id=order_id,
+                seller_id=seller_id,
+                transaction_hash=candidate_hash,
+            )
+        assert submitted_id == attempt_id
+        assert repeated_submission_id == attempt_id
+
+        async with session_factory() as session:
+            persisted_order = await session.get(Order, order_id)
+            persisted_listing = await session.get(Listing, listing_id)
+            attempt = await session.get(OrderDeliveryAttempt, attempt_id)
+            assert persisted_order is not None
+            assert persisted_order.status is OrderStatus.OBSERVING_TRANSFER
+            assert persisted_listing is not None
+            assert persisted_listing.status is ListingStatus.RESERVED
+            assert attempt is not None
+            assert attempt.status is OrderDeliveryAttemptStatus.OBSERVING
+            assert attempt.candidate_transaction_hash == candidate_hash
+            assert attempt.submitted_at is not None
+            submitted_notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order_id,
+                        TelegramNotificationOutbox.event_type == "delivery_submitted",
+                    )
+                )
+            ).all()
+            assert len(submitted_notices) == 2
+            assert {notice.recipient_role for notice in submitted_notices} == {"buyer", "seller"}
+
+        async with session_factory() as session:
+            with pytest.raises(OrderConflict, match="cannot be cancelled"):
+                await cancel_order(session, order_id=order_id, buyer_id=buyer_id)
+    finally:
+        await _cleanup_observer_fixture(
+            session_factory,
+            seller_id=seller_id,
+            buyer_id=buyer_id,
+            asset_id=asset_id,
+            listing_id=listing_id,
+            order_id=order_id,
+            attempt_id=attempt_id,
+        )
+        await engine.dispose()
 
 
 async def test_delivery_observer_verifies_and_completes_only_exact_finalized_evidence(
@@ -1769,6 +2011,23 @@ async def test_delivery_observer_verifies_and_completes_only_exact_finalized_evi
                 )
             ).all()
             assert len(completed_events) == 1
+            confirmed_notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order.id,
+                        TelegramNotificationOutbox.event_type == "delivery_confirmed",
+                    )
+                )
+            ).all()
+            assert len(confirmed_notices) == 2
+            assert {notice.recipient_role for notice in confirmed_notices} == {"buyer", "seller"}
+        # A repeated observer pass cannot re-complete or enqueue duplicate notices.
+        repeated = await run_delivery_observer_pass(
+            session_factory,
+            now=now + timedelta(seconds=5),
+            provider_factory=lambda _network: _FinalizedProvider(),
+        )
+        assert repeated.claimed == 0
     finally:
         await _cleanup_observer_fixture(
             session_factory,
@@ -1876,6 +2135,124 @@ async def test_delivery_observer_lease_fences_stale_worker_and_retries_inconclus
         await engine.dispose()
 
 
+async def test_delivery_observer_retry_schedule_uses_fresh_post_lock_time(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        seller, buyer, asset, listing, order, attempt, now = await _create_observer_fixture(session)
+    try:
+        async with session_factory() as session:
+            claims = await claim_due_delivery_attempts(session, now=now)
+            assert len(claims) == 1
+            claim = claims[0]
+
+        inconclusive = DeliveryEvidenceResult(
+            status=DeliveryEvidenceStatus.INCONCLUSIVE,
+            item_address=claim.item_address,
+            network=claim.network,
+            seller_wallet_address=claim.seller_address,
+            buyer_wallet_address=claim.buyer_address,
+            query_id=claim.query_id,
+            reason="trace not indexed yet",
+        )
+        # The observer pass timestamp can become stale while waiting for a DB lock.
+        stale_pass_time = now - timedelta(minutes=5)
+        async with session_factory() as session:
+            outcome = await apply_delivery_observation(
+                session, claim, inconclusive, now=stale_pass_time
+            )
+        assert outcome == "retried"
+
+        async with session_factory() as session:
+            persisted_attempt = await session.get(OrderDeliveryAttempt, attempt.id)
+            assert persisted_attempt is not None
+            assert persisted_attempt.last_checked_at is not None
+            assert persisted_attempt.last_checked_at >= now
+            assert persisted_attempt.next_check_at is not None
+            assert persisted_attempt.next_check_at > datetime.now(UTC)
+            assert persisted_attempt.next_check_at > persisted_attempt.last_checked_at
+            assert persisted_attempt.observer_lease_token is None
+    finally:
+        await _cleanup_observer_fixture(
+            session_factory,
+            seller_id=seller.id,
+            buyer_id=buyer.id,
+            asset_id=asset.id,
+            listing_id=listing.id,
+            order_id=order.id,
+            attempt_id=attempt.id,
+        )
+        await engine.dispose()
+
+
+async def test_delivery_observer_rejects_expired_lease_before_another_worker_reclaims_it(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        seller, buyer, asset, listing, order, attempt, now = await _create_observer_fixture(session)
+    try:
+        async with session_factory() as session:
+            claims = await claim_due_delivery_attempts(session, now=now)
+            assert len(claims) == 1
+            claim = claims[0]
+
+        # Simulate provider I/O lasting beyond the lease. No replacement worker
+        # has claimed the row, so the token still matches; expiry alone must fence it.
+        expired_at = datetime.now(UTC) - timedelta(seconds=1)
+        async with session_factory.begin() as session:
+            persisted_attempt = await session.get(OrderDeliveryAttempt, attempt.id)
+            assert persisted_attempt is not None
+            persisted_attempt.observer_lease_until = expired_at
+            persisted_attempt.next_check_at = expired_at
+
+        finalized = DeliveryEvidenceResult(
+            status=DeliveryEvidenceStatus.VERIFIED_FINALIZED,
+            item_address=claim.item_address,
+            network=claim.network,
+            seller_wallet_address=claim.seller_address,
+            buyer_wallet_address=claim.buyer_address,
+            query_id=claim.query_id,
+            transaction_hash="ef" * 32,
+            trace_id="12" * 32,
+            masterchain_seqno=123456,
+        )
+        async with session_factory() as session:
+            outcome = await apply_delivery_observation(session, claim, finalized)
+        assert outcome == "lease_lost"
+
+        async with session_factory() as session:
+            persisted_order = await session.get(Order, order.id)
+            persisted_listing = await session.get(Listing, listing.id)
+            persisted_asset = await session.get(NFTAsset, asset.id)
+            persisted_attempt = await session.get(OrderDeliveryAttempt, attempt.id)
+            assert persisted_order is not None
+            assert persisted_order.status is OrderStatus.OBSERVING_TRANSFER
+            assert persisted_listing is not None
+            assert persisted_listing.status is ListingStatus.RESERVED
+            assert persisted_asset is not None
+            assert persisted_asset.owner_id == seller.id
+            assert persisted_attempt is not None
+            assert persisted_attempt.status is OrderDeliveryAttemptStatus.OBSERVING
+            assert persisted_attempt.observer_lease_token == claim.lease_token
+            assert persisted_attempt.transaction_hash is None
+            assert persisted_attempt.verified_at is None
+    finally:
+        await _cleanup_observer_fixture(
+            session_factory,
+            seller_id=seller.id,
+            buyer_id=buyer.id,
+            asset_id=asset.id,
+            listing_id=listing.id,
+            order_id=order.id,
+            attempt_id=attempt.id,
+        )
+        await engine.dispose()
+
+
 async def test_delivery_observer_quarantines_failed_transfer_without_releasing_listing(
     test_database_url: str, migrated_database
 ) -> None:
@@ -1917,6 +2294,82 @@ async def test_delivery_observer_quarantines_failed_transfer_without_releasing_l
             assert persisted_attempt is not None
             assert persisted_attempt.status is OrderDeliveryAttemptStatus.MANUAL_REVIEW
             assert persisted_attempt.reason_code == "transfer_mismatch_or_failed"
+            review_notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order.id,
+                        TelegramNotificationOutbox.event_type == "delivery_manual_review",
+                    )
+                )
+            ).all()
+            assert len(review_notices) == 2
+            assert {notice.recipient_role for notice in review_notices} == {"buyer", "seller"}
+    finally:
+        await _cleanup_observer_fixture(
+            session_factory,
+            seller_id=seller.id,
+            buyer_id=buyer.id,
+            asset_id=asset.id,
+            listing_id=listing.id,
+            order_id=order.id,
+            attempt_id=attempt.id,
+        )
+        await engine.dispose()
+
+
+async def test_delivery_state_and_outbox_roll_back_atomically(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        (
+            seller,
+            buyer,
+            asset,
+            listing,
+            order,
+            attempt,
+            _now,
+        ) = await _create_observer_fixture(session)
+    try:
+        with pytest.raises(RuntimeError, match="force transaction rollback"):
+            async with session_factory() as session:
+                async with session.begin():
+                    order_to_complete = await session.get(Order, order.id)
+                    assert order_to_complete is not None
+                    previous_status = order_to_complete.status
+                    order_to_complete.status = OrderStatus.COMPLETED
+                    session.add(
+                        OrderEvent(
+                            order_id=order.id,
+                            from_status=previous_status,
+                            to_status=OrderStatus.COMPLETED,
+                            actor_id=None,
+                            actor_type="system",
+                        )
+                    )
+                    await _enqueue_order_notifications(
+                        session,
+                        order=order_to_complete,
+                        event_type="delivery_confirmed",
+                        recipients={buyer.id: "buyer", seller.id: "seller"},
+                    )
+                    raise RuntimeError("force transaction rollback")
+
+        async with session_factory() as session:
+            persisted_order = await session.get(Order, order.id)
+            assert persisted_order is not None
+            assert persisted_order.status is OrderStatus.AWAITING_TRANSFER
+            notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order.id,
+                        TelegramNotificationOutbox.event_type == "delivery_confirmed",
+                    )
+                )
+            ).all()
+            assert notices == []
     finally:
         await _cleanup_observer_fixture(
             session_factory,
