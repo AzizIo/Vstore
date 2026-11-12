@@ -953,7 +953,10 @@ async def prepare_delivery(
                     )
                     rejection = "Seller no longer owns this NFT; the listing was invalidated"
                 elif not identity_matches or not wallets_match:
-                    rejection = "Order, listing, asset, or verified wallet changed during preparation"
+                    rejection = (
+                        "Order, listing, asset, or verified wallet changed "
+                        "during preparation"
+                    )
                 elif (
                     order.status is not OrderStatus.RESERVED
                     or order.expires_at <= committed_at
