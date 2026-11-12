@@ -158,7 +158,10 @@ async def run(wallet_id: UUID, limit: int, offset: int) -> dict[str, object]:
                 "notes": [
                     "This is an indexed-provider observation, not a blockchain snapshot.",
                     "Provider read and DB reads are not transactionally atomic.",
-                    "No upsert was attempted; open-listing status is shown as a potential guard only.",
+                    (
+                        "No upsert was attempted; open-listing status is shown as a potential "
+                        "guard only."
+                    ),
                     (
                         "Capture the UI/API response separately with timestamp and query "
                         "params; the GET route may persist verified rows."
