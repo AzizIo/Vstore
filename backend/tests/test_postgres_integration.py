@@ -52,6 +52,7 @@ from app.listings.service import (
 )
 from app.orders.service import (
     OrderConflict,
+    _enqueue_order_notifications,
     cancel_order,
     create_order,
     expire_pending_orders,
@@ -2255,6 +2256,64 @@ async def test_delivery_observer_quarantines_failed_transfer_without_releasing_l
             ).all()
             assert len(review_notices) == 2
             assert {notice.recipient_role for notice in review_notices} == {"buyer", "seller"}
+    finally:
+        await _cleanup_observer_fixture(
+            session_factory,
+            seller_id=seller.id,
+            buyer_id=buyer.id,
+            asset_id=asset.id,
+            listing_id=listing.id,
+            order_id=order.id,
+            attempt_id=attempt.id,
+        )
+        await engine.dispose()
+
+
+async def test_delivery_state_and_outbox_roll_back_atomically(
+    test_database_url: str, migrated_database
+) -> None:
+    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        seller, buyer, asset, listing, order, attempt, _now = await _create_observer_fixture(session)
+    try:
+        with pytest.raises(RuntimeError, match="force transaction rollback"):
+            async with session_factory() as session:
+                async with session.begin():
+                    order_to_complete = await session.get(Order, order.id)
+                    assert order_to_complete is not None
+                    previous_status = order_to_complete.status
+                    order_to_complete.status = OrderStatus.COMPLETED
+                    session.add(
+                        OrderEvent(
+                            order_id=order.id,
+                            from_status=previous_status,
+                            to_status=OrderStatus.COMPLETED,
+                            actor_id=None,
+                            actor_type="system",
+                        )
+                    )
+                    await _enqueue_order_notifications(
+                        session,
+                        order=order_to_complete,
+                        event_type="delivery_confirmed",
+                        recipients={buyer.id: "buyer", seller.id: "seller"},
+                    )
+                    raise RuntimeError("force transaction rollback")
+
+        async with session_factory() as session:
+            persisted_order = await session.get(Order, order.id)
+            assert persisted_order is not None
+            assert persisted_order.status is OrderStatus.OBSERVING_TRANSFER
+            notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order.id,
+                        TelegramNotificationOutbox.event_type == "delivery_confirmed",
+                    )
+                )
+            ).all()
+            assert notices == []
     finally:
         await _cleanup_observer_fixture(
             session_factory,
