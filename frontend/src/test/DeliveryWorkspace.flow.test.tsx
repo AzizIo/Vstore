@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import { Address, Cell } from "@ton/core";
 
 import type { DeliveryAttempt, MarketplaceOrder, OrderDeliveryState } from "../api/orders";
@@ -17,7 +18,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@tonconnect/ui-react", () => ({
   CHAIN: { MAINNET: "-239", TESTNET: "-3" },
-  TonConnectUIProvider: ({ children }: { children: React.ReactNode }) => children,
+  TonConnectUIProvider: ({ children }: { children: ReactNode }) => children,
   useTonWallet: () => mocks.wallet,
   useTonConnectUI: () => [{ sendTransaction: mocks.sendTransaction, openModal: mocks.openModal }],
 }));
@@ -114,6 +115,8 @@ afterEach(() => {
 describe("DeliveryWorkspace", () => {
   it("builds the exact prepared transfer and submits only an untrusted wallet reference", async () => {
     const onRefreshOrder = vi.fn();
+    const prepared = attempt();
+    mocks.fetchDeliveryState.mockResolvedValue(deliveryState("awaiting_transfer", prepared));
     render(
       <DeliveryWorkspace
         order={order("awaiting_transfer")}
@@ -128,7 +131,7 @@ describe("DeliveryWorkspace", () => {
     await waitFor(() => expect(mocks.sendTransaction).toHaveBeenCalledTimes(1));
     const request = mocks.sendTransaction.mock.calls[0][0];
     expect(request.network).toBe("-3");
-    expect(request.validUntil).toBe(Math.floor(Date.parse(attempt().deadline) / 1000));
+    expect(request.validUntil).toBe(Math.floor(Date.parse(prepared.deadline) / 1000));
     expect(request.messages).toHaveLength(1);
     expect(request.messages[0].address).toBe(Address.parse(rawAddress("3")).toString({
       urlSafe: true, bounceable: true, testOnly: true,
@@ -148,6 +151,31 @@ describe("DeliveryWorkspace", () => {
     expect(token).toBe("test-token");
     expect(screen.getByText(/Transfer submitted · verifying/)).toBeTruthy();
     expect(screen.queryByText(/Transfer independently verified/)).toBeNull();
+    expect(onRefreshOrder).toHaveBeenCalled();
+  });
+
+
+  it("prepares against the connected, verified seller wallet with a stable idempotency key", async () => {
+    mocks.fetchDeliveryState.mockResolvedValue(deliveryState("reserved", null));
+    const onRefreshOrder = vi.fn();
+    render(
+      <DeliveryWorkspace
+        order={order("reserved")}
+        role="seller"
+        accessToken="test-token"
+        onRefreshOrder={onRefreshOrder}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Prepare transfer" }));
+    await waitFor(() => expect(mocks.prepareDelivery).toHaveBeenCalledTimes(1));
+    expect(mocks.prepareDelivery).toHaveBeenCalledWith(
+      "order-123",
+      "seller-wallet",
+      "test-token",
+      "stable-prepare-idempotency-key",
+    );
+    expect(mocks.sendTransaction).not.toHaveBeenCalled();
     expect(onRefreshOrder).toHaveBeenCalled();
   });
 
