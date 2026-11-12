@@ -8,7 +8,7 @@ const overviewApi = vi.hoisted(() => ({ fetchSellerOverview: vi.fn() }));
 vi.mock("../api/overview", () => overviewApi);
 
 const data: OverviewData = {
-  listings: { draft: 1, active: 3, reserved: 2, sold: 0, cancelled: 1, expired: 0, total: 7 },
+  listings: { draft: 1, active: 3, reserved: 2, sold: 0, cancelled: 1, expired: 0, suspended: 1, total: 8 },
   orders_as_seller: { reserved: 2, awaiting_transfer: 1, observing_transfer: 0, completed: 1, cancelled: 0, expired: 0, total: 4 },
   orders_as_buyer: { reserved: 0, awaiting_transfer: 0, observing_transfer: 0, completed: 1, cancelled: 0, expired: 0, total: 1 },
   reserved_order_snapshot_values: { TON: "12.500000000", XTR: "40.00" },
@@ -23,6 +23,11 @@ const data: OverviewData = {
       id: "listing-2", kind: "listing", role: null, listing_id: "listing-2",
       title: "Star Sail", status: "active", created_at: "2026-11-11T08:00:00Z",
       price_amount: "40", price_currency: "XTR",
+    },
+    {
+      id: "listing-suspended", kind: "listing", role: null, listing_id: "listing-suspended",
+      title: "Suspended listing", status: "suspended", created_at: "2026-11-10T08:00:00Z",
+      price_amount: "2", price_currency: "TON",
     },
   ],
 };
@@ -50,6 +55,7 @@ describe("Seller overview", () => {
     expect(screen.getByText("3.25 TON")).toBeInTheDocument();
     expect(screen.getByText(/Reservations are not payments/)).toBeInTheDocument();
     expect(screen.getByText("Active listings")).toBeInTheDocument();
+    expect(screen.getByText("Suspended")).toBeInTheDocument();
     expect(screen.getByText("Completed transfers")).toBeInTheDocument();
   });
 

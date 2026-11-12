@@ -7,6 +7,7 @@ export interface ListingOverviewCounts {
   sold: number;
   cancelled: number;
   expired: number;
+  suspended: number;
   total: number;
 }
 
@@ -48,7 +49,7 @@ function hasNonNegativeCounts(value: unknown, keys: string[]): boolean {
 }
 
 function isListingCounts(value: unknown): value is ListingOverviewCounts {
-  return hasNonNegativeCounts(value, ["draft", "active", "reserved", "sold", "cancelled", "expired", "total"]);
+  return hasNonNegativeCounts(value, ["draft", "active", "reserved", "sold", "cancelled", "expired", "suspended", "total"]);
 }
 
 function isOrderCounts(value: unknown): value is OrderOverviewCounts {

@@ -24,6 +24,7 @@ function statusLabel(status: string) {
     sold: "Sold",
     cancelled: "Cancelled",
     expired: "Expired",
+    suspended: "Suspended",
     awaiting_transfer: "Awaiting transfer",
     observing_transfer: "Verifying transfer",
     completed: "Completed",

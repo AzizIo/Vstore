@@ -121,6 +121,7 @@ class ListingOverviewCounts(BaseModel):
     sold: int = 0
     cancelled: int = 0
     expired: int = 0
+    suspended: int = 0
     total: int = 0
 
 
@@ -172,7 +173,7 @@ async def get_my_overview(
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> SellerOverviewResponse:
-    listing_statuses = ("draft", "active", "reserved", "sold", "cancelled", "expired")
+    listing_statuses = ("draft", "active", "reserved", "sold", "cancelled", "expired", "suspended")
     order_statuses = (
         "reserved",
         "awaiting_transfer",
