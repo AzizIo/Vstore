@@ -58,7 +58,7 @@ export async function getTransferPayload(attempt: DeliveryAttempt): Promise<stri
     .storeAddress(Address.parse(attempt.buyer_address))
     .storeAddress(Address.parse(attempt.seller_address))
     .storeBit(0) // no custom payload
-    .storeCoins(1) // 1 nanoton forward amount
+    .storeCoins(0) // no forwarded TON amount; avoids turning the transfer into a payment
     .storeBit(0) // empty inline forward payload
     .endCell();
 
