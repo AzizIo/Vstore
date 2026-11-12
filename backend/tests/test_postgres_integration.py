@@ -41,6 +41,7 @@ from app.db.models import (
     OrderEvent,
     OrderStatus,
     PriceCurrency,
+    TelegramNotificationOutbox,
     User,
     Wallet,
 )
@@ -1817,6 +1818,17 @@ async def test_delivery_prepare_snapshots_verified_wallets_and_submission_is_ide
             assert attempt.buyer_address_snapshot == buyer_address
             assert int(attempt.query_id) >= 0
             assert attempt.deadline > attempt.prepared_at
+            prepared_notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order_id,
+                        TelegramNotificationOutbox.event_type == "delivery_prepared",
+                    )
+                )
+            ).all()
+            assert len(prepared_notices) == 2
+            assert {notice.recipient_role for notice in prepared_notices} == {"buyer", "seller"}
+            assert len({notice.dedupe_key for notice in prepared_notices}) == 2
             late_submission_at = attempt.deadline + timedelta(seconds=1)
 
         async with session_factory() as session:
@@ -1859,6 +1871,16 @@ async def test_delivery_prepare_snapshots_verified_wallets_and_submission_is_ide
             assert attempt.status is OrderDeliveryAttemptStatus.OBSERVING
             assert attempt.candidate_transaction_hash == candidate_hash
             assert attempt.submitted_at is not None
+            submitted_notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order_id,
+                        TelegramNotificationOutbox.event_type == "delivery_submitted",
+                    )
+                )
+            ).all()
+            assert len(submitted_notices) == 2
+            assert {notice.recipient_role for notice in submitted_notices} == {"buyer", "seller"}
 
         async with session_factory() as session:
             with pytest.raises(OrderConflict, match="cannot be cancelled"):
@@ -1940,6 +1962,23 @@ async def test_delivery_observer_verifies_and_completes_only_exact_finalized_evi
                 )
             ).all()
             assert len(completed_events) == 1
+            confirmed_notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order.id,
+                        TelegramNotificationOutbox.event_type == "delivery_confirmed",
+                    )
+                )
+            ).all()
+            assert len(confirmed_notices) == 2
+            assert {notice.recipient_role for notice in confirmed_notices} == {"buyer", "seller"}
+        # A repeated observer pass cannot re-complete or enqueue duplicate notices.
+        repeated = await run_delivery_observer_pass(
+            session_factory,
+            now=now + timedelta(seconds=5),
+            provider_factory=lambda _network: _FinalizedProvider(),
+        )
+        assert repeated.claimed == 0
     finally:
         await _cleanup_observer_fixture(
             session_factory,
@@ -2206,6 +2245,16 @@ async def test_delivery_observer_quarantines_failed_transfer_without_releasing_l
             assert persisted_attempt is not None
             assert persisted_attempt.status is OrderDeliveryAttemptStatus.MANUAL_REVIEW
             assert persisted_attempt.reason_code == "transfer_mismatch_or_failed"
+            review_notices = (
+                await session.scalars(
+                    select(TelegramNotificationOutbox).where(
+                        TelegramNotificationOutbox.order_id == order.id,
+                        TelegramNotificationOutbox.event_type == "delivery_manual_review",
+                    )
+                )
+            ).all()
+            assert len(review_notices) == 2
+            assert {notice.recipient_role for notice in review_notices} == {"buyer", "seller"}
     finally:
         await _cleanup_observer_fixture(
             session_factory,
