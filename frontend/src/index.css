@@ -304,7 +304,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .select-control select { min-width: 120px; border: 0; outline: 0; background: transparent; font-size: 12px; cursor: pointer; }
 .select-control option { background: #191c19; }
 .price-control { display: flex; align-items: center; width: 112px; padding: 0 10px; }
-.price-control input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #f3f0e9; font: 12px inherit; }
+.price-control input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #f3f0e9; font: inherit; font-size: 12px; }
 .price-control input::placeholder { color: var(--muted); }
 .clear-filters-button { min-height: 44px; padding: 0 12px; border: 1px solid var(--line); background: transparent; color: var(--accent); font-size: 11px; cursor: pointer; }
 .clear-filters-button:hover { border-color: var(--accent); }
