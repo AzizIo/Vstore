@@ -1,10 +1,20 @@
 import { API_BASE_URL } from "./config";
 
-export interface OverviewCounts {
+export interface ListingOverviewCounts {
   draft: number;
   active: number;
   reserved: number;
   sold: number;
+  cancelled: number;
+  expired: number;
+  total: number;
+}
+
+export interface OrderOverviewCounts {
+  reserved: number;
+  awaiting_transfer: number;
+  observing_transfer: number;
+  completed: number;
   cancelled: number;
   expired: number;
   total: number;
@@ -23,19 +33,26 @@ export interface SellerActivityItem {
 }
 
 export interface SellerOverview {
-  listings: OverviewCounts;
-  orders_as_seller: OverviewCounts;
-  orders_as_buyer: OverviewCounts;
+  listings: ListingOverviewCounts;
+  orders_as_seller: OrderOverviewCounts;
+  orders_as_buyer: OrderOverviewCounts;
   reserved_order_snapshot_values: Record<string, string>;
   completed_order_snapshot_values: Record<string, string>;
   recent_activity: SellerActivityItem[];
 }
 
-function isCounts(value: unknown): value is OverviewCounts {
+function hasNonNegativeCounts(value: unknown, keys: string[]): boolean {
   if (!value || typeof value !== "object") return false;
-  const counts = value as Partial<OverviewCounts>;
-  return ["draft", "active", "reserved", "sold", "cancelled", "expired", "total"]
-    .every((key) => Number.isInteger(counts[key as keyof OverviewCounts]) && (counts[key as keyof OverviewCounts] as number) >= 0);
+  const counts = value as Record<string, unknown>;
+  return keys.every((key) => Number.isInteger(counts[key]) && (counts[key] as number) >= 0);
+}
+
+function isListingCounts(value: unknown): value is ListingOverviewCounts {
+  return hasNonNegativeCounts(value, ["draft", "active", "reserved", "sold", "cancelled", "expired", "total"]);
+}
+
+function isOrderCounts(value: unknown): value is OrderOverviewCounts {
+  return hasNonNegativeCounts(value, ["reserved", "awaiting_transfer", "observing_transfer", "completed", "cancelled", "expired", "total"]);
 }
 
 function isActivity(value: unknown): value is SellerActivityItem {
@@ -88,9 +105,9 @@ export async function fetchSellerOverview(
   const result: unknown = await response.json();
   if (
     !result || typeof result !== "object" ||
-    !isCounts((result as SellerOverview).listings) ||
-    !isCounts((result as SellerOverview).orders_as_seller) ||
-    !isCounts((result as SellerOverview).orders_as_buyer) ||
+    !isListingCounts((result as SellerOverview).listings) ||
+    !isOrderCounts((result as SellerOverview).orders_as_seller) ||
+    !isOrderCounts((result as SellerOverview).orders_as_buyer) ||
     !isSnapshotMap((result as SellerOverview).reserved_order_snapshot_values) ||
     !isSnapshotMap((result as SellerOverview).completed_order_snapshot_values) ||
     !Array.isArray((result as SellerOverview).recent_activity) ||
