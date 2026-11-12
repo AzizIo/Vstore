@@ -550,12 +550,17 @@ class ModerationAuditLog(Base):
             "'misleading_metadata', 'duplicate_listing', 'other')",
             name="ck_moderation_audit_reason_code",
         ),
-        CheckConstraint("length(reason) BETWEEN 5 AND 500", name="ck_moderation_audit_reason_length"),
+        CheckConstraint(
+            "length(reason) BETWEEN 5 AND 500",
+            name="ck_moderation_audit_reason_length",
+        ),
         CheckConstraint(
             "length(idempotency_key) BETWEEN 8 AND 128",
             name="ck_moderation_audit_idempotency_key_length",
         ),
-        UniqueConstraint("actor_id", "idempotency_key", name="uq_moderation_audit_actor_idempotency"),
+        UniqueConstraint(
+            "actor_id", "idempotency_key", name="uq_moderation_audit_actor_idempotency"
+        ),
         Index("ix_moderation_audit_target_time", "target_type", "target_id", "occurred_at"),
         Index("ix_moderation_audit_actor_time", "actor_id", "occurred_at"),
     )

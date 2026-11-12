@@ -6,8 +6,8 @@ from logging import getLogger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.assets import router as assets_router
 from app.admin.moderation import router as admin_moderation_router
+from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.api.listings import router as listings_router

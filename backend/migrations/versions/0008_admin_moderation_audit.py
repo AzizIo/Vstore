@@ -25,7 +25,9 @@ def upgrade() -> None:
         sa.Column("after_snapshot", sa.JSON(), nullable=False),
         sa.Column("request_id", sa.String(length=100), nullable=True),
         sa.Column("idempotency_key", sa.String(length=128), nullable=False),
-        sa.Column("occurred_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "occurred_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint("target_type = 'listing'", name="ck_moderation_audit_target_type"),
         sa.CheckConstraint(
             "action IN ('approved', 'rejected', 'suspended', 'restored')",
@@ -36,7 +38,10 @@ def upgrade() -> None:
             "'misleading_metadata', 'duplicate_listing', 'other')",
             name="ck_moderation_audit_reason_code",
         ),
-        sa.CheckConstraint("length(reason) BETWEEN 5 AND 500", name="ck_moderation_audit_reason_length"),
+        sa.CheckConstraint(
+            "length(reason) BETWEEN 5 AND 500",
+            name="ck_moderation_audit_reason_length",
+        ),
         sa.CheckConstraint(
             "length(idempotency_key) BETWEEN 8 AND 128",
             name="ck_moderation_audit_idempotency_key_length",
@@ -44,7 +49,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["actor_id"], ["users.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["target_id"], ["listings.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("actor_id", "idempotency_key", name="uq_moderation_audit_actor_idempotency"),
+        sa.UniqueConstraint(
+            "actor_id", "idempotency_key", name="uq_moderation_audit_actor_idempotency"
+        ),
     )
     op.create_index("ix_moderation_audit_target_time", "moderation_audit_log",
                     ["target_type", "target_id", "occurred_at"])
@@ -68,9 +75,13 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
-    suspended = bind.execute(sa.text("SELECT count(*) FROM listings WHERE status = 'suspended'")).scalar_one()
+    suspended = bind.execute(
+        sa.text("SELECT count(*) FROM listings WHERE status = 'suspended'")
+    ).scalar_one()
     if suspended:
-        raise RuntimeError("Cannot downgrade while suspended listings exist; restore or reconcile them first.")
+        raise RuntimeError(
+            "Cannot downgrade while suspended listings exist; restore or reconcile them first."
+        )
     count = bind.execute(sa.text("SELECT count(*) FROM moderation_audit_log")).scalar_one()
     if count:
         raise RuntimeError(

@@ -200,7 +200,10 @@ async def _verify_ownership(
     if listing.status is not expected_status:
         raise HTTPException(status_code=409, detail="Listing status changed; refresh the queue")
     if listing.expires_at is not None and listing.expires_at <= datetime.now(UTC):
-        raise HTTPException(status_code=409, detail="Expired listings cannot be approved or restored")
+        raise HTTPException(
+            status_code=409,
+            detail="Expired listings cannot be approved or restored",
+        )
     asset = listing.asset
     if (
         asset.asset_type is not AssetType.TON_NFT
@@ -467,7 +470,10 @@ async def decide_listing(
                     or wallet.network != asset.network
                     or (listing.expires_at is not None and listing.expires_at <= datetime.now(UTC))
                 ):
-                    raise HTTPException(status_code=409, detail="Listing ownership changed during verification")
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Listing ownership changed during verification",
+                    )
                 conflicting = await session.scalar(
                     select(Listing.id).where(
                         Listing.asset_id == listing.asset_id,
@@ -476,7 +482,10 @@ async def decide_listing(
                     ).limit(1)
                 )
                 if conflicting is not None:
-                    raise HTTPException(status_code=409, detail="Another active or reserved listing exists for this NFT")
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Another active or reserved listing exists for this NFT",
+                    )
                 asset.verified_at = datetime.now(UTC)
             listing.status = target_status
             after = _snapshot(listing)
