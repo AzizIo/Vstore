@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -68,6 +69,10 @@ class _FakeResult:
 class _FakeSession:
     def __init__(self) -> None:
         self.statements: list[str] = []
+
+    @property
+    def no_autoflush(self):
+        return nullcontext()
 
     async def execute(self, statement):
         compiled = str(
@@ -438,11 +443,27 @@ async def test_postgres_diagnostic_reports_persisted_states_without_mutating_row
         for row in before
     ]
 
+    pending_probe = TelegramNotificationOutbox(
+        dedupe_key=f"must-not-autoflush-{uuid4()}",
+        order_id=order.id,
+        recipient_telegram_id=buyer.telegram_id,
+        recipient_role="buyer",
+        event_type="order_created",
+        status="pending",
+        attempt_count=0,
+        next_attempt_at=now,
+    )
+    outbox_health_session.add(pending_probe)
+
     summary = await inspect_notification_outbox(
         outbox_health_session,
         now=now,
         max_due_age_seconds=300,
     )
+
+    # The read-only diagnostic must not flush unrelated pending ORM objects.
+    assert pending_probe in outbox_health_session.new
+    outbox_health_session.expunge(pending_probe)
 
     after = list(
         (

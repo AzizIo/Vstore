@@ -121,7 +121,8 @@ async def inspect_notification_outbox(
         .label("oldest_failed_created_at"),
     )
 
-    row = (await session.execute(statement)).one()
+    with session.no_autoflush:
+        row = (await session.execute(statement)).one()
     return NotificationOutboxHealth(
         sampled_at=sampled_at,
         max_due_age_seconds=max_due_age_seconds,
