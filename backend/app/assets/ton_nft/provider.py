@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from typing import Any, Protocol, cast
@@ -15,6 +16,8 @@ from app.assets.ton_nft.models import NFTInventoryPage, NFTItemSnapshot, NFTMeta
 
 MAX_PROVIDER_RESPONSE_BYTES = 2_000_000
 MAX_PROVIDER_PAGE_SIZE = 1000
+MAX_PROVIDER_REQUEST_ATTEMPTS = 2
+_PROVIDER_RETRY_BACKOFF_SECONDS = 0.15
 
 
 class NFTDataProvider(Protocol):
@@ -103,54 +106,92 @@ class TONCenterV3Provider:
         request_headers = (
             {"X-API-Key": self.config.api_key} if self.config.api_key else None
         )
-        content = bytearray()
-        try:
-            async with self._client.stream(
-                "GET",
-                "nft/items",
-                params=request_params,
-                headers=request_headers,
-            ) as response:
-                response.raise_for_status()
-                content_length = response.headers.get("content-length")
-                if content_length is not None:
+
+        for attempt in range(MAX_PROVIDER_REQUEST_ATTEMPTS):
+            content = bytearray()
+            try:
+                async with self._client.stream(
+                    "GET",
+                    "nft/items",
+                    params=request_params,
+                    headers=request_headers,
+                ) as response:
                     try:
-                        declared_length = int(content_length)
-                    except ValueError as exc:
+                        response.raise_for_status()
+                    except httpx.HTTPStatusError as exc:
+                        retryable_status = (
+                            exc.response.status_code == 429
+                            or exc.response.status_code >= 500
+                        )
+                        if retryable_status and attempt + 1 < MAX_PROVIDER_REQUEST_ATTEMPTS:
+                            await asyncio.sleep(
+                                _PROVIDER_RETRY_BACKOFF_SECONDS * (2**attempt)
+                            )
+                            continue
+                        if retryable_status:
+                            raise ProviderUnavailable(
+                                "TON Center NFT indexer is temporarily unavailable"
+                            ) from exc
                         raise InvalidProviderData(
-                            "TON Center returned invalid Content-Length"
+                            "TON Center rejected the NFT inventory request"
                         ) from exc
-                    if (
-                        declared_length < 0
-                        or declared_length > MAX_PROVIDER_RESPONSE_BYTES
-                    ):
-                        raise InvalidProviderData(
-                            "TON Center response exceeds the allowed size"
-                        )
-                async for chunk in response.aiter_bytes():
-                    if len(content) + len(chunk) > MAX_PROVIDER_RESPONSE_BYTES:
-                        raise InvalidProviderData(
-                            "TON Center response exceeds the allowed size"
-                        )
-                    content.extend(chunk)
-        except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-            raise ProviderUnavailable("TON Center NFT indexer request failed") from exc
 
-        try:
-            payload: object = json.loads(content)
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            raise InvalidProviderData("TON Center returned non-JSON data") from exc
+                    content_length = response.headers.get("content-length")
+                    if content_length is not None:
+                        try:
+                            declared_length = int(content_length)
+                        except ValueError as exc:
+                            raise InvalidProviderData(
+                                "TON Center returned invalid Content-Length"
+                            ) from exc
+                        if (
+                            declared_length < 0
+                            or declared_length > MAX_PROVIDER_RESPONSE_BYTES
+                        ):
+                            raise InvalidProviderData(
+                                "TON Center response exceeds the allowed size"
+                            )
+                    async for chunk in response.aiter_bytes():
+                        if len(content) + len(chunk) > MAX_PROVIDER_RESPONSE_BYTES:
+                            raise InvalidProviderData(
+                                "TON Center response exceeds the allowed size"
+                            )
+                        content.extend(chunk)
+            except (
+                httpx.TimeoutException,
+                httpx.NetworkError,
+                httpx.RemoteProtocolError,
+            ) as exc:
+                if attempt + 1 < MAX_PROVIDER_REQUEST_ATTEMPTS:
+                    await asyncio.sleep(
+                        _PROVIDER_RETRY_BACKOFF_SECONDS * (2**attempt)
+                    )
+                    continue
+                raise ProviderUnavailable(
+                    "TON Center NFT indexer is temporarily unavailable"
+                ) from exc
+            except httpx.RequestError as exc:
+                raise ProviderUnavailable(
+                    "TON Center NFT indexer request failed"
+                ) from exc
 
-        if not isinstance(payload, dict):
-            raise InvalidProviderData("TON Center response has no nft_items array")
-        raw_rows = payload.get("nft_items")
-        if not isinstance(raw_rows, list):
-            raise InvalidProviderData("TON Center response has no nft_items array")
-        if len(raw_rows) > limit or any(not isinstance(row, dict) for row in raw_rows):
-            raise InvalidProviderData(
-                "TON Center returned too many or malformed NFT items"
-            )
-        return [cast(dict[str, Any], row) for row in raw_rows]
+            try:
+                payload: object = json.loads(content)
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                raise InvalidProviderData("TON Center returned non-JSON data") from exc
+
+            if not isinstance(payload, dict):
+                raise InvalidProviderData("TON Center response has no nft_items array")
+            raw_rows = payload.get("nft_items")
+            if not isinstance(raw_rows, list):
+                raise InvalidProviderData("TON Center response has no nft_items array")
+            if len(raw_rows) > limit or any(not isinstance(row, dict) for row in raw_rows):
+                raise InvalidProviderData(
+                    "TON Center returned too many or malformed NFT items"
+                )
+            return [cast(dict[str, Any], row) for row in raw_rows]
+
+        raise ProviderUnavailable("TON Center NFT indexer is temporarily unavailable")
 
     @staticmethod
     def _metadata(raw: dict[str, Any]) -> NFTMetadata:
