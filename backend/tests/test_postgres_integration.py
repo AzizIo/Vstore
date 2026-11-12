@@ -2275,7 +2275,15 @@ async def test_delivery_state_and_outbox_roll_back_atomically(
     engine = create_async_engine(test_database_url, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory.begin() as session:
-        seller, buyer, asset, listing, order, attempt, _now = await _create_observer_fixture(session)
+        (
+            seller,
+            buyer,
+            asset,
+            listing,
+            order,
+            attempt,
+            _now,
+        ) = await _create_observer_fixture(session)
     try:
         with pytest.raises(RuntimeError, match="force transaction rollback"):
             async with session_factory() as session:
