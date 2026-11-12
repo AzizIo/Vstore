@@ -993,3 +993,17 @@ async def test_provider_does_not_retry_non_retryable_auth_configuration_errors()
         await provider.get_item(ITEM)
     assert attempts == 1
     await client.aclose()
+
+def test_configured_ipfs_gateway_is_used_for_media_uri() -> None:
+    from app.assets.ton_nft.provider import _metadata_fields
+
+    metadata = _metadata_fields(
+        {"image": "ipfs://bafybeigdyrzt5sfp7udm7hu76uh2yltop2wyklgdnzbz3u7zvy3gq/cover.png"},
+        ipfs_gateway_url="https://gateway.example/ipfs",
+    )
+
+    assert metadata.image == (
+        "https://gateway.example/ipfs/"
+        "bafybeigdyrzt5sfp7udm7hu76uh2yltop2wyklgdnzbz3u7zvy3gq/cover.png"
+    )
+
