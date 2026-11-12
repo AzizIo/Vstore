@@ -100,3 +100,17 @@ def test_auth_token_required_even_when_polling_bot_is_optional(preview_settings)
     preview_settings.bot_token = None
     with pytest.raises(RuntimeError, match="PREVIEW_BOT_TOKEN"):
         preview_safety.validate_preview_targets()
+
+
+
+@pytest.mark.parametrize(
+    ("database_url", "preview_mode", "expected"),
+    [
+        ("postgresql+asyncpg://user:pass@db:5432/viltara_preview", None, True),
+        ("postgresql+asyncpg://user:pass@db:5432/viltara", "1", True),
+        ("postgresql+asyncpg://user:pass@db:5432/viltara", "0", True),
+        ("postgresql+asyncpg://user:pass@db:5432/viltara", None, False),
+    ],
+)
+def test_preview_migration_guard_cannot_be_bypassed(database_url, preview_mode, expected):
+    assert preview_safety.should_validate_preview_migrations(database_url, preview_mode) is expected
