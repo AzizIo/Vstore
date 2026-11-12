@@ -12,7 +12,7 @@ test.describe("public catalog", () => {
     await mockMarketplaceApi(page);
     await page.goto("/");
 
-    await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "For sale" })).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Dragon Egg/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Rose Bouquet/ })).toBeVisible();
@@ -91,7 +91,7 @@ test.describe("listing details", () => {
 
     await page.getByRole("button", { name: /Back to catalog/ }).click();
 
-    await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "For sale" })).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
   });
 
@@ -133,7 +133,7 @@ test.describe("listing details", () => {
     expect(requests.filter((request) => request === "POST /api/orders")).toHaveLength(1);
 
     await page.getByRole("dialog").getByRole("button", { name: "View Orders" }).click();
-    await expect(page.getByRole("heading", { name: "Order workspace" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Orders" })).toBeVisible();
   });
 
 test.describe("order workspace", () => {
@@ -142,7 +142,7 @@ test.describe("order workspace", () => {
     await page.goto("/");
     await page.getByRole("button", { name: "Orders" }).click();
 
-    await expect(page.getByRole("heading", { name: "Order workspace" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Orders" })).toBeVisible();
     await expect(page.getByRole("tab", { name: /Purchases/ })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("button", { name: /Open order Moon Lantern/ })).toBeVisible();
 
@@ -153,8 +153,8 @@ test.describe("order workspace", () => {
     await expect(page.getByRole("button", { name: /Open order Moon Lantern/ })).toBeVisible();
 
     await page.getByRole("button", { name: /Open order Moon Lantern/ }).click();
-    await expect(page.getByRole("heading", { name: "Lifecycle" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Event timeline" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Order status" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "History" })).toBeVisible();
     await expect(page.getByText(/Payments are not enabled/)).toBeVisible();
 
     await page.setViewportSize({ width: 390, height: 844 });
@@ -191,7 +191,7 @@ test.describe("Telegram deep links", () => {
     });
     await page.goto(`/?startapp=${startParam}`);
 
-    await expect(page.getByRole("heading", { name: "Lifecycle" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Order status" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Moon Lantern" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Orders", exact: true })).toHaveAttribute("aria-pressed", "true");
     expect(requests).toContain(`GET /api/orders/${orderId}`);
@@ -203,7 +203,7 @@ test.describe("Telegram deep links", () => {
     });
     await page.goto("/?startapp=listing_not-a-32-character-hex-id");
 
-    await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "For sale" })).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
     await expect(page.getByRole("button", { name: "Catalog" })).toHaveAttribute("aria-pressed", "true");
     expect(requests.some((request) => request.startsWith("GET /api/listings/"))).toBe(false);
@@ -244,7 +244,7 @@ test.describe("navigation and unauthenticated access", () => {
 
     await page.getByRole("link", { name: "VILTARA" }).click();
 
-    await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "For sale" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Catalog", exact: true })).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -277,7 +277,7 @@ test.describe("navigation and unauthenticated access", () => {
       paddingLeft: "14px",
     });
     expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
-    await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "For sale" })).toBeVisible();
   });
 
 });

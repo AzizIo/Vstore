@@ -950,7 +950,7 @@ describe("My Listings dashboard", () => {
     renderMarketplace();
     await openMyListings();
 
-    expect(await screen.findByText("Session unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("Could not verify your session")).toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/listings/me"))).toBe(false);
   });
 

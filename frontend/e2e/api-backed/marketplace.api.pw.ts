@@ -134,8 +134,8 @@ test(
 
     await sellerPage.getByRole("spinbutton", { name: "Price amount" }).fill("15.75");
     await sellerPage.locator(".draft-form input[maxlength='200']").fill("E2E Published NFT");
-    await sellerPage.getByRole("button", { name: "Create private draft" }).click();
-    await expect(sellerPage.getByRole("heading", { name: "Draft created" })).toBeVisible();
+    await sellerPage.getByRole("button", { name: "Save draft" }).click();
+    await expect(sellerPage.getByRole("heading", { name: "Draft saved" })).toBeVisible();
     await sellerPage.getByRole("button", { name: "View My Listings" }).click();
 
     const draftCard = sellerPage.getByRole("button", { name: /E2E Published NFT/ });
@@ -174,11 +174,11 @@ test(
     await expect(reservationSuccess).toContainText("Payment is not enabled, no funds were collected");
     await reservationSuccess.getByRole("button", { name: "View Orders" }).click();
 
-    await expect(buyerPage.getByRole("heading", { name: "Order workspace" })).toBeVisible();
+    await expect(buyerPage.getByRole("heading", { name: "Orders" })).toBeVisible();
     await expect(buyerPage.getByText("Reservation pending", { exact: true })).toBeVisible();
     await expect(buyerPage.getByText(/^15\.75(?:0+)? TON$/)).toBeVisible();
     await buyerPage.getByRole("button", { name: /Open order E2E Published NFT/ }).click();
-    await expect(buyerPage.getByRole("heading", { name: "Lifecycle" })).toBeVisible();
+    await expect(buyerPage.getByRole("heading", { name: "Order status" })).toBeVisible();
     await expect(buyerPage.getByText(/Payments are not enabled/)).toBeVisible();
 
     // Continue through the real delivery APIs. Only the external TON Connect
@@ -291,7 +291,7 @@ test(
   "anonymous browser can read the public catalog but cannot call protected write endpoints",
   async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "For sale" })).toBeVisible();
   await expect(page.getByRole("button", { name: "My Listings", exact: true })).toBeVisible();
 
   const catalog = await page.evaluate(async () => {
