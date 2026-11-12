@@ -511,6 +511,7 @@ function MarketplaceApp() {
       ) : section === "my-nft" ? (
         session.status === "authenticated" ? (
           <MyInventory
+            key={selectedWallet ? `${selectedWallet.id}:${selectedWallet.network}` : "no-selected-wallet"}
             accessToken={session.accessToken}
             selectedWallet={selectedWallet}
           />
