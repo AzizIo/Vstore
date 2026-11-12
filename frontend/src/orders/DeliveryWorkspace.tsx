@@ -237,8 +237,11 @@ function DeliveryPanel({
       if (rejected) {
         setWalletResultUncertain(false);
         setError("The wallet request was rejected or cancelled. No delivery success was recorded; you can review the request and try again.");
+      } else if (walletRequestStarted) {
+        const detail = reason instanceof Error ? reason.message : "Wallet request did not return a confirmed result.";
+        setError(`Wallet result is uncertain: ${detail} Refresh delivery status and check wallet activity before retrying.`);
       } else {
-        setError(reason instanceof Error ? reason.message : "Wallet result is uncertain. Refresh delivery status and check wallet activity before retrying.");
+        setError(reason instanceof Error ? reason.message : "Wallet request did not complete.");
       }
     } finally {
       actionLockRef.current = false;
