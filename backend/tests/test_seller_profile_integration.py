@@ -5,6 +5,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.sellers import get_public_seller_profile
@@ -136,6 +137,7 @@ async def test_public_profile_isolated_privacy_safe_and_filters_hidden_listings(
     visible_asset, visible_listing = await _public_listing(db_session, seller)
     await _public_listing(db_session, seller, status=ListingStatus.DRAFT)
     await _public_listing(db_session, seller, status=ListingStatus.RESERVED)
+    await _public_listing(db_session, seller, status=ListingStatus.SUSPENDED)
     await _public_listing(
         db_session, seller, verification=AssetVerificationStatus.STALE
     )
@@ -167,12 +169,45 @@ async def test_public_profile_isolated_privacy_safe_and_filters_hidden_listings(
     assert [review.comment for review in response.reviews] == ["Great seller"]
     assert response.listings[0].asset.id == visible_asset.id
     serialized = response.model_dump(mode="json")
-    public_json = str(serialized)
-    for private_field in (
-        "telegram_id", "language_code", "is_blocked", "wallets",
-        "address", "buyer_id", "order_id", "email", "auth_token",
-    ):
-        assert private_field not in public_json
+    seller_payload = serialized["seller"]
+    listing_payload = serialized["listings"][0]
+    listing_seller_payload = listing_payload["seller"]
+    review_payload = serialized["reviews"][0]
+
+    assert set(seller_payload) == {
+        "id", "display_name", "average_rating", "review_count", "active_listing_count"
+    }
+    assert set(listing_seller_payload) == {"id", "username", "first_name"}
+    assert "item_address" in listing_payload["asset"]
+    assert set(review_payload) == {"id", "rating", "comment", "created_at"}
+
+    forbidden_keys = {
+        "telegram_id",
+        "language_code",
+        "is_blocked",
+        "wallets",
+        "seller_address_snapshot",
+        "buyer_address_snapshot",
+        "buyer_id",
+        "order_id",
+        "email",
+        "auth_token",
+        "session_token",
+        "provider_source",
+        "trace_id",
+        "transaction_hash",
+    }
+
+    def assert_no_private_fields(value):
+        if isinstance(value, dict):
+            assert forbidden_keys.isdisjoint(value)
+            for nested in value.values():
+                assert_no_private_fields(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                assert_no_private_fields(nested)
+
+    assert_no_private_fields(serialized)
 
 
 async def test_public_profile_empty_seller_and_stable_bounded_pagination(db_session):
@@ -266,3 +301,54 @@ async def test_public_rating_excludes_completed_orders_without_verified_transfer
     assert profile.seller.review_count == 1
     assert profile.seller.average_rating == 4.0
     assert [review.comment for review in profile.reviews] == ["Verified"]
+
+
+
+async def test_multiple_verified_attempts_do_not_duplicate_reviews_or_bias_rating(db_session):
+    seller = await _seller_user(db_session, 820000008)
+    buyer = await _seller_user(db_session, 820000009)
+    review = await _verified_review(
+        db_session, seller, buyer, rating=4, comment="One review, two attempts"
+    )
+
+    order = await db_session.get(Order, review.order_id)
+    assert order is not None
+    existing_attempt = await db_session.scalar(
+        select(OrderDeliveryAttempt).where(
+            OrderDeliveryAttempt.order_id == order.id,
+            OrderDeliveryAttempt.status == OrderDeliveryAttemptStatus.VERIFIED,
+        )
+    )
+    assert existing_attempt is not None
+    now = datetime.now(UTC)
+    db_session.add(
+        OrderDeliveryAttempt(
+            order_id=order.id,
+            attempt_number=2,
+            status=OrderDeliveryAttemptStatus.VERIFIED,
+            network=existing_attempt.network,
+            item_address=existing_attempt.item_address,
+            seller_address_snapshot="0:" + "33" * 32,
+            buyer_address_snapshot="0:" + "44" * 32,
+            query_id=Decimal("2"),
+            transaction_hash=f"tx-second-{uuid4().hex}",
+            trace_id=f"trace-second-{uuid4().hex}",
+            masterchain_seqno=2,
+            prepared_at=now,
+            deadline=now + timedelta(minutes=1),
+            verified_at=now,
+        )
+    )
+    await db_session.flush()
+
+    profile = await get_public_seller_profile(
+        seller.id,
+        db_session,
+        listings_limit=10,
+        listings_offset=0,
+        reviews_limit=10,
+        reviews_offset=0,
+    )
+    assert profile.seller.review_count == 1
+    assert profile.seller.average_rating == 4.0
+    assert [item.id for item in profile.reviews] == [review.id]
