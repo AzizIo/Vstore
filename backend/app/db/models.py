@@ -491,7 +491,9 @@ class TelegramNotificationOutbox(Base):
             name="ck_telegram_notification_outbox_recipient_role",
         ),
         CheckConstraint(
-            "event_type IN ('order_created', 'order_cancelled', 'order_expired')",
+            "event_type IN ('order_created', 'order_cancelled', 'order_expired', "
+            "'delivery_prepared', 'delivery_submitted', 'delivery_confirmed', "
+            "'delivery_manual_review')",
             name="ck_telegram_notification_outbox_event_type",
         ),
         CheckConstraint(

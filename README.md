@@ -1,8 +1,8 @@
 # VILTARA SHOP
 
-VILTARA SHOP is a Telegram Mini App and optional bot for a peer-to-peer marketplace foundation built around **TON NFTs that implement TEP-62**. Sellers can create priced listings for assets whose current ownership has been checked by the backend. Buyers can reserve a listing and view the resulting order; direct-transfer coordination and independent delivery confirmation are planned, not yet available.
+VILTARA SHOP is a Telegram Mini App and optional bot for a peer-to-peer marketplace built around **TON NFTs that implement TEP-62**. Sellers create priced listings for backend-verified assets; buyers reserve listings; sellers can prepare and sign direct NFT transfers in their own TON Connect wallet. The backend independently verifies finalized transfer evidence before marking an order completed.
 
-**Reservation is not payment.** The current product stage does not collect funds, provide escrow, transfer NFTs on behalf of users, or verify post-reservation delivery. A reservation records the buyer, seller, listing, price/currency snapshot, expiry and lifecycle events; it does not mean that the seller has transferred the NFT or that the buyer has paid.
+**Reservation is not payment.** The product does not collect funds, provide escrow, transfer NFTs on behalf of users, or hold assets. A reservation records the buyer, seller, listing, price/currency snapshot, expiry and lifecycle events. NFT delivery is a separate, non-custodial step: the seller signs from their wallet and the backend observer independently checks chain evidence. A reservation is not proof of delivery or payment.
 
 Product boundaries and decisions approved for the current MVP are recorded in [docs/PRODUCT_MODEL.md](docs/PRODUCT_MODEL.md).
 
@@ -20,11 +20,11 @@ Product boundaries and decisions approved for the current MVP are recorded in [d
 | Telegram order notifications using a durable outbox | Implemented; optional bot container |
 | TON Connect frontend challenge → proof → backend verification and manifest | Implemented in main via [PR #51](https://github.com/AzizIo/Vstore/pull/51); live Telegram/Tonkeeper acceptance remains open in [Issue #43](https://github.com/AzizIo/Vstore/issues/43) |
 | Full inventory reconciliation/sync and dedicated My NFT screen | Implemented in main via [PR #58](https://github.com/AzizIo/Vstore/pull/58); live testnet/provider acceptance remains open in [Issue #44](https://github.com/AzizIo/Vstore/issues/44) |
-| Server-side verification that a reserved NFT was delivered to the buyer | Not implemented. B1 read-only TON evidence adapter is merged; B2 status migration and immutable delivery-attempt persistence are in [PR #85](https://github.com/AzizIo/Vstore/pull/85). No prepare/submit API, observer, or completion transition exists yet; see [Issue #46](https://github.com/AzizIo/Vstore/issues/46). |
+| Server-side verification that a reserved NFT was delivered to the buyer | B1–B6 implemented on `main`: read-only evidence adapter, immutable attempt snapshots, leased observer, preparation/submission APIs, wallet-driven transfer UX, transactional delivery notifications. Live testnet acceptance remains outstanding; see [Issue #46](https://github.com/AzizIo/Vstore/issues/46). |
 | Telegram Gifts adapter, deal chat, admin panel | Not implemented |
 | Payments, checkout, escrow/guarantee, refunds, commissions and seller payouts | Not implemented |
 
-The B2 migration in PR #85 renames historical `pending_payment` order/event rows to `reserved` without changing their IDs, price/currency snapshots, idempotency keys, or event history. Reservation is not payment. The new delivery statuses and attempt table are groundwork only; no delivery API or observer is active.
+The B2 migration renames historical `pending_payment` order/event rows to `reserved` without changing their IDs, price/currency snapshots, idempotency keys, or event history. Delivery preparation snapshots the exact NFT item, network, seller source, buyer destination, query ID and deadline. The seller wallet signs the TEP-62 transfer; submitted references are untrusted hints. Only independently verified finalized evidence can complete the order.
 
 ## How listing and reservation work today
 
@@ -32,22 +32,22 @@ The B2 migration in PR #85 renames historical `pending_payment` order/event rows
 2. NFT inventory is sourced from backend-verified TON wallets. The My NFT screen uses the server-side inventory sync and TEP-62 ownership rechecks; wallet connection alone is not proof of wallet control, and client-supplied NFT metadata is not proof of ownership.
 3. A seller creates a draft for an eligible, verified asset. Publishing rechecks on-chain ownership immediately before making the listing active.
 4. A buyer reserves an active listing. The backend checks seller/asset state, takes a snapshot of price and currency, and uses idempotency/concurrency protections. The order expires or can be cancelled; the reservation does not lock the NFT on-chain.
-5. The current product has **no automated NFT delivery confirmation**. The service must not display a reservation as paid, completed, or delivered.
+5. The seller can prepare and sign a direct TEP-62 transfer through their own TON Connect wallet. The backend observer independently checks the exact item, network, seller, buyer, query ID and finalized provider evidence before marking the order completed. A reservation is not payment, and a wallet callback is not delivery proof.
 
-The Stage B architecture is documented in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md). The maintainer's technical baseline is recorded in [Issue #46](https://github.com/AzizIo/Vstore/issues/46). B1 read-only transfer evidence is merged; B2 persistence/state migration is in [PR #85](https://github.com/AzizIo/Vstore/pull/85). A transaction hash, screenshot, client callback, or current-owner read alone is not sufficient proof of delivery.
+The Stage B implementation is documented in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md), and the technical baseline is recorded in [Issue #46](https://github.com/AzizIo/Vstore/issues/46). B1–B6 are implemented across the delivery PRs, including [PR #101](https://github.com/AzizIo/Vstore/pull/101). A transaction hash, screenshot, client callback, or current-owner read alone is not sufficient proof of delivery.
 
-## Planned direct NFT transfer flow (Stage B — not implemented)
+## Direct NFT transfer flow (Stage B B1–B6 implemented; testnet acceptance remains open)
 
-The following describes the intended non-custodial flow. It is **not available in the current application** and must not be represented as a completed transaction feature:
+The non-custodial flow is implemented as follows. Completion still depends on independent backend verification and live testnet acceptance; never represent a wallet callback as proof:
 
 1. The buyer connects and proves control of a TON wallet through the backend-verified TON Connect Proof flow.
 2. The buyer reserves an active listing. Reservation records the order and price/currency snapshot; it does not transfer or lock the NFT.
-3. Before the seller is asked to transfer, the delivery-preparation flow is intended to snapshot the verified seller wallet, buyer destination wallet, exact NFT item and network for that order.
+3. Before the seller is asked to transfer, delivery preparation snapshots the verified seller wallet, buyer destination wallet, exact NFT item and network for that order.
 4. The seller initiates and signs the TEP-62 NFT transfer directly from the seller's own wallet to the snapshotted buyer address. The marketplace never receives private keys or takes custody of the NFT.
-5. A backend observer independently retrieves and validates chain evidence for the exact item, network, source and destination under an approved finality policy. A transaction hash supplied by a user is only a lookup hint.
-6. Only after server-side verification may the order be marked completed. Provider outages, incomplete evidence, wrong recipients or ambiguous transfers must remain non-success states and require reconciliation.
+5. The application submits a wallet-returned message reference only as an untrusted lookup hint; the observer independently correlates the persisted item, network, source, destination and query ID with provider evidence and the finality policy.
+6. Only after server-side verification may the order be marked completed. Provider outages, incomplete evidence, wrong recipients or ambiguous transfers remain pending/manual-review states and require reconciliation.
 
-The state machine, proposed API/database contracts, failure handling and decisions required before implementation are described in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md). See [Issue #46](https://github.com/AzizIo/Vstore/issues/46) for the implementation work. No payment, escrow, refund or seller-payout behavior is part of this flow.
+The implemented state machine, API/database contracts and failure handling are described in [docs/STAGE_B_ORDER_LIFECYCLE.md](docs/STAGE_B_ORDER_LIFECYCLE.md). See [Issue #46](https://github.com/AzizIo/Vstore/issues/46) for the implementation history and remaining live acceptance work. No payment, escrow, refund or seller-payout behavior is part of this flow.
 
 ## Supported assets and wallet security
 
@@ -124,7 +124,10 @@ Example current API routes (authenticate with a backend Bearer token where indic
 | POST | /api/listings/{listing_id}/publish | Publish after a fresh ownership check |
 | POST | /api/orders | Reserve listing (requires Idempotency-Key; **not payment**) |
 | GET | /api/orders | Buyer's or seller's orders |
-| POST | /api/orders/{order_id}/cancel | Cancel an eligible pending reservation |
+| POST | /api/orders/{order_id}/cancel | Cancel an eligible reservation before delivery preparation |
+| POST | /api/orders/{order_id}/delivery/prepare | Snapshot buyer/seller wallets and prepare a time-limited direct transfer |
+| POST | /api/orders/{order_id}/delivery/submissions | Submit an untrusted transaction reference for observer lookup |
+| GET | /api/orders/{order_id}/delivery | Read the participant-scoped delivery attempt and verification status |
 
 For the exact contract, inspect routes, schemas and tests under backend/app/api/ and backend/tests/; do not infer additional endpoints from the roadmap.
 
@@ -150,11 +153,11 @@ Frontend:
 
 Frontend CI runs Vitest, TypeScript checks and a production Vite build. Use the CI result for the exact commit you intend to review.
 
-The separate API-backed Playwright suite runs the real React app against FastAPI, disposable PostgreSQL/Redis and a loopback TON provider fixture. It validates Telegram initData signatures, verified seller inventory, listing publication, buyer reservation, price snapshots and notification outbox persistence. It stops at reservation; no NFT delivery observer or `completed` transition is implied. See [docs/API_BACKED_E2E.md](docs/API_BACKED_E2E.md).
+The API-backed Playwright suite runs the real React app against FastAPI, disposable PostgreSQL/Redis and a loopback TON provider fixture. It exercises reservation, seller delivery preparation, a mocked TON Connect wallet boundary, reference submission, independent observer completion, and completed status in both participant views. The wallet and provider are simulated only at their external boundaries; backend API calls and persistence are real. Live testnet wallet/provider acceptance remains required before claiming live transfer support. See [docs/API_BACKED_E2E.md](docs/API_BACKED_E2E.md).
 
 ## Roadmap
 
-1. **MVP — non-custodial NFT listing and direct-transfer verification (Issues #42–#47):** Stage A currently provides listings, ownership checks, reservations and expiry/cancellation. Stage B adds the post-reservation transfer lifecycle and complete Telegram user journey; these parts are still in progress and must not be presented as shipped.
+1. **MVP — non-custodial NFT listing and direct-transfer verification (Issues #42–#47):** Stage A provides listings, ownership checks, reservations and expiry/cancellation. Stage B B1–B6 now provides preparation/submission APIs, a seller wallet-driven transfer flow, independent observer verification and transactional lifecycle notifications. Live testnet acceptance is still required.
 2. **Future — guaranteed transactions (not implemented):** a separate product phase requiring its own architecture, security, platform-policy and legal review. Do not assume a custody model, refund policy, payment method or seller settlement has been approved.
 3. **Other planned work:** Telegram Gifts (only if a supported transfer path is established), deal chat, admin and production operations.
 

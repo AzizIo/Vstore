@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.db.models import (
     Listing,
     ListingStatus,
+    NFTAsset,
     Order,
     OrderEvent,
     OrderStatus,
@@ -48,8 +49,9 @@ async def assert_journey() -> None:
         )
         assert len(listings) == 1, f"Expected one seller listing, got {len(listings)}."
         listing = listings[0]
-        assert listing.status is ListingStatus.RESERVED, (
-            f"Expected reserved listing after buyer order, got {listing.status.value}."
+        assert listing.status is ListingStatus.SOLD, (
+            "Expected sold listing after independently verified delivery, "
+            f"got {listing.status.value}."
         )
         assert listing.price_amount == Decimal("15.75")
         assert listing.price_currency.value == "TON"
@@ -68,7 +70,7 @@ async def assert_journey() -> None:
         assert len(orders) == 1, f"Expected one buyer order, got {len(orders)}."
         order = orders[0]
         assert order.listing_id == listing.id
-        assert order.status is OrderStatus.RESERVED
+        assert order.status is OrderStatus.COMPLETED
         assert order.price_amount == Decimal("15.75")
         assert order.price_currency.value == "TON"
 
@@ -79,11 +81,24 @@ async def assert_journey() -> None:
                 )
             ).all()
         )
-        assert len(events) == 1, f"Expected one reservation event, got {len(events)}."
+        assert [event.to_status for event in sorted(events, key=lambda item: item.created_at)] == [
+            OrderStatus.RESERVED,
+            OrderStatus.AWAITING_TRANSFER,
+            OrderStatus.OBSERVING_TRANSFER,
+            OrderStatus.COMPLETED,
+        ], (
+            "Unexpected delivery lifecycle event history: "
+            f"{[event.to_status.value for event in events]}."
+        )
         assert events[0].from_status is None
-        assert events[0].to_status is OrderStatus.RESERVED
         assert events[0].actor_id == buyer.id
         assert events[0].actor_type == "buyer"
+
+        delivered_asset = await session.scalar(
+            select(NFTAsset).where(NFTAsset.id == listing.asset_id)
+        )
+        assert delivered_asset is not None
+        assert delivered_asset.owner_id == buyer.id
 
         outbox = list(
             (
@@ -94,9 +109,18 @@ async def assert_journey() -> None:
                 )
             ).all()
         )
-        assert len(outbox) == 2, f"Expected buyer and seller outbox rows, got {len(outbox)}."
+        assert len(outbox) == 8, (
+            "Expected four lifecycle events for buyer and seller, "
+            f"got {len(outbox)}."
+        )
         assert {item.recipient_role for item in outbox} == {"buyer", "seller"}
-        assert {item.event_type for item in outbox} == {"order_created"}
+        assert {item.event_type for item in outbox} == {
+            "order_created",
+            "delivery_prepared",
+            "delivery_submitted",
+            "delivery_confirmed",
+        }
+        assert len({item.dedupe_key for item in outbox}) == 8
         assert {item.status for item in outbox} == {"pending"}
         assert {item.recipient_telegram_id for item in outbox} == {
             E2E_SELLER_TELEGRAM_ID,
@@ -124,8 +148,8 @@ async def assert_journey() -> None:
     await dispose_engine()
     print(
         "API-backed E2E persistence verified: active listing published, buyer "
-        "reservation and price snapshot persisted, one order event and two "
-        "pending notification outbox rows."
+        "reservation and price snapshot persisted, seller-signed transfer independently "
+        "verified, four order events and eight pending lifecycle notification outbox rows."
     )
 
 

@@ -997,6 +997,14 @@ async def prepare_delivery(
                             actor_type="seller",
                         )
                     )
+                    # Outbox records share the state-transition transaction. A
+                    # delivery notice never implies that a transfer was sent.
+                    await _enqueue_order_notifications(
+                        session,
+                        order=order,
+                        event_type="delivery_prepared",
+                        recipients={order.buyer_id: "buyer", order.seller_id: "seller"},
+                    )
                     await session.flush()
                     attempt_id = attempt.id
 
@@ -1096,6 +1104,12 @@ async def submit_delivery_candidate(
                             actor_type="seller",
                         )
                     )
+                await _enqueue_order_notifications(
+                    session,
+                    order=order,
+                    event_type="delivery_submitted",
+                    recipients={order.buyer_id: "buyer", order.seller_id: "seller"},
+                )
                 attempt_id = attempt.id
 
     if rejection is not None:
