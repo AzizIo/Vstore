@@ -776,7 +776,7 @@ describe("TON Connect wallet UI", () => {
     tonConnectMocks.wallet = {
       account: { address: selectedAddress, chain: "-239" },
     };
-    vi.mocked(fetch).mockImplementation(async (input, init) => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
       const url = new URL(String(input), "http://localhost");
       if (url.pathname === "/api/auth/telegram") return jsonResponse(authResponse);
       if (url.pathname === "/api/users/me") return jsonResponse(profile);
