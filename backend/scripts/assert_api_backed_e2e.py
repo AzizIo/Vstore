@@ -46,12 +46,19 @@ async def assert_journey() -> None:
                 await session.scalars(
                     select(Listing).where(
                         Listing.seller_id == seller.id,
-                        Listing.title == "E2E Published NFT",
+                        Listing.title.in_(
+                            ["E2E Published NFT", "E2E Admin Moderation Listing"]
+                        ),
                     )
                 )
             ).all()
         )
-        marketplace_listings = [item for item in listings if item.status is not ListingStatus.CANCELLED]
+        marketplace_listings = [
+            item
+            for item in listings
+            if item.title == "E2E Published NFT"
+            and item.status is not ListingStatus.CANCELLED
+        ]
         moderation_listings = [
             item for item in listings
             if item.title == "E2E Admin Moderation Listing"
