@@ -82,7 +82,10 @@ def test_preview_hostname_must_match_allowlist(preview_settings):
 
 
 def test_manifest_must_match_preview_origin(preview_settings, monkeypatch):
-    monkeypatch.setenv("PREVIEW_VITE_TONCONNECT_MANIFEST_URL", "https://other.example/tonconnect-manifest.json")
+    monkeypatch.setenv(
+        "PREVIEW_VITE_TONCONNECT_MANIFEST_URL",
+        "https://other.example/tonconnect-manifest.json",
+    )
     with pytest.raises(RuntimeError, match="MANIFEST_URL"):
         preview_safety.validate_preview_targets()
 
