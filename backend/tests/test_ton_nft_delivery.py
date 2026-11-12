@@ -7,10 +7,10 @@ import pytest
 
 from app.assets.ton_nft.delivery import (
     DeliveryEvidenceStatus,
-    normalize_transaction_hash,
     TEP62TransferIntent,
     TONCenterDeliveryConfig,
     TONCenterDeliveryEvidenceProvider,
+    normalize_transaction_hash,
 )
 from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable
 
