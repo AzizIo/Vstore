@@ -329,7 +329,7 @@ function DeliveryPanel({
           Delivery needs reconciliation. Do not send another NFT transfer; completion has not been confirmed.
         </p>
       )}
-      {attempt && (
+      {(attempt || role === "buyer") && (
         <button className="secondary-button" type="button" disabled={loading} onClick={() => { void refreshDelivery(); onRefreshOrder(); }}>
           Refresh verification status
         </button>
