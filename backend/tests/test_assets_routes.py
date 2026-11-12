@@ -381,6 +381,14 @@ class PaginatedInventoryProvider:
         return self.pages[offset]
 
 
+class SecondPageUnavailableProvider(PaginatedInventoryProvider):
+    async def get_items_by_owner(self, owner_address: str, *, limit: int, offset: int):
+        self.calls.append((owner_address, limit, offset))
+        if offset > 0:
+            raise ProviderUnavailable("DNS lookup failed")
+        return self.pages[offset]
+
+
 class SyncVerifier:
     def __init__(
         self,
@@ -799,6 +807,43 @@ def test_inventory_sync_cancels_reserved_order_when_transfer_away_is_confirmed(
     assert {item.recipient_user_id for item in outbox} == {buyer.id, owner.id}
     assert {item.recipient_role for item in outbox} == {"buyer", "seller"}
     session.commit.assert_awaited_once()
+
+def test_inventory_sync_dns_outage_after_a_verified_page_commits_nothing(
+    api_client, owner, verified_wallet
+) -> None:
+    candidate = _inventory_item(ITEM)
+    provider = SecondPageUnavailableProvider({
+        0: NFTInventoryPage(items=(candidate,), has_more=True, next_offset=1),
+    })
+    verifier = SyncVerifier(provider)
+    redis = FakeSyncRedis()
+    session = SimpleNamespace(
+        scalars=AsyncMock(side_effect=[
+            _rows([verified_wallet]),
+            _rows([]),
+        ]),
+        scalar=AsyncMock(),
+        rollback=AsyncMock(),
+        commit=AsyncMock(),
+        flush=AsyncMock(),
+        add=Mock(),
+    )
+    _install_sync_overrides(session, verifier, redis)
+    try:
+        response = api_client.post("/api/assets/me/sync")
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_ton_nft_verifier, None)
+        app.dependency_overrides.pop(get_redis_client, None)
+
+    assert response.status_code == 503
+    assert "temporarily unavailable" in response.json()["detail"]
+    assert [call[2] for call in provider.calls] == [0, 1]
+    assert verifier.calls == [(ITEM, OWNER)]
+    session.commit.assert_not_awaited()
+    session.add.assert_not_called()
+    assert redis.values == {}
+
 
 def test_inventory_sync_provider_outage_during_stale_recheck_keeps_existing_state(
     api_client, owner, verified_wallet
