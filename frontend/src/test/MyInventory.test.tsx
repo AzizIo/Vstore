@@ -115,6 +115,40 @@ describe("My NFT inventory", () => {
     expect(screen.getByText(/Connecting a wallet alone does not verify ownership/i)).toBeInTheDocument();
   });
 
+  it("can reach later pages when the current page has no verified NFTs", async () => {
+    inventoryApi.fetchMyInventory.mockReset()
+      .mockResolvedValueOnce({
+        ...firstPage,
+        items: [],
+        has_more: true,
+        next_offset: 24,
+      })
+      .mockResolvedValueOnce({
+        ...lastPage,
+        items: [asset],
+        offset: 24,
+        next_offset: 25,
+        has_more: false,
+      });
+
+    render(<MyInventory accessToken="session-token" />);
+
+    expect(
+      await screen.findByRole("heading", { name: "No verified NFTs on this page" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more NFTs" }));
+
+    expect(await screen.findByText("Moon Lantern NFT")).toBeInTheDocument();
+    expect(inventoryApi.fetchMyInventory).toHaveBeenNthCalledWith(
+      2,
+      "session-token",
+      { limit: 24, offset: 24, walletId: "wallet-1" },
+      expect.any(AbortSignal),
+    );
+    expect(screen.queryByText("No verified NFTs found")).not.toBeInTheDocument();
+  });
+
   it("shows empty inventory after a successful sync", async () => {
     inventoryApi.fetchMyInventory.mockReset().mockResolvedValue({
       ...firstPage,
