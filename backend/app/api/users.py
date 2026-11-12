@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
@@ -140,7 +141,7 @@ class SellerActivityItem(BaseModel):
     listing_id: UUID
     title: str
     status: str
-    created_at: object
+    created_at: datetime
     price_amount: Decimal
     price_currency: str
 
@@ -149,8 +150,8 @@ class SellerOverviewResponse(BaseModel):
     listings: ListingOverviewCounts
     orders_as_seller: OrderOverviewCounts
     orders_as_buyer: OrderOverviewCounts
-    reserved_order_snapshot_value: Decimal
-    completed_order_snapshot_value: Decimal
+    reserved_order_snapshot_values: dict[str, Decimal]
+    completed_order_snapshot_values: dict[str, Decimal]
     recent_activity: list[SellerActivityItem]
 
 
@@ -195,17 +196,21 @@ async def get_my_overview(
         .group_by(Order.status)
     )
 
-    reserved_value = await session.scalar(
-        select(func.coalesce(func.sum(Order.price_amount), Decimal("0"))).where(
+    reserved_value_rows = await session.execute(
+        select(Order.price_currency, func.sum(Order.price_amount))
+        .where(
             Order.seller_id == user.id,
             Order.status.in_(OrderStatus.LIVE_STATUSES),
         )
+        .group_by(Order.price_currency)
     )
-    completed_value = await session.scalar(
-        select(func.coalesce(func.sum(Order.price_amount), Decimal("0"))).where(
+    completed_value_rows = await session.execute(
+        select(Order.price_currency, func.sum(Order.price_amount))
+        .where(
             Order.seller_id == user.id,
             Order.status == OrderStatus.COMPLETED,
         )
+        .group_by(Order.price_currency)
     )
 
     recent_listing_rows = await session.execute(
@@ -262,7 +267,11 @@ async def get_my_overview(
         orders_as_buyer=OrderOverviewCounts(
             **_count_statuses(buyer_order_rows.all(), order_statuses)
         ),
-        reserved_order_snapshot_value=reserved_value or Decimal("0"),
-        completed_order_snapshot_value=completed_value or Decimal("0"),
+        reserved_order_snapshot_values={
+            currency.value: amount for currency, amount in reserved_value_rows.all()
+        },
+        completed_order_snapshot_values={
+            currency.value: amount for currency, amount in completed_value_rows.all()
+        },
         recent_activity=activity[:10],
     )
