@@ -1,137 +1,155 @@
 # Целевая продуктовая модель VILTARA SHOP и границы текущего этапа
 
-- **Статус:** Утверждено владельцем в рамках Issue #54 и PR #55.
-- **Issue:** #54.
-- **Дата последней сверки статуса:** 2026-11-11.
-- **Заменяет:** ничего не заменяет структурно; фиксирует приоритеты поверх ADR-0001/0002 (платёжные архитектуры остаются в силе как будущие этапы, не текущие).
+- **Статус:** продуктовые решения утверждены в рамках Issue #54 и PR #55.
+- **Последняя сверка реализации:** 2026-11-12.
+- **Проверенная база:** main, commit 4d43f175e570f347fa80c042c26257b18919cdc0.
+- **Назначение документа:** фиксирует продуктовые ограничения и фактический статус кода на main. Открытые PR не считаются реализованными, пока не смёржены.
 
 ---
 
 ## 1. Главные продуктовые решения
 
 **D1. VILTARA — маркетплейс, и цена обязательна.**
-Объявление содержит NFT и цену продавца (`price_amount`, `price_currency`). Отсутствие
-платёжной интеграции сейчас не означает, что объявления бесплатны или что цены нужно удалять.
+
+Объявление содержит NFT и цену продавца (price_amount, price_currency). Отсутствие платёжной интеграции не означает, что объявления бесплатны и не является основанием удалять цены или денежные снимки из заказов.
 
 **D2. Резервирование — не оплата.**
-На текущем этапе покупатель может зарезервировать объявление (создать заказ) без фактического
-списания средств. Заказ фиксирует снимок цены и валюты на момент резерва. Статусов и текстов
-«оплачено» не существует, пока платёж не подтверждён доверенным серверным механизмом, которого
-сейчас нет.
 
-**D3. Платёж и escrow — отдельный будущий этап.**
-Ничего не изображать реализованным. Архитектурные контракты для будущих модулей Payment
-(существующий `PaymentAdapter` протокол) и Escrow задокументированы в ADR-0001/0002; реальное
-хранение средств не внедряется до отдельного утверждения, тестнета-валидации и аудита.
+Покупатель может зарезервировать объявление без фактического списания средств. Заказ фиксирует цену и валюту на момент резерва. Резервирование не переводит деньги, не удерживает NFT в блокчейне и не доказывает передачу NFT. Не использовать тексты «оплачено» или «покупка завершена» без соответствующего доверенного механизма.
+
+**D3. Платёж и escrow — отдельные будущие продукты.**
+
+Payment provider, checkout, Stars settlement, ledger, escrow, custody, refunds, disputes, commissions и seller payouts не входят в текущий MVP. ADR-0001/0002 и design-документы описывают предложения/будущие архитектурные варианты, а не запущенные платёжные рельсы. Любая реализация требует отдельного решения владельца, продуктовой и технической проверки.
 
 **D4. TON NFT (TEP-62) и Telegram Gifts — разные домены.**
-Не смешивать в одной реализации без отдельной технической проработки. Сейчас поддерживается
-только TON NFT; Gifts отсутствуют.
+
+Сейчас поддерживаются стандартные TON NFT items, реализующие TEP-62. Telegram Gifts не интегрированы как передаваемые маркетплейс-активы; для них нужен отдельный адаптер и проверка ограничений Telegram Business API.
 
 **D5. Никаких ключей и никаких клиентских доказательств.**
-Seed-фразы и приватные ключи никогда не запрашиваются и не хранятся. Хеш транзакции, скриншот
-или состояние интерфейса сами по себе не доказательство передачи NFT; единственно допустимое
-доказательство — серверная on-chain проверка.
 
-Здесь два разных механизма, которые нельзя смешивать:
+Seed-фразы и приватные ключи никогда не запрашиваются и не хранятся. TON Connect инициирует операции в кошельке пользователя. Подключённый адрес не доказывает владение кошельком до backend-проверки TON Connect Proof.
 
-| Механизм | Что делает | Статус |
+Хеш/ссылка, скриншот, callback кошелька, текст из UI или клиентский статус сами по себе не являются доказательством передачи NFT. Подтверждение доставки выполняет серверный observer по сохранённому намерению перевода и независимым on-chain/provider данным.
+
+### Два разных механизма проверки
+
+| Механизм | Что делает | Статус на main |
 |---|---|---|
-| **Проверка владения NFT** (ownership verification) | TEP-62-верификатор читает текущего владельца item-контракта и сравнивает с кошельком продавца. Используется при импорте в инвентарь, публикации объявления и **перед резервированием заказа** | **реализован** (TON Center v3 + TEP-62, с fail-closed 503 при недоступности провайдера) |
-| **Подтверждение передачи NFT** (delivery confirmation) | серверная проверка того, что после резерва NFT фактически перешёл кошельку покупателя | **не реализовано** — этап B; после резерва сервер не наблюдает за перемещением актива |
+| Проверка владения NFT (ownership verification) | TEP-62 verifier проверяет item, сеть и текущего владельца относительно верифицированного кошелька пользователя; используется при синхронизации инвентаря, публикации и резервировании | Реализовано; ошибки/неопределённость провайдера не трактуются как успех |
+| Подтверждение передачи NFT (delivery confirmation) | После резерва сервер проверяет, что именно сохранённый NFT item перешёл с ожидаемого кошелька продавца на сохранённый адрес покупателя в нужной сети | B1–B6 реализованы на main; независимое подтверждение observer есть в коде. Live testnet/Tonkeeper acceptance остаётся отдельным ручным gate по Issue #46 |
 
-Поэтому сегодняшняя сделка выглядит так: резервирование подтверждает, что продавец владел NFT
-в момент резерва, но **не** что NFT будет или был передан. Никакие тексты о «передаче проверена»
-недопустимы до реализации этапа B.
+Поэтому текущая сделка включает два этапа: резерв фиксирует заказ и снимок цены; отдельный seller-initiated transfer доставляет NFT, а backend подтверждает его независимо. Эти этапы не являются оплатой.
+
+---
 
 ## 2. Разделение доменов
 
 | Домен | Что содержит | Статус |
 |---|---|---|
-| **Listing** | NFT + цена продавца + статусы | реализован |
-| **Reservation/Order** | покупатель, продавец, объявление, **снимок цены/валюты на момент резерва**, сроки, история событий | реализован |
-| **Payment** | приём и подтверждение средств | **отсутствует, контракт определён** (`PaymentAdapter`) |
-| **Escrow/гарант** | удержание средств/актива, возвраты, споры, выплаты | **отсутствует, архитектура в ADR-0001/0002** |
+| **Listing** | TEP-62 NFT, обязательная цена продавца, валюта и состояния объявления | Реализован |
+| **Reservation / Order** | Покупатель, продавец, объявление, снимок цены/валюты, срок, idempotency key и история событий | Реализован; резерв не является оплатой |
+| **Delivery** | Снимок item/network/source/destination/query/deadline, попытки, submission hints, observer и подтверждение доставки | B1–B6 реализованы на main; live acceptance не завершён |
+| **Notification outbox** | Транзакционные уведомления buyer/seller по событиям заказа и доставки, worker с retry/dedupe | Реализован; worker запускается отдельно через bot profile |
+| **Admin moderation** | Очередь модерации, approve/reject/suspend/restore, append-only аудит | Реализован на main через PR #107; доступ закрыт по умолчанию |
+| **Payment** | Приём, списание и подтверждение средств | Не реализован |
+| **Escrow / guarantee** | Удержание средств/актива, возвраты, споры и выплаты | Не реализован |
+| **Telegram Gifts** | Отдельный тип актива и transfer adapter | Не реализован |
+| **Deal chat** | Коммуникация участников сделки | Не реализован |
 
-Правило: Reservation не меняет денежный смысл заказа. Если появился платёж — это новый
-подмодуль с собственными записями, а не новый статус в `orders.status`.
+Правило: Reservation не меняет денежный смысл заказа. Если появится платёж, это отдельный модуль с собственным жизненным циклом и доказательствами, а не фиктивный статус внутри текущего Order.
 
-## 3. Карта текущего состояния (аудит 2026-11-11)
+---
 
-Проверено по `main` @ `c5b815c` (2026-11-11); B2 order-state migration and delivery-attempt persistence are proposed in PR #85. После предыдущего аудита в `main` смёржены PR #51 (TON Connect Proof lifecycle) и PR #58 (полная NFT inventory sync/reconciliation + My NFT UI). Схема БД этими PR не менялась; production wallet UI остаётся fail-closed до настройки публичных URL и domain allowlist.
+## 3. Фактическое состояние реализации на main (2026-11-12)
 
-### Готово и соответствует продукту
+### Реализовано
 
 | Компонент | Состояние |
 |---|---|
-| Цена в `Listing` (Decimal, `Numeric(24,9)`, check > 0) | ✅ |
-| Снимок цены/валюты в `Order` при создании | ✅ `orders/service.py` переносит из listing |
-| Сортировка `price_asc`/`price_desc` с стабильным tiebreaker | ✅ (PR #50) |
-| Фильтр по валюте | ✅ |
-| Цена в API-схемах (create/edit/response) | ✅ Decimal на backend, без float |
-| Цена во frontend: создание, карточка, detail, my-listings, карточка заказа | ✅ |
-| Резервирование с идемпотентностью, конкурентной защитой (unique index + SKIP LOCKED) | ✅ |
-| Свежая проверка владения перед резервом, fail-closed 503 при недоступности провайдера | ✅ (PR #34, смёржен) |
-| Скрытие непокупаемых листингов (stale/unverified/reserved) из каталога и detail | ✅ (PR #50) |
-| Истечение резерва/срока листинга воркером | ✅ |
-| Уведомления через durable outbox | ✅ |
-| TON Connect Proof challenge → frontend signing flow → backend verification and wallet lifecycle | ✅ PR #51; UI fail-closed until public manifest URL and exact backend domain allowlist are configured; live Tonkeeper acceptance remains in Issue #43 |
-| Full NFT inventory sync/reconciliation, multi-wallet ownership checks and My NFT UI | ✅ PR #58; manual testnet/provider and owner acceptance remains in Issue #44 |
-| `PaymentAdapter` протокол без провайдера | ✅ корректно изолирован |
+| Цена в Listing | Обязательная положительная цена и валюта; сохраняется в API и UI |
+| Снимок цены/валюты в Order | Переносится из listing при создании резерва; исторический снимок не должен подменяться текущей ценой |
+| Каталог | Публичное чтение, существующие фильтры/сортировка/пагинация |
+| Telegram auth | Проверка raw Telegram Mini App initData backend-ом и bearer session |
+| TON Connect Proof | Challenge → TON Proof → криптографическая backend-проверка; UI и proof fail-closed до настройки public manifest и exact domain allowlist |
+| NFT inventory | Backend-верифицированный инвентарь, paginated sync, multi-wallet ownership recheck, безопасная обработка потери владения |
+| My NFT UI | Отдельный экран инвентаря со статусами, pagination, sync и loading/error/empty состояниями |
+| Listings | Создание draft из eligible verified asset, свежая проверка владения при публикации, существующие edit/unpublish flows |
+| Order lifecycle | Резервирование с idempotency/concurrency защитой, cancellation и expiry; не оплата |
+| Stage B B1–B6 | Read-only transfer evidence adapter, миграции и immutable snapshots, leased observer, prepare/submit/read API, атомарное completion после независимой финальной проверки, seller TON Connect flow и notifications |
+| Telegram notifications | Durable outbox; сообщения buyer/seller создаются в той же транзакции, что и соответствующие lifecycle changes; отправка — отдельным worker |
+| Admin moderation | Отдельный /admin workspace; bounded queue; approve/reject/suspend/restore; обязательная причина и Idempotency-Key; append-only audit history; PostgreSQL блокирует UPDATE/DELETE/TRUNCATE журнала |
 
-### Частично / требует решения
+### Важные детали TON Connect
 
-| Пункт | Проблема |
-|---|---|
-| README | PR #59 merged; this status-refresh PR updates the capability table and wallet/inventory flow to the current main implementation while keeping manual live acceptance explicit |
-| AGENTS.md | PR #59 merged; this status-refresh PR updates TON Connect, inventory sync and API route status against current main |
-| Order status `pending_payment` | B2 migration in PR #85 renames legacy reservation rows/events to `reserved` in place. Delivery statuses and attempt snapshots are schema groundwork only; no API/observer transitions an order into delivery or `completed`. |
-| Подтверждение передачи NFT | B1 read-only TON transfer evidence adapter merged via PR #63. B2 order-state migration and immutable delivery-attempt snapshots are implemented in PR #85; there is still no prepare/submit API, observer, or order-completion path. Follow the maintainer baseline recorded in Issue #46. |
+- Frontend остаётся выключенным/fail-closed, пока не задан публичный VITE_TONCONNECT_MANIFEST_URL.
+- Backend proof challenges доступны только при корректном непустом TON_CONNECT_ALLOWED_DOMAINS.
+- Домен в allowlist проверяется точно; подключённый адрес без свежего proof не является verified wallet.
+- Настройки должны относиться к реальному публичному HTTPS hostname Mini App. Не включать wallet flow с произвольным локальным или временным URL.
 
-### Противоречит продукту / остановлено
+### Важные детали доставки NFT (Stage B)
 
-| Пункт | Действие |
-|---|---|
-| **PR #49 `docs/issue-48-mvp-scope`** | удалял цены из моделей, API, UI, миграций, тестов и документации; содержал destructive-миграцию `0005_free_listings`. **Закрыт владельцем 2026-11-10 без мерджа** — направление остановлено, данные в main не затронуты (см. §5) |
-| Миграция `0005_free_listings` | **не существует в main** и не применялась ни к одной БД. Если направление «без цен» вернётся — потребуется отдельный issue с планом сохранения данных |
+1. Покупатель резервирует активное объявление. В заказе фиксируется цена и валюта; деньги не списываются.
+2. При подготовке доставки backend повторно проверяет владение NFT продавцом и сохраняет точные item, network, seller source, buyer destination, query ID и deadline.
+3. Продавец формирует и подписывает TEP-62 transfer в своём TON Connect wallet. Сервер не хранит ключи, не подписывает и не отправляет транзакцию от имени пользователя.
+4. Возвращённый кошельком reference/BOC digest используется только как lookup hint. Он не принимается за tx hash или доказательство передачи.
+5. Leased observer независимо сопоставляет transfer evidence с persisted intent и политикой финальности. Только эта серверная проверка может атомарно завершить Order и перевести Listing в соответствующее конечное состояние.
+6. Неопределённость, лаг провайдера или конфликт доказательств не означают success; попытка остаётся в состоянии наблюдения/manual review согласно state machine.
 
-### Отсутствует (осознанно, не имитируется)
+Подробный контракт, переходы, отказоустойчивость и ограничения: [docs/STAGE_B_ORDER_LIFECYCLE.md](STAGE_B_ORDER_LIFECYCLE.md).
 
-Payment (провайдер, webhook, ledger), Escrow, чат сделки, админ-панель, споры, комиссии,
-выплаты, E2E-тесты, deployment runbook.
+### Важные детали admin moderation
 
-## 4. Дорожная карта
+- API находится под /api/admin; отдельная Mini App workspace открывается по /admin.
+- ADMIN_TELEGRAM_IDS — server-side JSON allowlist числовых Telegram IDs; по умолчанию пуст, поэтому доступ закрыт.
+- Actor берётся только из проверенной bearer session; клиент не может сам назначить себе admin.
+- Approve/restore требуют свежей проверки TON NFT ownership. Reject/suspend/restore/approve следуют строгим переходам Listing state.
+- Каждое решение требует причины и Idempotency-Key; изменение Listing и audit record коммитятся атомарно.
+- PostgreSQL append-only защита запрещает изменение и удаление audit rows, включая TRUNCATE. Downgrade не должен удалять непустой audit log.
 
-```text
-Этап A (текущий): маркетплейс-foundation
-  каталог, объявления с ценой, резервирование, проверка владения, уведомления
-  └─ вопрос PR #49 закрыт; README/AGENTS приведены к реальности (этот PR)
+Операционная настройка и точные endpoint-контракты: [docs/ADMIN_MODERATION_AUDIT.md](ADMIN_MODERATION_AUDIT.md).
 
-Этап B: сделки
-  дизайн подтверждения передачи NFT и жизненного цикла заказа находится в
-  docs/STAGE_B_ORDER_LIFECYCLE.md (PR #60 merged); реализация по Issue #46 ожидает
-  согласования решений владельца. Любая последующая платёжная интеграция — отдельное
-  решение по ADR-0001/0002 (Stars → отдельное утверждение).
+---
 
-Этап C: escrow/гарант
-  только после отдельного проектирования, тестнета, аудита — по ADR-0002
-```
+## 4. Ручная приёмка и незакрытые gates
 
-Никаких параллельных реализаций зависимых задач до фиксации API/DB-контрактов соответствующего этапа.
+Слитый код и успешный CI доказывают автоматизированное поведение на тестовой инфраструктуре, но не заменяют реальные действия в Telegram, Tonkeeper или TON testnet.
 
-## 5. Решение по PR #49 (закрыто владельцем 2026-11-10)
+| Issue | Что реализовано | Что остаётся проверить вручную |
+|---|---|---|
+| [#43 TON Connect Proof](https://github.com/AzizIo/Vstore/issues/43) | Backend криптографическая проверка и frontend lifecycle находятся в main | Реальный connect/sign в Telegram Mini App на целевом HTTPS host; verified wallet в backend; reopen/restore; account/network switch; публичные manifest/icon, content types и CORS |
+| [#44 NFT inventory](https://github.com/AzizIo/Vstore/issues/44) | Backend sync/reconciliation, multi-wallet checks и My NFT UI находятся в main | Testnet/provider сценарии с несколькими страницами и вторым verified wallet; ownership loss после резерва; outage/malformed response; owner review/screenshots |
+| [#46 NFT delivery Stage B](https://github.com/AzizIo/Vstore/issues/46) | B1–B6 находятся в main, включая observer и seller wallet UX | Реальный testnet/Tonkeeper seller transfer; проверка indexed finality на успешных и негативных transfer; задержки провайдера и manual-review cases |
+| [#47 full Mini App journey](https://github.com/AzizIo/Vstore/issues/47) | Основные frontend/backend workflows, durable notifications и API-backed Playwright coverage существуют | Полный проход в настоящем Telegram mobile WebView от двух пользователей, реальные уведомления и wallet return/UX на целевом публичном host |
 
-PR #49 противоречил D1 и содержал destructive-миграцию. Владелец закрыл его без мерджа; это
-записано здесь как решение с датой. Ценовая модель в main полная и согласованная; задача
-«MVP без платежей» решена границей этапа A без удаления цен.
+Issues #43, #44, #46 и #47 должны оставаться открытыми до документирования их соответствующих ручных acceptance criteria. Исторические чек-листы issue могут не отражать последние merged PR; перед изменением статуса сначала сопоставить пункты с кодом и последними комментариями.
 
-Если направление «объявления без цен» вернётся — это отдельный issue с обоснованием и планом
-сохранения данных, а не тихое удаление колонок.
+### Что доказывают автоматические E2E
 
-## 6. Правила для будущих миграций
+API-backed Playwright тесты запускают реальный FastAPI backend против временных PostgreSQL/Redis сервисов и loopback TON provider fixture. Они проверяют persistence и серверные переходы состояния, но Tonkeeper/Telegram wallet boundary и TON provider заменены тестовыми fixture. Это не live blockchain acceptance.
 
-- Никаких миграций, удаляющих денежные колонки (`price_amount`, `price_currency`) — это данные о
-  предмете сделки, а не деталь неиспользуемого платежа.
-- Destructive-миграция (drop column/table) требует отдельного issue с обоснованием и планом
-  сохранения данных, независимо от того, кто её пишет.
-- Новые статусы заказа, связанные с оплатой, — только вместе с реальным платёжным модулем.
+---
+
+## 5. Что не входит в текущий MVP
+
+Не реализовывать и не изображать реализованными без отдельного решения:
+
+- Payment provider, checkout, payment webhook/ledger и settlement;
+- Telegram Stars как фактический платёжный rail за NFT;
+- escrow, custody, refunds, dispute resolution, buyer guarantee;
+- marketplace commissions и seller payouts;
+- хранение seed phrases/private keys или server-side wallet signing;
+- Telegram Gifts transfers;
+- deal chat.
+
+Архитектурные документы ADR-0001/0002 и PAYMENTS_ESCROW_DESIGN — предложения для отдельного этапа. Они не разрешают добавлять платёжное поведение в текущий order lifecycle.
+
+---
+
+## 6. Правила для будущих миграций и изменений
+
+- Не удалять денежные поля price_amount и price_currency: они описывают условия объявления и снимок заказа, а не наличие payment provider.
+- Любая destructive-миграция (drop column/table или удаление истории) требует отдельного issue с обоснованием, планом сохранения данных и явного согласования владельца.
+- Новые статусы заказа, связанные с оплатой, допустимы только вместе с реальным платёжным модулем и утверждённым контрактом.
+- Изменения Delivery должны сохранять persisted intent, idempotency, observer fencing, независимую проверку и правила финальности.
+- Изменения moderation должны сохранять fail-closed allowlist, verified actor, атомарность решения и append-only audit.
+
