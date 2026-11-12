@@ -106,6 +106,39 @@ test.describe("listing details", () => {
   });
 });
 
+
+test.describe("order workspace", () => {
+  test("filters, opens details, confirms cancellation, and captures desktop/mobile views", async ({ page }) => {
+    const requests = await mockMarketplaceApi(page, { authenticated: true });
+    await page.goto("/");
+    await page.getByRole("button", { name: "Orders" }).click();
+
+    await expect(page.getByRole("heading", { name: "Order workspace" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /Purchases/ })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("button", { name: /Open order Moon Lantern/ })).toBeVisible();
+
+    await page.screenshot({ path: "test-results/order-workspace-desktop.png", fullPage: true });
+    await page.getByRole("button", { name: /Active/ }).click();
+    await expect(page.getByRole("button", { name: /Open order Moon Lantern/ })).toBeVisible();
+    await page.getByRole("searchbox", { name: "Search orders by asset title or order ID" }).fill(orderId);
+    await expect(page.getByRole("button", { name: /Open order Moon Lantern/ })).toBeVisible();
+
+    await page.getByRole("button", { name: /Open order Moon Lantern/ }).click();
+    await expect(page.getByRole("heading", { name: "Lifecycle" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Event timeline" })).toBeVisible();
+    await expect(page.getByText(/Payments are not enabled/)).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: "test-results/order-details-mobile.png", fullPage: true });
+
+    await page.getByRole("button", { name: "Cancel order" }).click();
+    await expect(page.getByText("Cancel this reservation?")).toBeVisible();
+    await page.getByRole("button", { name: "Confirm cancellation" }).click();
+    await expect(page.getByText("Cancelled").first()).toBeVisible();
+    expect(requests).toContain(`POST /api/orders/${orderId}/cancel`);
+  });
+});
+
 test.describe("Telegram deep links", () => {
   test("opens the requested public listing from a listing start_param without a session", async ({ page }) => {
     const startParam = `listing_${listingIds.moon.replace(/-/g, "")}`;
@@ -129,9 +162,9 @@ test.describe("Telegram deep links", () => {
     });
     await page.goto(`/?startapp=${startParam}`);
 
-    await expect(page.getByRole("heading", { name: "My Orders" })).toBeVisible();
-    await expect(page.getByText("OPENED FROM TELEGRAM NOTIFICATION")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Orders" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("heading", { name: "Lifecycle" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Moon Lantern" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Orders", exact: true })).toHaveAttribute("aria-pressed", "true");
     expect(requests).toContain(`GET /api/orders/${orderId}`);
   });
 

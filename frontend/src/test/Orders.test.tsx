@@ -31,7 +31,10 @@ function jsonResponse(body: unknown, status = 200) {
 
 describe("orders", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ items: [order] })));
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (input) => {
+      const url = String(input);
+      return url.match(/\/api\/orders\/[^/?]+$/) ? jsonResponse(order) : jsonResponse({ items: [order] });
+    }));
   });
 
   it("shows loading, pending-payment status, and a clear no-payment notice", async () => {
@@ -44,9 +47,10 @@ describe("orders", () => {
 
     resolveRequest?.(jsonResponse({ items: [order] }));
 
-    expect(await screen.findByText("Reservation pending")).toBeInTheDocument();
+    expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Open order Moon Lantern/ }));
+    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
     expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
-    expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
   });
 
   it("cancels a pending buyer order and updates its displayed state", async () => {
@@ -62,21 +66,23 @@ describe("orders", () => {
           ],
         });
       }
+      if (String(input).endsWith(`/api/orders/${order.id}`)) return jsonResponse(order);
       return jsonResponse({ items: [order] });
     });
     render(<Orders accessToken="private-token" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Open order Moon Lantern/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Cancel order" }));
+    expect(await screen.findByText("Cancel this reservation?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm cancellation" }));
 
-    expect(await screen.findByText("Cancelled")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("Cancelled").length).toBeGreaterThan(0));
     expect(screen.queryByRole("button", { name: "Cancel order" })).not.toBeInTheDocument();
   });
 
   it("shows seller sales without a buyer cancellation action", async () => {
     render(<Orders accessToken="private-token" />);
     await screen.findByText("Moon Lantern");
-    fireEvent.change(screen.getByRole("combobox", { name: "Order role" }), {
-      target: { value: "seller" },
-    });
+    fireEvent.click(screen.getByRole("tab", { name: /Sales/ }));
 
     await waitFor(() => {
       expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("role=seller");
@@ -114,10 +120,66 @@ describe("orders", () => {
       />,
     );
 
-    expect(await screen.findByText("OPENED FROM TELEGRAM NOTIFICATION")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Order role" })).toHaveValue("seller");
+    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
+    expect(screen.getByText("Seller · Sale")).toBeInTheDocument();
     expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
     await waitFor(() => {
       expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/api/orders?role=seller"))).toBe(true);
     });
   });
+
+
+describe("order workspace interactions", () => {
+  beforeEach(() => {
+    const orders = [
+      order,
+      { ...order, id: "order-2", title: "Golden Gift", status: "completed" as const, price_amount: "30", created_at: "2026-01-02T00:00:00Z" },
+      { ...order, id: "order-3", title: "Silver Gift", status: "expired" as const, price_amount: "5", created_at: "2026-01-03T00:00:00Z" },
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (input) => {
+      const url = String(input);
+      const match = url.match(/\/api\/orders\/([^/?]+)$/);
+      if (match) return jsonResponse(orders.find((item) => item.id === decodeURIComponent(match[1])) ?? order);
+      return jsonResponse({ items: orders });
+    }));
+  });
+
+  it("searches titles and IDs and filters by lifecycle state", async () => {
+    render(<Orders accessToken="token" onCatalog={vi.fn()} />);
+    expect(await screen.findByText("Golden Gift")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Active/ }));
+    expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
+    expect(screen.queryByText("Golden Gift")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search orders by asset title or order ID" }), {
+      target: { value: "order-1" },
+    });
+    expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
+    expect(screen.queryByText("Silver Gift")).not.toBeInTheDocument();
+  });
+
+  it("opens order details, displays lifecycle facts and countdown, and returns to the workspace", async () => {
+    render(<Orders accessToken="token" userId="buyer-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Open order Moon Lantern/ }));
+    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Event timeline" })).toBeInTheDocument();
+    expect(screen.getByText("Order ID")).toBeInTheDocument();
+    expect(screen.getByText(/remaining|Reservation expired/)).toBeInTheDocument();
+    expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "← Back to orders" }));
+    expect(await screen.findByRole("heading", { name: "Order workspace" })).toBeInTheDocument();
+  });
+
+  it("sorts orders by price and offers a catalog action when empty", async () => {
+    render(<Orders accessToken="token" onCatalog={vi.fn()} />);
+    await screen.findByText("Golden Gift");
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort orders" }), { target: { value: "price" } });
+    const cards = screen.getAllByRole("button", { name: /Open order/ });
+    expect(cards[0]).toHaveAccessibleName(/Golden Gift/);
+
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ items: [] }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(await screen.findByText("No purchases yet")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Explore catalog" })).toBeInTheDocument();
+  });
+});

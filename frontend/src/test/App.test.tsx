@@ -498,7 +498,8 @@ describe("Buyer orders", () => {
 
     renderMarketplace();
 
-    expect(await screen.findByText("OPENED FROM TELEGRAM NOTIFICATION")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: listing.title })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Orders" })).toHaveAttribute("aria-pressed", "true");
     expect(vi.mocked(fetch).mock.calls.some(([input]) =>
       String(input).endsWith(`/api/orders/${orderId}`)

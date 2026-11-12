@@ -138,9 +138,11 @@ test(
     ).toBeVisible();
 
     await buyerPage.getByRole("button", { name: "Orders", exact: true }).click();
-    await expect(buyerPage.getByRole("heading", { name: "My Orders" })).toBeVisible();
+    await expect(buyerPage.getByRole("heading", { name: "Order workspace" })).toBeVisible();
     await expect(buyerPage.getByText("Reservation pending", { exact: true })).toBeVisible();
     await expect(buyerPage.getByText(/^15\.75(?:0+)? TON$/)).toBeVisible();
+    await buyerPage.getByRole("button", { name: /Open order E2E Published NFT/ }).click();
+    await expect(buyerPage.getByRole("heading", { name: "Lifecycle" })).toBeVisible();
     await expect(buyerPage.getByText(/Payments are not enabled/)).toBeVisible();
 
     expect(sellerApiRequests).toContain("POST /api/auth/telegram");
