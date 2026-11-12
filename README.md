@@ -119,12 +119,14 @@ Example current API routes (authenticate with a backend Bearer token where indic
 | POST | /api/wallets/proof/verify | Cryptographically verify TON Connect Proof and link wallet |
 | GET | /api/wallets/me | Current user's linked wallets |
 | GET | /api/assets/me | Verified NFT inventory (server-side ownership recheck) |
-| GET | /api/listings?limit=24&offset=0&sort=newest | Public listings |
+| GET | /api/listings?limit=24&offset=0&sort=newest | Public listings; supports `search`, `asset_type`, `currency`, `min_price`, `max_price` and currency-scoped price sorting |
 | POST | /api/listings | Create listing draft from a verified eligible asset |
 | POST | /api/listings/{listing_id}/publish | Publish after a fresh ownership check |
 | POST | /api/orders | Reserve listing (requires Idempotency-Key; **not payment**) |
 | GET | /api/orders | Buyer's or seller's orders |
 | POST | /api/orders/{order_id}/cancel | Cancel an eligible pending reservation |
+
+Price range filters and price sorting require an explicit `currency=TON` or `currency=XTR`. TON and Telegram Stars are separate units and are never compared or aggregated together. `min_price` and `max_price` are inclusive positive decimal bounds; the API rejects inverted ranges.
 
 For the exact contract, inspect routes, schemas and tests under backend/app/api/ and backend/tests/; do not infer additional endpoints from the roadmap.
 
