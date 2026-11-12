@@ -48,7 +48,7 @@ test.describe("public catalog", () => {
     await page.getByRole("combobox", { name: "Price currency" }).selectOption("TON");
     await page.getByRole("combobox", { name: "Sort listings" }).selectOption("price_desc");
 
-    const catalogCards = page.getByRole("region", { name: "Marketplace catalog" }).getByRole("button");
+    const catalogCards = page.getByRole("region", { name: "Marketplace catalog" }).locator(".listing-card");
     await expect(catalogCards).toHaveCount(2);
     await expect(catalogCards.first()).toContainText("Moon Lantern");
     await expect(catalogCards.nth(1)).toContainText("Dragon Egg");
