@@ -21,6 +21,12 @@ def test_accepts_only_the_disposable_loopback_targets(e2e_settings):
     validate_e2e_targets()
 
 
+def test_rejects_preview_mode_even_with_e2e_opt_in(e2e_settings, monkeypatch):
+    monkeypatch.setenv("PREVIEW_MODE", "1")
+    with pytest.raises(RuntimeError, match="cannot be enabled together"):
+        validate_e2e_targets()
+
+
 def test_requires_explicit_e2e_mode(e2e_settings, monkeypatch):
     monkeypatch.delenv("E2E_MODE")
     with pytest.raises(RuntimeError, match="E2E_MODE=1"):

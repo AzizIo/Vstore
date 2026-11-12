@@ -3,6 +3,31 @@ import type { AssetType, PriceCurrency } from "./listings";
 
 export type OrderStatus = "reserved" | "awaiting_transfer" | "observing_transfer" | "completed" | "cancelled" | "expired";
 export type OrderRole = "buyer" | "seller";
+export type DeliveryAttemptStatus = "prepared" | "observing" | "verified" | "failed" | "manual_review" | "cancelled";
+
+export interface DeliveryAttempt {
+  id: string;
+  status: DeliveryAttemptStatus;
+  network: "mainnet" | "testnet";
+  item_address: string;
+  seller_address: string;
+  buyer_address: string;
+  query_id: string;
+  prepared_at: string;
+  deadline: string;
+  submitted_at: string | null;
+  candidate_transaction_hash: string | null;
+  transaction_hash: string | null;
+  trace_id: string | null;
+  masterchain_seqno: number | null;
+  verified_at: string | null;
+}
+
+export interface OrderDeliveryState {
+  order_id: string;
+  order_status: OrderStatus;
+  attempt: DeliveryAttempt | null;
+}
 
 export interface OrderEvent {
   from_status: OrderStatus | null;
@@ -158,4 +183,86 @@ export async function fetchOrder(
   );
   if (!isOrder(order)) throw new Error("Orders returned an invalid order.");
   return order;
+}
+
+
+
+function isDeliveryAttempt(value: unknown): value is DeliveryAttempt {
+  if (!value || typeof value !== "object") return false;
+  const attempt = value as Partial<DeliveryAttempt>;
+  return typeof attempt.id === "string" &&
+    ["prepared", "observing", "verified", "failed", "manual_review", "cancelled"].includes(String(attempt.status)) &&
+    (attempt.network === "mainnet" || attempt.network === "testnet") &&
+    typeof attempt.item_address === "string" &&
+    typeof attempt.seller_address === "string" &&
+    typeof attempt.buyer_address === "string" &&
+    typeof attempt.query_id === "string" &&
+    typeof attempt.prepared_at === "string" &&
+    typeof attempt.deadline === "string";
+}
+
+function isDeliveryState(value: unknown): value is OrderDeliveryState {
+  if (!value || typeof value !== "object") return false;
+  const state = value as Partial<OrderDeliveryState>;
+  return typeof state.order_id === "string" &&
+    isOrderStatus(state.order_status) &&
+    (state.attempt === null || isDeliveryAttempt(state.attempt));
+}
+
+async function requestDeliveryState(
+  url: string,
+  accessToken: string,
+  init?: RequestInit,
+): Promise<OrderDeliveryState> {
+  const state = await requestJson<unknown>(url, accessToken, init);
+  if (!isDeliveryState(state)) throw new Error("Orders returned an invalid delivery state.");
+  return state;
+}
+
+export async function fetchDeliveryState(
+  orderId: string,
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<OrderDeliveryState> {
+  return requestDeliveryState(
+    `${API_BASE_URL}/api/orders/${encodeURIComponent(orderId)}/delivery`,
+    accessToken,
+    { signal },
+  );
+}
+
+export async function prepareDelivery(
+  orderId: string,
+  sellerWalletId: string,
+  accessToken: string,
+  idempotencyKey: string,
+): Promise<OrderDeliveryState> {
+  return requestDeliveryState(
+    `${API_BASE_URL}/api/orders/${encodeURIComponent(orderId)}/delivery/prepare`,
+    accessToken,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify({ seller_wallet_id: sellerWalletId }),
+    },
+  );
+}
+
+export async function submitDeliveryCandidate(
+  orderId: string,
+  transactionHash: string,
+  accessToken: string,
+): Promise<OrderDeliveryState> {
+  return requestDeliveryState(
+    `${API_BASE_URL}/api/orders/${encodeURIComponent(orderId)}/delivery/submissions`,
+    accessToken,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transaction_hash: transactionHash }),
+    },
+  );
 }

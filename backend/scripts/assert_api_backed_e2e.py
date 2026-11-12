@@ -12,6 +12,8 @@ from app.core.config import get_settings
 from app.db.models import (
     Listing,
     ListingStatus,
+    ModerationAuditLog,
+    NFTAsset,
     Order,
     OrderEvent,
     OrderStatus,
@@ -42,14 +44,49 @@ async def assert_journey() -> None:
         listings = list(
             (
                 await session.scalars(
-                    select(Listing).where(Listing.seller_id == seller.id)
+                    select(Listing).where(
+                        Listing.seller_id == seller.id,
+                        Listing.title.in_(
+                            ["E2E Published NFT", "E2E Admin Moderation Listing"]
+                        ),
+                    )
                 )
             ).all()
         )
-        assert len(listings) == 1, f"Expected one seller listing, got {len(listings)}."
-        listing = listings[0]
-        assert listing.status is ListingStatus.RESERVED, (
-            f"Expected reserved listing after buyer order, got {listing.status.value}."
+        marketplace_listings = [
+            item
+            for item in listings
+            if item.title == "E2E Published NFT"
+            and item.status is not ListingStatus.CANCELLED
+        ]
+        moderation_listings = [
+            item for item in listings
+            if item.title == "E2E Admin Moderation Listing"
+        ]
+        assert len(marketplace_listings) == 1, (
+            f"Expected one non-cancelled marketplace listing, got {len(marketplace_listings)}."
+        )
+        assert len(moderation_listings) == 1, (
+            f"Expected one isolated moderation listing, got {len(moderation_listings)}."
+        )
+        moderation_listing = moderation_listings[0]
+        assert moderation_listing.status is ListingStatus.CANCELLED
+        moderation_events = list(
+            (
+                await session.scalars(
+                    select(ModerationAuditLog).where(
+                        ModerationAuditLog.target_id == moderation_listing.id
+                    )
+                )
+            ).all()
+        )
+        assert [event.action for event in sorted(
+            moderation_events, key=lambda item: item.occurred_at
+        )] == ["suspended", "restored"]
+        listing = marketplace_listings[0]
+        assert listing.status is ListingStatus.SOLD, (
+            "Expected sold listing after independently verified delivery, "
+            f"got {listing.status.value}."
         )
         assert listing.price_amount == Decimal("15.75")
         assert listing.price_currency.value == "TON"
@@ -68,7 +105,7 @@ async def assert_journey() -> None:
         assert len(orders) == 1, f"Expected one buyer order, got {len(orders)}."
         order = orders[0]
         assert order.listing_id == listing.id
-        assert order.status is OrderStatus.RESERVED
+        assert order.status is OrderStatus.COMPLETED
         assert order.price_amount == Decimal("15.75")
         assert order.price_currency.value == "TON"
 
@@ -79,11 +116,24 @@ async def assert_journey() -> None:
                 )
             ).all()
         )
-        assert len(events) == 1, f"Expected one reservation event, got {len(events)}."
+        assert [event.to_status for event in sorted(events, key=lambda item: item.created_at)] == [
+            OrderStatus.RESERVED,
+            OrderStatus.AWAITING_TRANSFER,
+            OrderStatus.OBSERVING_TRANSFER,
+            OrderStatus.COMPLETED,
+        ], (
+            "Unexpected delivery lifecycle event history: "
+            f"{[event.to_status.value for event in events]}."
+        )
         assert events[0].from_status is None
-        assert events[0].to_status is OrderStatus.RESERVED
         assert events[0].actor_id == buyer.id
         assert events[0].actor_type == "buyer"
+
+        delivered_asset = await session.scalar(
+            select(NFTAsset).where(NFTAsset.id == listing.asset_id)
+        )
+        assert delivered_asset is not None
+        assert delivered_asset.owner_id == buyer.id
 
         outbox = list(
             (
@@ -94,9 +144,18 @@ async def assert_journey() -> None:
                 )
             ).all()
         )
-        assert len(outbox) == 2, f"Expected buyer and seller outbox rows, got {len(outbox)}."
+        assert len(outbox) == 8, (
+            "Expected four lifecycle events for buyer and seller, "
+            f"got {len(outbox)}."
+        )
         assert {item.recipient_role for item in outbox} == {"buyer", "seller"}
-        assert {item.event_type for item in outbox} == {"order_created"}
+        assert {item.event_type for item in outbox} == {
+            "order_created",
+            "delivery_prepared",
+            "delivery_submitted",
+            "delivery_confirmed",
+        }
+        assert len({item.dedupe_key for item in outbox}) == 8
         assert {item.status for item in outbox} == {"pending"}
         assert {item.recipient_telegram_id for item in outbox} == {
             E2E_SELLER_TELEGRAM_ID,
@@ -123,9 +182,9 @@ async def assert_journey() -> None:
 
     await dispose_engine()
     print(
-        "API-backed E2E persistence verified: active listing published, buyer "
-        "reservation and price snapshot persisted, one order event and two "
-        "pending notification outbox rows."
+        "API-backed E2E persistence verified: moderation audit append-only decisions, "
+        "one cancelled moderation fixture, one completed marketplace listing, seller-signed "
+        "transfer independently verified, four order events and eight pending outbox rows."
     )
 
 

@@ -8,6 +8,7 @@ import {
   type OrderRole,
   type OrderStatus,
 } from "../api/orders";
+import { DeliveryWorkspace } from "./DeliveryWorkspace";
 
 type StatusFilter = "all" | "active" | "completed" | "closed";
 type SortMode = "newest" | "oldest" | "price";
@@ -123,14 +124,18 @@ function OrderDetails({
   order,
   role,
   busy,
+  accessToken,
   onClose,
   onCancel,
+  onRefreshOrder,
 }: {
   order: MarketplaceOrder;
   role: OrderRole;
   busy: boolean;
+  accessToken: string;
   onClose: () => void;
   onCancel: (orderId: string) => void;
+  onRefreshOrder: () => void;
 }) {
   const now = useClock();
   const [copied, setCopied] = useState(false);
@@ -211,6 +216,12 @@ function OrderDetails({
               </ol>
             ) : <p className="workspace-muted">No lifecycle events are available yet.</p>}
           </section>
+          <DeliveryWorkspace
+            order={order}
+            role={role}
+            accessToken={accessToken}
+            onRefreshOrder={onRefreshOrder}
+          />
         </div>
 
         <aside className="order-detail-aside">
@@ -389,7 +400,7 @@ export function Orders({
       <div className="orders-view order-detail-view">
         {detailLoading && <p className="workspace-inline-loading" role="status">Refreshing order details…</p>}
         {detailError && <div className="orders-error" role="alert"><span>{detailError}</span><button className="text-button" type="button" onClick={() => void openOrder(selectedOrder)}>Retry</button></div>}
-        <OrderDetails order={selectedOrder} role={userId ? (selectedOrder.buyer_id === userId ? "buyer" : "seller") : role} busy={busyOrderId === selectedOrder.id} onClose={() => setSelectedOrder(null)} onCancel={(id) => void handleCancel(id)} />
+        <OrderDetails order={selectedOrder} role={userId ? (selectedOrder.buyer_id === userId ? "buyer" : "seller") : role} busy={busyOrderId === selectedOrder.id} accessToken={accessToken} onClose={() => setSelectedOrder(null)} onCancel={(id) => void handleCancel(id)} onRefreshOrder={() => void openOrder(selectedOrder)} />
       </div>
     );
   }

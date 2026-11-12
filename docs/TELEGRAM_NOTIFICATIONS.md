@@ -23,14 +23,17 @@ notification records; they never make a Telegram network request while committin
 | Order created / listing reserved | Confirmation | Reservation notice |
 | Buyer cancellation | Cancellation notice | Cancellation notice |
 | Automatic expiry | Expiry notice | Expiry notice |
+| Delivery prepared / seller action required | Transfer intent is prepared; no delivery claim | Review and sign the exact transfer in your own wallet |
+| Transfer reference submitted / observation started | Independent verification is in progress | Wait for backend verification; do not send another transfer |
+| Transfer independently confirmed | Exact transfer verified by backend observer | Exact transfer verified by backend observer |
+| Manual review / reconciliation required | Delivery is not confirmed; do not assume success | Delivery is not confirmed; do not submit another transfer |
 
 Each outbox row snapshots the recipient Telegram ID and role. The unique deduplication key is
 based on order, lifecycle event, and recipient. The order transition, order event, and outbox
 rows are committed atomically.
 
-Messages contain an order reference, status, amount/currency, and an optional deep link with
-`startapp=order_<id>`. The message explicitly says checkout is not enabled and payment has not
-been received. It does not include wallet addresses, initData, JWTs, signatures, or private data.
+Messages contain an order reference, truthful lifecycle status, amount/currency, and an optional deep link with
+`startapp=order_<id>`. Delivery notifications never claim success before the backend observer has confirmed finalized evidence. Messages do not include wallet addresses, initData, JWTs, signatures, raw provider payloads or private data. Delivery notices are inserted in the same database transaction as the accepted delivery state transition.
 
 ## Retry and operations
 
@@ -75,4 +78,4 @@ be sent again after lease recovery. The implemented guarantee is at-least-once d
 duplicate risk limited to that unavoidable acknowledgement window.
 
 No payment processing, escrow, refunds, payout, or NFT transfer is performed by these
-notifications. A notification is informational only.
+notifications. A notification is informational only. A failed notification send cannot roll back or fabricate a chain verification result.
