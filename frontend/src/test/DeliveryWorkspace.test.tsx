@@ -28,9 +28,9 @@ function preparedAttempt(overrides: Partial<DeliveryAttempt> = {}): DeliveryAtte
 }
 
 describe("getTransferPayload", () => {
-  it("encodes the exact TEP-62 opcode, persisted query_id and snapshotted recipient/source", () => {
+  it("encodes the exact TEP-62 opcode, persisted query_id and snapshotted recipient/source", async () => {
     const attempt = preparedAttempt();
-    const payload = getTransferPayload(attempt);
+    const payload = await getTransferPayload(attempt);
     const slice = Cell.fromBase64(payload).beginParse();
 
     expect(slice.loadUint(32)).toBe(0x5fcc3d14);
@@ -44,8 +44,8 @@ describe("getTransferPayload", () => {
     expect(slice.remainingRefs).toBe(0);
   });
 
-  it("rejects a query_id outside the unsigned 64-bit range", () => {
-    expect(() => getTransferPayload(preparedAttempt({ query_id: "18446744073709551616" })))
-      .toThrow("invalid query ID");
+  it("rejects a query_id outside the unsigned 64-bit range", async () => {
+    await expect(getTransferPayload(preparedAttempt({ query_id: "18446744073709551616" })))
+      .rejects.toThrow("invalid query ID");
   });
 });
