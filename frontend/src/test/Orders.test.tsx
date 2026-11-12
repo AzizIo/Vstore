@@ -33,7 +33,7 @@ describe("orders", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async (input) => {
       const url = String(input);
-      return url.match(/\\/api\\/orders\\/[^/?]+$/) ? jsonResponse(order) : jsonResponse({ items: [order] });
+      return url.match(/\/api\/orders\/[^/?]+$/) ? jsonResponse(order) : jsonResponse({ items: [order] });
     }));
   });
 
@@ -138,7 +138,7 @@ describe("order workspace interactions", () => {
     ];
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async (input) => {
       const url = String(input);
-      const match = url.match(/\\/api\\/orders\\/([^/?]+)$/);
+      const match = url.match(/\/api\/orders\/([^/?]+)$/);
       if (match) return jsonResponse(orders.find((item) => item.id === decodeURIComponent(match[1])) ?? order);
       return jsonResponse({ items: orders });
     }));
