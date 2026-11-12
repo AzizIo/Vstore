@@ -13,6 +13,7 @@ import { MyListings } from "./listings/MyListings";
 import { MyInventory } from "./inventory/MyInventory";
 import { Orders } from "./orders/Orders";
 import { WalletConnection } from "./wallet/WalletConnection";
+import { SellerOverview } from "./overview/SellerOverview";
 
 const assetTypeLabels: Record<AssetType, string> = {
   ton_nft: "TON NFT",
@@ -292,7 +293,7 @@ function MarketplaceApp() {
   const session = useSession();
   const startParam = useRef(getTelegramStartParam()).current;
   const [initialOrderId, setInitialOrderId] = useState<string | null>(null);
-  const [section, setSection] = useState<"catalog" | "my-listings" | "my-nft" | "orders">("catalog");
+  const [section, setSection] = useState<"catalog" | "my-listings" | "my-nft" | "orders" | "overview">("catalog");
   const [listings, setListings] = useState<Listing[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -434,6 +435,19 @@ function MarketplaceApp() {
         >
           Catalog
         </button>
+        {session.status === "authenticated" && (
+          <button
+            className="navigation-tab"
+            type="button"
+            aria-pressed={section === "overview"}
+            onClick={() => {
+              setListingId(null);
+              setSection("overview");
+            }}
+          >
+            Overview
+          </button>
+        )}
         <button
           className="navigation-tab"
           type="button"
@@ -469,7 +483,32 @@ function MarketplaceApp() {
         </button>
       </nav>
 
-      {section === "orders" ? (
+      {section === "overview" ? (
+        session.status === "authenticated" ? (
+          <SellerOverview
+            accessToken={session.accessToken}
+            onOpenOrders={(orderId) => {
+              setListingId(null);
+              setInitialOrderId(orderId ?? null);
+              setSection("orders");
+            }}
+            onOpenListing={(id) => {
+              setInitialOrderId(null);
+              setListingId(id);
+              setSection("catalog");
+            }}
+            onManageListings={() => {
+              setListingId(null);
+              setSection("my-listings");
+            }}
+          />
+        ) : (
+          <div className="orders-message" role="status">
+            <h2>Sign in to view seller overview</h2>
+            <p>Your store activity is private and requires a verified Telegram session.</p>
+          </div>
+        )
+      ) : section === "orders" ? (
         session.status === "authenticated" ? (
           <Orders accessToken={session.accessToken} userId={session.user.id} initialOrderId={initialOrderId} onCatalog={() => setSection("catalog")} />
         ) : (
