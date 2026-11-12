@@ -77,4 +77,4 @@ cd backend
 python -m scripts.assert_api_backed_e2e
 ```
 
-The Playwright test deliberately stops at reservation. NFT transfer preparation, chain observation and the `completed` transition are not implemented by this suite; those remain separate Issue #46 work.
+The current Playwright API-backed journey still stops at reservation. PostgreSQL integration tests cover real delivery preparation/submission persistence, observer completion/manual review, and transactional outbox targeting/dedupe/rollback. Frontend TON Connect boundary tests cover the exact transfer payload, seller preparation, wallet rejection/disconnect, and uncertain results. These automated checks do not claim live TON Connect or public testnet acceptance.
