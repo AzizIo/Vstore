@@ -18,20 +18,36 @@ import {
 export default function TonConnectWallet({
   manifestUrl,
   accessToken,
+  onSelectedWalletChange,
 }: {
   manifestUrl: string;
   accessToken: string;
+  onSelectedWalletChange: (wallet: WalletRecord | null) => void;
 }) {
   return (
     <TonConnectUIProvider manifestUrl={manifestUrl}>
-      <WalletControls accessToken={accessToken} />
+      <WalletControls
+        accessToken={accessToken}
+        onSelectedWalletChange={onSelectedWalletChange}
+      />
     </TonConnectUIProvider>
   );
 }
 
-function WalletControls({ accessToken }: { accessToken: string }) {
+function WalletControls({
+  accessToken,
+  onSelectedWalletChange,
+}: {
+  accessToken: string;
+  onSelectedWalletChange: (wallet: WalletRecord | null) => void;
+}) {
   const wallet = useTonWallet();
   const [tonConnectUI] = useTonConnectUI();
+  const network = wallet?.account.chain === CHAIN.MAINNET
+    ? "mainnet"
+    : wallet?.account.chain === CHAIN.TESTNET
+      ? "testnet"
+      : null;
   const challengeRef = useRef<string | null>(null);
   const connectedAccountRef = useRef<{ address: string; chain: string } | null>(null);
   connectedAccountRef.current = wallet
@@ -43,6 +59,18 @@ function WalletControls({ accessToken }: { accessToken: string }) {
   const [isSettingPrimary, setIsSettingPrimary] = useState(false);
   const [isUnlinking, setIsUnlinking] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const selectedWallet = wallet && network
+      ? wallets.find(
+          (item) =>
+            item.is_verified &&
+            item.address === wallet.account.address &&
+            item.network === network,
+        ) ?? null
+      : null;
+    onSelectedWalletChange(selectedWallet);
+  }, [wallet?.account.address, network, wallets, onSelectedWalletChange]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -218,11 +246,6 @@ function WalletControls({ accessToken }: { accessToken: string }) {
     }
   }
 
-  const network = wallet?.account.chain === CHAIN.MAINNET
-    ? "mainnet"
-    : wallet?.account.chain === CHAIN.TESTNET
-      ? "testnet"
-      : null;
   const verified = Boolean(
     wallet &&
     network &&
