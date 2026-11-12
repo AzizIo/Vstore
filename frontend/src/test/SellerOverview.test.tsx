@@ -55,7 +55,7 @@ describe("Seller overview", () => {
     expect(screen.getByText("3.25 TON")).toBeInTheDocument();
     expect(screen.getByText(/Reservations are not payments/)).toBeInTheDocument();
     expect(screen.getByText("Active listings")).toBeInTheDocument();
-    expect(screen.getByText("Suspended")).toBeInTheDocument();
+    expect(screen.getByText(/Listing · Suspended/)).toBeInTheDocument();
     expect(screen.getByText("Completed transfers")).toBeInTheDocument();
   });
 
