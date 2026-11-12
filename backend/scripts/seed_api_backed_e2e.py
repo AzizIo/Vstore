@@ -1,4 +1,4 @@
-"""Seed a single verified seller NFT into the disposable API-backed E2E database."""
+"""Seed verified seller/buyer wallets and one NFT into the disposable E2E database."""
 
 from __future__ import annotations
 
@@ -18,10 +18,10 @@ from app.db.models import (
 from app.db.session import async_session_factory, dispose_engine
 from scripts.e2e_safety import assert_e2e_environment
 from scripts.e2e_ton_provider import (
-    E2E_NFT_ITEM_ADDRESS,
-    E2E_NFT_NAME,
     E2E_BUYER_TELEGRAM_ID,
     E2E_BUYER_WALLET_ADDRESS,
+    E2E_NFT_ITEM_ADDRESS,
+    E2E_NFT_NAME,
     E2E_SELLER_TELEGRAM_ID,
     E2E_SELLER_WALLET_ADDRESS,
 )
