@@ -28,6 +28,7 @@ _MAX_METADATA_CACHE_ENTRIES = 2048
 _METADATA_CACHE_TTL_SECONDS = 600.0
 _METADATA_NEGATIVE_CACHE_TTL_SECONDS = 30.0
 _METADATA_FETCH_CONCURRENCY = 5
+_METADATA_PAGE_ENRICHMENT_TIMEOUT_SECONDS = 8.0
 
 
 class NFTDataProvider(Protocol):
@@ -362,10 +363,23 @@ class TONCenterV3Provider:
         consumed_rows = rows[:limit]
         # Metadata enrichment is page-scoped, bounded-concurrency and cached by the
         # exact item address + URI. Subsequent ownership verification reuses the cache.
+        metadata_tasks = [
+            asyncio.create_task(self._parse_item_with_metadata(row))
+            for row in consumed_rows
+        ]
+        completed, pending = await asyncio.wait(
+            metadata_tasks,
+            timeout=_METADATA_PAGE_ENRICHMENT_TIMEOUT_SECONDS,
+        )
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        # If an external metadata host is slow, return the on-chain snapshot rather
+        # than extending the inventory request. Metadata is optional display data.
         snapshots = tuple(
-            await asyncio.gather(
-                *(self._parse_item_with_metadata(row) for row in consumed_rows)
-            )
+            task.result() if task in completed else self._parse_item(row)
+            for row, task in zip(consumed_rows, metadata_tasks, strict=True)
         )
         return NFTInventoryPage(
             items=snapshots,
