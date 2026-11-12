@@ -1696,6 +1696,11 @@ async def _cleanup_observer_fixture(
 ) -> None:
     async with session_factory.begin() as session:
         await session.execute(
+            TelegramNotificationOutbox.__table__.delete().where(
+                TelegramNotificationOutbox.order_id == order_id
+            )
+        )
+        await session.execute(
             OrderEvent.__table__.delete().where(OrderEvent.order_id == order_id)
         )
         await session.execute(
