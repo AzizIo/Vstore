@@ -17,6 +17,13 @@ import {
 } from "../api/orders";
 import { fetchMyWallets } from "../wallet/api";
 
+async function loadTonCore() {
+  const { Buffer } = await import("buffer");
+  const runtime = globalThis as typeof globalThis & { Buffer?: typeof Buffer };
+  runtime.Buffer ??= Buffer;
+  return import("@ton/core");
+}
+
 type LocalTonConnectTestBoundary = {
   wallet?: { account: { address: string; chain: string } } | null;
   sendTransaction?: (request: {
@@ -43,7 +50,7 @@ function networkForChain(chain: string): "mainnet" | "testnet" | null {
 }
 
 export async function getTransferPayload(attempt: DeliveryAttempt): Promise<string> {
-  const { Address, beginCell } = await import("@ton/core");
+  const { Address, beginCell } = await loadTonCore();
   const queryId = BigInt(attempt.query_id);
   if (queryId < 0n || queryId > 0xffffffffffffffffn) {
     throw new Error("The prepared transfer contains an invalid query ID.");
@@ -148,7 +155,7 @@ function DeliveryPanel({
         throw new Error("Connect a supported TON wallet on mainnet or testnet first.");
       }
       const records = await fetchMyWallets(accessToken);
-      const { Address } = await import("@ton/core");
+      const { Address } = await loadTonCore();
       const connectedAddress = Address.parse(wallet.account.address).toRawString();
       const linked = records.find((record) =>
         record.is_verified &&
