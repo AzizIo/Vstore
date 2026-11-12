@@ -105,6 +105,8 @@ class ModerationPageDTO(BaseModel):
 
 
 class AuditDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     actor_id: UUID
     target_type: str

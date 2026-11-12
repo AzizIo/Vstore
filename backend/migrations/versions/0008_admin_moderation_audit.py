@@ -68,6 +68,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
+    suspended = bind.execute(sa.text("SELECT count(*) FROM listings WHERE status = 'suspended'")).scalar_one()
+    if suspended:
+        raise RuntimeError("Cannot downgrade while suspended listings exist; restore or reconcile them first.")
     count = bind.execute(sa.text("SELECT count(*) FROM moderation_audit_log")).scalar_one()
     if count:
         raise RuntimeError(
