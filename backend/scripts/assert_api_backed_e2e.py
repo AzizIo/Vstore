@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.db.models import (
     Listing,
     ListingStatus,
+    ModerationAuditLog,
     NFTAsset,
     Order,
     OrderEvent,
@@ -50,8 +51,32 @@ async def assert_journey() -> None:
                 )
             ).all()
         )
-        assert len(listings) == 1, f"Expected one seller listing, got {len(listings)}."
-        listing = listings[0]
+        marketplace_listings = [item for item in listings if item.status is not ListingStatus.CANCELLED]
+        moderation_listings = [
+            item for item in listings
+            if item.title == "E2E Admin Moderation Listing"
+        ]
+        assert len(marketplace_listings) == 1, (
+            f"Expected one non-cancelled marketplace listing, got {len(marketplace_listings)}."
+        )
+        assert len(moderation_listings) == 1, (
+            f"Expected one isolated moderation listing, got {len(moderation_listings)}."
+        )
+        moderation_listing = moderation_listings[0]
+        assert moderation_listing.status is ListingStatus.CANCELLED
+        moderation_events = list(
+            (
+                await session.scalars(
+                    select(ModerationAuditLog).where(
+                        ModerationAuditLog.target_id == moderation_listing.id
+                    )
+                )
+            ).all()
+        )
+        assert [event.action for event in sorted(
+            moderation_events, key=lambda item: item.occurred_at
+        )] == ["suspended", "restored"]
+        listing = marketplace_listings[0]
         assert listing.status is ListingStatus.SOLD, (
             "Expected sold listing after independently verified delivery, "
             f"got {listing.status.value}."
@@ -150,9 +175,9 @@ async def assert_journey() -> None:
 
     await dispose_engine()
     print(
-        "API-backed E2E persistence verified: active listing published, buyer "
-        "reservation and price snapshot persisted, seller-signed transfer independently "
-        "verified, four order events and eight pending lifecycle notification outbox rows."
+        "API-backed E2E persistence verified: moderation audit append-only decisions, "
+        "one cancelled moderation fixture, one completed marketplace listing, seller-signed "
+        "transfer independently verified, four order events and eight pending outbox rows."
     )
 
 
