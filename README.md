@@ -166,8 +166,3 @@ Prices are part of the Listing model and must not be removed to make the no-paym
 ## Contributing
 
 Read [AGENTS.md](AGENTS.md) before changing code. Never commit directly to main; create a task-specific branch and focused PR. Inspect active issues/PRs before starting work, do not overwrite another branch, and do not merge or close issues without authorization.
-
-
-## Admin Moderation & Audit Center
-
-A separate admin API and Mini App workspace provide a bounded listing moderation queue, reasoned approve/reject/suspend/restore decisions, and per-listing audit history. Admin access is denied by default and is granted only when the verified session's Telegram user ID is included in the server-side `ADMIN_TELEGRAM_IDS` configuration. Never trust a client-supplied actor or role. See [docs/ADMIN_MODERATION_AUDIT.md](docs/ADMIN_MODERATION_AUDIT.md) for endpoints, allowed state transitions, fresh ownership verification and append-only audit guarantees. Audit entries and listing changes commit atomically; PostgreSQL rejects audit updates/deletes. No order, payment, delivery or wallet lifecycle is changed.
