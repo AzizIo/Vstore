@@ -125,7 +125,7 @@ test.describe("listing details", () => {
     await expect(dialog).toContainText("Moon Lantern");
     await expect(dialog).toContainText("12.5 TON");
     await expect(dialog).toContainText("Ari (@collector)");
-    await expect(dialog).toContainText("Payment is not enabled and no funds will be collected");
+    await expect(dialog).toContainText("Payments are not enabled, no funds will be collected and the NFT stays with the seller");
     expect(requests.some((request) => request === "POST /api/orders")).toBe(false);
 
     await dialog.getByRole("button", { name: "Confirm reservation" }).click();

@@ -198,7 +198,7 @@ test(
     await sellerPage.getByRole("button", { name: "Orders", exact: true }).click();
     await sellerPage.getByRole("tab", { name: /Sales/ }).click();
     await sellerPage.getByRole("button", { name: /Open order E2E Published NFT/ }).click();
-    await expect(sellerPage.getByRole("heading", { name: "NFT transfer" })).toBeVisible();
+    await expect(sellerPage.getByRole("heading", { name: "Transfer" })).toBeVisible();
     await sellerPage.getByRole("button", { name: "Prepare transfer" }).click();
     await expect(sellerPage.getByRole("button", { name: "Review and sign in wallet" })).toBeVisible();
 
