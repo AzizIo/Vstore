@@ -76,7 +76,8 @@ def validate_preview_targets() -> None:
             "PREVIEW_VITE_TONCONNECT_MANIFEST_URL must equal the app origin plus "
             "/tonconnect-manifest.json."
         )
-    if settings.telegram_mini_app_url is None or settings.telegram_mini_app_url.rstrip("/") != app_origin:
+    telegram_origin = (settings.telegram_mini_app_url or "").rstrip("/")
+    if telegram_origin != app_origin:
         raise RuntimeError(
             "PREVIEW_TELEGRAM_MINI_APP_URL and PREVIEW_VITE_TONCONNECT_APP_URL must match."
         )
@@ -162,7 +163,10 @@ async def main() -> int:
     parser.add_argument(
         "command",
         choices=("guard", "preflight"),
-        help="'guard' validates targets before migration; 'preflight' also checks DB/Redis/migrations.",
+        help=(
+            "'guard' validates targets before migration; "
+            "'preflight' also checks DB/Redis/migrations."
+        ),
     )
     args = parser.parse_args()
     try:
@@ -171,7 +175,9 @@ async def main() -> int:
             print("Preview target guard passed; database target is explicitly isolated.")
         else:
             await assert_preview_dependencies()
-            print("Preview preflight passed: target, configuration, PostgreSQL, Redis and migrations.")
+            print(
+                "Preview preflight passed: target, configuration, PostgreSQL, Redis and migrations."
+            )
     except RuntimeError as exc:
         print(f"PREVIEW BLOCKED: {exc}")
         return 1
