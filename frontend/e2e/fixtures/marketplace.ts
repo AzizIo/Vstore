@@ -72,6 +72,36 @@ export const roseGift = {
 
 const catalogListings = [moonLantern, dragonEgg, roseGift];
 
+const verifiedInventoryAsset = {
+  id: "asset-moon",
+  asset_type: "ton_nft",
+  external_id: moonLantern.asset.external_id,
+  item_address: moonLantern.asset.item_address,
+  collection_address: moonLantern.asset.collection.address,
+  name: "Moon Lantern NFT",
+  description: "A verified TON collectible.",
+  image_url: null,
+  verification_status: "verified",
+  eligible_for_listing: true,
+};
+
+const inventoryPage = {
+  items: [verifiedInventoryAsset],
+  wallet_id: "wallet-e2e",
+  limit: 24,
+  offset: 0,
+  next_offset: 1,
+  has_more: false,
+};
+
+const draftListing = {
+  ...moonLantern,
+  id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  status: "draft",
+  price_amount: "1.5",
+  title: "Draft Moon Lantern",
+};
+
 const profile = {
   id: "buyer-1",
   telegram_id: 123456789,
@@ -237,6 +267,22 @@ export async function mockMarketplaceApi(
 
     if (path === "/api/listings/me" && method === "GET" && options.authenticated) {
       return fulfillJson([moonLantern]);
+    }
+
+    if (path === "/api/assets/me" && method === "GET" && options.authenticated) {
+      const limit = Number(url.searchParams.get("limit") ?? 24);
+      const offset = Number(url.searchParams.get("offset") ?? 0);
+      return fulfillJson({
+        ...inventoryPage,
+        items: inventoryPage.items.slice(offset, offset + limit),
+        limit,
+        offset,
+        next_offset: offset + inventoryPage.items.slice(offset, offset + limit).length,
+      });
+    }
+
+    if (path === "/api/listings" && method === "POST" && options.authenticated) {
+      return fulfillJson(draftListing, 201);
     }
 
     const listingMatch = /^\/api\/listings\/([^/]+)$/.exec(path);
