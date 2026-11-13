@@ -3,6 +3,8 @@ import logging
 from contextlib import suppress
 
 from aiogram import Bot, Dispatcher
+from aiogram.exceptions import TelegramAPIError
+from aiogram.types import BotCommand
 
 from app.bot_handlers import router as user_router
 from app.core.config import get_settings
@@ -12,12 +14,23 @@ from app.notifications.telegram import TelegramNotificationSender
 
 logger = logging.getLogger(__name__)
 
+BOT_COMMANDS = [
+    BotCommand(command="start", description="Открыть главное меню"),
+    BotCommand(command="app", description="Открыть VILTARA SHOP"),
+    BotCommand(command="help", description="Справка и инструкции"),
+]
+
 
 def create_dispatcher() -> Dispatcher:
     """Build the dispatcher and register all user-facing bot handlers."""
     dispatcher = Dispatcher()
     dispatcher.include_router(user_router)
     return dispatcher
+
+
+async def register_bot_commands(bot: Bot) -> None:
+    """Publish a Russian command menu in Telegram's chat command picker."""
+    await bot.set_my_commands(BOT_COMMANDS)
 
 
 async def _run_notification_worker(bot: Bot) -> None:
@@ -53,6 +66,12 @@ async def main() -> None:
 
     logging.basicConfig(level=logging.INFO)
     bot = Bot(token=settings.bot_token)
+    try:
+        await register_bot_commands(bot)
+    except TelegramAPIError:
+        # Command-menu registration is helpful but must not prevent the bot from starting.
+        logger.exception("Не удалось обновить список команд Telegram-бота")
+
     dispatcher = create_dispatcher()
     notification_task = asyncio.create_task(_run_notification_worker(bot))
 
