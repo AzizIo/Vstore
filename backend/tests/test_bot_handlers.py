@@ -7,7 +7,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.types import Chat, Message, Update
 
 from app import bot_handlers
-from app.bot import create_dispatcher
+from app.bot import BOT_COMMANDS, create_dispatcher, register_bot_commands
 
 
 @pytest.fixture(scope="module")
@@ -41,10 +41,12 @@ async def test_start_handler_sends_welcome_and_configured_mini_app_button(
 
     message.answer.assert_awaited_once()
     args = message.answer.await_args
-    assert "Добро пожаловать в VILTARA SHOP" in args.args[0]
+    assert "<b>VILTARA SHOP</b>" in args.args[0]
+    assert args.kwargs["parse_mode"] == "HTML"
     keyboard = args.kwargs["reply_markup"]
     button = keyboard.inline_keyboard[0][0]
     assert button.text == "Открыть VILTARA SHOP"
+    assert button.style == "primary"
     assert button.url is None
     assert button.web_app is not None
     assert button.web_app.url == "https://dealtime-com-badly-twice.trycloudflare.com"
@@ -89,6 +91,7 @@ async def test_app_command_uses_web_app_button(
     assert button.url is None
     assert button.web_app is not None
     assert button.web_app.url == mini_app_url
+    assert button.style == "primary"
 
 
 @pytest.mark.asyncio
@@ -114,7 +117,8 @@ async def test_help_callback_is_acknowledged_and_updates_the_message(
 
     callback.answer.assert_awaited_once()
     edit_text.assert_awaited_once()
-    assert "резервирование, а не оплата" in edit_text.await_args.args[0]
+    assert "Создание заказа резервирует объявление" in edit_text.await_args.args[0]
+    assert edit_text.await_args.kwargs["parse_mode"] == "HTML"
     keyboard = edit_text.await_args.kwargs["reply_markup"]
     assert keyboard.inline_keyboard[0][0].callback_data == "bot:menu"
 
@@ -134,11 +138,11 @@ async def test_help_command_explains_supported_features_and_limits(
 
     message.answer.assert_awaited_once()
     text = message.answer.await_args.args[0]
-    assert "маркетплейс объявлений о TON NFT" in text
+    assert "<b>Каталог</b>" in text
     assert "Каталог" in text
     assert "Объявления" in text
     assert "Заказы" in text
-    assert "резервирование, а не оплата" in text
+    assert "Создание заказа резервирует объявление" in text
     keyboard = message.answer.await_args.kwargs["reply_markup"]
     assert keyboard.inline_keyboard[0][0].url is None
     assert keyboard.inline_keyboard[0][0].web_app is not None
@@ -160,7 +164,7 @@ async def test_app_command_explains_missing_mini_app_configuration(
 
     message.answer.assert_awaited_once()
     text = message.answer.await_args.args[0]
-    assert "Mini App пока не настроен" in text
+    assert "Приложение пока недоступно" in text
     assert "TELEGRAM_MINI_APP_URL" in text
     assert "/help" in text
     assert "reply_markup" not in message.answer.await_args.kwargs
@@ -190,6 +194,7 @@ async def test_menu_callback_acknowledges_query_and_restores_main_menu(
     callback.answer.assert_awaited_once()
     edit_text.assert_awaited_once()
     assert edit_text.await_args.args[0] == bot_handlers.START_MESSAGE
+    assert edit_text.await_args.kwargs["parse_mode"] == "HTML"
     keyboard = edit_text.await_args.kwargs["reply_markup"]
     assert keyboard.inline_keyboard[0][0].url is None
     assert keyboard.inline_keyboard[0][0].web_app is not None
@@ -212,7 +217,7 @@ async def test_plain_text_fallback_guides_user_to_supported_actions(
 
     message.answer.assert_awaited_once()
     text = message.answer.await_args.args[0]
-    assert "не обрабатываю произвольные сообщения" in text
+    assert "Не удалось распознать сообщение" in text
     assert "/start" in text
     assert "/app" in text
     assert "/help" in text
@@ -249,7 +254,7 @@ async def test_unknown_command_is_routed_to_fallback_without_exception(
         await bot.session.close()
 
     answer.assert_awaited_once()
-    assert "не обрабатываю произвольные сообщения" in answer.await_args.args[0]
+    assert "Не удалось распознать сообщение" in answer.await_args.args[0]
 
 
 def test_dispatcher_registers_each_public_handler(
@@ -298,6 +303,7 @@ async def test_start_menu_accepts_public_https_mini_app_url(
     button = keyboard.inline_keyboard[0][0]
     assert button.web_app is not None
     assert button.web_app.url == "https://shop.example.com/miniapp"
+    assert button.style == "primary"
     assert keyboard.inline_keyboard[1][0].callback_data == "bot:help"
 
 
@@ -317,6 +323,20 @@ async def test_app_command_explains_invalid_mini_app_url(
     await bot_handlers.handle_app(message)  # type: ignore[arg-type]
 
     response_text = message.answer.await_args.args[0]
-    assert "ссылка указана неверно" in response_text
+    assert "не настроена или указана неверно" in response_text
     assert "публичный HTTPS-адрес" in response_text
     assert "reply_markup" not in message.answer.await_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_register_bot_commands_exposes_russian_command_menu() -> None:
+    bot = SimpleNamespace(set_my_commands=AsyncMock())
+
+    await register_bot_commands(bot)  # type: ignore[arg-type]
+
+    bot.set_my_commands.assert_awaited_once_with(BOT_COMMANDS)
+    assert [(command.command, command.description) for command in BOT_COMMANDS] == [
+        ("start", "Открыть главное меню"),
+        ("app", "Открыть VILTARA SHOP"),
+        ("help", "Справка и инструкции"),
+    ]
