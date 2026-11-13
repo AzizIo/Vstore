@@ -424,7 +424,7 @@ export function Orders({
     <section className="orders-view" aria-labelledby="orders-title">
       <div className="workspace-page-heading">
         <div><p className="eyebrow">ВАША АКТИВНОСТЬ</p><h1 id="orders-title">Заказы</h1><p className="workspace-subtitle">Все ваши резервы, передачи NFT и завершённые заказы — в одном месте.</p></div>
-        <button className="secondary-button refresh-button" type="button" disabled={loading} onClick={() => { setRefreshing(true); setRetry((value) => value + 1); }}><span aria-hidden="true">↻</span> {refreshing ? "Обновляем…" : "Refresh"}</button>
+        <button className="secondary-button refresh-button" type="button" disabled={loading} onClick={() => { setRefreshing(true); setRetry((value) => value + 1); }}><span aria-hidden="true">↻</span> {refreshing ? "Обновляем…" : "Обновить"}</button>
       </div>
 
       <div className="workspace-role-tabs" role="tablist" aria-label="Тип заказа">
