@@ -160,9 +160,24 @@ test(
     await draftCard.click();
     await sellerPage.getByRole("button", { name: "Опубликовать объявление", exact: true }).click();
     await sellerPage.getByRole("button", { name: "Подтвердить публикацию", exact: true }).click();
+    await expect(sellerPage.locator(".listing-status-pending_review")).toHaveText("На модерации");
+
+    // The seller is an allowlisted CI moderator. Approval is an explicit step;
+    // submitting the listing alone must never expose it to buyers.
+    await sellerPage.goto("/admin");
+    await expect(sellerPage.getByRole("heading", { name: "Модерация и аудит" })).toBeVisible();
+    const moderationCard = sellerPage.locator(".admin-listing").filter({ hasText: "E2E Published NFT" });
+    await expect(moderationCard).toBeVisible();
+    await moderationCard.getByRole("button", { name: "Одобрить", exact: true }).click();
+    const approvalDialog = sellerPage.getByRole("dialog", { name: "Одобрить объявление" });
+    await approvalDialog.getByLabel("Пояснение (5–500 символов)").fill("E2E explicit publication approval");
+    await approvalDialog.getByRole("button", { name: "Подтвердить одобрение" }).click();
+    await expect(moderationCard.getByText("Активно", { exact: true })).toBeVisible();
+    await sellerPage.goto("/");
+    await sellerPage.getByRole("button", { name: "Мои объявления", exact: true }).click();
     await expect(sellerPage.locator(".listing-status-active")).toHaveText("Активно");
 
-    // Exercise the real catalog endpoint after publication: price ranges and
+    // Exercise the real catalog endpoint after explicit administrator approval: price ranges and
     // sorting must remain isolated to one currency, never TON vs XTR together.
     const catalogFilterResults = await sellerPage.evaluate(async () => {
       const [tonResponse, xtrResponse, unscopedSortResponse] = await Promise.all([
