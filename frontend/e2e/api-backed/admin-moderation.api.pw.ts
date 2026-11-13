@@ -200,10 +200,8 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
       "http://127.0.0.1:8000/api/listings/me",
       { headers },
     );
-    const sellerListings = await sellerListingsResponse.json() as {
-      items: Array<{ id: string; status: string }>;
-    };
-    expect(sellerListings.items.find((item) => item.id === rejectedDraft.id)?.status).toBe("cancelled");
+    const sellerListings = await sellerListingsResponse.json() as Array<{ id: string; status: string }>;
+    expect(sellerListings.find((item) => item.id === rejectedDraft.id)?.status).toBe("cancelled");
   } finally {
     await context.close();
   }
