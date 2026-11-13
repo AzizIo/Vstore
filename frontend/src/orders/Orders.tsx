@@ -23,14 +23,14 @@ const statusOrder: OrderStatus[] = [
 ];
 
 function getOrderTitle(order: MarketplaceOrder) {
-  return order.title || order.asset_name || "Untitled asset";
+  return order.title || order.asset_name || "Без названия";
 }
 
 function getDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
-    ? "Date unavailable"
-    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
+    ? "Дата недоступна"
+    : new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
 function getTimestamp(value: string) {
@@ -40,37 +40,37 @@ function getTimestamp(value: string) {
 
 function statusLabel(status: OrderStatus) {
   switch (status) {
-    case "reserved": return "Reservation pending";
-    case "awaiting_transfer": return "Awaiting transfer";
-    case "observing_transfer": return "Verifying transfer";
-    case "completed": return "Completed";
-    case "cancelled": return "Cancelled";
-    case "expired": return "Expired";
+    case "reserved": return "Ожидает передачи";
+    case "awaiting_transfer": return "Ожидает перевода";
+    case "observing_transfer": return "Проверяем перевод";
+    case "completed": return "Завершён";
+    case "cancelled": return "Отменено";
+    case "expired": return "Срок истёк";
   }
 }
 
 function statusGuidance(status: OrderStatus) {
   switch (status) {
     case "reserved":
-      return "The listing is reserved. The seller has not started the NFT transfer.";
+      return "Объявление зарезервировано. Продавец ещё не начал передачу NFT.";
     case "awaiting_transfer":
-      return "The seller is preparing a direct NFT transfer to the buyer. Payments are not enabled.";
+      return "Продавец готовит прямую передачу NFT покупателю. Оплата не предусмотрена.";
     case "observing_transfer":
-      return "The transfer is being checked against on-chain evidence. It is not considered delivered until verification completes.";
+      return "Проверяем перевод по данным блокчейна. Заказ не считается завершённым до окончания проверки.";
     case "completed":
-      return "The server confirmed the exact NFT transfer to the buyer. This order is complete.";
+      return "Сервер подтвердил передачу нужного NFT покупателю. Заказ завершён.";
     case "cancelled":
-      return "This reservation was cancelled. No payment or refund was processed by this app.";
+      return "Резерв отменён. Приложение не проводило оплату или возврат средств.";
     case "expired":
-      return "The reservation expired before completion. Payments and automatic refunds are not enabled.";
+      return "Срок резерва истёк до завершения заказа. Оплата и автоматический возврат средств не предусмотрены.";
   }
 }
 
 function formatRemaining(expiresAt: string, now: number) {
   const expiry = new Date(expiresAt).getTime();
-  if (!Number.isFinite(expiry)) return "Expiry unavailable";
+  if (!Number.isFinite(expiry)) return "Срок действия неизвестен";
   const remaining = expiry - now;
-  if (remaining <= 0) return "Reservation expired";
+  if (remaining <= 0) return "Срок резерва истёк";
   const seconds = Math.floor(remaining / 1000);
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
@@ -109,13 +109,13 @@ function OrderCard({
       aria-label={`Open order ${title}, ${statusLabel(order.status)}`}
     >
       <span className="workspace-card-topline">
-        <span className="workspace-asset-type">{order.asset_type === "ton_nft" ? "TON NFT" : "TELEGRAM GIFT"}</span>
+        <span className="workspace-asset-type">{order.asset_type === "ton_nft" ? "TON NFT" : "ПОДАРОК TELEGRAM"}</span>
         <span className={`order-status order-status-${order.status}`}>{statusLabel(order.status)}</span>
       </span>
       <span className="workspace-card-title">{title}</span>
       <span className="workspace-card-price">{order.price_amount} {order.price_currency}</span>
       <span className="workspace-card-meta">
-        <span>{role === "buyer" ? "Purchase" : "Sale"} · {getDate(order.created_at)}</span>
+        <span>{role === "buyer" ? "Покупка" : "Продажа"} · {getDate(order.created_at)}</span>
         <span className="workspace-card-arrow" aria-hidden="true">↗</span>
       </span>
     </button>
@@ -148,13 +148,13 @@ function OrderDetails({
 
   async function copyOrderId() {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      if (!navigator.clipboard?.writeText) throw new Error("Буфер обмена недоступен");
       await navigator.clipboard.writeText(order.id);
       setCopied(true);
       setCopyError("");
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
-      setCopyError("Copy is unavailable here. Select and copy the ID manually.");
+      setCopyError("Копирование недоступно. Выделите и скопируйте ID вручную.");
     }
   }
 
@@ -162,12 +162,12 @@ function OrderDetails({
     <section className="order-detail-panel" aria-labelledby="order-detail-title">
       <div className="order-detail-toolbar">
         <button className="text-button" type="button" onClick={onClose}>← Back to orders</button>
-        <span className="workspace-asset-type">ORDER DETAILS</span>
+        <span className="workspace-asset-type">ДАННЫЕ ЗАКАЗА</span>
       </div>
       <div className="order-detail-hero">
         <div className="order-detail-symbol" aria-hidden="true">{order.asset_type === "ton_nft" ? "◇" : "✳"}</div>
         <div className="order-detail-heading">
-          <p className="eyebrow">{order.asset_type === "ton_nft" ? "TON NFT" : "TELEGRAM GIFT"}</p>
+          <p className="eyebrow">{order.asset_type === "ton_nft" ? "TON NFT" : "ПОДАРОК TELEGRAM"}</p>
           <h1 id="order-detail-title">{getOrderTitle(order)}</h1>
           <p className="order-detail-price">{order.price_amount} {order.price_currency}</p>
         </div>
@@ -178,7 +178,7 @@ function OrderDetails({
         <div className="order-detail-main">
           <section className="workspace-section" aria-labelledby="lifecycle-heading">
             <div className="workspace-section-heading">
-              <div><p className="eyebrow">ORDER JOURNEY</p><h2 id="lifecycle-heading">Lifecycle</h2></div>
+              <div><p className="eyebrow">ЭТАПЫ ЗАКАЗА</p><h2 id="lifecycle-heading">Статус заказа</h2></div>
               <span className={`order-status order-status-${order.status}`}>{statusLabel(order.status)}</span>
             </div>
             {isTerminal ? (
@@ -194,29 +194,29 @@ function OrderDetails({
                   return (
                     <li key={status} className={`lifecycle-step${done ? " is-done" : ""}${current ? " is-current" : ""}`}>
                       <span className="lifecycle-step-marker" aria-hidden="true">{index < activeIndex ? "✓" : index + 1}</span>
-                      <span className="lifecycle-step-copy"><strong>{statusLabel(status)}</strong>{current && <small>Current stage</small>}</span>
+                      <span className="lifecycle-step-copy"><strong>{statusLabel(status)}</strong>{current && <small>Текущий этап</small>}</span>
                     </li>
                   );
                 })}
               </ol>
             )}
             <p className="order-guidance">{statusGuidance(order.status)}</p>
-            <p className="payment-disclaimer">Payments are not enabled in VILTARA SHOP. This app does not provide escrow, custody, automatic refunds, or payment processing.</p>
+            <p className="payment-disclaimer">Оплата в VILTARA SHOP пока не подключена. Приложение не предоставляет эскроу, хранение средств, автоматический возврат или обработку платежей.</p>
           </section>
 
           <section className="workspace-section" aria-labelledby="timeline-heading">
-            <div className="workspace-section-heading"><div><p className="eyebrow">AUDIT TRAIL</p><h2 id="timeline-heading">Event timeline</h2></div><span className="workspace-count">{order.events.length} events</span></div>
+            <div className="workspace-section-heading"><div><p className="eyebrow">ИСТОРИЯ ИЗМЕНЕНИЙ</p><h2 id="timeline-heading">История событий</h2></div><span className="workspace-count">{order.events.length} events</span></div>
             {order.events.length ? (
               <ol className="event-timeline">
                 {[...order.events].sort((a, b) => getTimestamp(a.created_at) - getTimestamp(b.created_at)).map((event, index) => (
                   <li key={`${event.to_status}-${event.created_at}-${index}`}>
                     <span className="event-timeline-dot" aria-hidden="true" />
-                    <div className="event-timeline-copy"><strong>{statusLabel(event.to_status)}</strong><span>{event.actor_type === "system" ? "System" : event.actor_type === "buyer" ? "Buyer" : "Seller"} update</span></div>
+                    <div className="event-timeline-copy"><strong>{statusLabel(event.to_status)}</strong><span>{event.actor_type === "system" ? "Система" : event.actor_type === "buyer" ? "Покупатель" : "Продавец"} update</span></div>
                     <time dateTime={event.created_at}>{getDate(event.created_at)}</time>
                   </li>
                 ))}
               </ol>
-            ) : <p className="workspace-muted">No lifecycle events are available yet.</p>}
+            ) : <p className="workspace-muted">Пока нет событий по этому заказу.</p>}
           </section>
           {role === "buyer" && order.status === "completed" && (
             <ReviewForm
@@ -236,33 +236,33 @@ function OrderDetails({
         <aside className="order-detail-aside">
           {order.status === "reserved" && (
             <section className="expiry-card" aria-live="polite">
-              <p className="eyebrow">RESERVATION WINDOW</p>
+              <p className="eyebrow">СРОК РЕЗЕРВА</p>
               <strong className="expiry-countdown">{formatRemaining(order.expires_at, now)}</strong>
               <p>Expires {getDate(order.expires_at)}</p>
             </section>
           )}
           <section className="workspace-section order-facts">
-            <p className="eyebrow">ORDER INFORMATION</p>
+            <p className="eyebrow">ИНФОРМАЦИЯ О ЗАКАЗЕ</p>
             <dl>
-              <div><dt>Your role</dt><dd>{role === "buyer" ? "Buyer · Purchase" : "Seller · Sale"}</dd></div>
-              <div><dt>Order ID</dt><dd className="order-id-value"><code>{order.id}</code><button className="copy-id-button" type="button" onClick={() => void copyOrderId()} aria-label="Copy order ID">{copied ? "Copied" : "Copy ID"}</button></dd></div>
+              <div><dt>Ваша роль</dt><dd>{role === "buyer" ? "Buyer · Purchase" : "Seller · Sale"}</dd></div>
+              <div><dt>ID заказа</dt><dd className="order-id-value"><code>{order.id}</code><button className="copy-id-button" type="button" onClick={() => void copyOrderId()} aria-label="Скопировать ID заказа">{copied ? "Скопировано" : "Копировать ID"}</button></dd></div>
               {copyError && <p className="copy-id-error" role="status">{copyError}</p>}
-              <div><dt>Listing ID</dt><dd><code>{order.listing_id}</code></dd></div>
-              <div><dt>Asset type</dt><dd>{order.asset_type === "ton_nft" ? "TON NFT" : "Telegram gift"}</dd></div>
-              <div><dt>Created</dt><dd>{getDate(order.created_at)}</dd></div>
-              <div><dt>Last updated</dt><dd>{getDate(order.updated_at)}</dd></div>
-              <div><dt>Reservation expires</dt><dd>{getDate(order.expires_at)}</dd></div>
+              <div><dt>ID объявления</dt><dd><code>{order.listing_id}</code></dd></div>
+              <div><dt>Тип актива</dt><dd>{order.asset_type === "ton_nft" ? "TON NFT" : "Подарок Telegram"}</dd></div>
+              <div><dt>Создан</dt><dd>{getDate(order.created_at)}</dd></div>
+              <div><dt>Последнее обновление</dt><dd>{getDate(order.updated_at)}</dd></div>
+              <div><dt>Резерв истекает</dt><dd>{getDate(order.expires_at)}</dd></div>
             </dl>
           </section>
           {role === "buyer" && order.status === "reserved" && (
             <section className="cancel-order-card">
               {!confirmCancel ? (
-                <><strong>Need to cancel?</strong><p>You can cancel while this order is still reserved.</p><button className="danger-button" type="button" onClick={() => setConfirmCancel(true)}>Cancel order</button></>
+                <><strong>Хотите отменить?</strong><p>Вы можете отменить заказ, пока он находится в резерве.</p><button className="danger-button" type="button" onClick={() => setConfirmCancel(true)}>Отменить заказ</button></>
               ) : (
                 <div className="cancel-confirmation" role="group" aria-label="Confirm order cancellation">
-                  <strong>Cancel this reservation?</strong>
-                  <p>This cannot be undone. No payment or refund will be processed.</p>
-                  <div><button className="danger-button" type="button" disabled={busy} onClick={() => onCancel(order.id)}>{busy ? "Cancelling…" : "Confirm cancellation"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmCancel(false)}>Keep order</button></div>
+                  <strong>Отменить этот резерв?</strong>
+                  <p>Это действие нельзя отменить. Оплата и возврат средств не проводятся.</p>
+                  <div><button className="danger-button" type="button" disabled={busy} onClick={() => onCancel(order.id)}>{busy ? "Cancelling…" : "Confirm cancellation"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmCancel(false)}>Оставить заказ</button></div>
                 </div>
               )}
             </section>
@@ -407,8 +407,8 @@ export function Orders({
   if (selectedOrder) {
     return (
       <div className="orders-view order-detail-view">
-        {detailLoading && <p className="workspace-inline-loading" role="status">Refreshing order details…</p>}
-        {detailError && <div className="orders-error" role="alert"><span>{detailError}</span><button className="text-button" type="button" onClick={() => void openOrder(selectedOrder)}>Retry</button></div>}
+        {detailLoading && <p className="workspace-inline-loading" role="status">Обновляем данные заказа…</p>}
+        {detailError && <div className="orders-error" role="alert"><span>{detailError}</span><button className="text-button" type="button" onClick={() => void openOrder(selectedOrder)}>Повторить</button></div>}
         <OrderDetails order={selectedOrder} role={userId ? (selectedOrder.buyer_id === userId ? "buyer" : "seller") : role} busy={busyOrderId === selectedOrder.id} accessToken={accessToken} onClose={() => setSelectedOrder(null)} onCancel={(id) => void handleCancel(id)} onRefreshOrder={() => void openOrder(selectedOrder)} />
       </div>
     );
@@ -417,38 +417,38 @@ export function Orders({
   return (
     <section className="orders-view" aria-labelledby="orders-title">
       <div className="workspace-page-heading">
-        <div><p className="eyebrow">YOUR MARKETPLACE ACTIVITY</p><h1 id="orders-title">Order workspace</h1><p className="workspace-subtitle">Track reservations, transfers and completed orders in one place.</p></div>
+        <div><p className="eyebrow">ВАША АКТИВНОСТЬ</p><h1 id="orders-title">Заказы</h1><p className="workspace-subtitle">Все ваши резервы, передачи NFT и завершённые заказы — в одном месте.</p></div>
         <button className="secondary-button refresh-button" type="button" disabled={loading} onClick={() => { setRefreshing(true); setRetry((value) => value + 1); }}><span aria-hidden="true">↻</span> {refreshing ? "Refreshing…" : "Refresh"}</button>
       </div>
 
       <div className="workspace-role-tabs" role="tablist" aria-label="Order type">
-        <button role="tab" id="purchases-tab" aria-selected={role === "buyer"} type="button" onClick={() => { setRole("buyer"); setFilter("all"); }}><span>Purchases</span><span className="workspace-tab-count">{role === "buyer" ? counts.all : "—"}</span></button>
-        <button role="tab" id="sales-tab" aria-selected={role === "seller"} type="button" onClick={() => { setRole("seller"); setFilter("all"); }}><span>Sales</span><span className="workspace-tab-count">{role === "seller" ? counts.all : "—"}</span></button>
+        <button role="tab" id="purchases-tab" aria-selected={role === "buyer"} type="button" onClick={() => { setRole("buyer"); setFilter("all"); }}><span>Покупки</span><span className="workspace-tab-count">{role === "buyer" ? counts.all : "—"}</span></button>
+        <button role="tab" id="sales-tab" aria-selected={role === "seller"} type="button" onClick={() => { setRole("seller"); setFilter("all"); }}><span>Продажи</span><span className="workspace-tab-count">{role === "seller" ? counts.all : "—"}</span></button>
       </div>
 
       {actionError && <p className="orders-error" role="alert">{actionError}</p>}
       {linkedOrderError && <p className="orders-error" role="alert">{linkedOrderError}</p>}
 
       <div className="workspace-toolbar">
-        <label className="workspace-search"><span aria-hidden="true">⌕</span><span className="sr-only">Search orders by asset title or order ID</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search title or order ID" /></label>
-        <label className="workspace-sort"><span className="sr-only">Sort orders</span><select value={sort} onChange={(event) => setSort(event.target.value as SortMode)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="price">Highest price</option></select></label>
+        <label className="workspace-search"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск по названию актива или ID заказа</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search title or order ID" /></label>
+        <label className="workspace-sort"><span className="sr-only">Сортировка заказов</span><select value={sort} onChange={(event) => setSort(event.target.value as SortMode)}><option value="newest">Сначала новые</option><option value="oldest">Сначала старые</option><option value="price">Сначала дорогие</option></select></label>
       </div>
 
       <div className="workspace-filter-row" role="group" aria-label="Filter orders by status">
-        {([{ value: "all", label: "All", count: counts.all }, { value: "active", label: "Active", count: counts.active }, { value: "completed", label: "Completed", count: counts.completed }, { value: "closed", label: "Cancelled / expired", count: counts.closed }] as const).map((item) => (
+        {([{ value: "all", label: "All", count: counts.all }, { value: "active", label: "Активно", count: counts.active }, { value: "completed", label: "Завершён", count: counts.completed }, { value: "closed", label: "Cancelled / expired", count: counts.closed }] as const).map((item) => (
           <button key={item.value} type="button" className={filter === item.value ? "workspace-filter is-active" : "workspace-filter"} aria-pressed={filter === item.value} onClick={() => setFilter(item.value)}>{item.label}<span>{item.count}</span></button>
         ))}
       </div>
 
       {loading ? (
-        <div className="workspace-order-grid" aria-label="Loading orders" role="status"><span className="sr-only">Loading orders...</span>{[1, 2, 3, 4].map((item) => <div className="workspace-skeleton" key={item}><span /><span /><span /><span /></div>)}</div>
+        <div className="workspace-order-grid" aria-label="Loading orders" role="status"><span className="sr-only">Загружаем заказы…</span>{[1, 2, 3, 4].map((item) => <div className="workspace-skeleton" key={item}><span /><span /><span /><span /></div>)}</div>
       ) : error ? (
-        <div className="orders-message workspace-empty" role="alert"><span className="workspace-empty-icon" aria-hidden="true">!</span><h2>Orders unavailable</h2><p>{error}</p><button className="primary-button" type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button></div>
+        <div className="orders-message workspace-empty" role="alert"><span className="workspace-empty-icon" aria-hidden="true">!</span><h2>Заказы недоступны</h2><p>{error}</p><button className="primary-button" type="button" onClick={() => setRetry((value) => value + 1)}>Повторить</button></div>
       ) : visibleOrders.length === 0 ? (
-        <div className="orders-message workspace-empty" role="status"><span className="workspace-empty-icon" aria-hidden="true">◇</span><h2>{search || filter !== "all" ? "No matching orders" : `No ${role === "buyer" ? "purchases" : "sales"} yet`}</h2><p>{search || filter !== "all" ? "Try another search or status filter." : "When you reserve a listing or sell an asset, your order activity will appear here."}</p>{search || filter !== "all" ? <button className="secondary-button" type="button" onClick={() => { setSearch(""); setFilter("all"); }}>Clear filters</button> : onCatalog ? <button className="primary-button" type="button" onClick={onCatalog}>Explore catalog</button> : null}</div>
+        <div className="orders-message workspace-empty" role="status"><span className="workspace-empty-icon" aria-hidden="true">◇</span><h2>{search || filter !== "all" ? "No matching orders" : `No ${role === "buyer" ? "purchases" : "sales"} yet`}</h2><p>{search || filter !== "all" ? "Try another search or status filter." : "When you reserve a listing or sell an asset, your order activity will appear here."}</p>{search || filter !== "all" ? <button className="secondary-button" type="button" onClick={() => { setSearch(""); setFilter("all"); }}>Сбросить фильтры</button> : onCatalog ? <button className="primary-button" type="button" onClick={onCatalog}>Перейти в каталог</button> : null}</div>
       ) : (
         <>
-          <div className="workspace-results-heading"><span>{visibleOrders.length} {visibleOrders.length === 1 ? "order" : "orders"}</span><span>Updated from your account</span></div>
+          <div className="workspace-results-heading"><span>{visibleOrders.length} {visibleOrders.length === 1 ? "order" : "orders"}</span><span>Данные вашего аккаунта</span></div>
           <div className="workspace-order-grid">{visibleOrders.map((order) => <OrderCard key={order.id} order={order} role={role} highlighted={order.id === linkedOrder?.id} onOpen={() => void openOrder(order)} />)}</div>
         </>
       )}

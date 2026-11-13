@@ -28,7 +28,7 @@ export function WalletConnection({
   }
 
   return (
-    <Suspense fallback={<p id="wallet-connect" className="wallet-config-message" role="status">Loading wallet options...</p>}>
+    <Suspense fallback={<p id="wallet-connect" className="wallet-config-message" role="status">Загружаем варианты подключения…</p>}>
       <ConfiguredWalletConnection
         manifestUrl={manifestUrl}
         accessToken={accessToken}

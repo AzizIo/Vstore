@@ -20,16 +20,16 @@ function AdminPageContent() {
   }, [session.status, session.status === "authenticated" ? session.accessToken : null]);
 
   if (session.status === "loading") {
-    return <main className="admin-route-message" role="status">Verifying Telegram session…</main>;
+    return <main className="admin-route-message" role="status">Проверяем сессию Telegram…</main>;
   }
   if (session.status !== "authenticated") {
-    return <main className="admin-route-message" role="alert">A verified Telegram session is required.</main>;
+    return <main className="admin-route-message" role="alert">Требуется подтверждённая сессия Telegram.</main>;
   }
   if (isAdmin === null) {
-    return <main className="admin-route-message" role="status">Checking administrator access…</main>;
+    return <main className="admin-route-message" role="status">Проверяем права администратора…</main>;
   }
   if (!isAdmin) {
-    return <main className="admin-route-message" role="alert">Administrator access required.</main>;
+    return <main className="admin-route-message" role="alert">Требуются права администратора.</main>;
   }
   return <AdminCenter accessToken={session.accessToken} active />;
 }
