@@ -70,7 +70,6 @@ class PaymentTransaction(TimestampMixin, Base):
     __tablename__ = "payment_transactions"
     __table_args__ = (
         CheckConstraint("amount > 0", name="ck_payment_transactions_amount_positive"),
-        CheckConstraint("currency = 'XTR'", name="ck_payment_transactions_currency_stars"),
         CheckConstraint(
             "status IN ('captured', 'refund_pending', 'refunded')",
             name="ck_payment_transactions_status",
