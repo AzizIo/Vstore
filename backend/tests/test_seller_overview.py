@@ -36,7 +36,14 @@ def test_seller_overview_returns_private_counts_and_currency_safe_snapshots() ->
     )
     session = AsyncMock()
     session.execute.side_effect = [
-        Rows([(ListingStatus.ACTIVE, 3), (ListingStatus.DRAFT, 1), (ListingStatus.PENDING_REVIEW, 2), (ListingStatus.SUSPENDED, 2)]),
+        Rows(
+            [
+                (ListingStatus.ACTIVE, 3),
+                (ListingStatus.DRAFT, 1),
+                (ListingStatus.PENDING_REVIEW, 2),
+                (ListingStatus.SUSPENDED, 2),
+            ]
+        ),
         Rows([(OrderStatus.RESERVED, 2), (OrderStatus.COMPLETED, 1)]),
         Rows([(OrderStatus.COMPLETED, 1)]),
         Rows([(PriceCurrency.TON, Decimal("12.500000000")), (PriceCurrency.XTR, Decimal("40"))]),
