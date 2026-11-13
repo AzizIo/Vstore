@@ -41,7 +41,7 @@ describe("AdminCenter", () => {
     expect(screen.getByRole("dialog", { name: "Одобрить объявление" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Подтвердить одобрение" })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Пояснение (5–500 символов)"), { target: { value: "Policy review required" } });
-    expect(screen.getByRole("button", { name: "Подтвердить приостановку" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Подтвердить одобрение" })).toBeEnabled();
   });
   it("shows a retryable error if the queue API is forbidden", async () => {
     vi.mocked(fetch).mockResolvedValue(response({ detail: "Требуются права администратора" }, 403));
