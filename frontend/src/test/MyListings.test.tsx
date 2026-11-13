@@ -153,7 +153,7 @@ describe("seller listing management", () => {
     render(<MyListings />);
     fireEvent.click(await screen.findByRole("button", { name: /My NFT draft/ }));
 
-    expect(await screen.findByText(/reserved by a pending order/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Объявление зарезервировано активным заказом/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Опубликовать объявление" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Сохранить изменения" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Снять с публикации" })).not.toBeInTheDocument();

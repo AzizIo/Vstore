@@ -149,8 +149,8 @@ describe("DeliveryWorkspace", () => {
     expect(submittedOrderId).toBe("order-123");
     expect(reference).toMatch(/^[a-f0-9]{64}$/);
     expect(token).toBe("test-token");
-    expect(screen.getByText(/Transfer submitted · verifying/)).toBeTruthy();
-    expect(screen.queryByText(/Transfer independently verified/)).toBeNull();
+    expect(screen.getByText(/Перевод отправлен · проверяем/)).toBeTruthy();
+    expect(screen.queryByText(/Передача подтверждена независимо/)).toBeNull();
     expect(onRefreshOrder).toHaveBeenCalled();
   });
 

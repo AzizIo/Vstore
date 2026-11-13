@@ -126,7 +126,7 @@ describe("Мои NFT", () => {
       "wallet-1",
       expect.any(AbortSignal),
     ));
-    expect(await screen.findByText(/24 verified/)).toBeInTheDocument();
+    expect(await screen.findByText(/Подтверждено NFT: 24/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё NFT" }));
     expect(await screen.findByText("Star Sail NFT")).toBeInTheDocument();
@@ -145,7 +145,7 @@ describe("Мои NFT", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "A verified TON wallet is required to discover NFT inventory",
     );
-    expect(screen.getByText(/Connecting a wallet alone does not verify ownership/i)).toBeInTheDocument();
+    expect(screen.getByText(/Одного подключения недостаточно для подтверждения владения/i)).toBeInTheDocument();
   });
 
   it("does not request inventory until a verified wallet is selected", async () => {

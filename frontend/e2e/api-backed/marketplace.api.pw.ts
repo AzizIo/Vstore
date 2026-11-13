@@ -189,7 +189,7 @@ test(
     await buyerPage.getByRole("button", { name: "Зарезервировать", exact: true }).click();
     const reservationDialog = buyerPage.getByRole("dialog", { name: "Зарезервировать это объявление?" });
     await expect(reservationDialog).toContainText("E2E Published NFT");
-    await expect(reservationDialog).toContainText("15.75 TON");
+    await expect(reservationDialog).toContainText("15,75 TON");
     await expect(reservationDialog).toContainText("E2E Seller");
     await expect(reservationDialog).toContainText("Оплата не подключена, средства не списываются, NFT остаётся у продавца");
     expect(buyerApiRequests.some((item) => item === "POST /api/orders")).toBe(false);
@@ -200,7 +200,7 @@ test(
     await reservationSuccess.getByRole("button", { name: "Мои заказы" }).click();
 
     await expect(buyerPage.getByRole("heading", { name: "Заказы" })).toBeVisible();
-    await expect(buyerPage.getByText("Reservation pending", { exact: true })).toBeVisible();
+    await expect(buyerPage.getByText("Ожидает передачи", { exact: true })).toBeVisible();
     await expect(buyerPage.getByText(/^15\.75(?:0+)? TON$/)).toBeVisible();
     await buyerPage.getByRole("button", { name: /Open order E2E Published NFT/ }).click();
     await expect(buyerPage.getByRole("heading", { name: "Статус заказа" })).toBeVisible();
@@ -289,11 +289,11 @@ test(
       return order.status;
     }, { timeout: 45_000, intervals: [500, 1000, 2000] }).toBe("completed");
 
-    await sellerPage.getByRole("button", { name: "Refresh verification status" }).click();
+    await sellerPage.getByRole("button", { name: "Обновить статус проверки" }).click();
     await expect(sellerPage.getByText("Передача подтверждена независимо", { exact: true })).toBeVisible();
-    await buyerPage.getByRole("button", { name: "Refresh verification status" }).click();
+    await buyerPage.getByRole("button", { name: "Обновить статус проверки" }).click();
     await expect(buyerPage.getByText("Передача подтверждена независимо", { exact: true })).toBeVisible();
-    await expect(buyerPage.getByText("Completed", { exact: true }).first()).toBeVisible();
+    await expect(buyerPage.getByText("Завершён", { exact: true }).first()).toBeVisible();
 
     expect(sellerApiRequests).toContain("POST /api/auth/telegram");
     expect(sellerApiRequests).toContain("GET /api/assets/me");

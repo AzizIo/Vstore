@@ -11,13 +11,13 @@ describe("AdminCenter", () => {
     vi.mocked(fetch).mockImplementation(async (input) => String(input).includes("/audit") ? response(auditPage) : response(page));
     render(<AdminCenter accessToken="verified-session" active />);
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Audit history" }));
+    fireEvent.click(screen.getByRole("button", { name: "История аудита" }));
     expect(await screen.findByText("No moderation decisions recorded.")).toBeInTheDocument();
   });
   it("requires a reason before confirming a moderation decision", async () => {
     render(<AdminCenter accessToken="verified-session" active />);
     await screen.findByText("Moon Lantern");
-    fireEvent.click(screen.getByRole("button", { name: "Suspend" }));
+    fireEvent.click(screen.getByRole("button", { name: "Приостановить" }));
     expect(screen.getByRole("dialog", { name: "Suspend listing" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm suspend" })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Explanation (5–500 characters)"), { target: { value: "Policy review required" } });

@@ -115,7 +115,7 @@ describe("CreateListing seller flow", () => {
 
     expect(await screen.findByText("Сначала подтвердите кошелёк")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Подключить кошелёк" })).toHaveAttribute("href", "#wallet-connect");
-    expect(screen.getByText(/Connecting a wallet alone does not prove ownership/)).toBeInTheDocument();
+    expect(screen.getByText(/Одного подключения недостаточно для подтверждения владения/)).toBeInTheDocument();
   });
 
   it("shows an empty inventory state without enabling a draft", async () => {

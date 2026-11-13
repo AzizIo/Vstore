@@ -75,25 +75,25 @@ const lifecycleCases: Array<{
 }> = [
   {
     status: "reserved",
-    label: "Reservation pending",
+    label: "Ожидает передачи",
     explanation: /seller has not started the NFT transfer/,
     canCancel: true,
   },
   {
     status: "awaiting_transfer",
-    label: "Awaiting transfer",
+    label: "Ожидает перевода",
     explanation: /preparing a direct NFT transfer to the buyer/,
     canCancel: false,
   },
   {
     status: "observing_transfer",
-    label: "Verifying transfer",
+    label: "Проверяем перевод",
     explanation: /checked against on-chain evidence/,
     canCancel: false,
   },
   {
     status: "completed",
-    label: "Completed",
+    label: "Завершён",
     explanation: /server confirmed the exact NFT transfer to the buyer/,
     canCancel: false,
   },
@@ -105,7 +105,7 @@ const lifecycleCases: Array<{
   },
   {
     status: "expired",
-    label: "Expired",
+    label: "Срок резерва истёк",
     explanation: /reservation expired before completion/,
     canCancel: false,
   },

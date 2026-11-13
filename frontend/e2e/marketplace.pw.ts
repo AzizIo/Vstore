@@ -105,7 +105,7 @@ test.describe("listing details", () => {
     await page.getByRole("button", { name: /Moon Lantern/ }).click();
 
     await expect(page.getByRole("heading", { name: "Moon Lantern" })).toBeVisible();
-    await expect(page.getByText("12.5 TON")).toBeVisible();
+    await expect(page.getByText("12,5 TON")).toBeVisible();
     await expect(page.getByText("Ari")).toBeVisible();
     await expect(page.getByText("@collector")).toBeVisible();
 
@@ -143,7 +143,7 @@ test.describe("listing details", () => {
     await page.getByRole("button", { name: "Зарезервировать" }).click();
     const dialog = page.getByRole("dialog", { name: "Зарезервировать это объявление?" });
     await expect(dialog).toContainText("Moon Lantern");
-    await expect(dialog).toContainText("12.5 TON");
+    await expect(dialog).toContainText("12,5 TON");
     await expect(dialog).toContainText("Ari (@collector)");
     await expect(dialog).toContainText("Оплата не подключена, средства не списываются, NFT остаётся у продавца");
     expect(requests.some((request) => request === "POST /api/orders")).toBe(false);
