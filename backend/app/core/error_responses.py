@@ -19,119 +19,386 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 # Keep English strings here as lookup keys only; never return them to a client.
 _ERROR_MESSAGES: dict[str, str] = {
     # Authentication / account access
-    "Telegram authentication is not configured": "Вход через Telegram временно недоступен. Попробуйте позже.",
-    "API authentication secret is not configured": "Авторизация временно недоступна. Попробуйте позже.",
-    "API authentication is not configured": "Авторизация временно недоступна. Попробуйте позже.",
-    "Invalid or expired Telegram initData": "Сеанс Telegram недействителен или истёк. Откройте Mini App заново.",
+    "Telegram authentication is not configured": (
+        "Вход через Telegram временно недоступен. Попробуйте позже."
+    ),
+    "API authentication secret is not configured": (
+        "Авторизация временно недоступна. Попробуйте позже."
+    ),
+    "API authentication is not configured": (
+        "Авторизация временно недоступна. Попробуйте позже."
+    ),
+    "Invalid or expired Telegram initData": (
+        "Сеанс Telegram недействителен или истёк. Откройте Mini App "
+        "заново."
+    ),
     "This account is restricted": "Доступ к аккаунту ограничен. Обратитесь в поддержку.",
     "Authentication required": "Для выполнения действия войдите в аккаунт.",
-    "Invalid or expired access token": "Сеанс истёк или недействителен. Войдите в аккаунт повторно.",
+    "Invalid or expired access token": (
+        "Сеанс истёк или недействителен. Войдите в аккаунт "
+        "повторно."
+    ),
     "User no longer exists": "Учётная запись не найдена. Войдите в аккаунт повторно.",
-    "Administrator access required": "Для выполнения этого действия нужны права администратора.",
+    "Administrator access required": (
+        "Для выполнения этого действия нужны права администратора."
+    ),
 
     # Wallet linking and proof
-    "TON Connect proof verification is not configured": "Проверка TON-кошелька временно недоступна. Попробуйте позже.",
-    "Wallet proof challenge storage is unavailable": "Не удалось подготовить проверку TON-кошелька. Попробуйте позже.",
-    "Could not create a wallet proof challenge": "Не удалось начать проверку TON-кошелька. Попробуйте ещё раз.",
-    "Invalid or expired wallet proof": "Подтверждение TON-кошелька недействительно или устарело. Начните проверку заново.",
-    "This wallet is already linked to another account": "Этот TON-кошелёк уже привязан к другому аккаунту.",
+    "TON Connect proof verification is not configured": (
+        "Проверка TON-кошелька временно недоступна. Попробуйте "
+        "позже."
+    ),
+    "Wallet proof challenge storage is unavailable": (
+        "Не удалось подготовить проверку TON-кошелька. Попробуйте "
+        "позже."
+    ),
+    "Could not create a wallet proof challenge": (
+        "Не удалось начать проверку TON-кошелька. Попробуйте ещё "
+        "раз."
+    ),
+    "Invalid or expired wallet proof": (
+        "Подтверждение TON-кошелька недействительно или устарело. "
+        "Начните проверку заново."
+    ),
+    "This wallet is already linked to another account": (
+        "Этот TON-кошелёк уже привязан к другому аккаунту."
+    ),
     "Wallet not found": "Кошелёк не найден.",
-    "Only a verified wallet can be primary": "Основным можно сделать только подтверждённый кошелёк.",
+    "Only a verified wallet can be primary": (
+        "Основным можно сделать только подтверждённый кошелёк."
+    ),
 
     # Inventory and TON provider
-    "TON NFT inventory provider returned a repeated pagination cursor": "Не удалось полностью загрузить инвентарь NFT. Обновите страницу и повторите попытку.",
-    "TON NFT inventory provider is temporarily unavailable": "Сервис инвентаря TON NFT временно недоступен. Попробуйте позже.",
-    "TON NFT inventory provider returned invalid data": "Сервис TON вернул некорректные данные об инвентаре NFT. Попробуйте позже.",
-    "TON NFT inventory provider returned an inconsistent pagination cursor": "Не удалось корректно загрузить инвентарь NFT. Обновите страницу и повторите попытку.",
-    "TON NFT inventory provider returned an empty non-final page": "Не удалось полностью загрузить инвентарь NFT. Повторите синхронизацию.",
-    "Inventory is too large for one sync; no changes were saved": "В инвентаре слишком много NFT для одной синхронизации. Изменения не сохранены.",
-    "Stored inventory is too large for one sync; no changes were saved": "Сохранённый инвентарь слишком велик для одной синхронизации. Изменения не сохранены.",
-    "TON NFT ownership provider is temporarily unavailable": "Проверка владения NFT в сети TON временно недоступна. Попробуйте позже.",
-    "TON NFT inventory provider did not advance the pagination cursor": "Не удалось продолжить загрузку инвентаря NFT. Повторите синхронизацию.",
-    "Inventory sync lock is unavailable": "Синхронизация инвентаря сейчас недоступна. Попробуйте позже.",
-    "Inventory sync lock expired; retry the sync": "Время синхронизации истекло. Запустите её ещё раз.",
-    "A verified wallet address is not supported for TON NFT inventory": "Этот формат адреса подтверждённого TON-кошелька не поддерживается для инвентаря NFT.",
-    "The verified wallet workchain is not supported for TON NFT inventory": "Сеть или workchain этого TON-кошелька не поддерживается для инвентаря NFT.",
-    "A verified TON wallet is required to sync NFT inventory": "Чтобы синхронизировать NFT, сначала подключите и подтвердите TON-кошелёк.",
+(
+        "TON NFT inventory provider returned a repeated pagination "
+        "cursor"
+: (
+            "Не удалось полностью загрузить инвентарь NFT. Обновите "
+            "страницу и повторите попытку."
+        ),
+    "TON NFT inventory provider is temporarily unavailable": (
+        "Сервис инвентаря TON NFT временно недоступен. Попробуйте "
+        "позже."
+    ),
+    "TON NFT inventory provider returned invalid data": (
+        "Сервис TON вернул некорректные данные об инвентаре NFT. "
+        "Попробуйте позже."
+    ),
+(
+        "TON NFT inventory provider returned an inconsistent "
+        "pagination cursor"
+: (
+            "Не удалось корректно загрузить инвентарь NFT. Обновите "
+            "страницу и повторите попытку."
+        ),
+    "TON NFT inventory provider returned an empty non-final page": (
+        "Не удалось полностью загрузить инвентарь NFT. Повторите "
+        "синхронизацию."
+    ),
+    "Inventory is too large for one sync; no changes were saved": (
+        "В инвентаре слишком много NFT для одной синхронизации. "
+        "Изменения не сохранены."
+    ),
+(
+        "Stored inventory is too large for one sync; no changes "
+        "were saved"
+: (
+            "Сохранённый инвентарь слишком велик для одной "
+            "синхронизации. Изменения не сохранены."
+        ),
+    "TON NFT ownership provider is temporarily unavailable": (
+        "Проверка владения NFT в сети TON временно недоступна. "
+        "Попробуйте позже."
+    ),
+(
+        "TON NFT inventory provider did not advance the pagination "
+        "cursor"
+: (
+            "Не удалось продолжить загрузку инвентаря NFT. Повторите "
+            "синхронизацию."
+        ),
+    "Inventory sync lock is unavailable": (
+        "Синхронизация инвентаря сейчас недоступна. Попробуйте "
+        "позже."
+    ),
+    "Inventory sync lock expired; retry the sync": (
+        "Время синхронизации истекло. Запустите её ещё раз."
+    ),
+(
+        "A verified wallet address is not supported for TON NFT "
+        "inventory"
+: (
+            "Этот формат адреса подтверждённого TON-кошелька не "
+            "поддерживается для инвентаря NFT."
+        ),
+(
+        "The verified wallet workchain is not supported for TON NFT "
+        "inventory"
+: (
+            "Сеть или workchain этого TON-кошелька не поддерживается "
+            "для инвентаря NFT."
+        ),
+    "A verified TON wallet is required to sync NFT inventory": (
+        "Чтобы синхронизировать NFT, сначала подключите и "
+        "подтвердите TON-кошелёк."
+    ),
     "Verified wallet not found": "Подтверждённый TON-кошелёк не найден.",
-    "An NFT inventory sync is already running for this account": "Синхронизация инвентаря NFT уже выполняется. Дождитесь её завершения.",
-    "Verified wallets changed during sync; retry to refresh inventory": "Список подтверждённых кошельков изменился во время синхронизации. Повторите её.",
-    "Selected wallet changed during sync": "Выбранный кошелёк изменился во время синхронизации. Обновите страницу и повторите попытку.",
-    "A verified TON wallet is required to discover NFT inventory": "Чтобы найти NFT, сначала подключите и подтвердите TON-кошелёк.",
+    "An NFT inventory sync is already running for this account": (
+        "Синхронизация инвентаря NFT уже выполняется. Дождитесь её "
+        "завершения."
+    ),
+(
+        "Verified wallets changed during sync; retry to refresh "
+        "inventory"
+: (
+            "Список подтверждённых кошельков изменился во время "
+            "синхронизации. Повторите её."
+        ),
+    "Selected wallet changed during sync": (
+        "Выбранный кошелёк изменился во время синхронизации. "
+        "Обновите страницу и повторите попытку."
+    ),
+    "A verified TON wallet is required to discover NFT inventory": (
+        "Чтобы найти NFT, сначала подключите и подтвердите "
+        "TON-кошелёк."
+    ),
 
     # Listings / seller actions
-    "Minimum price cannot exceed maximum price": "Минимальная цена не может быть выше максимальной.",
-    "Select a price currency before filtering or sorting by price": "Выберите валюту, чтобы фильтровать или сортировать объявления по цене.",
+    "Minimum price cannot exceed maximum price": (
+        "Минимальная цена не может быть выше максимальной."
+    ),
+    "Select a price currency before filtering or sorting by price": (
+        "Выберите валюту, чтобы фильтровать или сортировать "
+        "объявления по цене."
+    ),
     "Listing not found": "Объявление не найдено.",
-    "Only verified TON NFTs currently owned by you can be listed": "Можно выставить только подтверждённый TON NFT, которым вы владеете сейчас.",
-    "This NFT already has an active or reserved listing": "Этот NFT уже выставлен на продажу или зарезервирован.",
-    "A verified TON wallet is required to create a listing draft": "Чтобы создать черновик объявления, подключите и подтвердите TON-кошелёк.",
-    "NFT ownership could not be freshly verified; refresh your inventory": "Не удалось повторно подтвердить владение NFT. Обновите инвентарь и попробуйте ещё раз.",
-    "NFT inventory changed during verification; refresh your inventory": "Инвентарь NFT изменился во время проверки. Обновите его и повторите попытку.",
+    "Only verified TON NFTs currently owned by you can be listed": (
+        "Можно выставить только подтверждённый TON NFT, которым вы "
+        "владеете сейчас."
+    ),
+    "This NFT already has an active or reserved listing": (
+        "Этот NFT уже выставлен на продажу или зарезервирован."
+    ),
+    "A verified TON wallet is required to create a listing draft": (
+        "Чтобы создать черновик объявления, подключите и "
+        "подтвердите TON-кошелёк."
+    ),
+(
+        "NFT ownership could not be freshly verified; refresh your "
+        "inventory"
+: (
+            "Не удалось повторно подтвердить владение NFT. Обновите "
+            "инвентарь и попробуйте ещё раз."
+        ),
+(
+        "NFT inventory changed during verification; refresh your "
+        "inventory"
+: (
+            "Инвентарь NFT изменился во время проверки. Обновите его и "
+            "повторите попытку."
+        ),
     "Only private drafts can be published": "Опубликовать можно только черновик объявления.",
     "This listing draft has already expired": "Срок действия черновика объявления истёк.",
-    "Only a currently verified TON NFT owned by you can be published": "Опубликовать можно только подтверждённый TON NFT, которым вы владеете сейчас.",
-    "A verified TON wallet on this network is required to publish a listing": "Для публикации объявления нужен подтверждённый TON-кошелёк в той же сети, что и NFT.",
-    "Current NFT ownership could not be verified for your connected wallets": "Не удалось подтвердить, что NFT по-прежнему принадлежит одному из подключённых кошельков.",
-    "The verified wallet changed during ownership verification": "Подтверждённый кошелёк изменился во время проверки. Обновите страницу и повторите попытку.",
-    "NFT ownership or verification state changed; refresh your inventory": "Данные о владении NFT изменились. Обновите инвентарь и повторите попытку.",
-    "Provide at least one listing field to update": "Укажите хотя бы одно поле для изменения объявления.",
+    "Only a currently verified TON NFT owned by you can be published": (
+        "Опубликовать можно только подтверждённый TON NFT, которым "
+        "вы владеете сейчас."
+    ),
+(
+        "A verified TON wallet on this network is required to "
+        "publish a listing"
+: (
+            "Для публикации объявления нужен подтверждённый TON-кошелёк "
+            "в той же сети, что и NFT."
+        ),
+(
+        "Current NFT ownership could not be verified for your "
+        "connected wallets"
+: (
+            "Не удалось подтвердить, что NFT по-прежнему принадлежит "
+            "одному из подключённых кошельков."
+        ),
+    "The verified wallet changed during ownership verification": (
+        "Подтверждённый кошелёк изменился во время проверки. "
+        "Обновите страницу и повторите попытку."
+    ),
+(
+        "NFT ownership or verification state changed; refresh your "
+        "inventory"
+: (
+            "Данные о владении NFT изменились. Обновите инвентарь и "
+            "повторите попытку."
+        ),
+    "Provide at least one listing field to update": (
+        "Укажите хотя бы одно поле для изменения объявления."
+    ),
     "Price must be greater than zero": "Цена должна быть больше нуля.",
     "Expiration must include a timezone": "Укажите часовой пояс в дате окончания объявления.",
     "Expiration must be in the future": "Дата окончания объявления должна быть в будущем.",
-    "Only draft or active listings can be edited": "Изменять можно только черновики и активные объявления.",
-    "Only draft or active listings can be cancelled": "Отменить можно только черновик или активное объявление.",
-    "Listing changed while ownership was being verified; refresh and try again": "Объявление изменилось во время проверки владения. Обновите страницу и попробуйте снова.",
+    "Only draft or active listings can be edited": (
+        "Изменять можно только черновики и активные объявления."
+    ),
+    "Only draft or active listings can be cancelled": (
+        "Отменить можно только черновик или активное объявление."
+    ),
+(
+        "Listing changed while ownership was being verified; "
+        "refresh and try again"
+: (
+            "Объявление изменилось во время проверки владения. Обновите "
+            "страницу и попробуйте снова."
+        ),
 
     # Orders and NFT delivery
-    "Idempotency key was already used for another listing": "Этот ключ запроса уже использован для другого объявления. Обновите страницу и повторите попытку.",
+    "Idempotency key was already used for another listing": (
+        "Этот ключ запроса уже использован для другого объявления. "
+        "Обновите страницу и повторите попытку."
+    ),
     "Listing is not available": "Объявление сейчас недоступно.",
     "You cannot order your own listing": "Нельзя оформить заказ на собственное объявление.",
-    "The TON ownership provider is not configured for this asset's network": "Проверка владения NFT для этой сети TON не настроена. Попробуйте позже.",
-    "A TON NFT ownership verifier is required": "Сейчас невозможно проверить владение NFT. Попробуйте позже.",
-    "Listing changed while ownership was being verified; try again": "Объявление изменилось во время проверки владения. Обновите страницу и повторите попытку.",
-    "The verified seller wallet changed during ownership verification": "Кошелёк продавца изменился во время проверки. Обновите страницу и повторите попытку.",
-    "NFT ownership could not be freshly verified; the listing is unavailable": "Не удалось подтвердить владение NFT. Объявление временно недоступно.",
+(
+        "The TON ownership provider is not configured for this "
+        "asset's network"
+: (
+            "Проверка владения NFT для этой сети TON не настроена. "
+            "Попробуйте позже."
+        ),
+    "A TON NFT ownership verifier is required": (
+        "Сейчас невозможно проверить владение NFT. Попробуйте "
+        "позже."
+    ),
+    "Listing changed while ownership was being verified; try again": (
+        "Объявление изменилось во время проверки владения. Обновите "
+        "страницу и повторите попытку."
+    ),
+(
+        "The verified seller wallet changed during ownership "
+        "verification"
+: (
+            "Кошелёк продавца изменился во время проверки. Обновите "
+            "страницу и повторите попытку."
+        ),
+(
+        "NFT ownership could not be freshly verified; the listing "
+        "is unavailable"
+: (
+            "Не удалось подтвердить владение NFT. Объявление временно "
+            "недоступно."
+        ),
     "Order not found": "Заказ не найден.",
     "Order unavailable": "Не удалось загрузить заказ. Попробуйте позже.",
-    "Order cannot be cancelled after delivery preparation": "Нельзя отменить заказ после подготовки передачи NFT.",
-    "Idempotency key was already used with another seller wallet": "Этот ключ запроса уже использован с другим кошельком продавца. Обновите страницу и повторите попытку.",
-    "Delivery has already been prepared for this order": "Передача NFT для этого заказа уже подготовлена.",
-    "Order is not available for delivery preparation": "Для этого заказа сейчас нельзя подготовить передачу NFT.",
+    "Order cannot be cancelled after delivery preparation": (
+        "Нельзя отменить заказ после подготовки передачи NFT."
+    ),
+    "Idempotency key was already used with another seller wallet": (
+        "Этот ключ запроса уже использован с другим кошельком "
+        "продавца. Обновите страницу и повторите попытку."
+    ),
+    "Delivery has already been prepared for this order": (
+        "Передача NFT для этого заказа уже подготовлена."
+    ),
+    "Order is not available for delivery preparation": (
+        "Для этого заказа сейчас нельзя подготовить передачу NFT."
+    ),
     "Reserved listing is not available": "Зарезервированное объявление больше недоступно.",
-    "NFT is not eligible for delivery preparation": "Этот NFT сейчас нельзя передать по данному заказу.",
-    "Choose a verified seller wallet on the NFT network": "Выберите подтверждённый кошелёк продавца в сети этого NFT.",
-    "Buyer must have one verified primary wallet on the NFT network": "У покупателя должен быть один основной подтверждённый кошелёк в сети этого NFT.",
-    "A delivery wallet or NFT address is invalid": "Адрес кошелька для передачи или адрес NFT указан неверно.",
-    "Seller and buyer delivery wallets must be different": "Кошельки продавца и покупателя для передачи NFT должны различаться.",
-    "Invalid delivery preparation idempotency key": "Ключ запроса для подготовки передачи NFT указан неверно.",
+    "NFT is not eligible for delivery preparation": (
+        "Этот NFT сейчас нельзя передать по данному заказу."
+    ),
+    "Choose a verified seller wallet on the NFT network": (
+        "Выберите подтверждённый кошелёк продавца в сети этого NFT."
+    ),
+    "Buyer must have one verified primary wallet on the NFT network": (
+        "У покупателя должен быть один основной подтверждённый "
+        "кошелёк в сети этого NFT."
+    ),
+    "A delivery wallet or NFT address is invalid": (
+        "Адрес кошелька для передачи или адрес NFT указан неверно."
+    ),
+    "Seller and buyer delivery wallets must be different": (
+        "Кошельки продавца и покупателя для передачи NFT должны "
+        "различаться."
+    ),
+    "Invalid delivery preparation idempotency key": (
+        "Ключ запроса для подготовки передачи NFT указан неверно."
+    ),
     "Delivery is not available": "Передача NFT для этого заказа сейчас недоступна.",
-    "Current NFT ownership could not be verified": "Не удалось подтвердить текущее владение NFT. Передача не подготовлена.",
-    "TON provider returned ownership data for a different NFT or wallet": "Сервис TON вернул данные о другом NFT или кошельке. Передача не подготовлена.",
-    "Seller ownership of this NFT could not be verified": "Не удалось подтвердить, что продавец владеет этим NFT. Передача не подготовлена.",
-    "Order is no longer available for delivery preparation": "Заказ больше не доступен для подготовки передачи NFT.",
-    "Delivery preparation could not be persisted": "Не удалось сохранить подготовку передачи NFT. Попробуйте ещё раз.",
+    "Current NFT ownership could not be verified": (
+        "Не удалось подтвердить текущее владение NFT. Передача не "
+        "подготовлена."
+    ),
+(
+        "TON provider returned ownership data for a different NFT "
+        "or wallet"
+: (
+            "Сервис TON вернул данные о другом NFT или кошельке. "
+            "Передача не подготовлена."
+        ),
+    "Seller ownership of this NFT could not be verified": (
+        "Не удалось подтвердить, что продавец владеет этим NFT. "
+        "Передача не подготовлена."
+    ),
+    "Order is no longer available for delivery preparation": (
+        "Заказ больше не доступен для подготовки передачи NFT."
+    ),
+    "Delivery preparation could not be persisted": (
+        "Не удалось сохранить подготовку передачи NFT. Попробуйте "
+        "ещё раз."
+    ),
     "Invalid candidate transaction hash": "Хеш транзакции указан неверно.",
     "Delivery has not been prepared": "Передача NFT ещё не подготовлена.",
-    "A different transaction hash was already submitted": "Для этого заказа уже отправлен другой хеш транзакции.",
-    "Delivery preparation window has expired": "Время на подготовку передачи NFT истекло. Создайте новый запрос.",
-    "Order is not accepting a delivery submission": "Этот заказ сейчас не принимает данные о переводе NFT.",
-    "Delivery submission could not be persisted": "Не удалось сохранить данные о переводе NFT. Попробуйте ещё раз.",
+    "A different transaction hash was already submitted": (
+        "Для этого заказа уже отправлен другой хеш транзакции."
+    ),
+    "Delivery preparation window has expired": (
+        "Время на подготовку передачи NFT истекло. Создайте новый "
+        "запрос."
+    ),
+    "Order is not accepting a delivery submission": (
+        "Этот заказ сейчас не принимает данные о переводе NFT."
+    ),
+    "Delivery submission could not be persisted": (
+        "Не удалось сохранить данные о переводе NFT. Попробуйте ещё "
+        "раз."
+    ),
 
     # Reviews
     "Review is not available for this order": "Для этого заказа нельзя оставить отзыв.",
     "This order has already been reviewed": "Для этого заказа отзыв уже оставлен.",
 
     # Moderation
-    "Idempotency-Key was already used for a different moderation decision": "Этот ключ запроса уже использован для другого решения модерации.",
-    "Listing status changed; refresh the queue": "Статус объявления изменился. Обновите список модерации.",
-    "Expired listings cannot be approved or restored": "Нельзя одобрить или восстановить объявление, срок действия которого истёк.",
-    "Current verified NFT ownership is required": "Для этого действия нужно подтвердить текущее владение NFT.",
+(
+        "Idempotency-Key was already used for a different "
+        "moderation decision"
+: (
+            "Этот ключ запроса уже использован для другого решения "
+            "модерации."
+        ),
+    "Listing status changed; refresh the queue": (
+        "Статус объявления изменился. Обновите список модерации."
+    ),
+    "Expired listings cannot be approved or restored": (
+        "Нельзя одобрить или восстановить объявление, срок действия "
+        "которого истёк."
+    ),
+    "Current verified NFT ownership is required": (
+        "Для этого действия нужно подтвердить текущее владение NFT."
+    ),
     "A verified seller wallet is required": "Нужен подтверждённый TON-кошелёк продавца.",
-    "Ownership provider is unavailable": "Сервис проверки владения NFT временно недоступен. Попробуйте позже.",
-    "Fresh NFT ownership could not be verified": "Не удалось подтвердить текущее владение NFT. Повторите проверку позже.",
-    "Listing ownership changed during verification": "Владелец NFT изменился во время проверки. Обновите очередь и повторите попытку.",
-    "Another active or reserved listing exists for this NFT": "Для этого NFT уже существует другое активное или зарезервированное объявление.",
+    "Ownership provider is unavailable": (
+        "Сервис проверки владения NFT временно недоступен. "
+        "Попробуйте позже."
+    ),
+    "Fresh NFT ownership could not be verified": (
+        "Не удалось подтвердить текущее владение NFT. Повторите "
+        "проверку позже."
+    ),
+    "Listing ownership changed during verification": (
+        "Владелец NFT изменился во время проверки. Обновите очередь "
+        "и повторите попытку."
+    ),
+    "Another active or reserved listing exists for this NFT": (
+        "Для этого NFT уже существует другое активное или "
+        "зарезервированное объявление."
+    ),
     "Duplicate moderation request": "Такой запрос на модерацию уже обрабатывается.",
 }
 
@@ -179,11 +446,22 @@ _VALIDATION_MESSAGES: dict[str, str] = {
 }
 
 _CUSTOM_VALIDATION_MESSAGES: dict[str, str] = {
-    "Value error, Expiration must include a timezone": "Укажите часовой пояс в дате окончания объявления.",
-    "Value error, Expiration must be in the future": "Дата окончания объявления должна быть в будущем.",
-    "Value error, Timestamp must be an unsigned integer": "Временная метка должна быть неотрицательным целым числом.",
+    "Value error, Expiration must include a timezone": (
+        "Укажите часовой пояс в дате окончания объявления."
+    ),
+    "Value error, Expiration must be in the future": (
+        "Дата окончания объявления должна быть в будущем."
+    ),
+    "Value error, Timestamp must be an unsigned integer": (
+        "Временная метка должна быть неотрицательным целым числом."
+    ),
     "Value error, Invalid TON transaction hash": "Хеш транзакции TON указан неверно.",
-    "Value error, Reason must contain at least five non-whitespace characters": "Укажите причину длиной не менее пяти символов.",
+(
+        "Value error, Reason must contain at least five "
+        "non-whitespace characters"
+: (
+            "Укажите причину длиной не менее пяти символов."
+        ),
 }
 
 
