@@ -39,6 +39,7 @@ from app.orders.payment_service import (
 from app.orders.service import OrderConflict, cancel_order, prepare_delivery
 
 pytestmark = pytest.mark.integration
+ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 
 @pytest.fixture(scope="session")
@@ -52,7 +53,7 @@ def payment_database() -> str:
     os.environ["DATABASE_URL"] = url
     get_settings.cache_clear()
     try:
-        config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        config = Config(ALEMBIC_CONFIG_PATH)
         command.upgrade(config, "head")
         yield url
     finally:
