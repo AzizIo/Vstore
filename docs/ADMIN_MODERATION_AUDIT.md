@@ -13,8 +13,6 @@ The moderation API is mounted under `/api/admin`. It uses the existing verified 
 
 A seller's publish request does not make a listing public. It performs a fresh ownership check and moves DRAFT → PENDING_REVIEW. Only admin approval can move PENDING_REVIEW → ACTIVE. Editing a pending submission returns it to DRAFT, so changed content must be resubmitted. The seller can withdraw a pending submission.
 
-A seller's publish request does not make a listing public. It performs a fresh ownership check and moves DRAFT → PENDING_REVIEW. Only the admin approval action can move PENDING_REVIEW → ACTIVE. Editing a pending submission returns it to DRAFT, so changed content must be resubmitted. The seller can withdraw a pending submission.
-
 - Approve: pending_review → active. The API rechecks current TON NFT ownership against a verified seller wallet through the existing verifier, then locks and revalidates listing, wallet and asset before committing.
 - Reject: pending_review → cancelled. This is an explicit terminal moderation decision, not a listing deletion.
 - Suspend: active → suspended. Reserved, sold, cancelled and expired listings cannot be suspended.
