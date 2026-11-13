@@ -222,8 +222,10 @@ def test_catalog_requires_currency_for_price_sort_and_range(api_client) -> None:
 
     assert missing_sort_currency.status_code == 422
     assert missing_range_currency.status_code == 422
-    assert "Выберите валюту, чтобы фильтровать или сортировать объявления по цене."
-        == missing_sort_currency.json()["detail"]
+    assert (
+        missing_sort_currency.json()["detail"]
+        == "Выберите валюту, чтобы фильтровать или сортировать объявления по цене."
+    )
 
 
 def test_catalog_rejects_inverted_price_range(api_client) -> None:
