@@ -227,7 +227,11 @@ async def record_stars_success(
                 if duplicate_event.payment_transaction_id is not None
                 else None
             )
-            return duplicate_transaction.status if duplicate_transaction is not None else "duplicate"
+            return (
+                duplicate_transaction.status
+                if duplicate_transaction is not None
+                else "duplicate"
+            )
 
         intent = await session.scalar(
             select(PaymentIntent)
@@ -252,7 +256,8 @@ async def record_stars_success(
                 existing_charge.amount != Decimal(total_amount)
                 or existing_charge.currency != currency
                 or existing_charge.payer_telegram_id != payer_telegram_id
-                or existing_charge.provider_payment_charge_id != (provider_payment_charge_id or None)
+                or existing_charge.provider_payment_charge_id
+                != (provider_payment_charge_id or None)
             ):
                 raise PaymentConflict("Telegram charge ID was replayed with different payment data")
             session.add(
