@@ -73,6 +73,8 @@ async def create_stars_payment_intent(
                 or existing.currency != "XTR"
             ):
                 raise PaymentConflict("Existing payment intent does not match the order")
+            if existing.status != "pending":
+                raise PaymentConflict("Existing Stars invoice is no longer accepting payments")
             return existing
 
         amount = Decimal(order.price_amount)
@@ -223,6 +225,28 @@ async def record_stars_success(
         if existing_charge is not None:
             if existing_charge.payment_intent_id != intent.id:
                 raise PaymentConflict("Telegram charge ID is already bound to another invoice")
+            if (
+                existing_charge.amount != Decimal(total_amount)
+                or existing_charge.currency != currency
+                or existing_charge.payer_telegram_id != payer_telegram_id
+                or existing_charge.provider_payment_charge_id != (provider_payment_charge_id or None)
+            ):
+                raise PaymentConflict("Telegram charge ID was replayed with different payment data")
+            session.add(
+                PaymentEvent(
+                    payment_intent_id=intent.id,
+                    payment_transaction_id=existing_charge.id,
+                    provider="telegram_stars",
+                    provider_event_id=provider_event_id,
+                    event_type=(
+                        "payment_succeeded"
+                        if existing_charge.status == "captured"
+                        else "payment_rejected"
+                    ),
+                    payload_sha256=digest,
+                )
+            )
+            await session.flush()
             return existing_charge.status
 
         amount_matches = (
