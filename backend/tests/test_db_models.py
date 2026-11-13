@@ -1,4 +1,3 @@
-from app.db.payments import PaymentEvent, PaymentIntent, PaymentTransaction
 from app.db.models import (
     AssetType,
     AssetVerificationStatus,
@@ -7,6 +6,7 @@ from app.db.models import (
     OrderStatus,
     PriceCurrency,
 )
+from app.db.payments import PaymentEvent, PaymentIntent, PaymentTransaction
 
 
 def test_marketplace_tables_are_registered() -> None:
