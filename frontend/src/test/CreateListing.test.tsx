@@ -60,13 +60,18 @@ describe("CreateListing seller flow", () => {
     renderCreateListing(onDraftCreated);
 
     expect(await screen.findByText("Verified collectible")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Выберите NFT для продажи" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Шаг 1 из 2")).toBeInTheDocument();
     expect(apiMocks.fetchMyInventory).toHaveBeenCalledWith(
       "memory-session-token",
       { limit: 24, offset: 0 },
       expect.any(AbortSignal),
     );
-    fireEvent.click(screen.getByRole("button", { name: /Verified collectible/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Выбрать NFT Verified collectible/ }));
+    expect(screen.getByRole("heading", { name: "Настройте предложение" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Шаг 2 из 2")).toBeInTheDocument();
     fireEvent.change(screen.getByRole("spinbutton", { name: "Цена" }), { target: { value: "1.5" } });
+    expect(screen.getByText("1.5 TON")).toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: "Название (необязательно)" }), { target: { value: "My collectible" } });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
 
