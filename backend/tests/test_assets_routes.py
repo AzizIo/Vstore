@@ -843,7 +843,9 @@ def test_inventory_sync_dns_outage_after_a_verified_page_commits_nothing(
         app.dependency_overrides.pop(get_redis_client, None)
 
     assert response.status_code == 503
-    assert "temporarily unavailable" in response.json()["detail"]
+    assert response.json()["detail"] == (
+        "Сервис инвентаря TON NFT временно недоступен. Попробуйте позже."
+    )
     assert [call[2] for call in provider.calls] == [0, 1]
     assert verifier.calls == [(ITEM, OWNER)]
     session.commit.assert_not_awaited()

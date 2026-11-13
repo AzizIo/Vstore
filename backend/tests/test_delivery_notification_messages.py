@@ -12,14 +12,46 @@ from app.notifications import service as notification_service
 @pytest.mark.parametrize(
     ("event_type", "role", "expected"),
     [
-        ("delivery_prepared", "seller", "review and sign"),
-        ("delivery_prepared", "buyer", "has not been confirmed delivered"),
-        ("delivery_submitted", "seller", "independent on-chain verification"),
-        ("delivery_submitted", "buyer", "independently checking on-chain evidence"),
-        ("delivery_confirmed", "buyer", "independently confirmed the exact NFT transfer"),
-        ("delivery_confirmed", "seller", "independently confirmed the exact NFT transfer"),
-        ("delivery_manual_review", "buyer", "Do not assume the NFT was delivered"),
-        ("delivery_manual_review", "seller", "Do not assume the NFT was delivered"),
+        (
+            "delivery_prepared",
+            "seller",
+            "Требуется действие: проверьте данные и подпишите перевод именно этого NFT",
+        ),
+        (
+            "delivery_prepared",
+            "buyer",
+            "Получение NFT ещё не подтверждено.",
+        ),
+        (
+            "delivery_submitted",
+            "seller",
+            "Дождитесь независимой проверки в сети TON.",
+        ),
+        (
+            "delivery_submitted",
+            "buyer",
+            "Сервис проверяет подтверждение в сети TON.",
+        ),
+        (
+            "delivery_confirmed",
+            "buyer",
+            "Передача именно этого NFT на кошелёк покупателя подтверждена в блокчейне TON.",
+        ),
+        (
+            "delivery_confirmed",
+            "seller",
+            "Передача именно этого NFT на кошелёк покупателя подтверждена в блокчейне TON.",
+        ),
+        (
+            "delivery_manual_review",
+            "buyer",
+            "Не считайте NFT полученным и не отправляйте повторный перевод.",
+        ),
+        (
+            "delivery_manual_review",
+            "seller",
+            "Не считайте NFT полученным и не отправляйте повторный перевод.",
+        ),
     ],
 )
 def test_delivery_notification_messages_are_truthful_and_role_specific(
@@ -48,8 +80,8 @@ def test_delivery_notification_messages_are_truthful_and_role_specific(
     message = notification_service.build_notification_message(delivery)
 
     assert expected in message
-    assert "VILTARA SHOP · Order #" in message
-    assert "Payment is not enabled." in message
+    assert "VILTARA SHOP · Заказ №" in message
+    assert "Оплата пока не подключена. Платёж не принимался." in message
     assert "seed phrase" not in message.lower()
     assert "api key" not in message.lower()
     assert "provider payload" not in message.lower()

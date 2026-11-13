@@ -53,16 +53,21 @@ def test_unhandled_exception_returns_generic_message_without_internal_details() 
     async def fail_with_sensitive_details() -> None:
         raise RuntimeError("password=never-return-this SELECT * FROM private_users")
 
-    route = app.add_api_route(
+    app.add_api_route(
         "/_test/unhandled-error",
         fail_with_sensitive_details,
         methods=["GET"],
+    )
+    test_route = next(
+        route
+        for route in app.router.routes
+        if getattr(route, "path", None) == "/_test/unhandled-error"
     )
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
             response = client.get("/_test/unhandled-error")
     finally:
-        app.router.routes.remove(route)
+        app.router.routes.remove(test_route)
 
     assert response.status_code == 500
     assert response.json() == {
