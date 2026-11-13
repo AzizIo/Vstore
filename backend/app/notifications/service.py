@@ -215,7 +215,10 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
         description = (
             "Продавец подготовил прямую передачу NFT. Получение NFT ещё не подтверждено."
             if delivery.recipient_role == "buyer"
-            else "Требуется действие: проверьте данные и подпишите перевод именно этого NFT в своём TON-кошельке."
+            else (
+                "Требуется действие: проверьте данные и подпишите перевод именно этого NFT "
+                "в своём TON-кошельке."
+            )
         )
         status = "Ожидается перевод продавца"
     elif delivery.event_type == "delivery_submitted":
@@ -232,7 +235,10 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
         status = "Перевод подтверждён"
     elif delivery.event_type == "delivery_manual_review":
         description = (
-            "Передача требует ручной проверки. Не считайте NFT полученным и не отправляйте повторный перевод."
+            (
+                "Передача требует ручной проверки. Не считайте NFT полученным "
+                "и не отправляйте повторный перевод."
+            )
         )
         status = "Требуется проверка"
     else:
