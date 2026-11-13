@@ -235,6 +235,10 @@ export async function mockMarketplaceApi(
       });
     }
 
+    if (path === "/api/listings/me" && method === "GET" && options.authenticated) {
+      return fulfillJson([moonLantern]);
+    }
+
     const listingMatch = /^\/api\/listings\/([^/]+)$/.exec(path);
     if (listingMatch && method === "GET") {
       if (options.missingListingDetail) {
@@ -283,10 +287,6 @@ export async function mockMarketplaceApi(
 
     if (path === `/api/orders/${orderId}` && method === "GET" && options.authenticated) {
       return fulfillJson(linkedOrder);
-    }
-
-    if (path === "/api/listings/me" && method === "GET" && options.authenticated) {
-      return fulfillJson([moonLantern]);
     }
 
     if (path === "/api/orders" && method === "GET" && options.authenticated) {
