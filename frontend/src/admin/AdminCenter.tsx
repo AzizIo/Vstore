@@ -12,6 +12,20 @@ const reasonCodeLabels: Record<ModerationReasonCode, string> = {
   policy_violation: "Нарушение правил", ownership_unverified: "Не удалось подтвердить владение",
   misleading_metadata: "Недостоверные метаданные", duplicate_listing: "Дубликат объявления", other: "Другое",
 };
+const listingStatusLabels: Record<string, string> = {
+  draft: "Черновик", active: "Активно", reserved: "Зарезервировано",
+  sold: "Продано", cancelled: "Отменено", expired: "Срок истёк", suspended: "Приостановлено",
+};
+function formatListingCount(count: number) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  const word = mod10 === 1 && mod100 !== 11
+    ? "объявление"
+    : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
+      ? "объявления"
+      : "объявлений";
+  return `${count} ${word}`;
+}
 interface Props { accessToken: string; active: boolean; }
 
 export function AdminCenter({ accessToken, active }: Props) {
@@ -64,7 +78,7 @@ export function AdminCenter({ accessToken, active }: Props) {
     setSubmitting(true); setError(""); setSuccess("");
     try {
       const result = await submitModerationDecision(accessToken, selected.id, { action, reason_code: reasonCode, reason: reason.trim() });
-      setSuccess(actionLabels[action] + " decision saved · " + result.id);
+      setSuccess(actionLabels[action] + " · решение сохранено · " + result.id);
       setSelected(null); setOffset(0);
       const page = await fetchModerationQueue(accessToken, { limit: pageSize, offset: 0, ...(statusFilter ? { status: statusFilter } : {}) });
       setItems(page.items); setTotal(page.total);
@@ -78,22 +92,22 @@ export function AdminCenter({ accessToken, active }: Props) {
     <section className="admin-center" aria-labelledby="admin-center-title">
       <header className="admin-center-header">
         <div><p className="admin-eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ</p><h1 id="admin-center-title">Модерация и аудит</h1><p>Для каждого решения требуется причина. Все действия сохраняются в журнале.</p></div>
-        <button type="button" className="admin-secondary" onClick={() => setRetry((value) => value + 1)} disabled={loading}>{loading ? "Refreshing…" : "Обновить очередь"}</button>
+        <button type="button" className="admin-secondary" onClick={() => setRetry((value) => value + 1)} disabled={loading}>{loading ? "Обновляем…" : "Обновить очередь"}</button>
       </header>
       {success && <p className="admin-success" role="status">{success}</p>}
       {error && <div className="admin-error" role="alert"><span>{error}</span><button type="button" onClick={() => setRetry((value) => value + 1)}>Повторить</button></div>}
       <div className="admin-toolbar">
         <label>Статус объявления<select value={statusFilter} onChange={(event) => { setOffset(0); setStatusFilter(event.target.value); }}>
           <option value="">Все статусы, требующие действий</option><option value="draft">Черновик</option><option value="active">Активно</option><option value="suspended">Приостановлено</option>
-        </select></label><span className="admin-count">{total} listing{total === 1 ? "" : "s"}</span>
+        </select></label><span className="admin-count">{formatListingCount(total)}</span>
       </div>
-      {loading && <p className="admin-state" role="status">Loading moderation queue…</p>}
+      {loading && <p className="admin-state" role="status">Загружаем очередь модерации…</p>}
       {!loading && !error && items.length === 0 && <p className="admin-state" role="status">Нет объявлений, требующих внимания по этому фильтру.</p>}
       <div className="admin-queue">
         {items.map((item) => <article className="admin-listing" key={item.id}>
           <div className="admin-listing-art">{item.asset.image_url ? <img src={item.asset.image_url} alt="" loading="lazy" /> : <span aria-hidden="true">V</span>}</div>
           <div className="admin-listing-main">
-            <div className="admin-listing-title-row"><h2>{item.title || item.asset.name || "Объявление без названия"}</h2><span className={"admin-status admin-status-" + item.status}>{item.status}</span></div>
+            <div className="admin-listing-title-row"><h2>{item.title || item.asset.name || "Объявление без названия"}</h2><span className={"admin-status admin-status-" + item.status}>{listingStatusLabels[item.status] ?? item.status}</span></div>
             <p className="admin-meta">{item.price_amount} {item.price_currency} · {item.seller.first_name}{item.seller.username ? " · @" + item.seller.username : ""}</p>
             <p className="admin-reasons">{item.queue_reasons.map((code) => reasonLabels[code] ?? code).join(" · ")}</p>
             <div className="admin-actions">
@@ -102,12 +116,12 @@ export function AdminCenter({ accessToken, active }: Props) {
               {item.status === "suspended" && <button type="button" className="admin-primary" onClick={() => startAction(item, "restore")}>Восстановить</button>}
               <button type="button" className="admin-secondary" onClick={() => void openAudit(item)}>История аудита</button>
             </div>
-            {auditFor === item.id && <div className="admin-audit" aria-label={"История аудита: " + (item.title || "listing")}>
+            {auditFor === item.id && <div className="admin-audit" aria-label={"История аудита: " + (item.title || "объявление")}>
               <h3>История аудита</h3>{auditError && <p role="alert">{auditError}</p>}
               {!auditError && audit.length === 0 && <p>Решения модерации пока не зафиксированы.</p>}
               {audit.map((entry) => <div className="admin-audit-entry" key={entry.id}>
-                <strong>{entry.action}</strong><time dateTime={entry.occurred_at}>{new Date(entry.occurred_at).toLocaleString()}</time>
-                <p>{entry.reason_code.replaceAll("_", " ")} — {entry.reason}</p><span>{String(entry.before_snapshot.status)} → {String(entry.after_snapshot.status)}</span>
+                <strong>{actionLabels[entry.action as ModerationAction] ?? entry.action}</strong><time dateTime={entry.occurred_at}>{new Date(entry.occurred_at).toLocaleString("ru-RU")}</time>
+                <p>{reasonCodeLabels[entry.reason_code as ModerationReasonCode] ?? entry.reason_code.replaceAll("_", " ")} — {entry.reason}</p><span>{listingStatusLabels[String(entry.before_snapshot.status)] ?? String(entry.before_snapshot.status)} → {listingStatusLabels[String(entry.after_snapshot.status)] ?? String(entry.after_snapshot.status)}</span>
               </div>)}
             </div>}
           </div>
@@ -115,11 +129,11 @@ export function AdminCenter({ accessToken, active }: Props) {
       </div>
       <nav className="admin-pagination" aria-label="Навигация по страницам модерации">
         <button type="button" className="admin-secondary" onClick={() => setOffset(Math.max(0, offset - pageSize))} disabled={offset === 0 || loading}>Назад</button>
-        <span>{total === 0 ? 0 : offset + 1}–{Math.min(offset + pageSize, total)} of {total}</span>
+        <span>{total === 0 ? 0 : offset + 1}–{Math.min(offset + pageSize, total)} из {total}</span>
         <button type="button" className="admin-secondary" onClick={() => setOffset(offset + pageSize)} disabled={offset + pageSize >= total || loading}>Далее</button>
       </nav>
       {selected && <div className="admin-dialog-backdrop"><section className="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title">
-        <h2 id="admin-dialog-title">{actionLabels[action]} listing</h2><p>{selected.title || selected.asset.name || "Объявление без названия"} · current status: {selected.status}</p>
+        <h2 id="admin-dialog-title">{actionLabels[action]} объявление</h2><p>{selected.title || selected.asset.name || "Объявление без названия"} · текущий статус: {listingStatusLabels[selected.status] ?? selected.status}</p>
         {(action === "approve" || action === "restore") && <p className="admin-warning">Для этого действия сервер должен заново подтвердить владение NFT.</p>}
         <form onSubmit={(event) => void submitDecision(event)}>
           <label>Причина<select value={reasonCode} onChange={(event) => setReasonCode(event.target.value as ModerationReasonCode)}>

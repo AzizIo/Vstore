@@ -281,22 +281,25 @@ test.describe("navigation and unauthenticated access", () => {
       }`,
     });
 
-    const layout = await page.evaluate(() => ({
-      paddingTop: getComputedStyle(document.body).paddingTop,
-      paddingRight: getComputedStyle(document.body).paddingRight,
-      paddingBottom: getComputedStyle(document.body).paddingBottom,
-      paddingLeft: getComputedStyle(document.body).paddingLeft,
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    }));
+    for (const width of [320, 360, 390, 430, 768, 1024]) {
+      await page.setViewportSize({ width, height: 844 });
+      const layout = await page.evaluate(() => ({
+        paddingTop: getComputedStyle(document.body).paddingTop,
+        paddingRight: getComputedStyle(document.body).paddingRight,
+        paddingBottom: getComputedStyle(document.body).paddingBottom,
+        paddingLeft: getComputedStyle(document.body).paddingLeft,
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      }));
 
-    expect(layout).toMatchObject({
-      paddingTop: "20px",
-      paddingRight: "12px",
-      paddingBottom: "28px",
-      paddingLeft: "14px",
-    });
-    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
+      expect(layout).toMatchObject({
+        paddingTop: "20px",
+        paddingRight: "12px",
+        paddingBottom: "28px",
+        paddingLeft: "14px",
+      });
+      expect(layout.scrollWidth, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(layout.clientWidth);
+    }
     await expect(page.getByRole("heading", { name: "Объявления" })).toBeVisible();
   });
 
