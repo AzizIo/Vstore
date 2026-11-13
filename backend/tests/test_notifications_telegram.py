@@ -44,6 +44,7 @@ async def test_sender_returns_successful_telegram_response_and_forwards_paramete
         chat_id=CHAT_ID,
         text=MESSAGE_TEXT,
         disable_web_page_preview=False,
+        parse_mode="HTML",
     )
 
 
@@ -66,6 +67,7 @@ async def test_retry_after_becomes_transient_error_with_retry_delay() -> None:
         chat_id=CHAT_ID,
         text=MESSAGE_TEXT,
         disable_web_page_preview=True,
+        parse_mode="HTML",
     )
 
 
@@ -97,4 +99,5 @@ async def test_sender_classifies_telegram_errors_and_preserves_context(
         chat_id=CHAT_ID,
         text=MESSAGE_TEXT,
         disable_web_page_preview=True,
+        parse_mode="HTML",
     )

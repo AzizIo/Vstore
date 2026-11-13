@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -191,66 +192,73 @@ async def _mark_failed_or_retry(
 
 
 def build_notification_message(delivery: NotificationDelivery) -> str:
+    """Build a concise Russian notification with escaped values and Telegram HTML."""
     order_reference = str(delivery.order_id).replace("-", "")[:8].upper()
-    amount = format(delivery.price_amount.normalize(), "f")
+    amount = html.escape(format(delivery.price_amount.normalize(), "f"))
+    currency = html.escape(delivery.price_currency)
 
     if delivery.event_type == "order_created":
         description = (
-            "Your order was created and the listing is reserved."
+            "Ваш заказ создан, объявление зарезервировано."
             if delivery.recipient_role == "buyer"
-            else "A buyer reserved your listing."
+            else "Покупатель зарезервировал ваше объявление."
         )
-        status = "Reserved"
+        status, icon = "Заказ зарезервирован", "🛍️"
     elif delivery.event_type == "order_cancelled":
         description = (
-            "You cancelled the order."
+            "Вы отменили заказ."
             if delivery.recipient_role == "buyer"
-            else "The buyer cancelled the order."
+            else "Покупатель отменил заказ."
         )
-        status = "Cancelled"
+        status, icon = "Заказ отменён", "↩️"
     elif delivery.event_type == "order_expired":
-        description = "The order reservation expired automatically."
-        status = "Expired"
+        description = "Время резервирования заказа истекло автоматически."
+        status, icon = "Резервирование истекло", "⌛"
     elif delivery.event_type == "delivery_prepared":
         description = (
-            "The seller prepared the direct NFT transfer. The NFT has not been confirmed delivered."
-            if delivery.recipient_role == "buyer"
-            else "Action required: review and sign the exact NFT transfer in your own TON wallet."
-        )
-        status = "Awaiting seller transfer"
-    elif delivery.event_type == "delivery_submitted":
-        description = (
-            "A transfer reference was submitted. The backend is independently "
-            "checking on-chain evidence."
+            "Продавец подготовил передачу NFT. Получение ещё не подтверждено."
             if delivery.recipient_role == "buyer"
             else (
-                "Your transfer reference was received. Wait for independent "
-                "on-chain verification."
+                "Проверьте детали и подтвердите точную передачу NFT в своём "
+                "TON-кошельке."
             )
         )
-        status = "Verification in progress"
+        status, icon = "Ожидается передача NFT", "📦"
+    elif delivery.event_type == "delivery_submitted":
+        description = (
+            "Данные о транзакции получены. Сервис проверяет подтверждение "
+            "в блокчейне."
+            if delivery.recipient_role == "buyer"
+            else (
+                "Данные о транзакции получены. Дождитесь независимой проверки "
+                "в блокчейне."
+            )
+        )
+        status, icon = "Проверяем транзакцию", "⏳"
     elif delivery.event_type == "delivery_confirmed":
         description = (
-            "The backend independently confirmed the exact NFT transfer "
-            "to the snapshotted buyer wallet."
+            "Передача NFT на указанный кошелёк покупателя независимо подтверждена "
+            "в блокчейне."
         )
-        status = "Transfer verified"
+        status, icon = "Передача NFT подтверждена", "✅"
     elif delivery.event_type == "delivery_manual_review":
         description = (
-            "Delivery needs manual review. Do not assume the NFT was "
-            "delivered or submit another transfer."
+            "Нужна ручная проверка. Не считайте NFT доставленным и не отправляйте "
+            "повторную транзакцию."
         )
-        status = "Manual review required"
+        status, icon = "Требуется проверка", "⚠️"
     else:
         raise UnsupportedNotificationEvent(
             f"Unsupported Telegram notification event_type: {delivery.event_type!r}"
         )
 
     lines = [
-        f"VILTARA SHOP · Order #{order_reference}",
+        f"<b>VILTARA SHOP</b> · Заказ <code>#{order_reference}</code>",
+        "",
+        f"{icon} <b>{status}</b>",
         description,
-        f"Status: {status}",
-        f"Amount: {amount} {delivery.price_currency}",
+        "",
+        f"<b>Сумма:</b> <code>{amount} {currency}</code>",
     ]
     settings = get_settings()
     app_url = validate_telegram_direct_link(settings.telegram_mini_app_direct_link)
@@ -260,9 +268,20 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
             startapp=f"order_{delivery.order_id.hex}",
         )
         if order_url is not None:
-            lines.append(f"Open in Mini App: {order_url}")
+            safe_url = html.escape(order_url, quote=True)
+            lines.extend(
+                [
+                    "",
+                    f'<a href="{safe_url}">Открыть заказ в приложении</a>',
+                ]
+            )
 
-    lines.append("Payment is not enabled. No payment has been received.")
+    lines.extend(
+        [
+            "",
+            "<i>Оплата внутри платформы пока не подключена; средства не списаны.</i>",
+        ]
+    )
     return "\n".join(lines)
 
 

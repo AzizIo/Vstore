@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from aiogram.exceptions import TelegramNetworkError
 
 from app import bot as bot_runtime
 
@@ -18,6 +19,7 @@ class _SessionContext:
 class _FakeBot:
     def __init__(self) -> None:
         self.session = SimpleNamespace(close=AsyncMock())
+        self.set_my_commands = AsyncMock()
 
 
 def _settings(*, bot_token: str | None = "123456:test-token") -> SimpleNamespace:
@@ -203,3 +205,26 @@ async def test_notification_worker_keeps_running_after_temporary_processing_erro
             await task
 
     assert attempts >= 2
+
+
+@pytest.mark.asyncio
+async def test_main_continues_when_telegram_command_menu_registration_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_bot = _FakeBot()
+    fake_bot.set_my_commands.side_effect = TelegramNetworkError(
+        method=SimpleNamespace(),
+        message="temporary Telegram network failure",
+    )
+    dispatcher = SimpleNamespace(start_polling=AsyncMock())
+
+    monkeypatch.setattr(bot_runtime, "get_settings", _settings)
+    monkeypatch.setattr(bot_runtime, "Bot", Mock(return_value=fake_bot))
+    monkeypatch.setattr(bot_runtime, "create_dispatcher", Mock(return_value=dispatcher))
+    monkeypatch.setattr(bot_runtime, "_run_notification_worker", AsyncMock())
+
+    await bot_runtime.main()
+
+    fake_bot.set_my_commands.assert_awaited_once_with(bot_runtime.BOT_COMMANDS)
+    dispatcher.start_polling.assert_awaited_once_with(fake_bot)
+    fake_bot.session.close.assert_awaited_once()

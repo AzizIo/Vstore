@@ -1,6 +1,7 @@
 from urllib.parse import urlsplit
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     CallbackQuery,
@@ -16,27 +17,33 @@ router = Router(name="viltara-shop-user")
 
 
 def _mini_app_button(url: str | None) -> InlineKeyboardButton | None:
-    """Create an in-Telegram Mini App button for a configured HTTPS URL."""
+    """Create a primary in-Telegram Mini App button for a public HTTPS URL."""
     if not url:
         return None
 
     candidate = url.strip()
     try:
         parsed = urlsplit(candidate)
+        hostname = parsed.hostname
+        # Accessing .port validates malformed and out-of-range port values.
+        _ = parsed.port
     except ValueError:
         return None
 
     if (
         parsed.scheme != "https"
         or not parsed.netloc
+        or not hostname
         or parsed.username
         or parsed.password
+        or any(character.isspace() for character in candidate)
     ):
         return None
 
     return InlineKeyboardButton(
         text="Открыть VILTARA SHOP",
         web_app=WebAppInfo(url=candidate),
+        style="primary",
     )
 
 
@@ -46,7 +53,12 @@ def _menu_keyboard() -> InlineKeyboardMarkup:
     if mini_app_button is not None:
         rows.append([mini_app_button])
     rows.append(
-        [InlineKeyboardButton(text="Как пользоваться", callback_data="bot:help")]
+        [
+            InlineKeyboardButton(
+                text="ℹ️ Как пользоваться",
+                callback_data="bot:help",
+            )
+        ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -54,29 +66,46 @@ def _menu_keyboard() -> InlineKeyboardMarkup:
 def _back_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="В главное меню", callback_data="bot:menu")]
+            [
+                InlineKeyboardButton(
+                    text="← В главное меню",
+                    callback_data="bot:menu",
+                    style="primary",
+                )
+            ]
         ]
     )
 
 
 START_MESSAGE = (
-    "Добро пожаловать в VILTARA SHOP!\n\n"
-    "Здесь можно просматривать каталог TON NFT и управлять объявлениями и заказами "
-    "через Mini App. Выберите действие ниже."
+    "<b>VILTARA SHOP</b>\n"
+    "<i>Маркетплейс TON NFT</i>\n\n"
+    "Просматривайте каталог, размещайте объявления и управляйте заказами — "
+    "всё в одном приложении.\n\n"
+    "Выберите действие:"
 )
 HELP_MESSAGE = (
-    "VILTARA SHOP — маркетплейс объявлений о TON NFT.\n\n"
-    "• Каталог: просматривайте объявления и их цены.\n"
-    "• Объявления: подключите и подтвердите кошелёк, затем создайте объявление "
-    "из NFT, которым владеете.\n"
-    "• Заказы: просматривайте свои резервации и управляйте доступными действиями.\n\n"
-    "Важно: создание заказа — это резервирование, а не оплата. Встроенная оплата "
-    "и автоматическая передача NFT пока не реализованы."
+    "<b>Как пользоваться VILTARA SHOP</b>\n\n"
+    "💎 <b>Каталог</b>\n"
+    "Просматривайте объявления и сравнивайте цены.\n\n"
+    "🛍 <b>Объявления</b>\n"
+    "Подключите и подтвердите TON-кошелёк в приложении, затем разместите NFT, "
+    "которым владеете.\n\n"
+    "📦 <b>Заказы</b>\n"
+    "Следите за статусом заказа и доступными действиями.\n\n"
+    "⚠️ <b>Важно об оплате</b>\n"
+    "Создание заказа резервирует объявление, но не означает оплату. Оплата "
+    "внутри платформы пока не подключена. Проверяйте статус передачи NFT "
+    "и дальнейшие действия в приложении."
 )
 
 
 async def _send_menu(message: Message, text: str = START_MESSAGE) -> None:
-    await message.answer(text, reply_markup=_menu_keyboard())
+    await message.answer(
+        text,
+        reply_markup=_menu_keyboard(),
+        parse_mode="HTML",
+    )
 
 
 @router.message(CommandStart())
@@ -87,8 +116,12 @@ async def handle_start(message: Message) -> None:
 
 @router.message(Command("help"))
 async def handle_help(message: Message) -> None:
-    """Explain the implemented marketplace features and current limitations."""
-    await message.answer(HELP_MESSAGE, reply_markup=_menu_keyboard())
+    """Explain implemented marketplace features and current limitations."""
+    await message.answer(
+        HELP_MESSAGE,
+        reply_markup=_menu_keyboard(),
+        parse_mode="HTML",
+    )
 
 
 @router.message(Command("app"))
@@ -97,9 +130,10 @@ async def handle_app(message: Message) -> None:
     mini_app_button = _mini_app_button(get_settings().telegram_mini_app_url)
     if mini_app_button is None:
         await message.answer(
-            "Mini App пока не настроен или ссылка указана неверно. "
-            "Администратору нужно задать TELEGRAM_MINI_APP_URL как публичный HTTPS-адрес "
-            "Mini App. Попробуйте команду /help."
+            "Приложение пока недоступно: ссылка не настроена или указана неверно. "
+            "Администратору нужно задать <code>TELEGRAM_MINI_APP_URL</code> — "
+            "публичный HTTPS-адрес приложения. Подробности: /help.",
+            parse_mode="HTML",
         )
         return
 
@@ -113,31 +147,43 @@ async def handle_app(message: Message) -> None:
 
 @router.callback_query(F.data == "bot:help")
 async def handle_help_callback(callback: CallbackQuery) -> None:
-    """Answer callback queries and show help without leaving the chat."""
+    """Acknowledge the callback and edit the existing message with help."""
     await callback.answer()
     if isinstance(callback.message, Message):
-        await callback.message.edit_text(
-            HELP_MESSAGE,
-            reply_markup=_back_keyboard(),
-        )
+        try:
+            await callback.message.edit_text(
+                HELP_MESSAGE,
+                reply_markup=_back_keyboard(),
+                parse_mode="HTML",
+            )
+        except TelegramBadRequest as exc:
+            # Repeated taps can try to apply the same screen twice.
+            if "message is not modified" not in str(exc).lower():
+                raise
 
 
 @router.callback_query(F.data == "bot:menu")
 async def handle_menu_callback(callback: CallbackQuery) -> None:
-    """Return to the bot's main menu from the inline help screen."""
+    """Return to the main menu by editing the existing help message."""
     await callback.answer()
     if isinstance(callback.message, Message):
-        await callback.message.edit_text(
-            START_MESSAGE,
-            reply_markup=_menu_keyboard(),
-        )
+        try:
+            await callback.message.edit_text(
+                START_MESSAGE,
+                reply_markup=_menu_keyboard(),
+                parse_mode="HTML",
+            )
+        except TelegramBadRequest as exc:
+            if "message is not modified" not in str(exc).lower():
+                raise
 
 
 @router.message(F.text)
 async def handle_text_fallback(message: Message) -> None:
-    """Guide ordinary text and unsupported commands to supported bot actions."""
+    """Guide unsupported text and commands toward the available bot actions."""
     await _send_menu(
         message,
-        "Я пока не обрабатываю произвольные сообщения. Используйте /start, /app "
-        "или /help — либо откройте Mini App кнопкой ниже.",
+        "Не удалось распознать сообщение. Бот помогает открыть приложение "
+        "и показывает инструкции.\n\n"
+        "Выберите действие ниже или используйте /start, /app либо /help.",
     )
