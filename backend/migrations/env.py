@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import get_settings
 from app.db.models import Base
+from app.db import payments as _payment_models  # noqa: F401
 from scripts.e2e_safety import assert_e2e_environment
 from scripts.preview_safety import should_validate_preview_migrations, validate_preview_targets
 
