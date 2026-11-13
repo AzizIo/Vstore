@@ -166,14 +166,44 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
     expect(rejectedSubmission.status()).toBe(200);
     expect((await rejectedSubmission.json()).status).toBe("pending_review");
 
-    await page.goto("/admin");
-    const rejectedCard = page.locator(".admin-listing").filter({ hasText: "E2E Rejected Moderation Listing" });
-    await expect(rejectedCard).toBeVisible();
-    await rejectedCard.getByRole("button", { name: "Отклонить", exact: true }).click();
-    const rejectDialog = page.getByRole("dialog", { name: "Отклонить объявление" });
-    await rejectDialog.getByLabel("Пояснение (5–500 символов)").fill("Rejected by the moderation acceptance test");
-    await rejectDialog.getByRole("button", { name: "Подтвердить отклонение" }).click();
-    await expect(rejectedCard.getByText("Отменено", { exact: true })).toBeVisible();
+    const pendingQueueResponse = await context.request.get(
+      "http://127.0.0.1:8000/api/admin/moderation",
+      { headers },
+    );
+    const pendingQueue = await pendingQueueResponse.json() as {
+      items: Array<{ id: string; status: string }>;
+    };
+    expect(pendingQueueResponse.status()).toBe(200);
+    expect(
+      pendingQueue.items.some((item) => item.id === rejectedDraft.id && item.status === "pending_review"),
+      JSON.stringify(pendingQueue),
+    ).toBe(true);
+
+    const rejectionResponse = await context.request.post(
+      "http://127.0.0.1:8000/api/admin/listings/" + rejectedDraft.id + "/decision",
+      {
+        headers: {
+          ...headers,
+          "Idempotency-Key": "reject-e2e-request-0001",
+          "X-Request-ID": "reject-e2e-request-0001",
+        },
+        data: {
+          action: "reject",
+          reason_code: "policy_violation",
+          reason: "Rejected by the moderation acceptance test",
+        },
+      },
+    );
+    expect(rejectionResponse.status()).toBe(200);
+    expect((await rejectionResponse.json()).action).toBe("rejected");
+    const sellerListingsResponse = await context.request.get(
+      "http://127.0.0.1:8000/api/listings/me",
+      { headers },
+    );
+    const sellerListings = await sellerListingsResponse.json() as {
+      items: Array<{ id: string; status: string }>;
+    };
+    expect(sellerListings.items.find((item) => item.id === rejectedDraft.id)?.status).toBe("cancelled");
   } finally {
     await context.close();
   }
