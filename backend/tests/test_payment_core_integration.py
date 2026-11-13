@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -367,3 +368,30 @@ async def test_production_environment_cannot_enable_test_stars(
     monkeypatch.setattr(payment_service, "get_settings", lambda: settings)
     with pytest.raises(PaymentConflict, match="outside test environments"):
         payment_service._assert_test_stars_enabled()
+
+
+
+async def test_migration_refuses_to_drop_payment_evidence(
+    payment_database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_test_stars(monkeypatch)
+    engine = create_async_engine(payment_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    ids = await _seed_order(session_factory)
+    try:
+        await _create_intent(session_factory, ids)
+        config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        with pytest.raises(RuntimeError, match="payment ledger"):
+            await asyncio.to_thread(
+                command.downgrade,
+                config,
+                "0011_listing_pending_review",
+            )
+        async with engine.connect() as connection:
+            revision = await connection.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
+            assert revision == "0012_telegram_stars_payments"
+    finally:
+        await _cleanup(session_factory, ids)
+        await engine.dispose()
