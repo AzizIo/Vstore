@@ -474,7 +474,17 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
       )}
 
       {loading ? (
-        <div className="my-listings-message" role="status">Загружаем ваши объявления…</div>
+        <div className="my-listings-loading-state" role="status" aria-busy="true">
+          <span className="sr-only">Загружаем ваши объявления…</span>
+          <div className="my-listings-grid my-listings-skeleton-grid" aria-hidden="true">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div className="my-listing-skeleton-card" key={index}>
+                <span className="my-listing-skeleton-artwork" />
+                <span className="my-listing-skeleton-copy"><i /><i /><i /></span>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : error ? (
         <div className="my-listings-message" role="alert">
           <h2>Объявления недоступны</h2>
