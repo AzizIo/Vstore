@@ -14,6 +14,15 @@ describe("AdminCenter", () => {
     fireEvent.click(screen.getByRole("button", { name: "История аудита" }));
     expect(await screen.findByText("Решения модерации пока не зафиксированы.")).toBeInTheDocument();
   });
+  it("opens the global audit log and displays moderation events", async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => String(input).endsWith("/audit?limit=25&offset=0")
+      ? response({ ...auditPage, total: 1, items: [{ id: "audit-1", actor_id: "admin-1", target_type: "listing", target_id: "listing-1", action: "approved", reason_code: "other", reason: "Approved after ownership check", before_snapshot: { status: "pending_review" }, after_snapshot: { status: "active" }, request_id: null, idempotency_key: "request-0001", occurred_at: "2026-01-02T00:00:00Z" }] })
+      : response(page));
+    render(<AdminCenter accessToken="verified-session" active />);
+    fireEvent.click(screen.getByRole("button", { name: "Общий журнал аудита" }));
+    expect(await screen.findByText(/Одобрено/)).toBeInTheDocument();
+    expect(screen.getByText(/Approved after ownership check/)).toBeInTheDocument();
+  });
   it("keeps unknown API statuses and queue reasons in Russian", async () => {
     const futureListing = {
       ...listing,
