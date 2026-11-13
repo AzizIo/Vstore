@@ -154,11 +154,11 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: backend
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install --disable-pip-version-check -e ".[dev]"
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm install
+        run: npm install --no-audit --no-fund
 
       - name: Validate isolated PostgreSQL and Redis targets
         working-directory: backend
@@ -203,9 +203,19 @@ jobs:
           cat /tmp/viltara-e2e-api.log
           exit 1
 
+      - name: Cache Playwright Chromium
+        id: api-playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
       - name: Install Playwright Chromium
+        if: steps.api-playwright-cache.outputs.cache-hit != 'true'
         working-directory: frontend
-        run: npx playwright install chromium
+        run: npx playwright install chromium --only-shell
 
       - name: Run API-backed Playwright journey
         working-directory: frontend
