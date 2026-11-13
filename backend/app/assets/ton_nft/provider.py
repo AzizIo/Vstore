@@ -1,8 +1,10 @@
-"""TON Center API v3 read-only provider adapter (indexed data, not proof)."""
+"""TON Center adapter for indexed candidate discovery and TEP-62 contract reads."""
 
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import json
 import time
 from dataclasses import dataclass, field, replace
@@ -10,9 +12,16 @@ from typing import Any, Protocol, cast
 from urllib.parse import urlparse
 
 import httpx
+from pytoniq_core.boc.address import Address as TonAddress
+from pytoniq_core.boc.cell import Cell, CellError
+from pytoniq_core.boc.deserialize import BocError
 
 from app.assets.ton_nft.address import AddressError, normalize_address
-from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable
+from app.assets.ton_nft.errors import (
+    InvalidProviderData,
+    ProviderUnavailable,
+    UnsupportedAsset,
+)
 from app.assets.ton_nft.metadata import (
     DEFAULT_IPFS_GATEWAY_URL,
     fetch_metadata_json,
@@ -34,6 +43,64 @@ _METADATA_CACHE_TTL_SECONDS = 600.0
 _METADATA_NEGATIVE_CACHE_TTL_SECONDS = 30.0
 _METADATA_FETCH_CONCURRENCY = 5
 _METADATA_PAGE_ENRICHMENT_TIMEOUT_SECONDS = 8.0
+
+
+def _stack_parts(entry: object) -> tuple[str, object]:
+    """Normalize TON Center v3 typed stack entries and legacy v2-style pairs."""
+    if isinstance(entry, dict):
+        kind = entry.get("type") or entry.get("@type")
+        value = entry.get("value")
+    elif isinstance(entry, (list, tuple)) and len(entry) == 2:
+        kind, value = entry
+    else:
+        raise InvalidProviderData("TON Center returned a malformed get-method stack entry")
+
+    if not isinstance(kind, str):
+        raise InvalidProviderData("TON Center returned a get-method stack entry without a type")
+    normalized_kind = kind.lower()
+    for suffix, target in (
+        ("number", "num"),
+        ("cell", "cell"),
+        ("slice", "slice"),
+    ):
+        if normalized_kind.endswith(suffix):
+            normalized_kind = target
+            break
+
+    if isinstance(value, dict):
+        value = value.get("bytes", value.get("value"))
+    return normalized_kind, value
+
+
+def _stack_integer(entry: object) -> int:
+    kind, value = _stack_parts(entry)
+    if kind != "num" or isinstance(value, bool) or not isinstance(value, (str, int)):
+        raise InvalidProviderData("TON Center returned a non-numeric get-method stack value")
+    try:
+        return int(value, 0) if isinstance(value, str) else value
+    except ValueError as exc:
+        raise InvalidProviderData("TON Center returned an invalid get-method integer") from exc
+
+
+def _stack_address(entry: object) -> str | None:
+    kind, value = _stack_parts(entry)
+    if kind not in {"cell", "slice"} or not isinstance(value, str):
+        raise InvalidProviderData("TON Center returned a non-address get-method stack value")
+    try:
+        encoded = value.replace("-", "+").replace("_", "/")
+        boc = base64.b64decode(
+            encoded + "=" * (-len(encoded) % 4),
+            validate=True,
+        )
+        cell = Cell.one_from_boc(boc)
+        address = cell.begin_parse().load_address()
+    except (binascii.Error, BocError, CellError, IndexError, TypeError, ValueError) as exc:
+        raise InvalidProviderData("TON Center returned an invalid address cell") from exc
+    if address is None:
+        return None
+    if not isinstance(address, TonAddress):
+        raise InvalidProviderData("TON Center returned an unsupported address type")
+    return normalize_address(address.to_str(is_user_friendly=False))
 
 
 class NFTDataProvider(Protocol):
@@ -249,6 +316,175 @@ class TONCenterV3Provider:
 
         raise ProviderUnavailable("TON Center NFT indexer is temporarily unavailable")
 
+
+    async def _run_get_method(
+        self,
+        address: str,
+        method: str,
+        *,
+        stack: list[dict[str, str]] | None = None,
+    ) -> list[object]:
+        """Execute a contract get-method through TON Center, not its NFT index tables."""
+        normalized = normalize_address(address)
+        request_headers = (
+            {"X-API-Key": self.config.api_key} if self.config.api_key else None
+        )
+        request_body = {
+            "address": normalized,
+            "method": method,
+            "stack": stack or [],
+        }
+
+        for attempt in range(MAX_PROVIDER_REQUEST_ATTEMPTS):
+            content = bytearray()
+            try:
+                async with self._client.stream(
+                    "POST",
+                    "runGetMethod",
+                    json=request_body,
+                    headers=request_headers,
+                ) as response:
+                    try:
+                        response.raise_for_status()
+                    except httpx.HTTPStatusError as exc:
+                        retryable_status = (
+                            exc.response.status_code == 429
+                            or exc.response.status_code >= 500
+                        )
+                        if retryable_status and attempt + 1 < MAX_PROVIDER_REQUEST_ATTEMPTS:
+                            await asyncio.sleep(
+                                _PROVIDER_RETRY_BACKOFF_SECONDS * (2**attempt)
+                            )
+                            continue
+                        if retryable_status:
+                            raise ProviderUnavailable(
+                                "TON Center contract state is temporarily unavailable"
+                            ) from exc
+                        raise InvalidProviderData(
+                            "TON Center rejected the NFT contract get-method request"
+                        ) from exc
+
+                    content_length = response.headers.get("content-length")
+                    if content_length is not None:
+                        try:
+                            declared_length = int(content_length)
+                        except ValueError as exc:
+                            raise InvalidProviderData(
+                                "TON Center returned invalid get-method Content-Length"
+                            ) from exc
+                        if declared_length < 0 or declared_length > MAX_PROVIDER_RESPONSE_BYTES:
+                            raise InvalidProviderData(
+                                "TON Center get-method response exceeds the allowed size"
+                            )
+                    async for chunk in response.aiter_bytes():
+                        if len(content) + len(chunk) > MAX_PROVIDER_RESPONSE_BYTES:
+                            raise InvalidProviderData(
+                                "TON Center get-method response exceeds the allowed size"
+                            )
+                        content.extend(chunk)
+            except (
+                httpx.TimeoutException,
+                httpx.NetworkError,
+                httpx.RemoteProtocolError,
+            ) as exc:
+                if attempt + 1 < MAX_PROVIDER_REQUEST_ATTEMPTS:
+                    await asyncio.sleep(
+                        _PROVIDER_RETRY_BACKOFF_SECONDS * (2**attempt)
+                    )
+                    continue
+                raise ProviderUnavailable(
+                    "TON Center contract state is temporarily unavailable"
+                ) from exc
+            except httpx.RequestError as exc:
+                raise ProviderUnavailable(
+                    "TON Center contract state request failed"
+                ) from exc
+
+            try:
+                payload: object = json.loads(content)
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                raise InvalidProviderData(
+                    "TON Center returned non-JSON get-method data"
+                ) from exc
+            if not isinstance(payload, dict):
+                raise InvalidProviderData(
+                    "TON Center returned malformed get-method data"
+                )
+            if payload.get("ok") is False:
+                raise InvalidProviderData(
+                    "TON Center could not execute the NFT contract get-method"
+                )
+            result = payload.get("result", payload)
+            if not isinstance(result, dict):
+                raise InvalidProviderData(
+                    "TON Center returned a malformed get-method result"
+                )
+            exit_code = result.get("exit_code")
+            if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+                raise InvalidProviderData(
+                    "TON Center get-method result has no valid exit code"
+                )
+            if exit_code != 0:
+                raise UnsupportedAsset(
+                    "NFT contract does not successfully implement the required TEP-62 get-method"
+                )
+            result_stack = result.get("stack")
+            if not isinstance(result_stack, list):
+                raise InvalidProviderData(
+                    "TON Center get-method result has no stack"
+                )
+            return result_stack
+
+        raise ProviderUnavailable("TON Center contract state is temporarily unavailable")
+
+    async def _get_nft_data(self, address: str) -> NFTItemSnapshot:
+        stack = await self._run_get_method(address, "get_nft_data")
+        if len(stack) < 5:
+            raise InvalidProviderData(
+                "TEP-62 get_nft_data returned fewer than five stack values"
+            )
+        initialized = _stack_integer(stack[0]) != 0
+        index = _stack_integer(stack[1])
+        collection = _stack_address(stack[2])
+        owner = _stack_address(stack[3])
+        if index < 0 or owner is None:
+            raise InvalidProviderData(
+                "TEP-62 get_nft_data returned an invalid index or empty owner address"
+            )
+        return NFTItemSnapshot(
+            address=normalize_address(address),
+            initialized=initialized,
+            index=index,
+            collection_address=collection,
+            owner_address=owner,
+            metadata=NFTMetadata(),
+        )
+
+    async def _indexed_metadata(
+        self,
+        address: str,
+        *,
+        fetch_remote: bool,
+    ) -> NFTMetadata:
+        """Use the indexer only for optional display metadata, never for ownership."""
+        try:
+            rows = await self._get_items(address=address, limit=2)
+        except (ProviderUnavailable, InvalidProviderData):
+            return NFTMetadata()
+        for raw in rows:
+            raw_address = raw.get("address")
+            try:
+                if normalize_address(raw_address) != address:
+                    continue
+            except (AddressError, TypeError):
+                continue
+            return await self._metadata_for_raw(
+                raw,
+                address,
+                fetch_remote=fetch_remote,
+            )
+        return NFTMetadata()
+
     @staticmethod
     def _metadata(raw: dict[str, Any]) -> NFTMetadata:
         return _metadata_fields(_onchain_metadata(raw))
@@ -368,26 +604,16 @@ class TONCenterV3Provider:
         )
 
     async def get_item(self, address: str) -> NFTItemSnapshot | None:
-        """Fetch the exact item for ownership checks; use cache but never wait on metadata."""
+        """Read TEP-62 ownership and collection fields from the contract get-method."""
         normalized = normalize_address(address)
-        rows = await self._get_items(address=normalized, limit=2)
-        if not rows:
-            return None
-        item = await self._parse_item_with_metadata(rows[0], fetch_remote=False)
-        if item.address != normalized:
-            raise InvalidProviderData("Indexer returned a different NFT item address")
-        return item
+        return await self._get_nft_data(normalized)
 
     async def get_item_with_metadata(self, address: str) -> NFTItemSnapshot | None:
-        """Resolve metadata for an exact NFT address without changing ownership semantics."""
+        """Read ownership from contract state and enrich display metadata separately."""
         normalized = normalize_address(address)
-        rows = await self._get_items(address=normalized, limit=2)
-        if not rows:
-            return None
-        item = await self._parse_item_with_metadata(rows[0], fetch_remote=True)
-        if item.address != normalized:
-            raise InvalidProviderData("Indexer returned a different NFT item address")
-        return item
+        snapshot = await self._get_nft_data(normalized)
+        metadata = await self._indexed_metadata(normalized, fetch_remote=True)
+        return replace(snapshot, metadata=metadata)
 
     async def get_items_by_owner(
         self, owner_address: str, *, limit: int, offset: int
@@ -436,12 +662,13 @@ class TONCenterV3Provider:
         collection = normalize_address(collection_address)
         if index < 0:
             raise ValueError("NFT item index cannot be negative")
-        rows = await self._get_items(collection_address=collection, index=index)
-        if not rows:
-            return None
-        item = self._parse_item(rows[0])
-        if item.collection_address != collection or item.index != index:
+        stack = await self._run_get_method(
+            collection,
+            "get_nft_address_by_index",
+            stack=[{"type": "num", "value": str(index)}],
+        )
+        if not stack:
             raise InvalidProviderData(
-                "Indexer returned an item outside the requested collection/index"
+                "TEP-62 collection get_nft_address_by_index returned an empty stack"
             )
-        return item.address
+        return _stack_address(stack[0])

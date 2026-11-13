@@ -2,23 +2,32 @@
 
 ## Scope
 
-`TONNFTVerifier` reads one TON NFT item, checks initialization, collection/index association, and current ownership against an expected seller wallet. It performs no database writes, transactions, transfers, API route registration, or listing publication.
+`TONNFTVerifier` reads TEP-62 contract state, checks initialization, collection/index association, and current ownership against an expected wallet. It performs no database writes, transactions, transfers, or wallet signing.
 
-## Standard and data source
+## Ownership source of truth
 
-The contract interface is [TEP-62](https://github.com/ton-blockchain/TEPs/blob/master/text/0062-nft-standard.md): `get_nft_data()` exposes initialization, index, collection and owner; a collection exposes `get_nft_address_by_index(index)`. See the [TON NFT reference implementation](https://docs.ton.org/contracts/standard/tokens/nft/nft-reference).
+TON Center v3 has two distinct roles in this adapter:
 
-The initial adapter uses [TON Center API v3](https://docs.ton.org/ecosystem/api/toncenter/v3/overview), `GET /api/v3/nft/items`. Its documented filters include item address, collection address and index, and its response includes `init`, `index`, `collection_address`, `owner_address` and item address. The verifier queries the item by address, then queries the indexer by collection plus index and compares the returned item address. This implements TON's documented [high-level NFT collection membership verification flow](https://docs.ton.org/contracts/standard/tokens/nft/verify).
+- `GET /api/v3/nft/items` is used to discover candidate NFTs for an owner and to retrieve optional display metadata.
+- `POST /api/v3/runGetMethod` executes the NFT contract's `get_nft_data()` method for each candidate. The returned `owner_address`, initialization flag, index and collection address are used for verification. The provider's indexed `owner_address` is not accepted as proof of current ownership.
+- For collection NFTs, the verifier calls the collection contract's `get_nft_address_by_index(index)` using `runGetMethod` and compares the returned address with the exact item contract address.
+
+This follows TEP-62: `get_nft_data()` returns initialization, index, collection, owner and content; the collection's `get_nft_address_by_index(index)` confirms the item address at that index. See the [TEP-62 standard](https://github.com/ton-blockchain/TEPs/blob/master/text/0062-nft-standard.md) and [TON NFT processing guide](https://docs.ton.org/develop/dapps/asset-processing/nfts).
 
 ## Trust model and limitations
 
-- TON Center v3 is an indexed data layer, not a trustless cryptographic proof response. This adapter trusts the configured provider's indexed view; it does not independently execute contract get-methods or validate a Merkle proof.
-- Indexing lag, API rate limits, provider availability and upstream data quality can affect results. Configure an API key and controlled endpoint in deployment; never hardcode credentials.
-- A missing item is `not_found`; malformed upstream data is `invalid_data`; network, timeout and server failures are `provider_unavailable`. Temporary provider failure is never evidence of incorrect ownership.
+- Contract get-methods are stronger than trusting the indexer's denormalized owner field, but a hosted RPC provider is still a trusted node service, not an independently validated Merkle proof. For high-value operations, use a provider/node with an explicit finality and proof policy.
+- The owner value is a point-in-time contract-state observation. Ownership can change immediately after verification; this does not reserve the NFT or authorize publication forever.
+- Indexer results are discovery hints only. A stale or inaccurate owner field in `nft/items` cannot by itself make an NFT appear verified.
+- Missing/uninitialized contracts, non-zero get-method exit codes, malformed stack data, collection-index mismatch, or owner mismatch are not treated as verified.
+- Timeout, DNS, rate-limit and server failures remain provider-unavailable errors; they must never be converted into an empty inventory or an ownership mismatch.
 - Friendly addresses are checksum-validated and normalized to raw `workchain:hex` form before comparison.
-- Metadata is optional, bounded display data only. The adapter does not fetch metadata URLs or images. Metadata never proves collection membership or ownership.
-- Collection-less TEP-62 items skip the collection lookup but still require initialized state and owner match.
-- The result is a **point-in-time snapshot**. Ownership can change immediately after verification; this does not reserve the NFT, prevent transfers, or authorize listing publication.
+- Metadata is optional bounded display data. Metadata lookup failures do not invalidate on-chain ownership verification and metadata never proves ownership.
+- Collection-less TEP-62 items skip the collection method but still require initialized state and exact owner match.
+
+## TON Center limits
+
+The API key is passed only to TON Center requests. TON Center documents a default limit of 1 request per second without an API key for `runGetMethod`; configure an API key and a suitable plan for normal inventory sizes. Calls are bounded by the existing provider timeout, response-size limit and retry policy. No unbounded retries are used.
 
 ## Usage
 
@@ -32,9 +41,9 @@ config = TONCenterV3Config(
 )
 
 async with TONCenterV3Provider(config) as provider:
-    result = await TONNFTVerifier(provider).verify(item_address, seller_wallet_address)
+    result = await TONNFTVerifier(provider).verify(item_address, wallet_address)
     if result.is_verified:
         ...  # re-check before any irreversible operation
 ```
 
-The HTTP transport is asynchronous `httpx`. Unit tests inject `httpx.MockTransport`; no live TON endpoint or API key is needed.
+The transport is asynchronous `httpx`. Unit tests inject `httpx.MockTransport`; no live TON endpoint or API key is needed.

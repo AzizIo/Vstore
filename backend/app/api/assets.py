@@ -18,7 +18,7 @@ from sqlalchemy.sql.selectable import Exists
 from app.assets.ton_nft.address import AddressError, normalize_address
 from app.assets.ton_nft.dependencies import get_ton_nft_verifier
 from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable
-from app.assets.ton_nft.models import NFTItemSnapshot, VerificationStatus
+from app.assets.ton_nft.models import NFTItemSnapshot, NFTMetadata, VerificationStatus
 from app.assets.ton_nft.verifier import TONNFTVerifier
 from app.auth.dependencies import get_current_user
 from app.core.config import get_settings
@@ -87,6 +87,17 @@ class InventorySyncResponse(BaseModel):
     invalid_count: int
     unsupported_count: int
     cancelled_listing_count: int
+
+
+
+def _merge_metadata(primary: NFTMetadata, fallback: NFTMetadata) -> NFTMetadata:
+    """Prefer exact-item metadata while retaining page metadata if a field is absent."""
+    return NFTMetadata(
+        name=primary.name or fallback.name,
+        description=primary.description or fallback.description,
+        image=primary.image or fallback.image,
+        attributes=primary.attributes or fallback.attributes,
+    )
 
 
 def _item_metadata(snapshot: NFTItemSnapshot) -> dict[str, object] | None:
@@ -262,7 +273,7 @@ async def _scan_wallet_inventory(
                     index=result.item_index if result.item_index is not None else candidate.index,
                     collection_address=result.collection_address,
                     owner_address=result.owner_address or owner_address,
-                    metadata=result.metadata,
+                    metadata=_merge_metadata(result.metadata, candidate.metadata),
                 )
             elif result.status is VerificationStatus.UNSUPPORTED:
                 unsupported_count += 1
@@ -700,7 +711,7 @@ async def get_my_verified_inventory(
                     index=result.item_index or 0,
                     collection_address=result.collection_address,
                     owner_address=result.owner_address or owner_address,
-                    metadata=result.metadata,
+                    metadata=_merge_metadata(result.metadata, candidate.metadata),
                 )
             verified_items.append(candidate)
 
