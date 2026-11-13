@@ -113,9 +113,9 @@ export function AdminCenter({ accessToken, active }: Props) {
         {items.map((item) => <article className="admin-listing" key={item.id}>
           <div className="admin-listing-art">{item.asset.image_url ? <img src={item.asset.image_url} alt="" loading="lazy" /> : <span aria-hidden="true">V</span>}</div>
           <div className="admin-listing-main">
-            <div className="admin-listing-title-row"><h2>{item.title || item.asset.name || "Объявление без названия"}</h2><span className={"admin-status admin-status-" + item.status}>{listingStatusLabels[item.status] ?? item.status}</span></div>
+            <div className="admin-listing-title-row"><h2>{item.title || item.asset.name || "Объявление без названия"}</h2><span className={"admin-status admin-status-" + item.status}>{listingStatusLabels[item.status] ?? "Неизвестный статус"}</span></div>
             <p className="admin-meta">{item.price_amount} {item.price_currency} · {item.seller.first_name}{item.seller.username ? " · @" + item.seller.username : ""}</p>
-            <p className="admin-reasons">{item.queue_reasons.map((code) => reasonLabels[code] ?? code).join(" · ")}</p>
+            <p className="admin-reasons">{item.queue_reasons.map((code) => reasonLabels[code] ?? "Дополнительная причина").join(" · ")}</p>
             <div className="admin-actions">
               {item.status === "draft" && <><button type="button" className="admin-primary" onClick={() => startAction(item, "approve")}>Одобрить</button><button type="button" className="admin-danger" onClick={() => startAction(item, "reject")}>Отклонить</button></>}
               {item.status === "active" && <button type="button" className="admin-danger" onClick={() => startAction(item, "suspend")}>Приостановить</button>}
@@ -126,8 +126,8 @@ export function AdminCenter({ accessToken, active }: Props) {
               <h3>История аудита</h3>{auditError && <p role="alert">{auditError}</p>}
               {!auditError && audit.length === 0 && <p>Решения модерации пока не зафиксированы.</p>}
               {audit.map((entry) => <div className="admin-audit-entry" key={entry.id}>
-                <strong>{auditActionLabels[entry.action] ?? entry.action}</strong><time dateTime={entry.occurred_at}>{new Date(entry.occurred_at).toLocaleString("ru-RU")}</time>
-                <p>{reasonCodeLabels[entry.reason_code as ModerationReasonCode] ?? entry.reason_code.replaceAll("_", " ")} — {entry.reason}</p><span>{listingStatusLabels[String(entry.before_snapshot.status)] ?? String(entry.before_snapshot.status)} → {listingStatusLabels[String(entry.after_snapshot.status)] ?? String(entry.after_snapshot.status)}</span>
+                <strong>{auditActionLabels[entry.action] ?? "Действие модерации"}</strong><time dateTime={entry.occurred_at}>{new Date(entry.occurred_at).toLocaleString("ru-RU")}</time>
+                <p>{reasonCodeLabels[entry.reason_code as ModerationReasonCode] ?? "Другая причина"} — {entry.reason}</p><span>{listingStatusLabels[String(entry.before_snapshot.status)] ?? "Неизвестный статус"} → {listingStatusLabels[String(entry.after_snapshot.status)] ?? "Неизвестный статус"}</span>
               </div>)}
             </div>}
           </div>
@@ -139,7 +139,7 @@ export function AdminCenter({ accessToken, active }: Props) {
         <button type="button" className="admin-secondary" onClick={() => setOffset(offset + pageSize)} disabled={offset + pageSize >= total || loading}>Далее</button>
       </nav>
       {selected && <div className="admin-dialog-backdrop"><section className="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title">
-        <h2 id="admin-dialog-title">{actionLabels[action]} объявление</h2><p>{selected.title || selected.asset.name || "Объявление без названия"} · текущий статус: {listingStatusLabels[selected.status] ?? selected.status}</p>
+        <h2 id="admin-dialog-title">{actionLabels[action]} объявление</h2><p>{selected.title || selected.asset.name || "Объявление без названия"} · текущий статус: {listingStatusLabels[selected.status] ?? "Неизвестный статус"}</p>
         {(action === "approve" || action === "restore") && <p className="admin-warning">Для этого действия сервер должен заново подтвердить владение NFT.</p>}
         <form onSubmit={(event) => void submitDecision(event)}>
           <label>Причина<select value={reasonCode} onChange={(event) => setReasonCode(event.target.value as ModerationReasonCode)}>
