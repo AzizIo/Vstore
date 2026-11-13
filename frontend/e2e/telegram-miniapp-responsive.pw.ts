@@ -265,8 +265,10 @@ test("workspace status filters remain keyboard-visible and fit narrow screens", 
   }
 
   await activeFilter.focus();
-  await expect(activeFilter).toBeFocused();
-  const focusStyle = await activeFilter.evaluate((element) => ({
+  await page.keyboard.press("Tab");
+  const keyboardFocusedFilter = page.locator(".workspace-filter").nth(1);
+  await expect(keyboardFocusedFilter).toBeFocused();
+  const focusStyle = await keyboardFocusedFilter.evaluate((element) => ({
     outlineStyle: getComputedStyle(element).outlineStyle,
     outlineWidth: getComputedStyle(element).outlineWidth,
   }));
