@@ -9,6 +9,7 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -122,7 +123,10 @@ def make_listing(owner: User, asset: NFTAsset, status: ListingStatus) -> Listing
 
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0001_initial_marketplace"
+    alembic_config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    expected_head = ScriptDirectory.from_config(alembic_config).get_current_head()
+
+    assert revision == expected_head
 
 
 async def test_users_reject_duplicate_telegram_ids(db_session: AsyncSession) -> None:
