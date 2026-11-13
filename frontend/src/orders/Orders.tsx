@@ -76,8 +76,8 @@ function formatRemaining(expiresAt: string, now: number) {
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
-  if (days > 0) return `${days}d ${hours}h remaining`;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")} remaining`;
+  if (days > 0) return `${days} дн. ${hours} ч. осталось`;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")} осталось`;
 }
 
 function useClock() {
@@ -106,7 +106,7 @@ function OrderCard({
       className={`workspace-order-card${highlighted ? " workspace-order-card-linked" : ""}`}
       type="button"
       onClick={onOpen}
-      aria-label={`Open order ${title}, ${statusLabel(order.status)}`}
+      aria-label={`Открыть заказ ${title}, ${statusLabel(order.status)}`}
     >
       <span className="workspace-card-topline">
         <span className="workspace-asset-type">{order.asset_type === "ton_nft" ? "TON NFT" : "ПОДАРОК TELEGRAM"}</span>
@@ -161,7 +161,7 @@ function OrderDetails({
   return (
     <section className="order-detail-panel" aria-labelledby="order-detail-title">
       <div className="order-detail-toolbar">
-        <button className="text-button" type="button" onClick={onClose}>← Back to orders</button>
+        <button className="text-button" type="button" onClick={onClose}>← Назад к заказам</button>
         <span className="workspace-asset-type">ДАННЫЕ ЗАКАЗА</span>
       </div>
       <div className="order-detail-hero">
@@ -205,13 +205,13 @@ function OrderDetails({
           </section>
 
           <section className="workspace-section" aria-labelledby="timeline-heading">
-            <div className="workspace-section-heading"><div><p className="eyebrow">ИСТОРИЯ ИЗМЕНЕНИЙ</p><h2 id="timeline-heading">История событий</h2></div><span className="workspace-count">{order.events.length} events</span></div>
+            <div className="workspace-section-heading"><div><p className="eyebrow">ИСТОРИЯ ИЗМЕНЕНИЙ</p><h2 id="timeline-heading">История событий</h2></div><span className="workspace-count">{order.events.length} событий</span></div>
             {order.events.length ? (
               <ol className="event-timeline">
                 {[...order.events].sort((a, b) => getTimestamp(a.created_at) - getTimestamp(b.created_at)).map((event, index) => (
                   <li key={`${event.to_status}-${event.created_at}-${index}`}>
                     <span className="event-timeline-dot" aria-hidden="true" />
-                    <div className="event-timeline-copy"><strong>{statusLabel(event.to_status)}</strong><span>{event.actor_type === "system" ? "Система" : event.actor_type === "buyer" ? "Покупатель" : "Продавец"} update</span></div>
+                    <div className="event-timeline-copy"><strong>{statusLabel(event.to_status)}</strong><span>{event.actor_type === "system" ? "Система" : event.actor_type === "buyer" ? "Покупатель" : "Продавец"} обновление</span></div>
                     <time dateTime={event.created_at}>{getDate(event.created_at)}</time>
                   </li>
                 ))}
@@ -418,7 +418,7 @@ export function Orders({
     <section className="orders-view" aria-labelledby="orders-title">
       <div className="workspace-page-heading">
         <div><p className="eyebrow">ВАША АКТИВНОСТЬ</p><h1 id="orders-title">Заказы</h1><p className="workspace-subtitle">Все ваши резервы, передачи NFT и завершённые заказы — в одном месте.</p></div>
-        <button className="secondary-button refresh-button" type="button" disabled={loading} onClick={() => { setRefreshing(true); setRetry((value) => value + 1); }}><span aria-hidden="true">↻</span> {refreshing ? "Refreshing…" : "Refresh"}</button>
+        <button className="secondary-button refresh-button" type="button" disabled={loading} onClick={() => { setRefreshing(true); setRetry((value) => value + 1); }}><span aria-hidden="true">↻</span> {refreshing ? "Обновляем…" : "Refresh"}</button>
       </div>
 
       <div className="workspace-role-tabs" role="tablist" aria-label="Тип заказа">
@@ -445,7 +445,7 @@ export function Orders({
       ) : error ? (
         <div className="orders-message workspace-empty" role="alert"><span className="workspace-empty-icon" aria-hidden="true">!</span><h2>Заказы недоступны</h2><p>{error}</p><button className="primary-button" type="button" onClick={() => setRetry((value) => value + 1)}>Повторить</button></div>
       ) : visibleOrders.length === 0 ? (
-        <div className="orders-message workspace-empty" role="status"><span className="workspace-empty-icon" aria-hidden="true">◇</span><h2>{search || filter !== "all" ? "Заказы не найдены" : `No ${role === "buyer" ? "purchases" : "sales"} yet`}</h2><p>{search || filter !== "all" ? "Измените поисковый запрос или фильтр статуса." : "Здесь появятся ваши заказы после резервирования объявления или продажи актива."}</p>{search || filter !== "all" ? <button className="secondary-button" type="button" onClick={() => { setSearch(""); setFilter("all"); }}>Сбросить фильтры</button> : onCatalog ? <button className="primary-button" type="button" onClick={onCatalog}>Перейти в каталог</button> : null}</div>
+        <div className="orders-message workspace-empty" role="status"><span className="workspace-empty-icon" aria-hidden="true">◇</span><h2>{search || filter !== "all" ? "Заказы не найдены" : `Пока нет ${role === "buyer" ? "покупок" : "продаж"}`}</h2><p>{search || filter !== "all" ? "Измените поисковый запрос или фильтр статуса." : "Здесь появятся ваши заказы после резервирования объявления или продажи актива."}</p>{search || filter !== "all" ? <button className="secondary-button" type="button" onClick={() => { setSearch(""); setFilter("all"); }}>Сбросить фильтры</button> : onCatalog ? <button className="primary-button" type="button" onClick={onCatalog}>Перейти в каталог</button> : null}</div>
       ) : (
         <>
           <div className="workspace-results-heading"><span>{visibleOrders.length} {visibleOrders.length === 1 ? "order" : "orders"}</span><span>Данные вашего аккаунта</span></div>

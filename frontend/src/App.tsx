@@ -23,7 +23,7 @@ const assetTypeLabels: Record<AssetType, string> = {
 };
 const CATALOG_PAGE_SIZE = 24;
 
-function formatPrice(amount: string, currency: string) {
+function formatItemCount(count: number) {\n  const category = new Intl.PluralRules("ru-RU").select(count);\n  const noun = category === "one" ? "предмет" : category === "few" ? "предмета" : "предметов";\n  return `${count} ${noun}`;\n}\n\nfunction formatPrice(amount: string, currency: string) {
   const numericAmount = Number(amount);
   const formattedAmount = Number.isFinite(numericAmount)
     ? new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 4 }).format(numericAmount)
@@ -337,7 +337,7 @@ function MarketplaceApp() {
   useEffect(() => {
     if (!startParam) return;
 
-    if (startParam.type === "listing") {
+    if (startParam.type === "объявление") {
       setInitialOrderId(null);
       setListingId(startParam.id);
       setSection("catalog");
@@ -518,7 +518,7 @@ function MarketplaceApp() {
         ) : (
           <div className="inventory-message" role="status">
             <h2>Мои NFT</h2>
-            <p>Your NFT inventory requires a verified Telegram session and a TON wallet confirmed by backend proof.</p>
+            <p>Чтобы посмотреть NFT, откройте VILTARA в Telegram и подключите кошелёк с подтверждённым владением.</p>
           </div>
         )
       ) : listingId ? (
@@ -526,14 +526,14 @@ function MarketplaceApp() {
       ) : (
         <>
           <section className="catalog-intro" id="catalog">
-            <p className="eyebrow">DIGITAL COLLECTIBLES · TON</p>
-            <h1>Find your next<br /><span>favorite thing.</span></h1>
-            <p className="intro-copy">A live catalog of listed digital collectibles.</p>
+            <p className="eyebrow">ЦИФРОВЫЕ КОЛЛЕКЦИОННЫЕ ПРЕДМЕТЫ · TON</p>
+            <h1>Найдите свой<br /><span>следующий цифровой актив.</span></h1>
+            <p className="intro-copy">Каталог цифровых предметов, выставленных владельцами на продажу.</p>
           </section>
           <section className="catalog" aria-label="Каталог маркетплейса">
             <div className="catalog-heading">
               <h2>Объявления</h2>
-              {!loading && !error && <span className="result-count">{total} {total === 1 ? "item" : "items"}</span>}
+              {!loading && !error && <span className="result-count">{total} {total === 1 ? "предмет" : "предметов"}</span>}
             </div>
             <form className="catalog-controls" onSubmit={(event) => event.preventDefault()}>
               <label className="search-control">
@@ -544,7 +544,7 @@ function MarketplaceApp() {
               <label className="select-control">
                 <span className="sr-only">Тип актива</span>
                 <select value={assetType} onChange={(event) => setAssetType(event.target.value as AssetType | "all")}>
-                  <option value="all">All assets</option>
+                  <option value="all">Все активы</option>
                   <option value="ton_nft">TON NFT</option>
                   <option value="telegram_gift">Подарок Telegram</option>
                 </select>
@@ -566,19 +566,19 @@ function MarketplaceApp() {
                 >
                   <option value="all">Все валюты</option>
                   <option value="TON">TON</option>
-                  <option value="XTR">Stars (XTR)</option>
+                  <option value="XTR">Звёзды (XTR)</option>
                 </select>
               </label>
               <label className="price-control">
                 <span className="sr-only">Минимальная цена</span>
-                <input aria-label="Минимальная цена" type="number" min="0.000000001" step="0.000000001" placeholder="Min price" disabled={currency === "all"} value={minPrice} onChange={(event) => setMinPrice(event.target.value)} />
+                <input aria-label="Минимальная цена" type="number" min="0.000000001" step="0.000000001" placeholder="Мин. цена" disabled={currency === "all"} value={minPrice} onChange={(event) => setMinPrice(event.target.value)} />
               </label>
               <label className="price-control">
                 <span className="sr-only">Максимальная цена</span>
-                <input aria-label="Максимальная цена" type="number" min="0.000000001" step="0.000000001" placeholder="Max price" disabled={currency === "all"} value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} />
+                <input aria-label="Максимальная цена" type="number" min="0.000000001" step="0.000000001" placeholder="Макс. цена" disabled={currency === "all"} value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} />
               </label>
               <label className="select-control">
-                <span className="sr-only">Sort listings</span>
+                <span className="sr-only">Сортировка объявлений</span>
                 <select
                   value={sort}
                   onChange={(event) => setSort(event.target.value as ListingSort)}
@@ -606,10 +606,10 @@ function MarketplaceApp() {
               )}
             </form>
             {(minPrice || maxPrice) && currency === "all" && (
-              <p className="filter-hint" role="status">Choose TON or Stars to apply a price range.</p>
+              <p className="filter-hint" role="status">Выберите TON или Звёзды, чтобы задать диапазон цены.</p>
             )}
             {currency === "all" && sort !== "newest" && (
-              <p className="filter-hint" role="status">Choose a currency to compare prices fairly.</p>
+              <p className="filter-hint" role="status">Выберите валюту, чтобы корректно сравнить цены.</p>
             )}
 
             {loading ? (
@@ -620,12 +620,12 @@ function MarketplaceApp() {
               </div>
             ) : error ? (
               <div className="catalog-message" role="alert">
-                <h3>Catalog unavailable</h3><p>{error}</p>
+                <h3>Каталог недоступен</h3><p>{error}</p>
                 <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Повторить</button>
               </div>
             ) : listings.length === 0 ? (
               <div className="catalog-message" role="status">
-                <h3>Объявления не найдены</h3><p>Try changing your search or asset type.</p>
+                <h3>Объявления не найдены</h3><p>Измените поисковый запрос или тип актива.</p>
               </div>
             ) : (
               <>

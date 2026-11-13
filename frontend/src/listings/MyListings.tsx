@@ -202,7 +202,7 @@ function MyListingDetail({
           {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
           <dl className="detail-facts">
             <div><dt>Создан</dt><dd>{getCreatedDate(listing.created_at)}</dd></div>
-            <div><dt>Expires</dt><dd>{getExpirationLabel(listing.expires_at)}</dd></div>
+            <div><dt>Истекает</dt><dd>{getExpirationLabel(listing.expires_at)}</dd></div>
             <div><dt>ID актива</dt><dd>{listing.asset.external_id}</dd></div>
             <div><dt>Проверка</dt><dd>{listing.asset.verification_status}</dd></div>
           </dl>
@@ -253,7 +253,7 @@ function MyListingDetail({
                 value={expiresAt}
                 onChange={(event) => setExpiresAt(event.target.value)}
               />
-              <small>Clear the field to remove automatic expiry.</small>
+              <small>Очистите поле, чтобы отключить автоматическое истечение срока.</small>
             </label>
             <div className="listing-management-actions">
               <button className="load-more-button" type="submit" disabled={Boolean(working)}>
@@ -434,7 +434,7 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
       {!loading && !error && listings.length > 0 && (
         <div className="my-listings-toolbar">
           <label className="select-control">
-            <span className="sr-only">Filter my listings by status</span>
+            <span className="sr-only">Фильтр моих объявлений по статусу</span>
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
               <option value="all">All statuses ({listings.length})</option>
               {availableStatuses.map((status) => (

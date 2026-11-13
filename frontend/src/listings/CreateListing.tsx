@@ -257,7 +257,7 @@ export function CreateListing({
         </div>
       ) : assets.length === 0 && !hasMore ? (
         <div className="my-listings-message" role="status">
-          <h2>No eligible TON NFTs found</h2>
+          <h2>Подтверждённые TON NFT не найдены</h2>
           <p>В черновик можно добавить только NFT, которыми сейчас владеет подтверждённый кошелёк.</p>
         </div>
       ) : (

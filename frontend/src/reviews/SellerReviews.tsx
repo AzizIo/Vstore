@@ -56,7 +56,7 @@ export function SellerReviews({ sellerId, accessToken: _accessToken }: { sellerI
       ) : items.length === 0 ? <p className="reviews-state">Пока нет подтверждённых отзывов.</p> : (
         <ul className="review-list">
           {items.map((item) => <li className="review-item" key={item.id}>
-            <div className="review-item-heading"><span aria-label={`${item.rating} out of 5 stars`}>{"★".repeat(item.rating)}{"☆".repeat(5 - item.rating)}</span><time dateTime={item.created_at}>{new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium" }).format(new Date(item.created_at))}</time></div>
+            <div className="review-item-heading"><span aria-label={`${item.rating} из 5 звёзд`}>{"★".repeat(item.rating)}{"☆".repeat(5 - item.rating)}</span><time dateTime={item.created_at}>{new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium" }).format(new Date(item.created_at))}</time></div>
             {item.comment && <p>{item.comment}</p>}
             <small>Заказ с подтверждённой передачей</small>
           </li>)}
