@@ -49,7 +49,7 @@ async def publish_listing(
 
     All provider calls happen after the initial read transaction is rolled back.
     The listing, asset, and selected verified wallet are locked and revalidated
-    in a new transaction before the status changes to ACTIVE.
+    in a new transaction before the status changes to PENDING_REVIEW. Only an administrator can make it publicly ACTIVE.
     """
 
     settings = get_settings()
@@ -215,7 +215,7 @@ async def publish_listing(
         conflicting_listing_id = await session.scalar(
             select(Listing.id).where(
                 Listing.asset_id == asset_id,
-                Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED]),
+                Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]),
             )
         )
         if conflicting_listing_id is not None:
@@ -224,7 +224,7 @@ async def publish_listing(
             )
 
         locked_asset.verified_at = datetime.now(UTC)
-        locked_listing.status = ListingStatus.ACTIVE
+        locked_listing.status = ListingStatus.PENDING_REVIEW
         await session.flush()
         response_listing = await session.scalar(
             select(Listing)
@@ -302,7 +302,7 @@ async def cancel_listing(
     listing_id: UUID,
     seller_id: UUID,
 ) -> Listing:
-    """Unpublish an active listing or cancel a private draft."""
+    """Withdraw a pending submission, unpublish an active listing or cancel a private draft."""
 
     async with session.begin():
         listing = await session.scalar(
@@ -315,9 +315,9 @@ async def cancel_listing(
         )
         if listing is None:
             raise ListingNotFound("Listing not found")
-        if listing.status not in {ListingStatus.DRAFT, ListingStatus.ACTIVE}:
+        if listing.status not in {ListingStatus.DRAFT, ListingStatus.PENDING_REVIEW, ListingStatus.ACTIVE}:
             raise ListingConflict(
-                "Only draft or active listings can be cancelled"
+                "Only draft, pending-review or active listings can be cancelled"
             )
 
         listing.status = ListingStatus.CANCELLED
