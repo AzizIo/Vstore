@@ -238,8 +238,14 @@ test.describe("Telegram Mini App mobile error states", () => {
     const orderDetailPage = await openMockedMobilePage(context, { authenticated: true, orderDetailFailure: true }, 320);
     await orderDetailPage.getByRole("button", { name: "Заказы", exact: true }).click();
     await orderDetailPage.getByRole("button", { name: /Открыть заказ Moon Lantern/ }).click();
-    await expect(orderDetailPage.locator(".orders-error")).toContainText("Данные заказа временно недоступны.");
-    await expectNoHorizontalOverflow(orderDetailPage, 320, [".orders-view", ".order-detail-panel", ".orders-error"]);
+    const detailError = orderDetailPage.locator(".orders-error").filter({
+      hasText: "Данные заказа временно недоступны.",
+    });
+    await expect(detailError).toBeVisible();
+    await expectNoHorizontalOverflow(orderDetailPage, 320, [".orders-view", ".order-detail-panel"]);
+    const errorBounds = await detailError.boundingBox();
+    expect(errorBounds).not.toBeNull();
+    expect((errorBounds?.x ?? 0) + (errorBounds?.width ?? 0)).toBeLessThanOrEqual(321);
     await orderDetailPage.close();
   });
 });

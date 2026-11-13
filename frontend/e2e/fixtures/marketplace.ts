@@ -297,7 +297,19 @@ export async function mockMarketplaceApi(
       if (options.draftCreationFailure) {
         return fulfillJson({ detail: "Не удалось сохранить черновик. Попробуйте ещё раз." }, 503);
       }
-      return fulfillJson(draftListing, 201);
+      const payload = request.postDataJSON() as {
+        title?: string | null;
+        price_amount?: string;
+        price_currency?: string;
+        description?: string | null;
+      };
+      return fulfillJson({
+        ...draftListing,
+        title: payload.title ?? draftListing.title,
+        price_amount: payload.price_amount ?? draftListing.price_amount,
+        price_currency: payload.price_currency ?? draftListing.price_currency,
+        description: payload.description ?? draftListing.description,
+      }, 201);
     }
 
     const listingMatch = /^\/api\/listings\/([^/]+)$/.exec(path);
