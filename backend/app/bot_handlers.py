@@ -26,7 +26,7 @@ def _mini_app_button(url: str | None) -> InlineKeyboardButton | None:
         parsed = urlsplit(candidate)
         hostname = parsed.hostname
         # Accessing .port validates malformed and out-of-range port values.
-        parsed.port
+        _ = parsed.port
     except ValueError:
         return None
 
