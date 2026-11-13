@@ -29,6 +29,7 @@ class TelegramNotificationSender:
                 chat_id=chat_id,
                 text=text,
                 disable_web_page_preview=disable_web_page_preview,
+                parse_mode="HTML",
             )
         except TelegramRetryAfter as exc:
             raise TransientNotificationError(
