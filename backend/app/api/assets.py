@@ -139,7 +139,7 @@ def _open_listing_exists() -> Exists:
         .select_from(Listing)
         .where(
             Listing.asset_id == target_asset_id,
-            Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED]),
+            Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]),
         )
         .exists()
     )
