@@ -900,3 +900,76 @@ def test_inventory_sync_provider_outage_during_stale_recheck_keeps_existing_stat
     assert asset.verification_status is AssetVerificationStatus.VERIFIED
     session.commit.assert_not_awaited()
     assert redis.values == {}
+
+
+def test_inventory_page_returns_only_items_verified_for_selected_wallet(
+    api_client, owner, verified_wallet
+) -> None:
+    """A provider page may contain multiple candidates; only current-owner proofs render."""
+    verified_candidate = NFTItemSnapshot(
+        address=ITEM,
+        initialized=True,
+        index=1,
+        collection_address=None,
+        owner_address=OWNER,
+        metadata=NFTMetadata(name="Currently owned"),
+    )
+    transferred_candidate = NFTItemSnapshot(
+        address=OTHER_ITEM,
+        initialized=True,
+        index=2,
+        collection_address=None,
+        owner_address=OTHER_OWNER,
+        metadata=NFTMetadata(name="Transferred away"),
+    )
+    provider = FakeInventoryProvider(
+        NFTInventoryPage(
+            items=(verified_candidate, transferred_candidate),
+            has_more=False,
+            next_offset=2,
+        )
+    )
+
+    class PerItemVerifier(FakeVerifier):
+        async def verify(self, item_address: str, expected_owner_address: str):
+            self.calls.append((item_address, expected_owner_address))
+            candidate = next(
+                item for item in self.provider.page.items if item.address == item_address
+            )
+            if candidate.owner_address != expected_owner_address:
+                return VerificationResult(
+                    VerificationStatus.OWNER_MISMATCH,
+                    item_address,
+                    owner_address=candidate.owner_address,
+                    expected_owner_address=expected_owner_address,
+                )
+            return VerificationResult(
+                VerificationStatus.VERIFIED,
+                item_address,
+                owner_address=expected_owner_address,
+                expected_owner_address=expected_owner_address,
+                metadata=candidate.metadata,
+            )
+
+    verifier = PerItemVerifier(provider=provider)
+    persisted = make_asset(owner.id, verified_candidate)
+    session = SimpleNamespace(
+        scalar=AsyncMock(side_effect=[verified_wallet, verified_wallet, persisted]),
+        rollback=AsyncMock(),
+        commit=AsyncMock(),
+    )
+    install_session_override(session)
+    app.dependency_overrides[get_ton_nft_verifier] = lambda: verifier
+    try:
+        response = api_client.get("/api/assets/me?limit=24&offset=0")
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_ton_nft_verifier, None)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [item["item_address"] for item in body["items"]] == [ITEM]
+    assert body["has_more"] is False
+    assert body["next_offset"] == 2
+    assert verifier.calls == [(ITEM, OWNER), (OTHER_ITEM, OWNER)]
+    session.commit.assert_awaited_once()
