@@ -225,7 +225,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
                       <div><dt>Продавец</dt><dd>{seller}{listing.seller.username ? ` (@${listing.seller.username})` : ""}</dd></div>
                     </dl>
                     <p id="reservation-dialog-description" className="reservation-disclaimer">Это только резерв объявления. Оплата не проводится, средства не списываются, NFT остаётся у продавца.</p>
-                    {orderError && <p className="reservation-error" role="alert">{orderError} Your reservation request may have reached the server; retrying uses the same idempotency key.</p>}
+                    {orderError && <p className="reservation-error" role="alert">{orderError} Запрос мог быть обработан сервером. Повторная попытка не создаст дубликат резерва.</p>}
                     <div className="reservation-dialog-actions">
                       <button className="text-button" type="button" disabled={ordering} onClick={() => { setConfirmationOpen(false); setOrderError(""); window.setTimeout(() => reserveTriggerRef.current?.focus(), 0); }}>Отмена</button>
                       <button ref={confirmButtonRef} className="primary-button" type="button" disabled={ordering} onClick={() => void handleOrder()}>{ordering ? "Создаём резерв…" : "Подтвердить резерв"}</button>

@@ -115,7 +115,7 @@ function MyListingDetail({
   const canPublish =
     listing.status === "draft" &&
     listing.asset.asset_type === "ton_nft" &&
-    listing.asset.verification_status === "подтверждённый" &&
+    listing.asset.verification_status === "verified" &&
     Boolean(listing.asset.item_address);
 
   async function saveChanges(event: React.FormEvent<HTMLFormElement>) {

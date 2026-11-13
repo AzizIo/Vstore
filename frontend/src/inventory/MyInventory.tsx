@@ -231,8 +231,8 @@ export function MyInventory({
           <p className="inventory-intro">
             {selectedWallet ? (
               <>
-                Showing подтверждено: NFTs for {selectedWallet.address.slice(0, 8)}…
-                {selectedWallet.address.slice(-5)} · {selectedWallet.network}
+                Показываем NFT кошелька {selectedWallet.address.slice(0, 8)}…
+                {selectedWallet.address.slice(-5)} · {selectedWallet.network === "mainnet" ? "основная сеть" : "тестовая сеть"}
               </>
             ) : (
               "Подключите и подтвердите TON-кошелёк, чтобы посмотреть его NFT. Другой основной кошелёк автоматически выбран не будет."
@@ -251,7 +251,7 @@ export function MyInventory({
 
       {syncResult && !loading && !error && (
         <p className="inventory-sync-summary" role="status">
-          Последняя синхронизация: {new Date(syncResult.synced_at).toLocaleString()} · {syncResult.verified_count} verified
+          Последняя синхронизация: {new Date(syncResult.synced_at).toLocaleString("ru-RU")} · {syncResult.verified_count} подтверждено
           {syncResult.stale_count > 0 ? ` · ${syncResult.stale_count} помечено как устаревшие` : ""}
           {syncResult.invalid_count > 0 ? ` · ${syncResult.invalid_count} не удалось подтвердить` : ""}
           {syncResult.unsupported_count > 0 ? ` · ${syncResult.unsupported_count} не поддерживается` : ""}
@@ -260,7 +260,7 @@ export function MyInventory({
 
       {loading ? (
         <div className="inventory-message" role="status" aria-busy="true">
-          Checking the selected подтверждено: wallet and its NFT ownership...
+          Проверяем выбранный подтверждённый кошелёк и владение его NFT…
         </div>
       ) : !selectedWallet ? (
         <div className="inventory-message" role="status">
@@ -284,8 +284,8 @@ export function MyInventory({
             <>
               <h2>На этой странице нет подтверждённых NFT</h2>
               <p>
-                None of the items on this page could be confirmed as currently owned by you.
-                More inventory pages are available and may contain подтверждено: NFTs.
+                Не удалось подтвердить, что вы владеете NFT на этой странице.
+                В следующих страницах инвентаря могут быть другие подтверждённые NFT.
               </p>
               {loadMoreError && <p role="alert">{loadMoreError}</p>}
               <button

@@ -83,7 +83,7 @@ async function walletReference(boc: string): Promise<string> {
 }
 
 function deliveryStatus(attempt: DeliveryAttempt | null, orderStatus: MarketplaceOrder["status"]) {
-  if (orderStatus === "completed" || attempt?.status === "подтверждённый") return "Передача подтверждена независимо";
+  if (orderStatus === "completed" || attempt?.status === "verified") return "Передача подтверждена независимо";
   if (attempt?.status === "manual_review") return "Требуется ручная проверка";
   if (attempt?.status === "failed") return "Передача не подтверждена";
   if (attempt?.candidate_transaction_hash || attempt?.submitted_at) return "Перевод отправлен · проверяем";
@@ -319,15 +319,15 @@ function DeliveryPanel({
       {message && <p className="workspace-muted" role="status">{message}</p>}
       {showDetails && attempt && (
         <dl className="delivery-snapshot">
-          <div><dt>Сеть</dt><dd>TON {attempt.network}</dd></div>
+          <div><dt>Сеть</dt><dd>{attempt.network === "mainnet" ? "Основная сеть TON" : "Тестовая сеть TON"}</dd></div>
           <div><dt>NFT</dt><dd><code>{attempt.item_address}</code></dd></div>
           <div><dt>Кошелёк продавца</dt><dd><code>{attempt.seller_address}</code></dd></div>
           <div><dt>Кошелёк покупателя</dt><dd><code>{attempt.buyer_address}</code></dd></div>
           <div><dt>ID запроса передачи</dt><dd><code>{attempt.query_id}</code></dd></div>
-          <div><dt>Срок подготовки</dt><dd>{new Date(attempt.deadline).toLocaleString()}</dd></div>
+          <div><dt>Срок подготовки</dt><dd>{new Date(attempt.deadline).toLocaleString("ru-RU")}</dd></div>
           {attempt.transaction_hash && <div><dt>Подтверждённая транзакция</dt><dd><code>{attempt.transaction_hash}</code></dd></div>}
           {attempt.masterchain_seqno !== null && <div><dt>Последовательность Masterchain</dt><dd>{attempt.masterchain_seqno}</dd></div>}
-          {attempt.verified_at && <div><dt>Подтверждено</dt><dd>{new Date(attempt.verified_at).toLocaleString()}</dd></div>}
+          {attempt.verified_at && <div><dt>Подтверждено</dt><dd>{new Date(attempt.verified_at).toLocaleString("ru-RU")}</dd></div>}
         </dl>
       )}
       {walletActionsEnabled && role === "seller" && !wallet && order.status !== "completed" && (
