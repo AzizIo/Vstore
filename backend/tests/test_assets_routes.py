@@ -170,7 +170,9 @@ def test_inventory_requires_a_verified_wallet(api_client, owner) -> None:
         app.dependency_overrides.pop(get_db_session, None)
 
     assert response.status_code == 409
-    assert "verified TON wallet" in response.json()["detail"]
+    assert response.json()["detail"] == (
+        "Чтобы найти NFT, сначала подключите и подтвердите TON-кошелёк."
+    )
 
 
 def test_inventory_does_not_disclose_a_foreign_wallet(api_client, owner) -> None:
@@ -182,7 +184,7 @@ def test_inventory_does_not_disclose_a_foreign_wallet(api_client, owner) -> None
         app.dependency_overrides.pop(get_db_session, None)
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Verified wallet not found"
+    assert response.json()["detail"] == "Подтверждённый TON-кошелёк не найден."
 
 
 def test_inventory_returns_only_freshly_verified_items_and_syncs_them(
@@ -323,7 +325,9 @@ def test_inventory_provider_outage_is_not_reported_as_empty(api_client, verified
         app.dependency_overrides.pop(get_ton_nft_verifier, None)
 
     assert response.status_code == 503
-    assert "temporarily unavailable" in response.json()["detail"]
+    assert response.json()["detail"] == (
+        "Сервис инвентаря TON NFT временно недоступен. Попробуйте позже."
+    )
     session.commit.assert_not_awaited()
 
 
@@ -345,7 +349,9 @@ def test_inventory_rejects_malformed_provider_data(api_client, verified_wallet) 
         app.dependency_overrides.pop(get_ton_nft_verifier, None)
 
     assert response.status_code == 502
-    assert "invalid data" in response.json()["detail"]
+    assert response.json()["detail"] == (
+        "Сервис TON вернул некорректные данные об инвентаре NFT. Попробуйте позже."
+    )
     session.commit.assert_not_awaited()
 
 
