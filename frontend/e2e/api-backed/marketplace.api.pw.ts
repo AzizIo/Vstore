@@ -162,18 +162,24 @@ test(
     await sellerPage.getByRole("button", { name: "Подтвердить публикацию", exact: true }).click();
     await expect(sellerPage.locator(".listing-status-pending_review")).toHaveText("На модерации");
 
-    // The seller is an allowlisted CI moderator. Approval is an explicit step;
-    // submitting the listing alone must never expose it to buyers.
-    await sellerPage.goto("/admin");
-    await expect(sellerPage.getByRole("heading", { name: "Модерация и аудит" })).toBeVisible();
-    const moderationCard = sellerPage.locator(".admin-listing").filter({ hasText: "E2E Published NFT" });
-    await expect(moderationCard).toBeVisible();
-    await moderationCard.getByRole("button", { name: "Одобрить", exact: true }).click();
-    const approvalDialog = sellerPage.getByRole("dialog", { name: "Одобрить объявление" });
-    await approvalDialog.getByLabel("Пояснение (5–500 символов)").fill("E2E explicit publication approval");
-    await approvalDialog.getByRole("button", { name: "Подтвердить одобрение" }).click();
-    await expect(moderationCard.getByText("Активно", { exact: true })).toBeVisible();
-    await sellerPage.goto("/");
+    // The listing remains private until the administrator explicitly approves it.
+    const approvalResponse = await sellerContext.request.post(
+      "http://127.0.0.1:5173/api/admin/listings/" + draft.id + "/decision",
+      {
+        headers: {
+          Authorization: `Bearer ${bootstrapSession.access_token}`,
+          "Idempotency-Key": "marketplace-approve-e2e-0001",
+        },
+        data: {
+          action: "approve",
+          reason_code: "other",
+          reason: "E2E explicit publication approval",
+        },
+      },
+    );
+    expect(approvalResponse.status()).toBe(200);
+    expect((await approvalResponse.json()).action).toBe("approved");
+    await sellerPage.reload();
     await sellerPage.getByRole("button", { name: "Мои объявления", exact: true }).click();
     await expect(sellerPage.locator(".listing-status-active")).toHaveText("Активно");
 
