@@ -4119,3 +4119,236 @@ code,
     transition: none !important;
   }
 }
+
+
+/* Final interaction pass — smoother section entry, tactile controls and asset fallbacks. */
+@keyframes mini-section-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.catalog-intro,
+.catalog,
+.detail-view,
+.inventory-view,
+.my-listings,
+.my-listings-gate,
+.create-listing-view,
+.orders-view {
+  animation: mini-section-enter 240ms cubic-bezier(.2, .7, .25, 1) both;
+}
+
+.select-control,
+.workspace-sort,
+.my-listings-toolbar .select-control {
+  position: relative;
+  min-width: 0;
+}
+
+.select-control::after,
+.workspace-sort::after {
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid #a8b19d;
+  border-bottom: 1.5px solid #a8b19d;
+  content: "";
+  pointer-events: none;
+  transform: translateY(-70%) rotate(45deg);
+}
+
+.select-control select,
+.workspace-sort select,
+.my-listings-toolbar .select-control select {
+  min-width: 0;
+  padding-right: 29px;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.workspace-sort select {
+  width: 100%;
+  min-height: 44px;
+  padding-left: 12px;
+  border: 1px solid var(--mini-border);
+  color: var(--mini-text);
+}
+
+.select-control:focus-within::after,
+.workspace-sort:focus-within::after {
+  border-color: var(--mini-accent);
+}
+
+.select-control select:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.artwork-placeholder,
+.inventory-artwork,
+.inventory-image {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 35%, rgb(208 220 112 / 13%), transparent 58%),
+    linear-gradient(145deg, #293224 0%, #1a2118 55%, #141914 100%);
+}
+
+.artwork-placeholder::before,
+.inventory-artwork::before,
+.inventory-image::before {
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: 50%;
+  width: 66%;
+  aspect-ratio: 1;
+  border: 1px solid rgb(208 220 112 / 17%);
+  border-radius: 50%;
+  content: "";
+  transform: translate(-50%, -50%);
+  box-shadow:
+    0 0 0 12px rgb(208 220 112 / 2%),
+    0 0 0 28px rgb(208 220 112 / 2%);
+}
+
+.artwork-placeholder::after,
+.inventory-artwork::after,
+.inventory-image::after {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(135deg, rgb(255 255 255 / 4%), transparent 42%, rgb(0 0 0 / 14%));
+  content: "";
+}
+
+.artwork-placeholder > span,
+.inventory-artwork > span,
+.inventory-image > span {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border: 1px solid rgb(208 220 112 / 28%);
+  border-radius: 18px;
+  background: rgb(208 220 112 / 7%);
+  color: #d5df83;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: -.06em;
+  box-shadow: 0 8px 26px rgb(0 0 0 / 16%);
+}
+
+.artwork-placeholder > span {
+  width: 66px;
+  height: 66px;
+  border-radius: 21px;
+  font-size: 29px;
+}
+
+.artwork-placeholder img,
+.inventory-artwork img,
+.inventory-image img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.workspace-filter,
+.workspace-role-tabs button,
+.review-rating-options label {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.workspace-filter {
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.workspace-filter:active,
+.workspace-role-tabs button:active,
+.review-rating-options label:active {
+  transform: scale(.98);
+}
+
+.catalog-pagination .load-more-button,
+.inventory-pagination .load-more-button,
+.reviews-load-more {
+  min-width: min(100%, 220px);
+}
+
+@media (max-width: 640px) {
+  .catalog-intro,
+  .catalog,
+  .detail-view,
+  .inventory-view,
+  .my-listings,
+  .my-listings-gate,
+  .create-listing-view,
+  .orders-view {
+    animation-duration: 210ms;
+  }
+
+  .select-control::after,
+  .workspace-sort::after {
+    right: 12px;
+  }
+
+  .workspace-sort select {
+    min-height: 46px;
+    padding-right: 32px;
+    padding-left: 12px;
+    border-radius: 11px;
+    font-size: 12px;
+  }
+
+  .artwork-placeholder > span,
+  .inventory-artwork > span,
+  .inventory-image > span {
+    width: 46px;
+    height: 46px;
+    border-radius: 15px;
+    font-size: 21px;
+  }
+
+  .artwork-placeholder > span {
+    width: 56px;
+    height: 56px;
+    font-size: 24px;
+  }
+
+  .workspace-filter:active {
+    transform: scale(.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalog-intro,
+  .catalog,
+  .detail-view,
+  .inventory-view,
+  .my-listings,
+  .my-listings-gate,
+  .create-listing-view,
+  .orders-view,
+  .workspace-filter,
+  .workspace-role-tabs button,
+  .review-rating-options label {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
