@@ -518,7 +518,10 @@ async def test_mismatched_successful_payment_is_queued_for_refund(
     try:
         intent = await _create_intent(session_factory, ids)
         evidence = _payment_evidence(
-            intent, ids, update_id=f"mismatch-update-{uuid4()}", charge_id=f"mismatch-charge-{uuid4()}"
+            intent,
+            ids,
+            update_id=f"mismatch-update-{uuid4()}",
+            charge_id=f"mismatch-charge-{uuid4()}"
         )
         evidence["total_amount"] = 26
         async with session_factory() as session:
