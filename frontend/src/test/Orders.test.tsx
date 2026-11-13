@@ -166,6 +166,31 @@ describe("order workspace interactions", () => {
     expect(screen.queryByText("Silver Gift")).not.toBeInTheDocument();
   });
 
+  it("ignores a late deep-link response after another order is opened", async () => {
+    const firstOrder = { ...order, id: "order-1", title: "Moon Lantern" };
+    const secondOrder = { ...order, id: "order-2", title: "Golden Gift" };
+    let resolveDeepLink: ((value: Response) => void) | undefined;
+
+    vi.mocked(fetch).mockImplementation((input) => {
+      const url = String(input);
+      if (url.endsWith("/api/orders/order-1")) {
+        return new Promise((resolve) => { resolveDeepLink = resolve; });
+      }
+      if (url.endsWith("/api/orders/order-2")) return Promise.resolve(jsonResponse(secondOrder));
+      return Promise.resolve(jsonResponse({ items: [firstOrder, secondOrder] }));
+    });
+
+    render(<Orders accessToken="token" userId="buyer-1" initialOrderId="order-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть заказ Golden Gift/ }));
+    expect(await screen.findByRole("heading", { name: "Golden Gift" })).toBeInTheDocument();
+
+    resolveDeepLink?.(jsonResponse(firstOrder));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Golden Gift" })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Moon Lantern" })).not.toBeInTheDocument();
+    });
+  });
+
   it("does not reopen order details after the user returns while loading", async () => {
     let resolveDetail: ((value: Response) => void) | undefined;
     vi.mocked(fetch).mockImplementation((input) => {
