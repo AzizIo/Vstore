@@ -206,6 +206,29 @@ async def record_stars_success(
         )
         if order is None:
             raise PaymentConflict("Payment order no longer exists")
+
+        # Recheck after acquiring the order lock: concurrent delivery of the same
+        # Telegram update may have committed while this transaction was waiting.
+        duplicate_event = await session.scalar(
+            select(PaymentEvent).where(
+                PaymentEvent.provider == "telegram_stars",
+                PaymentEvent.provider_event_id == provider_event_id,
+            )
+        )
+        if duplicate_event is not None:
+            if duplicate_event.payload_sha256 != digest:
+                raise PaymentConflict("Telegram update ID was replayed with different payment data")
+            duplicate_transaction = (
+                await session.scalar(
+                    select(PaymentTransaction).where(
+                        PaymentTransaction.id == duplicate_event.payment_transaction_id
+                    )
+                )
+                if duplicate_event.payment_transaction_id is not None
+                else None
+            )
+            return duplicate_transaction.status if duplicate_transaction is not None else "duplicate"
+
         intent = await session.scalar(
             select(PaymentIntent)
             .where(
