@@ -76,8 +76,13 @@ function ListingCard({ listing, onOpen }: { listing: Listing; onOpen: () => void
       <span className="listing-card-content">
         <span className="listing-card-topline">
           <span className="listing-card-type">{assetTypeLabels[listing.asset.asset_type]}</span>
-          {collection && <span className="listing-card-collection">{collection}</span>}
+          {listing.asset.verification_status === "verified" && (
+            <span className="listing-card-verified">
+              <span aria-hidden="true">✓</span> Проверен
+            </span>
+          )}
         </span>
+        {collection && <span className="listing-card-collection">{collection}</span>}
         <span className="listing-card-title">{title}</span>
         <span className="listing-card-footer">
           <span className="listing-card-price">{formatPrice(listing.price_amount, listing.price_currency)}</span>
