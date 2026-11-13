@@ -185,3 +185,51 @@ test("seller draft builder is usable at Telegram phone widths", async ({ page })
   await page.getByRole("spinbutton", { name: "Цена" }).fill("1.5");
   await expect(page.locator(".draft-price-preview")).toContainText("1.5 TON");
 });
+
+
+test("catalog cards and filter controls stay balanced on Telegram phone widths", async ({ page }) => {
+  await mockMarketplaceApi(page);
+  await page.goto("/");
+
+  for (const width of [320, 360, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+
+    const card = page.locator(".listing-card").first();
+    const search = page.locator(".catalog-controls .search-control");
+    const filter = page.locator(".catalog-controls .select-control").first();
+
+    await expect(card).toBeVisible();
+    await expect(search).toBeVisible();
+    await expect(filter).toBeVisible();
+
+    const layout = await page.evaluate(() => {
+      const rectOf = (selector: string) => {
+        const rect = document.querySelector(selector)?.getBoundingClientRect();
+        return rect ? { left: rect.left, right: rect.right, height: rect.height } : null;
+      };
+      const card = document.querySelector(".listing-card");
+      const artwork = card?.querySelector(".artwork");
+      return {
+        documentWidth: document.documentElement.scrollWidth,
+        viewportWidth: window.innerWidth,
+        card: rectOf(".listing-card"),
+        search: rectOf(".catalog-controls .search-control"),
+        filter: rectOf(".catalog-controls .select-control"),
+        artwork: artwork ? {
+          width: artwork.getBoundingClientRect().width,
+          height: artwork.getBoundingClientRect().height,
+        } : null,
+        cardRadius: card ? Number.parseFloat(getComputedStyle(card).borderTopLeftRadius) : 0,
+      };
+    });
+
+    expect(layout.documentWidth, `catalog should not overflow at ${width}px`).toBeLessThanOrEqual(layout.viewportWidth);
+    expect(layout.card?.left ?? -1).toBeGreaterThanOrEqual(0);
+    expect(layout.card?.right ?? Infinity).toBeLessThanOrEqual(width);
+    expect(layout.search?.height ?? 0).toBeGreaterThanOrEqual(44);
+    expect(layout.filter?.height ?? 0).toBeGreaterThanOrEqual(42);
+    expect(layout.artwork?.width ?? 0).toBeGreaterThan(0);
+    expect(layout.artwork?.height ?? 0).toBeGreaterThan(0);
+    expect(layout.cardRadius).toBeGreaterThan(0);
+  }
+});
