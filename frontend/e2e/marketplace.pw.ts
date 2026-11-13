@@ -109,7 +109,7 @@ test.describe("listing details", () => {
     await expect(page.getByText("Ari")).toBeVisible();
     await expect(page.getByText("@collector")).toBeVisible();
 
-    await page.getByRole("button", { name: /Back to catalog/ }).click();
+    await page.getByRole("button", { name: /Назад в каталог/ }).click();
 
     await expect(page.getByRole("heading", { name: "Объявления" })).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
@@ -145,7 +145,7 @@ test.describe("listing details", () => {
     await expect(dialog).toContainText("Moon Lantern");
     await expect(dialog).toContainText("12,5 TON");
     await expect(dialog).toContainText("Ari (@collector)");
-    await expect(dialog).toContainText("Оплата не подключена, средства не списываются, NFT остаётся у продавца");
+    await expect(dialog).toContainText("Это только резерв объявления. Оплата не проводится, средства не списываются, NFT остаётся у продавца.");
     expect(requests.some((request) => request === "POST /api/orders")).toBe(false);
 
     await dialog.getByRole("button", { name: "Подтвердить резерв" }).click();
@@ -163,19 +163,19 @@ test.describe("order workspace", () => {
     await page.getByRole("button", { name: "Заказы" }).click();
 
     await expect(page.getByRole("heading", { name: "Заказы" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: /Purchases/ })).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByRole("button", { name: /Open order Moon Lantern/ })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /Покупки/ })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("button", { name: /Открыть заказ Moon Lantern/ })).toBeVisible();
 
     await page.screenshot({ path: "test-results/order-workspace-desktop.png", fullPage: true });
-    await page.getByRole("button", { name: /Active/ }).click();
-    await expect(page.getByRole("button", { name: /Open order Moon Lantern/ })).toBeVisible();
+    await page.getByRole("button", { name: /Активные/ }).click();
+    await expect(page.getByRole("button", { name: /Открыть заказ Moon Lantern/ })).toBeVisible();
     await page.getByRole("searchbox", { name: "Поиск по названию актива или ID заказа" }).fill(orderId);
-    await expect(page.getByRole("button", { name: /Open order Moon Lantern/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Открыть заказ Moon Lantern/ })).toBeVisible();
 
-    await page.getByRole("button", { name: /Open order Moon Lantern/ }).click();
+    await page.getByRole("button", { name: /Открыть заказ Moon Lantern/ }).click();
     await expect(page.getByRole("heading", { name: "Статус заказа" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "История событий" })).toBeVisible();
-    await expect(page.getByText(/Payments are not enabled/)).toBeVisible();
+    await expect(page.getByText(/Оплата в VILTARA SHOP пока не подключена/)).toBeVisible();
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: "test-results/order-details-mobile.png", fullPage: true });

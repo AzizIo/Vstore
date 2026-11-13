@@ -78,7 +78,7 @@ const profile = {
   username: "e2e_buyer",
   first_name: "Alex",
   last_name: "Example",
-  language_code: "en",
+  language_code: "ru",
 };
 
 const authResponse = {
@@ -178,7 +178,7 @@ export async function mockMarketplaceApi(
     if (path === "/api/auth/telegram" && method === "POST") {
       return options.authenticated
         ? fulfillJson(authResponse)
-        : fulfillJson({ detail: "Telegram authentication is not enabled in this test." }, 401);
+        : fulfillJson({ detail: "Авторизация Telegram отключена в этом тесте." }, 401);
     }
 
     if (path === "/api/users/me" && method === "GET" && options.authenticated) {
@@ -188,7 +188,7 @@ export async function mockMarketplaceApi(
     if (path === "/api/listings" && method === "GET") {
       if (remainingCatalogFailures > 0) {
         remainingCatalogFailures -= 1;
-        return fulfillJson({ detail: "Catalog temporarily unavailable." }, 503);
+        return fulfillJson({ detail: "Каталог временно недоступен." }, 503);
       }
 
       const search = (url.searchParams.get("search") ?? "").trim().toLowerCase();
@@ -238,13 +238,26 @@ export async function mockMarketplaceApi(
     const listingMatch = /^\/api\/listings\/([^/]+)$/.exec(path);
     if (listingMatch && method === "GET") {
       if (options.missingListingDetail) {
-        return fulfillJson({ detail: "Listing not found." }, 404);
+        return fulfillJson({ detail: "Объявление не найдено." }, 404);
       }
       const id = decodeURIComponent(listingMatch[1]);
       const listing = catalogListings.find((item) => item.id === id);
       return listing
         ? fulfillJson(listing)
         : fulfillJson({ detail: "Listing not found." }, 404);
+    }
+
+    if (path === "/api/reviews/sellers/seller-1" && method === "GET") {
+      return fulfillJson({
+        seller_id: "seller-1",
+        average_rating: 0,
+        review_count: 0,
+        rating_distribution: { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 },
+        items: [],
+        limit: 10,
+        offset: 0,
+        has_more: false,
+      });
     }
 
     if (path === "/api/orders" && method === "POST" && options.authenticated) {
@@ -276,7 +289,7 @@ export async function mockMarketplaceApi(
       return fulfillJson({ items: [linkedOrder] });
     }
 
-    return fulfillJson({ detail: `No E2E mock for ${method} ${path}.` }, 404);
+    return fulfillJson({ detail: `Для метода ${method} и пути ${path} нет тестовой заглушки.` }, 404);
   });
 
   return requests;
