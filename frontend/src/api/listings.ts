@@ -107,11 +107,11 @@ async function requestJson<T>(url: string, signal?: AbortSignal, headers?: Heade
     response = await fetch(url, { signal, headers });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new Error("Could not connect to the marketplace. Please try again.");
+    throw new Error("Не удалось связаться с маркетплейсом. Попробуйте ещё раз.");
   }
 
   if (!response.ok) {
-    let message = `Request failed (${response.status}).`;
+    let message = `Запрос завершился ошибкой (${response.status}).`;
     try {
       const body: unknown = await response.json();
       if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
@@ -126,7 +126,7 @@ async function requestJson<T>(url: string, signal?: AbortSignal, headers?: Heade
   try {
     return (await response.json()) as T;
   } catch {
-    throw new Error("The marketplace returned an invalid response.");
+    throw new Error("Маркетплейс вернул некорректный ответ.");
   }
 }
 
@@ -150,14 +150,14 @@ export async function fetchListings(filters: ListingFilters, signal?: AbortSigna
     (page as ListingPage).items.length > limit ||
     !(page as ListingPage).items.every(isListing)
   ) {
-    throw new Error("The marketplace returned an invalid catalog response.");
+    throw new Error("Маркетплейс вернул некорректный каталог.");
   }
   return page as ListingPage;
 }
 
 export async function fetchListing(id: string, signal?: AbortSignal) {
   const listing = await requestJson<unknown>(`${API_BASE_URL}/api/listings/${encodeURIComponent(id)}`, signal);
-  if (!isListing(listing)) throw new Error("The marketplace returned an invalid listing.");
+  if (!isListing(listing)) throw new Error("Маркетплейс вернул некорректные данные объявления.");
   return listing;
 }
 
@@ -168,7 +168,7 @@ export async function fetchMyListings(accessToken: string, signal?: AbortSignal)
     { Authorization: `Bearer ${accessToken}` },
   );
   if (!Array.isArray(listings) || !listings.every(isListing)) {
-    throw new Error("The marketplace returned an invalid listings response.");
+    throw new Error("Маркетплейс вернул некорректный список объявлений.");
   }
   return listings;
 }
@@ -196,11 +196,11 @@ async function requestSellerListing(
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new Error("Could not connect to the marketplace. Please try again.");
+    throw new Error("Не удалось связаться с маркетплейсом. Попробуйте ещё раз.");
   }
 
   if (!response.ok) {
-    let message = `Request failed (${response.status}).`;
+    let message = `Запрос завершился ошибкой (${response.status}).`;
     try {
       const body: unknown = await response.json();
       if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
@@ -216,10 +216,10 @@ async function requestSellerListing(
   try {
     result = await response.json();
   } catch {
-    throw new Error("The marketplace returned an invalid listing response.");
+    throw new Error("Маркетплейс вернул некорректный ответ объявления.");
   }
   if (!isListing(result)) {
-    throw new Error("The marketplace returned an invalid listing response.");
+    throw new Error("Маркетплейс вернул некорректный ответ объявления.");
   }
   return result;
 }

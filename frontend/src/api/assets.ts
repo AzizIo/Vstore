@@ -54,11 +54,11 @@ async function requestJson<T>(url: string, accessToken: string, init?: RequestIn
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new Error("Could not connect to the seller service. Please try again.");
+    throw new Error("Не удалось связаться с сервисом объявлений. Попробуйте ещё раз.");
   }
 
   if (!response.ok) {
-    let message = `Request failed (${response.status}).`;
+    let message = `Запрос завершился ошибкой (${response.status}).`;
     try {
       const body: unknown = await response.json();
       if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
@@ -73,7 +73,7 @@ async function requestJson<T>(url: string, accessToken: string, init?: RequestIn
   try {
     return (await response.json()) as T;
   } catch {
-    throw new Error("The seller service returned an invalid response.");
+    throw new Error("Сервис объявлений вернул некорректный ответ.");
   }
 }
 
@@ -106,7 +106,7 @@ export async function fetchMyInventory(
 
   const page = await requestJson<unknown>(`${API_BASE_URL}/api/assets/me?${params}`, accessToken, { signal });
   if (!page || typeof page !== "object") {
-    throw new Error("The seller service returned an invalid inventory response.");
+    throw new Error("Сервис объявлений вернул некорректный инвентарь.");
   }
   const data = page as Partial<InventoryPage>;
   if (
@@ -118,10 +118,10 @@ export async function fetchMyInventory(
     data.items.length > limit ||
     typeof data.has_more !== "boolean"
   ) {
-    throw new Error("The seller service returned an invalid inventory response.");
+    throw new Error("Сервис объявлений вернул некорректный инвентарь.");
   }
   if (pageRequest.walletId && data.wallet_id !== pageRequest.walletId) {
-    throw new Error("The seller service returned inventory for a different wallet.");
+    throw new Error("Сервис объявлений вернул инвентарь другого кошелька.");
   }
   return data as InventoryPage;
 }
@@ -138,7 +138,7 @@ export async function createListingDraft(
     signal,
   });
   if (!isListing(listing) || listing.status !== "draft") {
-    throw new Error("The seller service returned an invalid draft response.");
+    throw new Error("Сервис объявлений вернул некорректный ответ при создании черновика.");
   }
   return listing;
 }
@@ -158,7 +158,7 @@ export async function syncMyInventory(
     { method: "POST", signal },
   );
   if (!response || typeof response !== "object") {
-    throw new Error("The seller service returned an invalid inventory sync response.");
+    throw new Error("Сервис объявлений вернул некорректный ответ синхронизации инвентаря.");
   }
   const result = response as Partial<InventorySyncResponse>;
   const countKeys = [
@@ -175,7 +175,7 @@ export async function syncMyInventory(
     !Number.isFinite(Date.parse(result.synced_at)) ||
     countKeys.some((key) => !Number.isInteger(result[key]) || (result[key] ?? -1) < 0)
   ) {
-    throw new Error("The seller service returned an invalid inventory sync response.");
+    throw new Error("Сервис объявлений вернул некорректный ответ синхронизации инвентаря.");
   }
   return result as InventorySyncResponse;
 }
