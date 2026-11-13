@@ -611,12 +611,12 @@ describe("Buyer orders", () => {
     expect(confirmation).toHaveTextContent("Moon Lantern");
     expect(confirmation).toHaveTextContent("12,5 TON");
     expect(confirmation).toHaveTextContent("Ari (@collector)");
-    expect(confirmation).toHaveTextContent("Оплата не подключена, средства не списываются, NFT остаётся у продавца");
+    expect(confirmation).toHaveTextContent("Это только резерв объявления. Оплата не проводится, средства не списываются, NFT остаётся у продавца");
     expect(vi.mocked(fetch).mock.calls.some(([input, init]) => String(input).endsWith("/api/orders") && init?.method === "POST")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Подтвердить резерв" }));
 
     expect(await screen.findByRole("heading", { name: "Резерв подтверждён" })).toBeInTheDocument();
-    expect(screen.getByRole("dialog")).toHaveTextContent("Оплата не подключена, средства не списываются, NFT остаётся у продавца");
+    expect(screen.getByRole("dialog")).toHaveTextContent("Резерв для «Moon Lantern» создан. Оплата не проводилась, NFT пока остаётся у продавца");
     const orderRequest = vi.mocked(fetch).mock.calls.find(([input, init]) =>
       String(input).endsWith("/api/orders") && init?.method === "POST"
     );
