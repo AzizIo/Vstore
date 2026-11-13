@@ -64,7 +64,9 @@ def upgrade() -> None:
         "payment_transactions",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("payment_intent_id", sa.Uuid(), nullable=False),
-        sa.Column("provider", sa.String(length=32), server_default="telegram_stars", nullable=False),
+        sa.Column(
+            "provider", sa.String(length=32), server_default="telegram_stars", nullable=False
+        ),
         sa.Column("telegram_payment_charge_id", sa.String(length=128), nullable=False),
         sa.Column("provider_payment_charge_id", sa.String(length=128), nullable=True),
         sa.Column("amount", sa.Numeric(precision=24, scale=9), nullable=False),
@@ -75,8 +77,12 @@ def upgrade() -> None:
         sa.Column("refund_requested_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("refunded_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_error_code", sa.String(length=64), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint(
             "amount > 0", name="ck_payment_transactions_amount_positive"
         ),
@@ -109,11 +115,15 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("payment_intent_id", sa.Uuid(), nullable=False),
         sa.Column("payment_transaction_id", sa.Uuid(), nullable=True),
-        sa.Column("provider", sa.String(length=32), server_default="telegram_stars", nullable=False),
+        sa.Column(
+            "provider", sa.String(length=32), server_default="telegram_stars", nullable=False
+        ),
         sa.Column("provider_event_id", sa.String(length=128), nullable=False),
         sa.Column("event_type", sa.String(length=32), nullable=False),
         sa.Column("payload_sha256", sa.String(length=64), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint(
             "event_type IN ('intent_created', 'pre_checkout_accepted', "
             "'payment_succeeded', 'payment_rejected', 'refund_requested', "
