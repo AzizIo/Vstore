@@ -16,7 +16,6 @@ from app.assets.ton_nft.errors import InvalidProviderData
 from app.assets.ton_nft.models import VerificationResult, VerificationStatus
 from app.assets.ton_nft.verifier import TONNFTVerifier
 from app.core.config import get_settings
-from app.db.payments import PaymentIntent
 from app.db.models import (
     AssetType,
     AssetVerificationStatus,
@@ -33,6 +32,7 @@ from app.db.models import (
     User,
     Wallet,
 )
+from app.db.payments import PaymentIntent
 
 
 class OrderConflict(Exception):
