@@ -327,7 +327,11 @@ async def cancel_listing(
         )
         if listing is None:
             raise ListingNotFound("Listing not found")
-        if listing.status not in {ListingStatus.DRAFT, ListingStatus.PENDING_REVIEW, ListingStatus.ACTIVE}:
+        if listing.status not in {
+            ListingStatus.DRAFT,
+            ListingStatus.PENDING_REVIEW,
+            ListingStatus.ACTIVE,
+        }:
             raise ListingConflict(
                 "Only draft, pending-review or active listings can be cancelled"
             )
