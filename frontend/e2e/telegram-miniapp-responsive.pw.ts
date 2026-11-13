@@ -233,3 +233,43 @@ test("catalog cards and filter controls stay balanced on Telegram phone widths",
     expect(layout.cardRadius).toBeGreaterThan(0);
   }
 });
+
+
+test("workspace status filters remain keyboard-visible and fit narrow screens", async ({ page }) => {
+  await mockMarketplaceApi(page, { authenticated: true });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Заказы", exact: true }).click();
+
+  const filterRow = page.locator(".workspace-filter-row");
+  const activeFilter = page.locator(".workspace-filter").first();
+  await expect(filterRow).toBeVisible();
+  await expect(activeFilter).toBeVisible();
+
+  for (const width of [320, 360, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    const layout = await filterRow.evaluate((element) => ({
+      left: element.getBoundingClientRect().left,
+      right: element.getBoundingClientRect().right,
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      pageWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth,
+      overflowX: getComputedStyle(element).overflowX,
+    }));
+
+    expect(layout.left).toBeGreaterThanOrEqual(0);
+    expect(layout.right).toBeLessThanOrEqual(width);
+    expect(layout.pageWidth).toBeLessThanOrEqual(layout.viewportWidth);
+    expect(layout.overflowX).toBe("auto");
+    expect(layout.scrollWidth).toBeGreaterThanOrEqual(layout.clientWidth);
+  }
+
+  await activeFilter.focus();
+  await expect(activeFilter).toBeFocused();
+  const focusStyle = await activeFilter.evaluate((element) => ({
+    outlineStyle: getComputedStyle(element).outlineStyle,
+    outlineWidth: getComputedStyle(element).outlineWidth,
+  }));
+  expect(focusStyle.outlineStyle).not.toBe("none");
+  expect(Number.parseFloat(focusStyle.outlineWidth)).toBeGreaterThanOrEqual(2);
+});
