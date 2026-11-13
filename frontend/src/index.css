@@ -5,7 +5,7 @@
   --app-safe-right: max(env(safe-area-inset-right, 0px), var(--tg-safe-area-inset-right, 0px), var(--tg-content-safe-area-inset-right, 0px));
   --app-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px), var(--tg-content-safe-area-inset-bottom, 0px));
   --app-safe-left: max(env(safe-area-inset-left, 0px), var(--tg-safe-area-inset-left, 0px), var(--tg-content-safe-area-inset-left, 0px));
-  font-family: "Onest", "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  font-family: "Manrope", "Avenir Next", Avenir, "Segoe UI", sans-serif;
   font-optical-sizing: auto;
   font-kerning: normal;
   color: #f3f0e9;
@@ -17,7 +17,7 @@
   --line: #303630;
   --muted: #a4aaa2;
   --accent: #c8d36a;
-  --font-display: "Onest", "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  --font-display: "Manrope", "Avenir Next", Avenir, "Segoe UI", sans-serif;
 }
 
 * { box-sizing: border-box; }
