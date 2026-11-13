@@ -311,8 +311,7 @@ function DeliveryPanel({
         <span className={`order-status order-status-${order.status}`}>{deliveryStatus(attempt, order.status)}</span>
       </div>
       <p className="order-guidance">
-        The seller signs the TEP-62 transfer in their own wallet. The submitted reference is untrusted;
-        only the backend observer can confirm delivery from finalized on-chain evidence.
+        Продавец подписывает перевод TEP-62 в собственном кошельке. Ссылка на отправку сама по себе не подтверждает доставку: сервер проверит завершённую транзакцию в блокчейне.
       </p>
       {loading && <p className="workspace-muted" role="status">Загружаем данные о передаче…</p>}
       {error && <p className="orders-error" role="alert">{error}</p>}

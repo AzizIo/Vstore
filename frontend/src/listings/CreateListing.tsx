@@ -218,11 +218,11 @@ export function CreateListing({
           </label>
           <label>
             <span>Название <small>необязательно</small></span>
-            <input maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} />
+            <input aria-label="Название (необязательно)" maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} />
           </label>
           <label>
             <span>Описание <small>необязательно</small></span>
-            <textarea maxLength={4000} rows={4} value={description} onChange={(event) => setDescription(event.target.value)} />
+            <textarea aria-label="Описание (необязательно)" maxLength={4000} rows={4} value={description} onChange={(event) => setDescription(event.target.value)} />
           </label>
           <label>
             <span>Срок действия <small>необязательно</small></span>

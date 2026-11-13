@@ -451,7 +451,7 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
               ))}
               {hasUnknownStatus && (
                 <option value="other">
-                  Other status ({listings.filter((listing) => !isKnownStatus(listing.status)).length})
+                  Другие статусы ({listings.filter((listing) => !isKnownStatus(listing.status)).length})
                 </option>
               )}
             </select>
