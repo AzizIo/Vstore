@@ -57,7 +57,7 @@ function AssetArtwork({ imageUrl, name }: { imageUrl: string | null; name: strin
       {imageUrl && !imageFailed ? (
         <img src={imageUrl} alt={name} loading="lazy" onError={() => setImageFailed(true)} />
       ) : (
-        <div className="artwork-placeholder" aria-label="Изображение недоступно"><span>V</span></div>
+        <div className="artwork-placeholder" role="img" aria-label={`Изображение ${name} недоступно`}><span aria-hidden="true">V</span></div>
       )}
     </div>
   );
@@ -384,6 +384,7 @@ function MarketplaceApp() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [assetType, setAssetType] = useState<AssetType | "all">("all");
   const [currency, setCurrency] = useState<PriceCurrency | "all">("all");
   const [minPrice, setMinPrice] = useState("");
@@ -399,6 +400,11 @@ function MarketplaceApp() {
   const requestVersion = useRef(0);
   const loadingMoreRef = useRef(false);
   const loadMoreController = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 280);
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
 
   useEffect(() => {
     if (!startParam) return;
@@ -429,7 +435,7 @@ function MarketplaceApp() {
     setListings([]);
     setTotal(0);
     setNextOffset(0);
-    fetchListings({ search, assetType, currency, minPrice, maxPrice, sort, limit: CATALOG_PAGE_SIZE, offset: 0 }, controller.signal)
+    fetchListings({ search: debouncedSearch, assetType, currency, minPrice, maxPrice, sort, limit: CATALOG_PAGE_SIZE, offset: 0 }, controller.signal)
       .then((page) => {
         if (controller.signal.aborted || version !== requestVersion.current) return;
         setListings(page.items);
@@ -453,9 +459,22 @@ function MarketplaceApp() {
       loadingMoreRef.current = false;
       if (requestVersion.current === version) requestVersion.current += 1;
     };
-  }, [search, assetType, currency, minPrice, maxPrice, sort, retry]);
+  }, [debouncedSearch, assetType, currency, minPrice, maxPrice, sort, retry]);
 
   const hasMore = listings.length < total && nextOffset < total;
+  const hasActiveCatalogFilters = Boolean(
+    search.trim() || assetType !== "all" || currency !== "all" || minPrice || maxPrice || sort !== "newest",
+  );
+
+  function resetCatalogFilters() {
+    setSearch("");
+    setDebouncedSearch("");
+    setAssetType("all");
+    setCurrency("all");
+    setMinPrice("");
+    setMaxPrice("");
+    setSort("newest");
+  }
 
   async function loadMore() {
     if (!hasMore || loading || error || loadingMoreRef.current) return;
@@ -469,7 +488,7 @@ function MarketplaceApp() {
 
     try {
       const page = await fetchListings(
-        { search, assetType, currency, minPrice, maxPrice, sort, limit: CATALOG_PAGE_SIZE, offset: nextOffset },
+        { search: debouncedSearch, assetType, currency, minPrice, maxPrice, sort, limit: CATALOG_PAGE_SIZE, offset: nextOffset },
         controller.signal,
       );
       if (controller.signal.aborted || version !== requestVersion.current) return;
@@ -605,7 +624,7 @@ function MarketplaceApp() {
               <h2>Объявления</h2>
               {!loading && !error && <span className="result-count">{formatItemCount(total)}</span>}
             </div>
-            <form className="catalog-controls" onSubmit={(event) => event.preventDefault()}>
+            <form className="catalog-controls" onSubmit={(event) => { event.preventDefault(); setDebouncedSearch(search.trim()); }}>
               <label className="search-control">
                 <span className="sr-only">Поиск объявлений</span>
                 <span aria-hidden="true">⌕</span>
@@ -662,14 +681,7 @@ function MarketplaceApp() {
                 <button
                   className="clear-filters-button"
                   type="button"
-                  onClick={() => {
-                    setSearch("");
-                    setAssetType("all");
-                    setCurrency("all");
-                    setMinPrice("");
-                    setMaxPrice("");
-                    setSort("newest");
-                  }}
+                  onClick={resetCatalogFilters}
                 >
                   Сбросить фильтры
                 </button>
@@ -695,7 +707,9 @@ function MarketplaceApp() {
               </div>
             ) : listings.length === 0 ? (
               <div className="catalog-message" role="status">
-                <h3>Объявления не найдены</h3><p>Измените поисковый запрос или тип актива.</p>
+                <h3>Объявления не найдены</h3>
+                <p>Попробуйте изменить запрос или параметры фильтрации.</p>
+                {hasActiveCatalogFilters && <button className="text-button" type="button" onClick={resetCatalogFilters}>Сбросить фильтры</button>}
               </div>
             ) : (
               <>

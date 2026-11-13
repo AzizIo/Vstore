@@ -308,3 +308,26 @@ test("workspace status filters remain keyboard-visible and fit narrow screens", 
   expect(focusStyle.outlineStyle).not.toBe("none");
   expect(Number.parseFloat(focusStyle.outlineWidth)).toBeGreaterThanOrEqual(2);
 });
+
+
+test("catalogue search waits for typing to finish and empty filters can be reset", async ({ page }) => {
+  const requests = await mockMarketplaceApi(page);
+  await page.goto("/");
+  await expect(page.locator(".listing-card")).toHaveCount(3);
+
+  const search = page.getByRole("searchbox", { name: "Поиск объявлений" });
+  await search.pressSequentially("Moon Lantern", { delay: 18 });
+  await expect(page.locator(".listing-card")).toHaveCount(1);
+
+  const catalogueRequests = requests.filter((request) => request.startsWith("GET /api/listings?"));
+  const searchRequests = catalogueRequests.filter((request) => request.includes("search="));
+  expect(searchRequests).toHaveLength(1);
+  expect(searchRequests[0]).toContain("search=Moon");
+
+  await search.fill("no-matching-collectible");
+  await expect(page.getByRole("heading", { name: "Объявления не найдены" })).toBeVisible();
+  await page.getByRole("status").getByRole("button", { name: "Сбросить фильтры" }).click();
+
+  await expect(search).toHaveValue("");
+  await expect(page.locator(".listing-card")).toHaveCount(3);
+});
