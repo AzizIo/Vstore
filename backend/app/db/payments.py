@@ -106,7 +106,9 @@ class PaymentTransaction(TimestampMixin, Base):
     telegram_payment_charge_id: Mapped[str] = mapped_column(String(128), nullable=False)
     provider_payment_charge_id: Mapped[str | None] = mapped_column(String(128))
     amount: Mapped[Decimal] = mapped_column(Numeric(24, 9), nullable=False)
-    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="XTR", server_default="XTR")
+    currency: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="XTR", server_default="XTR"
+    )
     payer_telegram_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(
         String(24), nullable=False, default="captured", server_default="captured"
