@@ -12,6 +12,7 @@ from alembic import command
 from alembic.config import Config
 from pydantic import SecretStr
 from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import Settings, get_settings
@@ -155,12 +156,20 @@ async def _cleanup(session_factory, ids: dict[str, object]) -> None:
     async with session_factory.begin() as session:
         order_id = ids["order_id"]
         await session.execute(
-            text(
-                "DELETE FROM payment_events WHERE payment_intent_id IN "
-                "(SELECT id FROM payment_intents WHERE order_id = :order_id)"
-            ),
-            {"order_id": order_id},
+            text("ALTER TABLE payment_events DISABLE TRIGGER trg_payment_events_append_only")
         )
+        try:
+            await session.execute(
+                text(
+                    "DELETE FROM payment_events WHERE payment_intent_id IN "
+                    "(SELECT id FROM payment_intents WHERE order_id = :order_id)"
+                ),
+                {"order_id": order_id},
+            )
+        finally:
+            await session.execute(
+                text("ALTER TABLE payment_events ENABLE TRIGGER trg_payment_events_append_only")
+            )
         await session.execute(
             text(
                 "DELETE FROM payment_transactions WHERE payment_intent_id IN "
@@ -440,6 +449,38 @@ async def test_cancelling_paid_xtr_order_queues_a_refund(
             assert order is not None and order.status is OrderStatus.CANCELLED
             assert persisted_intent is not None and persisted_intent.status == "refund_pending"
             assert transaction is not None and transaction.status == "refund_pending"
+    finally:
+        await _cleanup(session_factory, ids)
+        await engine.dispose()
+
+
+
+async def test_payment_event_journal_is_append_only(
+    payment_database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_test_stars(monkeypatch)
+    engine = create_async_engine(payment_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    ids = await _seed_order(session_factory)
+    try:
+        intent = await _create_intent(session_factory, ids)
+        with pytest.raises(DBAPIError, match="append-only"):
+            async with session_factory.begin() as session:
+                event = await session.scalar(
+                    select(PaymentEvent).where(
+                        PaymentEvent.payment_intent_id == intent.id
+                    )
+                )
+                assert event is not None
+                event.event_type = "payment_rejected"
+        async with session_factory() as session:
+            persisted = await session.scalar(
+                select(PaymentEvent).where(
+                    PaymentEvent.payment_intent_id == intent.id
+                )
+            )
+            assert persisted is not None
+            assert persisted.event_type == "intent_created"
     finally:
         await _cleanup(session_factory, ids)
         await engine.dispose()
