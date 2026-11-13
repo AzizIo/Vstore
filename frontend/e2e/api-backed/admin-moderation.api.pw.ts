@@ -78,17 +78,23 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
       { headers },
     );
     expect(publishResponse.status()).toBe(200);
-    expect((await publishResponse.json()).status).toBe("active");
+    expect((await publishResponse.json()).status).toBe("pending_review");
 
     const queueResponse = await context.request.get("http://127.0.0.1:8000/api/admin/moderation", { headers });
-    const queue = await queueResponse.json() as { items: Array<{ id: string; title: string | null }>; detail?: string };
+    const queue = await queueResponse.json() as { items: Array<{ id: string; title: string | null; status: string }>; detail?: string };
     expect(queueResponse.status(), JSON.stringify(queue)).toBe(200);
-    expect(queue.items.some((item) => item.id === draft.id), JSON.stringify(queue)).toBe(true);
+    expect(queue.items.some((item) => item.id === draft.id && item.status === "pending_review"), JSON.stringify(queue)).toBe(true);
 
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: "Модерация и аудит" })).toBeVisible();
     const card = page.locator(".admin-listing").filter({ hasText: "E2E Admin Moderation Listing" });
     await expect(card).toBeVisible();
+    await card.getByRole("button", { name: "Одобрить", exact: true }).click();
+    const approveDialog = page.getByRole("dialog", { name: "Одобрить объявление" });
+    await approveDialog.getByLabel("Пояснение (5–500 символов)").fill("Fresh ownership verified before publication");
+    await approveDialog.getByRole("button", { name: "Подтвердить одобрение" }).click();
+    await expect(card.getByText("Активно", { exact: true })).toBeVisible();
+
     await card.getByRole("button", { name: "Приостановить", exact: true }).click();
     const suspendDialog = page.getByRole("dialog", { name: "Приостановить объявление" });
     await suspendDialog.getByLabel("Пояснение (5–500 символов)").fill("API-backed moderation acceptance");
