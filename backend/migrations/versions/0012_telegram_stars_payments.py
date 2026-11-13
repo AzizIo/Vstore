@@ -64,7 +64,6 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.CheckConstraint("amount > 0", name="ck_payment_transactions_amount_positive"),
-        sa.CheckConstraint("currency = 'XTR'", name="ck_payment_transactions_currency_stars"),
         sa.CheckConstraint(
             "status IN ('captured', 'refund_pending', 'refunded')",
             name="ck_payment_transactions_status",
