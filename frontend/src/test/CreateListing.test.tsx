@@ -160,6 +160,19 @@ describe("CreateListing seller flow", () => {
     );
   });
 
+  it("stops pagination when the provider repeats the same page cursor", async () => {
+    apiMocks.fetchMyInventory
+      .mockResolvedValueOnce({ ...inventoryPage, has_more: true, next_offset: 24 })
+      .mockResolvedValueOnce({ ...inventoryPage, has_more: true, next_offset: 24 });
+    renderCreateListing();
+
+    expect(await screen.findByText("Verified collectible")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё NFT" }));
+
+    expect(await screen.findByText("Не удалось перейти к следующей странице. Обновите страницу и попробуйте снова.")).toBeInTheDocument();
+    expect(screen.getAllByText("Verified collectible")).toHaveLength(1);
+  });
+
   it("keeps the form open and explains draft failures", async () => {
     apiMocks.createListingDraft.mockRejectedValue(new Error("NFT ownership could not be freshly verified"));
     renderCreateListing();
