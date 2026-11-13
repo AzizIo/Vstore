@@ -285,6 +285,10 @@ export async function mockMarketplaceApi(
       return fulfillJson(linkedOrder);
     }
 
+    if (path === "/api/listings/me" && method === "GET" && options.authenticated) {
+      return fulfillJson([moonLantern]);
+    }
+
     if (path === "/api/orders" && method === "GET" && options.authenticated) {
       return fulfillJson({ items: [linkedOrder] });
     }
