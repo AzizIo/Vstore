@@ -48,7 +48,7 @@ const listing = {
     id: "asset-1", asset_type: "ton_nft" as const, external_id: "nft-001",
     item_address: "0:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     name: "Lantern", description: null,
-    image_url: "https://example.com/lantern.jpg", verification_status: "verified",
+    image_url: "https://example.com/lantern.jpg", verification_status: "Подтверждён",
     collection: {
       id: "collection-1", address: "0:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       network: "mainnet", name: "Lantern Guild", marketplace_name: "Getgems",
@@ -382,7 +382,7 @@ describe("marketplace catalog", () => {
     expect(
       screen.getByText("0:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
     ).toBeInTheDocument();
-    expect(screen.getByText("verified")).toBeInTheDocument();
+    expect(screen.getByText("Подтверждён")).toBeInTheDocument();
   });
 
   it("shows an uncollected label when the asset has no collection", async () => {
@@ -399,7 +399,7 @@ describe("marketplace catalog", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
 
     expect(await screen.findByText("Без коллекции")).toBeInTheDocument();
-    expect(screen.getByText("Not available")).toBeInTheDocument();
+    expect(screen.getByText("Недоступно")).toBeInTheDocument();
   });
 
   it("authenticates with raw Telegram initData, loads the Bearer profile, and keeps the token in memory", async () => {
@@ -421,7 +421,7 @@ describe("marketplace catalog", () => {
   it("does not authenticate without initData and keeps the public catalog available", async () => {
     renderMarketplace();
 
-    expect(await screen.findByText(/Откройте VILTARA в Telegram, чтобы войти//)).toBeInTheDocument();
+    expect(await screen.findByText(/Откройте VILTARA в Telegram, чтобы войти/)).toBeInTheDocument();
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/auth/telegram"))).toBe(false);
   });
@@ -434,7 +434,7 @@ describe("marketplace catalog", () => {
     });
     renderMarketplace();
 
-    expect(await screen.findByText(/Не удалось подтвердить сессию Telegram//)).toBeInTheDocument();
+    expect(await screen.findByText(/Не удалось подтвердить сессию Telegram/)).toBeInTheDocument();
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/users/me"))).toBe(false);
   });
@@ -442,13 +442,13 @@ describe("marketplace catalog", () => {
   it("shows a restricted-account message on 403 without blocking the catalog", async () => {
     setTelegramInitData();
     vi.mocked(fetch).mockImplementation(async (input) => {
-      if (String(input).endsWith("/api/auth/telegram")) return jsonResponse({ detail: "This account is restricted" }, 403);
+      if (String(input).endsWith("/api/auth/telegram")) return jsonResponse({ detail: "Для этого аккаунта ограничен доступ" }, 403);
       return jsonResponse(page);
     });
     renderMarketplace();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("This account is restricted");
-    expect(screen.queryByRole("button", { name: "Retry session" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Для этого аккаунта ограничен доступ");
+    expect(screen.queryByRole("button", { name: "Повторить проверку" })).not.toBeInTheDocument();
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
   });
 
@@ -470,7 +470,7 @@ describe("marketplace catalog", () => {
     renderMarketplace();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to verify your Telegram session");
-    fireEvent.click(screen.getByRole("button", { name: "Retry session" }));
+    fireEvent.click(screen.getByRole("button", { name: "Повторить проверку" }));
 
     expect(await screen.findByText("Вы вошли как Alex Example · @alex")).toBeInTheDocument();
     expect(authAttempts).toBe(2);
@@ -484,7 +484,7 @@ describe("marketplace catalog", () => {
     await queryClient.fetchQuery({ queryKey: ["public-preview"], queryFn: async () => "public" });
     renderMarketplace(queryClient);
 
-    expect(await screen.findByText(/Не удалось подтвердить сессию Telegram//)).toBeInTheDocument();
+    expect(await screen.findByText(/Не удалось подтвердить сессию Telegram/)).toBeInTheDocument();
     await waitFor(() => expect(queryClient.getQueryData(["private-profile"])).toBeUndefined());
     expect(queryClient.getQueryData(["public-preview"])).toBe("public");
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
@@ -761,7 +761,7 @@ describe("TON Connect wallet UI", () => {
       name: "Selected wallet NFT",
       description: null,
       image_url: null,
-      verification_status: "verified",
+      verification_status: "Подтверждён",
       eligible_for_listing: true,
     };
     const nextAsset = {
@@ -1072,7 +1072,7 @@ describe("My Listings dashboard", () => {
     renderMarketplace();
     await openMyListings();
 
-    expect(await screen.findByText("No listings yet")).toBeInTheDocument();
+    expect(await screen.findByText("Пока нет объявлений")).toBeInTheDocument();
   });
 
   it("renders all known statuses and a safe fallback for unknown status", async () => {

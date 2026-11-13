@@ -90,7 +90,7 @@ describe("orders", () => {
   it("shows seller sales without a buyer cancellation action", async () => {
     render(<Orders accessToken="private-token" />);
     await screen.findByText("Moon Lantern");
-    fireEvent.click(screen.getByRole("tab", { name: /Sales/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Продажи/ }));
 
     await waitFor(() => {
       expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("role=seller");
@@ -105,7 +105,7 @@ describe("orders", () => {
 
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ items: [] }));
     fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
-    expect(await screen.findByText("Покупок пока нет")).toBeInTheDocument();
+    expect(await screen.findByText("Пока нет покупок")).toBeInTheDocument();
     rerender(<Orders accessToken="private-token" />);
   });
 });
@@ -182,12 +182,12 @@ describe("order workspace interactions", () => {
     render(<Orders accessToken="token" onCatalog={vi.fn()} />);
     await screen.findByText("Golden Gift");
     fireEvent.change(screen.getByRole("combobox", { name: "Сортировка заказов" }), { target: { value: "price" } });
-    const cards = screen.getAllByRole("button", { name: /Open order/ });
+    const cards = screen.getAllByRole("button", { name: /Открыть заказ/ });
     expect(cards[0]).toHaveAccessibleName(/Golden Gift/);
 
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ items: [] }));
     fireEvent.click(screen.getByRole("button", { name: "Обновить" }));
-    expect(await screen.findByText("Покупок пока нет")).toBeInTheDocument();
+    expect(await screen.findByText("Пока нет покупок")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Перейти в каталог" })).toBeInTheDocument();
   });
 });

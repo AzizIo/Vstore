@@ -45,7 +45,7 @@ describe("ReviewForm", () => {
     await screen.findByRole("heading", { name: "Оставить отзыв" });
     fireEvent.click(screen.getByLabelText("5 звёзд"));
     fireEvent.click(screen.getByRole("button", { name: "Отправить отзыв" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("invalid");
+    expect(await screen.findByRole("alert")).toHaveTextContent("некорректные данные отзыва");
   });
 
 });

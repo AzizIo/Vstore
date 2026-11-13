@@ -76,31 +76,31 @@ const lifecycleCases: Array<{
   {
     status: "reserved",
     label: "Ожидает передачи",
-    explanation: /seller has not started the NFT transfer/,
+    explanation: /Продавец ещё не начал передачу NFT/,
     canCancel: true,
   },
   {
     status: "awaiting_transfer",
     label: "Ожидает перевода",
-    explanation: /preparing a direct NFT transfer to the buyer/,
+    explanation: /Продавец готовит прямую передачу NFT покупателю/,
     canCancel: false,
   },
   {
     status: "observing_transfer",
     label: "Проверяем перевод",
-    explanation: /checked against on-chain evidence/,
+    explanation: /Проверяем перевод по данным блокчейна/,
     canCancel: false,
   },
   {
     status: "completed",
     label: "Завершён",
-    explanation: /server confirmed the exact NFT transfer to the buyer/,
+    explanation: /Сервер подтвердил передачу нужного NFT покупателю/,
     canCancel: false,
   },
   {
     status: "cancelled",
     label: "Отменено",
-    explanation: /reservation was cancelled/,
+    explanation: /Резерв отменён/,
     canCancel: false,
   },
   {
