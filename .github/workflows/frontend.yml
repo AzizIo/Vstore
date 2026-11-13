@@ -90,7 +90,7 @@ jobs:
             playwright-${{ runner.os }}-
 
       - name: Install Playwright Chromium
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        # Verify the executable even on cache hits; stale caches can be incomplete.
         run: npx playwright install chromium --only-shell
 
       - name: Run Playwright E2E
@@ -231,7 +231,7 @@ jobs:
             playwright-${{ runner.os }}-
 
       - name: Install Playwright Chromium
-        if: steps.api-playwright-cache.outputs.cache-hit != 'true'
+        # Verify the executable even on cache hits; stale caches can be incomplete.
         working-directory: frontend
         run: npx playwright install chromium --only-shell
 
