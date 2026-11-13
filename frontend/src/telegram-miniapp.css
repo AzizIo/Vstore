@@ -3737,3 +3737,385 @@ code,
     letter-spacing: .13em;
   }
 }
+
+
+/* Product browsing polish — clearer surfaces, controls and navigation feedback. */
+:root {
+  --mini-font-family: var(--font-body);
+  --mini-card-shadow: 0 12px 30px rgb(0 0 0 / 16%);
+  --mini-card-shadow-hover: 0 18px 38px rgb(0 0 0 / 25%);
+}
+
+.listing-card {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgb(151 165 129 / 13%);
+  border-radius: 16px;
+  background: linear-gradient(155deg, rgb(255 255 255 / 2%), transparent 38%), #171c16;
+  box-shadow: var(--mini-card-shadow);
+  transform: translateY(0);
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.listing-card .artwork {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0;
+  background:
+    radial-gradient(ellipse at 50% 18%, rgb(208 220 112 / 9%), transparent 68%),
+    #20271e;
+}
+
+.listing-card .artwork::after {
+  position: absolute;
+  inset: 35% 0 0;
+  background: linear-gradient(180deg, transparent, rgb(13 17 12 / 13%));
+  content: "";
+  pointer-events: none;
+}
+
+.listing-card .artwork img {
+  transition: transform 300ms cubic-bezier(.2, .7, .2, 1), filter 220ms ease;
+}
+
+.listing-card-content {
+  position: relative;
+  min-height: 126px;
+  padding: 12px 12px 14px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 1.5%), transparent 50%);
+}
+
+.listing-card-verified {
+  flex: 0 0 auto;
+  color: var(--mini-success);
+  font-size: 9px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.listing-card-title {
+  display: -webkit-box;
+  overflow: hidden;
+  min-height: 2.35em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.listing-card-price {
+  font-size: 13px;
+}
+
+.listing-card-footer {
+  padding-top: 3px;
+}
+
+.listing-card-seller {
+  font-size: 9px;
+}
+
+.catalog-heading {
+  justify-content: space-between;
+}
+
+.result-count {
+  padding: 5px 9px;
+  border: 1px solid var(--mini-border);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 2%);
+  font-variant-numeric: tabular-nums;
+}
+
+.search-control,
+.select-control,
+.price-control,
+.workspace-search,
+.workspace-sort select {
+  border: 1px solid var(--mini-border);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgb(255 255 255 / 2%), transparent 70%), var(--mini-panel);
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.search-control:focus-within,
+.select-control:focus-within,
+.price-control:focus-within,
+.workspace-search:focus-within {
+  border-color: #7f8e4b;
+  background: var(--mini-panel-raised);
+  box-shadow: 0 0 0 3px rgb(208 220 112 / 7%);
+}
+
+.search-control input,
+.workspace-search input,
+.price-control input,
+.select-control select {
+  color: var(--mini-text);
+}
+
+.search-control input::placeholder,
+.workspace-search input::placeholder,
+.price-control input::placeholder {
+  color: #858f80;
+  opacity: 1;
+}
+
+.primary-button,
+.secondary-button,
+.danger-button,
+.load-more-button,
+.clear-filters-button,
+.refresh-button {
+  border-radius: 12px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.primary-button {
+  border-color: #d0dc70;
+  background: linear-gradient(135deg, #dce888 0%, #c5d15f 100%);
+  box-shadow: 0 7px 18px rgb(174 190 76 / 12%);
+  color: #151a10;
+}
+
+.primary-button:hover:not(:disabled) {
+  border-color: #e3efa0;
+  background: linear-gradient(135deg, #e4ef9b 0%, #d2de76 100%);
+  box-shadow: 0 9px 24px rgb(174 190 76 / 19%);
+  transform: translateY(-1px);
+}
+
+.secondary-button,
+.load-more-button,
+.clear-filters-button {
+  border-color: var(--mini-border-strong);
+  background: linear-gradient(145deg, rgb(255 255 255 / 2%), transparent 75%), var(--mini-panel);
+  color: #e2e7da;
+}
+
+.secondary-button:hover:not(:disabled),
+.load-more-button:hover:not(:disabled),
+.clear-filters-button:hover {
+  border-color: #77864b;
+  background: rgb(208 220 112 / 7%);
+  color: var(--mini-accent);
+}
+
+.danger-button:hover:not(:disabled) {
+  border-color: #a66e65;
+  background: rgb(229 161 154 / 10%);
+}
+
+.primary-button:focus-visible,
+.secondary-button:focus-visible,
+.danger-button:focus-visible,
+.load-more-button:focus-visible,
+.clear-filters-button:focus-visible,
+.listing-card:focus-visible,
+.navigation-tab:focus-visible {
+  outline: 2px solid var(--mini-accent);
+  outline-offset: 3px;
+}
+
+.detail-media-frame {
+  background:
+    radial-gradient(ellipse at 50% 20%, rgb(208 220 112 / 13%), transparent 68%),
+    linear-gradient(145deg, #1b2319, #121711);
+}
+
+.detail-copy > .order-action {
+  background: linear-gradient(145deg, rgb(208 220 112 / 4%), transparent 60%), var(--mini-panel);
+}
+
+.detail-facts > div + div {
+  border-top: 1px solid rgb(151 165 129 / 10%);
+}
+
+.detail-facts dt {
+  color: #aab3a2;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .listing-card:hover {
+    border-color: rgb(208 220 112 / 36%);
+    background: linear-gradient(155deg, rgb(208 220 112 / 4%), transparent 55%), #191f17;
+    box-shadow: var(--mini-card-shadow-hover);
+    transform: translateY(-3px);
+  }
+
+  .listing-card:hover .artwork img {
+    filter: saturate(1.06);
+    transform: scale(1.035);
+  }
+}
+
+.listing-card:active {
+  transform: scale(.992);
+}
+
+@media (min-width: 641px) {
+  .app-navigation {
+    align-items: center;
+    gap: 8px;
+    padding: 9px 0;
+  }
+
+  .navigation-tab {
+    min-height: 40px;
+    padding: 0 15px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-weight: 650;
+    transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+  }
+
+  .navigation-tab[aria-pressed="true"] {
+    border-color: rgb(208 220 112 / 16%);
+    background: rgb(208 220 112 / 7%);
+    color: var(--mini-accent);
+  }
+
+  .navigation-tab[aria-pressed="true"]::after {
+    right: 15px;
+    bottom: 4px;
+    left: 15px;
+    height: 2px;
+    border-radius: 99px;
+  }
+}
+
+@media (max-width: 640px) {
+  .listing-card {
+    border-radius: 13px;
+    box-shadow: 0 7px 18px rgb(0 0 0 / 13%);
+  }
+
+  .listing-card-content {
+    min-height: 108px;
+    padding: 10px 9px 11px;
+    gap: 7px;
+  }
+
+  .listing-card-title {
+    min-height: 2.35em;
+    font-size: 14px;
+    line-height: 1.18;
+  }
+
+  .listing-card-price {
+    font-size: 11px;
+  }
+
+  .listing-card-verified {
+    font-size: 8px;
+  }
+
+  .listing-card-seller {
+    max-width: 45%;
+    font-size: 8px;
+  }
+
+  .result-count {
+    padding: 4px 8px;
+    font-size: 9px;
+  }
+
+  .navigation-tab {
+    min-height: 58px;
+    border-radius: 13px;
+    font-weight: 650;
+    transition: background 150ms ease, color 150ms ease, transform 150ms ease;
+  }
+
+  .navigation-tab .navigation-icon {
+    display: grid;
+    width: 34px;
+    height: 25px;
+    place-items: center;
+    border-radius: 9px;
+    font-size: 18px;
+    transition: background 150ms ease, transform 150ms ease;
+  }
+
+  .navigation-tab[aria-pressed="true"] .navigation-icon {
+    background: rgb(208 220 112 / 11%);
+    transform: translateY(-1px);
+  }
+
+  .navigation-label {
+    font-size: 9px;
+    letter-spacing: -.015em;
+  }
+
+  .search-control,
+  .select-control,
+  .price-control,
+  .workspace-search,
+  .workspace-sort select {
+    border-radius: 11px;
+  }
+
+  .primary-button,
+  .secondary-button,
+  .danger-button,
+  .load-more-button,
+  .clear-filters-button {
+    min-height: 46px;
+    border-radius: 11px;
+  }
+
+  .detail-price-card {
+    box-shadow: inset 0 1px rgb(255 255 255 / 3%);
+  }
+
+  .seller-profile,
+  .detail-description-panel,
+  .detail-facts {
+    box-shadow: 0 8px 20px rgb(0 0 0 / 10%);
+  }
+}
+
+@media (max-width: 370px) {
+  .listing-card-content {
+    min-height: 104px;
+    padding: 9px 8px 10px;
+  }
+
+  .listing-card-title {
+    font-size: 13px;
+  }
+
+  .navigation-tab .navigation-icon {
+    width: 31px;
+  }
+
+  .navigation-label {
+    font-size: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .listing-card,
+  .listing-card .artwork img,
+  .navigation-tab,
+  .navigation-tab .navigation-icon,
+  .primary-button,
+  .secondary-button,
+  .danger-button,
+  .load-more-button {
+    transition: none !important;
+  }
+}
