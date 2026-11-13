@@ -40,6 +40,7 @@ from app.orders.service import OrderConflict, cancel_order, prepare_delivery
 
 pytestmark = pytest.mark.integration
 ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
+ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 
 @pytest.fixture(scope="session")
@@ -381,7 +382,7 @@ async def test_migration_refuses_to_drop_payment_evidence(
     ids = await _seed_order(session_factory)
     try:
         await _create_intent(session_factory, ids)
-        config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        config = Config(ALEMBIC_CONFIG_PATH)
         with pytest.raises(RuntimeError, match="payment ledger"):
             await asyncio.to_thread(
                 command.downgrade,
