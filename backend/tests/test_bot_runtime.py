@@ -2,8 +2,8 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
-import pytest
 from aiogram.exceptions import TelegramNetworkError
+import pytest
 
 from app import bot as bot_runtime
 
