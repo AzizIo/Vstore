@@ -3,7 +3,7 @@ import { fetchAuditHistory, fetchModerationQueue, submitModerationDecision, type
 import "./admin.css";
 
 const reasonLabels: Record<string, string> = {
-  draft_pending_review: "Черновик ожидает проверки", moderator_suspended: "Ранее приостановлено",
+  pending_admin_review: "Ожидает решения администратора", moderator_suspended: "Ранее приостановлено",
   active_listing_review: "Активное объявление доступно для модерации", asset_not_verified: "Актив не подтверждён",
   asset_owner_mismatch: "Владелец актива не совпадает с продавцом", listing_expired: "Срок объявления истёк",
 };
@@ -19,7 +19,7 @@ const reasonCodeLabels: Record<ModerationReasonCode, string> = {
   misleading_metadata: "Недостоверные метаданные", duplicate_listing: "Дубликат объявления", other: "Другое",
 };
 const listingStatusLabels: Record<string, string> = {
-  draft: "Черновик", active: "Активно", reserved: "Зарезервировано",
+  pending_review: "На модерации", active: "Активно", reserved: "Зарезервировано",
   sold: "Продано", cancelled: "Отменено", expired: "Срок истёк", suspended: "Приостановлено",
 };
 function formatListingCount(count: number) {
@@ -104,7 +104,7 @@ export function AdminCenter({ accessToken, active }: Props) {
       {error && <div className="admin-error" role="alert"><span>{error}</span><button type="button" onClick={() => setRetry((value) => value + 1)}>Повторить</button></div>}
       <div className="admin-toolbar">
         <label>Статус объявления<select value={statusFilter} onChange={(event) => { setOffset(0); setStatusFilter(event.target.value); }}>
-          <option value="">Все статусы, требующие действий</option><option value="draft">Черновик</option><option value="active">Активно</option><option value="suspended">Приостановлено</option>
+          <option value="">Все статусы, требующие действий</option><option value="pending_review">На модерации</option><option value="active">Активно</option><option value="suspended">Приостановлено</option>
         </select></label><span className="admin-count">{formatListingCount(total)}</span>
       </div>
       {loading && <p className="admin-state" role="status">Загружаем очередь модерации…</p>}
@@ -117,7 +117,7 @@ export function AdminCenter({ accessToken, active }: Props) {
             <p className="admin-meta">{item.price_amount} {item.price_currency} · {item.seller.first_name}{item.seller.username ? " · @" + item.seller.username : ""}</p>
             <p className="admin-reasons">{item.queue_reasons.map((code) => reasonLabels[code] ?? "Дополнительная причина").join(" · ")}</p>
             <div className="admin-actions">
-              {item.status === "draft" && <><button type="button" className="admin-primary" onClick={() => startAction(item, "approve")}>Одобрить</button><button type="button" className="admin-danger" onClick={() => startAction(item, "reject")}>Отклонить</button></>}
+              {item.status === "pending_review" && <><button type="button" className="admin-primary" onClick={() => startAction(item, "approve")}>Одобрить</button><button type="button" className="admin-danger" onClick={() => startAction(item, "reject")}>Отклонить</button></>}
               {item.status === "active" && <button type="button" className="admin-danger" onClick={() => startAction(item, "suspend")}>Приостановить</button>}
               {item.status === "suspended" && <button type="button" className="admin-primary" onClick={() => startAction(item, "restore")}>Восстановить</button>}
               <button type="button" className="admin-secondary" onClick={() => void openAudit(item)}>История аудита</button>
