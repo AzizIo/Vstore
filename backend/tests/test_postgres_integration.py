@@ -1294,14 +1294,14 @@ async def test_publish_listing_rechecks_ownership_outside_database_transaction(
                 verifier=verifier,
             )
 
-        assert published.status is ListingStatus.ACTIVE
+        assert published.status is ListingStatus.PENDING_REVIEW
         assert verifier.calls == [(asset.item_address, wallet.address)]
         assert verifier.transaction_states == [False]
 
         async with session_factory() as session:
             persisted = await session.get(Listing, draft.id)
             assert persisted is not None
-            assert persisted.status is ListingStatus.ACTIVE
+            assert persisted.status is ListingStatus.PENDING_REVIEW
     finally:
         await _cleanup_publishable_data(
             session_factory,
