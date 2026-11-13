@@ -795,6 +795,89 @@ footer span { padding: 0 6px; color: var(--accent); }
   .reservation-dialog-actions button { width: 100%; min-height: 44px; }
 }
 
+/* Keep the expanded TonConnect controls inside the header on desktop and Telegram WebViews. */
+.topbar {
+  min-width: 0;
+}
+.header-actions {
+  min-width: 0;
+  margin-left: auto;
+}
+.wallet-control {
+  min-width: 0;
+  max-width: min(760px, calc(100vw - 260px));
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.wallet-account {
+  min-width: 0;
+  max-width: 190px;
+  overflow-wrap: anywhere;
+}
+.wallet-error {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    height: auto;
+    min-height: 66px;
+    flex-wrap: wrap;
+    align-content: center;
+    row-gap: 10px;
+    padding: 12px 0;
+  }
+  .header-actions {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  .wallet-control {
+    width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+    gap: 7px;
+  }
+  .wallet-account {
+    flex: 1 1 100%;
+    max-width: none;
+    align-items: flex-start;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+  }
+  .wallet-button {
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: normal;
+    text-align: center;
+  }
+  .wallet-error {
+    flex-basis: 100%;
+    text-align: left;
+  }
+}
+
+@media (max-width: 390px) {
+  .wallet-control {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+  .wallet-account,
+  .wallet-error {
+    grid-column: 1 / -1;
+  }
+  .wallet-button {
+    width: 100%;
+    min-height: 38px;
+    padding: 7px 8px;
+    font-size: 10px;
+  }
+}
+
 /* Seller overview workspace */
 .seller-overview { display: grid; gap: 30px; padding: 38px 0 72px; }
 .seller-overview-heading, .seller-overview-section-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
