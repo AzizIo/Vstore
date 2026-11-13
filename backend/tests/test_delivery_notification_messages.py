@@ -12,17 +12,17 @@ from app.notifications import service as notification_service
 @pytest.mark.parametrize(
     ("event_type", "role", "expected"),
     [
-        ("delivery_prepared", "seller", "review and sign"),
-        ("delivery_prepared", "buyer", "has not been confirmed delivered"),
-        ("delivery_submitted", "seller", "independent on-chain verification"),
-        ("delivery_submitted", "buyer", "independently checking on-chain evidence"),
-        ("delivery_confirmed", "buyer", "independently confirmed the exact NFT transfer"),
-        ("delivery_confirmed", "seller", "independently confirmed the exact NFT transfer"),
-        ("delivery_manual_review", "buyer", "Do not assume the NFT was delivered"),
-        ("delivery_manual_review", "seller", "Do not assume the NFT was delivered"),
+        ("delivery_prepared", "seller", "подтвердите точную передачу NFT"),
+        ("delivery_prepared", "buyer", "ещё не подтверждено"),
+        ("delivery_submitted", "seller", "независимой проверки в блокчейне"),
+        ("delivery_submitted", "buyer", "сервис проверяет подтверждение"),
+        ("delivery_confirmed", "buyer", "независимо подтверждена в блокчейне"),
+        ("delivery_confirmed", "seller", "независимо подтверждена в блокчейне"),
+        ("delivery_manual_review", "buyer", "не считайте NFT доставленным"),
+        ("delivery_manual_review", "seller", "не считайте NFT доставленным"),
     ],
 )
-def test_delivery_notification_messages_are_truthful_and_role_specific(
+def test_delivery_notifications_are_russian_truthful_and_role_specific(
     monkeypatch: pytest.MonkeyPatch,
     event_type: str,
     role: str,
@@ -48,8 +48,8 @@ def test_delivery_notification_messages_are_truthful_and_role_specific(
     message = notification_service.build_notification_message(delivery)
 
     assert expected in message
-    assert "VILTARA SHOP · Order #" in message
-    assert "Payment is not enabled." in message
+    assert "<b>VILTARA SHOP</b> · Заказ <code>#" in message
+    assert "Оплата внутри платформы пока не подключена" in message
     assert "seed phrase" not in message.lower()
     assert "api key" not in message.lower()
     assert "provider payload" not in message.lower()
