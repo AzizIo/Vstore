@@ -49,7 +49,7 @@ export function SellerReviews({ sellerId, accessToken: _accessToken }: { sellerI
     <section className="seller-reviews" aria-labelledby="seller-reviews-title">
       <div className="reviews-heading">
         <div><p className="eyebrow">ПОДТВЕРЖДЁННЫЕ ПЕРЕДАЧИ NFT</p><h2 id="seller-reviews-title">Отзывы о продавце</h2></div>
-        {page && <p className="reviews-summary"><strong>{page.average_rating.toFixed(1)}</strong> / 5 <span>· {page.review_count} verified {page.review_count === 1 ? "отзыв" : "отзывов"}</span></p>}
+        {page && <p className="reviews-summary"><strong>{page.average_rating.toFixed(1)}</strong> / 5 <span>· {page.review_count} подтверждённых {page.review_count === 1 ? "отзыв" : "отзывов"}</span></p>}
       </div>
       {loading ? <p role="status" className="reviews-state">Загружаем отзывы…</p> : error && items.length === 0 ? (
         <div className="reviews-state" role="alert"><p>{error}</p><button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Повторить</button></div>

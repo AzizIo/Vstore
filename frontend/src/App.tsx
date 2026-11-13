@@ -636,7 +636,7 @@ function MarketplaceApp() {
                 </div>
                 {(hasMore || loadingMore || loadMoreError) && (
                   <div className="catalog-pagination">
-                    <p className="pagination-count" role="status">Showing {listings.length} of {total}</p>
+                    <p className="pagination-count" role="status">Показано {listings.length} из {total}</p>
                     {loadMoreError && <p className="pagination-error" role="alert">{loadMoreError}</p>}
                     <button className="load-more-button" type="button" onClick={loadMore} disabled={loadingMore || !hasMore}>
                       {loadingMore ? "Загружаем ещё…" : loadMoreError ? "Повторить загрузку" : "Загрузить ещё"}
