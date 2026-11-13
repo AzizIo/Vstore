@@ -14,6 +14,13 @@ const listingStatuses = ["draft", "active", "reserved", "sold", "cancelled", "ex
 type KnownStatus = (typeof listingStatuses)[number];
 type StatusFilter = "all" | KnownStatus | "other";
 
+const verificationStatusLabels: Record<string, string> = {
+  verified: "Подтверждён",
+  stale: "Устарел",
+  invalid: "Не подтверждён",
+  unsupported: "Не поддерживается",
+  provider_unavailable: "Провайдер недоступен",
+};
 const statusLabels: Record<KnownStatus, string> = {
   draft: "Черновик",
   active: "Активно",
@@ -35,7 +42,7 @@ function getCreatedDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? "Дата недоступна"
-    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
+    : new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium" }).format(date);
 }
 
 function toLocalDateTimeInput(value: string | null | undefined) {
@@ -59,7 +66,7 @@ function getExpirationLabel(value: string | null | undefined) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? "Дата недоступна"
-    : new Intl.DateTimeFormat(undefined, {
+    : new Intl.DateTimeFormat("ru-RU", {
         dateStyle: "medium",
         timeStyle: "short",
       }).format(date);
@@ -204,7 +211,7 @@ function MyListingDetail({
             <div><dt>Создан</dt><dd>{getCreatedDate(listing.created_at)}</dd></div>
             <div><dt>Истекает</dt><dd>{getExpirationLabel(listing.expires_at)}</dd></div>
             <div><dt>ID актива</dt><dd>{listing.asset.external_id}</dd></div>
-            <div><dt>Проверка</dt><dd>{listing.asset.verification_status}</dd></div>
+            <div><dt>Проверка</dt><dd>{verificationStatusLabels[listing.asset.verification_status] ?? "Неизвестно"}</dd></div>
           </dl>
         </div>
       </div>

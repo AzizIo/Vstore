@@ -33,6 +33,12 @@ function getDate(value: string) {
     : new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
+function formatOrderCount(count: number) {
+  const category = new Intl.PluralRules("ru-RU").select(count);
+  const noun = category === "one" ? "заказ" : category === "few" ? "заказа" : "заказов";
+  return `${count} ${noun}`;
+}
+
 function getTimestamp(value: string) {
   const time = new Date(value).getTime();
   return Number.isFinite(time) ? time : 0;
@@ -435,20 +441,20 @@ export function Orders({
       </div>
 
       <div className="workspace-filter-row" role="group" aria-label="Фильтр заказов по статусу">
-        {([{ value: "all", label: "Все", count: counts.all }, { value: "active", label: "Активно", count: counts.active }, { value: "completed", label: "Завершён", count: counts.completed }, { value: "closed", label: "Cancelled / expired", count: counts.closed }] as const).map((item) => (
+        {([{ value: "all", label: "Все", count: counts.all }, { value: "active", label: "Активные", count: counts.active }, { value: "completed", label: "Завершён", count: counts.completed }, { value: "closed", label: "Отменённые / истёкшие", count: counts.closed }] as const).map((item) => (
           <button key={item.value} type="button" className={filter === item.value ? "workspace-filter is-active" : "workspace-filter"} aria-pressed={filter === item.value} onClick={() => setFilter(item.value)}>{item.label}<span>{item.count}</span></button>
         ))}
       </div>
 
       {loading ? (
-        <div className="workspace-order-grid" aria-label="Loading orders" role="status"><span className="sr-only">Загружаем заказы…</span>{[1, 2, 3, 4].map((item) => <div className="workspace-skeleton" key={item}><span /><span /><span /><span /></div>)}</div>
+        <div className="workspace-order-grid" aria-label="Загружаем заказы" role="status"><span className="sr-only">Загружаем заказы…</span>{[1, 2, 3, 4].map((item) => <div className="workspace-skeleton" key={item}><span /><span /><span /><span /></div>)}</div>
       ) : error ? (
         <div className="orders-message workspace-empty" role="alert"><span className="workspace-empty-icon" aria-hidden="true">!</span><h2>Заказы недоступны</h2><p>{error}</p><button className="primary-button" type="button" onClick={() => setRetry((value) => value + 1)}>Повторить</button></div>
       ) : visibleOrders.length === 0 ? (
         <div className="orders-message workspace-empty" role="status"><span className="workspace-empty-icon" aria-hidden="true">◇</span><h2>{search || filter !== "all" ? "Заказы не найдены" : `Пока нет ${role === "buyer" ? "покупок" : "продаж"}`}</h2><p>{search || filter !== "all" ? "Измените поисковый запрос или фильтр статуса." : "Здесь появятся ваши заказы после резервирования объявления или продажи актива."}</p>{search || filter !== "all" ? <button className="secondary-button" type="button" onClick={() => { setSearch(""); setFilter("all"); }}>Сбросить фильтры</button> : onCatalog ? <button className="primary-button" type="button" onClick={onCatalog}>Перейти в каталог</button> : null}</div>
       ) : (
         <>
-          <div className="workspace-results-heading"><span>{visibleOrders.length} {visibleOrders.length === 1 ? "order" : "orders"}</span><span>Данные вашего аккаунта</span></div>
+          <div className="workspace-results-heading"><span>{formatOrderCount(visibleOrders.length)}</span><span>Данные вашего аккаунта</span></div>
           <div className="workspace-order-grid">{visibleOrders.map((order) => <OrderCard key={order.id} order={order} role={role} highlighted={order.id === linkedOrder?.id} onOpen={() => void openOrder(order)} />)}</div>
         </>
       )}

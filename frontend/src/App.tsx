@@ -539,7 +539,7 @@ function MarketplaceApp() {
           <section className="catalog" aria-label="Каталог маркетплейса">
             <div className="catalog-heading">
               <h2>Объявления</h2>
-              {!loading && !error && <span className="result-count">{total} {total === 1 ? "предмет" : "предметов"}</span>}
+              {!loading && !error && <span className="result-count">{formatItemCount(total)}</span>}
             </div>
             <form className="catalog-controls" onSubmit={(event) => event.preventDefault()}>
               <label className="search-control">

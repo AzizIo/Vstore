@@ -251,7 +251,7 @@ export function MyInventory({
 
       {syncResult && !loading && !error && (
         <p className="inventory-sync-summary" role="status">
-          Последняя синхронизация: {new Date(syncResult.synced_at).toLocaleString("ru-RU")} · {syncResult.verified_count} подтверждено
+          Последняя синхронизация: {new Date(syncResult.synced_at).toLocaleString("ru-RU")} · Подтверждено NFT: {syncResult.verified_count}
           {syncResult.stale_count > 0 ? ` · ${syncResult.stale_count} помечено как устаревшие` : ""}
           {syncResult.invalid_count > 0 ? ` · ${syncResult.invalid_count} не удалось подтвердить` : ""}
           {syncResult.unsupported_count > 0 ? ` · ${syncResult.unsupported_count} не поддерживается` : ""}
