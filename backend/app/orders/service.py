@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -32,7 +33,7 @@ from app.db.models import (
     User,
     Wallet,
 )
-from app.db.payments import PaymentIntent
+from app.db.payments import PaymentEvent, PaymentIntent, PaymentTransaction
 
 
 class OrderConflict(Exception):
@@ -458,6 +459,57 @@ async def _reserve_listing(
     return order_id
 
 
+async def _request_stars_refund_for_order(
+    session: AsyncSession,
+    *,
+    order: Order,
+    reason: str,
+    now: datetime,
+) -> None:
+    """Move captured Stars charges to the refund queue before releasing an order."""
+
+    if order.price_currency is not PriceCurrency.XTR:
+        return
+    intent = await session.scalar(
+        select(PaymentIntent)
+        .where(PaymentIntent.order_id == order.id)
+        .with_for_update()
+    )
+    if intent is None or intent.status not in {"paid", "refund_pending"}:
+        return
+
+    captured_transactions = (
+        await session.scalars(
+            select(PaymentTransaction)
+            .where(
+                PaymentTransaction.payment_intent_id == intent.id,
+                PaymentTransaction.status == "captured",
+            )
+            .with_for_update()
+        )
+    ).all()
+    for transaction in captured_transactions:
+        transaction.status = "refund_pending"
+        transaction.refund_requested_at = now
+        transaction.last_error_code = reason
+        session.add(
+            PaymentEvent(
+                payment_intent_id=intent.id,
+                payment_transaction_id=transaction.id,
+                provider="telegram_stars",
+                provider_event_id=f"internal-refund:{transaction.id}",
+                event_type="refund_requested",
+                payload_sha256=hashlib.sha256(
+                    f"{transaction.id}:{reason}".encode("utf-8")
+                ).hexdigest(),
+            )
+        )
+    if captured_transactions:
+        intent.status = "refund_pending"
+        intent.refund_requested_at = now
+        intent.last_error_code = reason
+
+
 async def cancel_order(
     session: AsyncSession,
     *,
@@ -514,6 +566,12 @@ async def cancel_order(
             target_status = OrderStatus.CANCELLED
             actor_id = buyer_id
             actor_type = "buyer"
+        await _request_stars_refund_for_order(
+            session,
+            order=order,
+            reason="order_cancelled",
+            now=current_time,
+        )
         order.status = target_status
         session.add(
             OrderEvent(
@@ -566,6 +624,12 @@ async def _invalidate_lost_ownership(
         )
     ).all()
     for pending_order in pending_orders:
+        await _request_stars_refund_for_order(
+            session,
+            order=pending_order,
+            reason="seller_ownership_lost",
+            now=current_time,
+        )
         pending_order.status = OrderStatus.CANCELLED
         session.add(
             OrderEvent(
@@ -675,6 +739,12 @@ async def expire_pending_orders(
             )
             if order is None:
                 continue
+            await _request_stars_refund_for_order(
+                session,
+                order=order,
+                reason="order_expired",
+                now=current_time,
+            )
             order.status = OrderStatus.EXPIRED
             _release_listing(listing, current_time, asset)
             session.add(
