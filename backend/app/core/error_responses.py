@@ -618,13 +618,18 @@ async def request_validation_exception_handler(
     safe_errors = []
     for error in exc.errors():
         location = error.get("loc", ())
-        safe_errors.append(
-            {
-                "loc": list(location) if isinstance(location, (list, tuple)) else [],
-                "msg": _validation_message(error),
-                "type": error.get("type", "value_error"),
-            }
-        )
+        safe_error = {
+            "loc": list(location) if isinstance(location, (list, tuple)) else [],
+            "msg": _validation_message(error),
+            "type": error.get("type", "value_error"),
+        }
+        # Preserve Pydantic's optional fields for existing clients, but redact
+        # their values because they may contain proofs, tokens or raw request data.
+        if "input" in error:
+            safe_error["input"] = None
+        if "ctx" in error:
+            safe_error["ctx"] = {}
+        safe_errors.append(safe_error)
     return JSONResponse(
         status_code=422,
         content={"detail": safe_errors},

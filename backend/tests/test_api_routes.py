@@ -123,7 +123,7 @@ def test_listing_catalog_rejects_unknown_sort_with_russian_validation_message() 
     error = response.json()["detail"][0]
     assert error["msg"] == "Значение не соответствует допустимому формату."
     assert error["loc"] == ["query", "sort"]
-    assert "input" not in error
+    assert error["input"] is None
     assert "random-value" not in response.text
 
 
@@ -153,4 +153,4 @@ def test_validation_errors_never_echo_submitted_secrets() -> None:
     error = response.json()["detail"][0]
     assert error["msg"] == "Введите текстовое значение."
     assert error["loc"] == ["body", "init_data"]
-    assert set(error) == {"loc", "msg", "type"}
+    assert set(error) == {"loc", "msg", "type", "input"}
