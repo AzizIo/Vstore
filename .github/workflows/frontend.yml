@@ -41,7 +41,7 @@ jobs:
           node-version: "22"
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
 
       - name: Run unit tests
         run: npm run test:coverage
@@ -61,7 +61,7 @@ jobs:
         run: docker run --rm --add-host=api:127.0.0.1 --entrypoint nginx viltara-miniapp-preview-ci -t
 
       - name: Install Playwright Chromium
-        run: npx playwright install chromium
+        run: npx playwright install chromium --only-shell
 
       - name: Run Playwright E2E
         run: npm run test:e2e
