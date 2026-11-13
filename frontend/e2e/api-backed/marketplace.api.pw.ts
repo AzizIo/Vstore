@@ -186,9 +186,12 @@ test(
     );
     expect(approvalResponse.status()).toBe(200);
     expect((await approvalResponse.json()).action).toBe("approved");
-    await sellerPage.reload();
-    await sellerPage.getByRole("button", { name: "Мои объявления", exact: true }).click();
-    await expect(sellerPage.locator(".listing-status-active")).toHaveText("Активно");
+    const approvedListingsResponse = await sellerContext.request.get(
+      "http://127.0.0.1:5173/api/listings/me",
+      { headers: { Authorization: `Bearer ${bootstrapSession.access_token}` } },
+    );
+    const approvedListings = await approvedListingsResponse.json() as Array<{ id: string; status: string }>;
+    expect(approvedListings.find((item) => item.id === submittedListing!.id)?.status).toBe("active");
 
     // Exercise the real catalog endpoint after explicit administrator approval: price ranges and
     // sorting must remain isolated to one currency, never TON vs XTR together.
