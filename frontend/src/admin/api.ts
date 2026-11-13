@@ -1,3 +1,4 @@
+import { getApiErrorMessage } from "../api/errors";
 import { API_BASE_URL } from "../api/config";
 
 export type ModerationAction = "approve" | "reject" | "suspend" | "restore";
@@ -37,7 +38,7 @@ async function request<T>(path: string, accessToken: string, init: RequestInit =
     let message = "Ошибка запроса модерации (" + response.status + ").";
     try {
       const body: unknown = await response.json();
-      if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") message = body.detail;
+      message = getApiErrorMessage(body, message);
     } catch { /* Keep HTTP status message. */ }
     const apiError = new Error(message) as Error & { status?: number };
     apiError.status = response.status;
