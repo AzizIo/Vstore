@@ -21,6 +21,11 @@ on:
 permissions:
   contents: read
 
+# Keep only the newest run for a PR/ref; stale runs waste runner capacity.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   frontend:
     runs-on: ubuntu-latest
