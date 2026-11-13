@@ -65,13 +65,24 @@ function AssetArtwork({ imageUrl, name }: { imageUrl: string | null; name: strin
 
 function ListingCard({ listing, onOpen }: { listing: Listing; onOpen: () => void }) {
   const title = listing.title || listing.asset.name || "Без названия";
+  const collection = listing.asset.collection?.name;
+  const seller = listing.seller.username
+    ? `@${listing.seller.username}`
+    : listing.seller.first_name || "Продавец";
+
   return (
     <button className="listing-card" type="button" onClick={onOpen}>
       <AssetArtwork imageUrl={listing.asset.image_url} name={title} />
       <span className="listing-card-content">
-        <span className="listing-card-type">{assetTypeLabels[listing.asset.asset_type]}</span>
+        <span className="listing-card-topline">
+          <span className="listing-card-type">{assetTypeLabels[listing.asset.asset_type]}</span>
+          {collection && <span className="listing-card-collection">{collection}</span>}
+        </span>
         <span className="listing-card-title">{title}</span>
-        <span className="listing-card-price">{formatPrice(listing.price_amount, listing.price_currency)}</span>
+        <span className="listing-card-footer">
+          <span className="listing-card-price">{formatPrice(listing.price_amount, listing.price_currency)}</span>
+          <span className="listing-card-seller">{seller}</span>
+        </span>
       </span>
     </button>
   );
@@ -477,7 +488,8 @@ function MarketplaceApp() {
             setSection("catalog");
           }}
         >
-          Каталог
+          <span className="navigation-icon" aria-hidden="true">▦</span>
+          <span className="navigation-label">Каталог</span>
         </button>
         <button
           className="navigation-tab"
@@ -488,7 +500,8 @@ function MarketplaceApp() {
             setSection("my-nft");
           }}
         >
-          Мои NFT
+          <span className="navigation-icon" aria-hidden="true">◇</span>
+          <span className="navigation-label">Мои NFT</span>
         </button>
         <button
           className="navigation-tab"
@@ -499,7 +512,8 @@ function MarketplaceApp() {
             setSection("my-listings");
           }}
         >
-          Мои объявления
+          <span className="navigation-icon" aria-hidden="true">▤</span>
+          <span className="navigation-label">Мои объявления</span>
         </button>
         <button
           className="navigation-tab"
@@ -510,7 +524,8 @@ function MarketplaceApp() {
             setSection("orders");
           }}
         >
-          Заказы
+          <span className="navigation-icon" aria-hidden="true">↗</span>
+          <span className="navigation-label">Заказы</span>
         </button>
       </nav>
 
