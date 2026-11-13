@@ -139,7 +139,9 @@ def _open_listing_exists() -> Exists:
         .select_from(Listing)
         .where(
             Listing.asset_id == target_asset_id,
-            Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]),
+            Listing.status.in_(
+                [ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]
+            ),
         )
         .exists()
     )
@@ -567,7 +569,9 @@ async def sync_my_verified_inventory(
                             select(Listing)
                             .where(
                                 Listing.asset_id == asset_id,
-                                Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]),
+                                Listing.status.in_(
+                [ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]
+            ),
                             )
                             .order_by(Listing.id)
                             .with_for_update()
