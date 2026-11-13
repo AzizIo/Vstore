@@ -90,6 +90,9 @@ def migrated_database(test_database_url: str):
             engine = create_async_engine(test_database_url, pool_pre_ping=True)
             try:
                 async with engine.begin() as connection:
+                    await connection.execute(
+                        text("UPDATE listings SET status = 'cancelled' WHERE status = 'pending_review'")
+                    )
                     has_reviews_table = await connection.scalar(
                         text("SELECT to_regclass('public.seller_reviews') IS NOT NULL")
                     )
@@ -170,7 +173,7 @@ ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0010_seller_reviews"
+    assert revision == "0011_listing_pending_review"
 
 
 
@@ -268,7 +271,7 @@ async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
         engine = create_async_engine(test_database_url, pool_pre_ping=True)
         async with engine.connect() as connection:
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0010_seller_reviews"
+            assert revision == "0011_listing_pending_review"
 
         async with engine.begin() as connection:
             await connection.execute(
@@ -677,7 +680,7 @@ async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
                 )
             ).one()
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0010_seller_reviews"
+            assert revision == "0011_listing_pending_review"
             assert order.status == "reserved"
             assert order.price_amount == Decimal("12.500000000")
             assert order.price_currency == "TON"
@@ -1455,7 +1458,7 @@ async def test_concurrent_publication_of_two_drafts_for_one_nft_has_one_winner(
                 await session.scalars(
                     select(Listing.id).where(
                         Listing.asset_id == asset.id,
-                        Listing.status == ListingStatus.ACTIVE,
+                        Listing.status == ListingStatus.PENDING_REVIEW,
                     )
                 )
             ).all()
