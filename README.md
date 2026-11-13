@@ -6,6 +6,8 @@ VILTARA SHOP is a Telegram Mini App and optional bot for a peer-to-peer marketpl
 
 Product boundaries and decisions approved for the current MVP are recorded in [docs/PRODUCT_MODEL.md](docs/PRODUCT_MODEL.md).
 
+Admin workspace: `/admin`. Access is fail-closed and requires the server-side `ADMIN_TELEGRAM_IDS` JSON array of numeric Telegram user IDs. The default is `[]` (no admin access). Never commit real administrator IDs or credentials.
+
 ## Current MVP status
 
 | Capability | Status on main |
@@ -139,6 +141,7 @@ Example current API routes (authenticate with a backend Bearer token where indic
 | GET | /api/admin/moderation | Read the admin moderation queue |
 | POST | /api/admin/listings/{listing_id}/decision | Approve/reject/suspend/restore with reason and Idempotency-Key |
 | GET | /api/admin/audit | Read the moderation audit log |
+| GET | /api/admin/listings/{listing_id}/audit | Read one listing's moderation history |
 
 Price range filters and price sorting require an explicit `currency=TON` or `currency=XTR`. TON and Telegram Stars are separate units and are never compared or aggregated together. `min_price` and `max_price` are inclusive positive decimal bounds; the API rejects inverted ranges.
 
