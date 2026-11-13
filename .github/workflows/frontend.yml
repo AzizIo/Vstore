@@ -51,13 +51,22 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build static preview container
-        run: |
-          docker build \
-            --file Dockerfile.preview \
-            --build-arg VITE_TONCONNECT_APP_URL="$VITE_TONCONNECT_APP_URL" \
-            --build-arg VITE_TONCONNECT_MANIFEST_URL="$VITE_TONCONNECT_MANIFEST_URL" \
-            --tag viltara-miniapp-preview-ci .
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          file: frontend/Dockerfile.preview
+          push: false
+          load: true
+          tags: viltara-miniapp-preview-ci
+          build-args: |
+            VITE_TONCONNECT_APP_URL=${{ env.VITE_TONCONNECT_APP_URL }}
+            VITE_TONCONNECT_MANIFEST_URL=${{ env.VITE_TONCONNECT_MANIFEST_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Validate Nginx configuration
         run: docker run --rm --add-host=api:127.0.0.1 --entrypoint nginx viltara-miniapp-preview-ci -t
