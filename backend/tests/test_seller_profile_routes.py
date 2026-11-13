@@ -30,7 +30,7 @@ def test_public_seller_profile_requires_no_auth_and_404s_unknown_seller(
     client, session = public_seller_client
     response = client.get(f"/api/sellers/{uuid4()}/profile")
     assert response.status_code == 404
-    assert response.json() == {"detail": "Seller not found"}
+    assert response.json() == {"detail": "Запрашиваемый ресурс не найден."}
     session.scalar.assert_awaited_once()
 
 
