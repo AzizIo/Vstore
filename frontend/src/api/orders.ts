@@ -1,3 +1,4 @@
+import { getApiErrorMessage } from "./errors";
 import { API_BASE_URL } from "./config";
 import type { AssetType, PriceCurrency } from "./listings";
 
@@ -104,9 +105,7 @@ async function requestJson<T>(url: string, accessToken: string, init?: RequestIn
     let message = `Запрос завершился ошибкой (${response.status}).`;
     try {
       const body: unknown = await response.json();
-      if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
-        message = body.detail;
-      }
+      message = getApiErrorMessage(body, message);
     } catch {
       // Keep the HTTP status message when the response is not JSON.
     }
