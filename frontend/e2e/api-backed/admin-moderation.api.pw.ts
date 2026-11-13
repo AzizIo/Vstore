@@ -78,7 +78,7 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
       { headers },
     );
     expect(publishResponse.status()).toBe(200);
-    expect((await publishResponse.json()).status).toBe("Активно");
+    expect((await publishResponse.json()).status).toBe("active");
 
     const queueResponse = await context.request.get("http://127.0.0.1:8000/api/admin/moderation", { headers });
     const queue = await queueResponse.json() as { items: Array<{ id: string; title: string | null }>; detail?: string };
