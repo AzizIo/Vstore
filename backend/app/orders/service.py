@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -27,10 +28,12 @@ from app.db.models import (
     OrderDeliveryAttemptStatus,
     OrderEvent,
     OrderStatus,
+    PriceCurrency,
     TelegramNotificationOutbox,
     User,
     Wallet,
 )
+from app.db.payments import PaymentEvent, PaymentIntent, PaymentTransaction
 
 
 class OrderConflict(Exception):
@@ -456,6 +459,57 @@ async def _reserve_listing(
     return order_id
 
 
+async def _request_stars_refund_for_order(
+    session: AsyncSession,
+    *,
+    order: Order,
+    reason: str,
+    now: datetime,
+) -> None:
+    """Move captured Stars charges to the refund queue before releasing an order."""
+
+    if order.price_currency is not PriceCurrency.XTR:
+        return
+    intent = await session.scalar(
+        select(PaymentIntent)
+        .where(PaymentIntent.order_id == order.id)
+        .with_for_update()
+    )
+    if intent is None or intent.status not in {"paid", "refund_pending"}:
+        return
+
+    captured_transactions = (
+        await session.scalars(
+            select(PaymentTransaction)
+            .where(
+                PaymentTransaction.payment_intent_id == intent.id,
+                PaymentTransaction.status == "captured",
+            )
+            .with_for_update()
+        )
+    ).all()
+    for transaction in captured_transactions:
+        transaction.status = "refund_pending"
+        transaction.refund_requested_at = now
+        transaction.last_error_code = reason
+        session.add(
+            PaymentEvent(
+                payment_intent_id=intent.id,
+                payment_transaction_id=transaction.id,
+                provider="telegram_stars",
+                provider_event_id=f"internal-refund:{transaction.id}",
+                event_type="refund_requested",
+                payload_sha256=hashlib.sha256(
+                    f"{transaction.id}:{reason}".encode()
+                ).hexdigest(),
+            )
+        )
+    if captured_transactions:
+        intent.status = "refund_pending"
+        intent.refund_requested_at = now
+        intent.last_error_code = reason
+
+
 async def cancel_order(
     session: AsyncSession,
     *,
@@ -512,6 +566,12 @@ async def cancel_order(
             target_status = OrderStatus.CANCELLED
             actor_id = buyer_id
             actor_type = "buyer"
+        await _request_stars_refund_for_order(
+            session,
+            order=order,
+            reason="order_cancelled",
+            now=current_time,
+        )
         order.status = target_status
         session.add(
             OrderEvent(
@@ -564,6 +624,12 @@ async def _invalidate_lost_ownership(
         )
     ).all()
     for pending_order in pending_orders:
+        await _request_stars_refund_for_order(
+            session,
+            order=pending_order,
+            reason="seller_ownership_lost",
+            now=current_time,
+        )
         pending_order.status = OrderStatus.CANCELLED
         session.add(
             OrderEvent(
@@ -673,6 +739,12 @@ async def expire_pending_orders(
             )
             if order is None:
                 continue
+            await _request_stars_refund_for_order(
+                session,
+                order=order,
+                reason="order_expired",
+                now=current_time,
+            )
             order.status = OrderStatus.EXPIRED
             _release_listing(listing, current_time, asset)
             session.add(
@@ -728,6 +800,16 @@ async def _load_delivery_preparation_snapshot(
         raise OrderConflict("Delivery has already been prepared for this order")
     if order.status is not OrderStatus.RESERVED or order.expires_at <= now:
         raise OrderConflict("Order is not available for delivery preparation")
+
+    if order.price_currency is PriceCurrency.XTR:
+        paid_intent = await session.scalar(
+            select(PaymentIntent).where(
+                PaymentIntent.order_id == order.id,
+                PaymentIntent.status == "paid",
+            )
+        )
+        if paid_intent is None:
+            raise OrderConflict("Telegram Stars payment must be confirmed before delivery")
 
     listing = await session.scalar(select(Listing).where(Listing.id == order.listing_id))
     if (
@@ -894,6 +976,13 @@ async def prepare_delivery(
         if order is None or order.seller_id != seller_id:
             rejection = "Order not found"
         else:
+            payment_intent = None
+            if order.price_currency is PriceCurrency.XTR:
+                payment_intent = await session.scalar(
+                    select(PaymentIntent)
+                    .where(PaymentIntent.order_id == order.id)
+                    .with_for_update()
+                )
             same_key_attempt = await session.scalar(
                 select(OrderDeliveryAttempt)
                 .where(
@@ -944,6 +1033,11 @@ async def prepare_delivery(
                 )
                 if previous_attempt is not None:
                     rejection = "Delivery has already been prepared for this order"
+                elif (
+                    order.price_currency is PriceCurrency.XTR
+                    and (payment_intent is None or payment_intent.status != "paid")
+                ):
+                    rejection = "Telegram Stars payment must be confirmed before delivery"
                 elif ownership_lost and identity_matches:
                     await _invalidate_lost_ownership(
                         session,
