@@ -91,7 +91,10 @@ def migrated_database(test_database_url: str):
             try:
                 async with engine.begin() as connection:
                     await connection.execute(
-                        text("UPDATE listings SET status = 'cancelled' WHERE status = 'pending_review'")
+                        text(
+                            "UPDATE listings SET status = 'cancelled' "
+                            "WHERE status = 'pending_review'"
+                        )
                     )
                     has_reviews_table = await connection.scalar(
                         text("SELECT to_regclass('public.seller_reviews') IS NOT NULL")
