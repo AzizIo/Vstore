@@ -294,9 +294,11 @@ async def test_reusable_invoice_second_charge_is_refundable(
                 )
             )
             assert extra is not None
+            extra_id = extra.id
+        async with session_factory() as session:
             assert await record_stars_refund_result(
                 session,
-                transaction_id=extra.id,
+                transaction_id=extra_id,
                 provider_event_id=f"refund-{uuid4()}",
                 succeeded=True,
             ) == "refunded"
