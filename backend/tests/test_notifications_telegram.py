@@ -99,4 +99,5 @@ async def test_sender_classifies_telegram_errors_and_preserves_context(
         chat_id=CHAT_ID,
         text=MESSAGE_TEXT,
         disable_web_page_preview=True,
+        parse_mode="HTML",
     )
