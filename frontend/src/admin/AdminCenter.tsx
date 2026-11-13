@@ -8,6 +8,9 @@ const reasonLabels: Record<string, string> = {
   asset_owner_mismatch: "Владелец актива не совпадает с продавцом", listing_expired: "Срок объявления истёк",
 };
 const actionLabels: Record<ModerationAction, string> = { approve: "Одобрить", reject: "Отклонить", suspend: "Приостановить", restore: "Восстановить" };
+const auditActionLabels: Record<string, string> = {
+  approved: "Одобрено", rejected: "Отклонено", suspended: "Приостановлено", restored: "Восстановлено",
+};
 const actionConfirmLabels: Record<ModerationAction, string> = {
   approve: "одобрение", reject: "отклонение", suspend: "приостановку", restore: "восстановление",
 };
@@ -123,7 +126,7 @@ export function AdminCenter({ accessToken, active }: Props) {
               <h3>История аудита</h3>{auditError && <p role="alert">{auditError}</p>}
               {!auditError && audit.length === 0 && <p>Решения модерации пока не зафиксированы.</p>}
               {audit.map((entry) => <div className="admin-audit-entry" key={entry.id}>
-                <strong>{actionLabels[entry.action as ModerationAction] ?? entry.action}</strong><time dateTime={entry.occurred_at}>{new Date(entry.occurred_at).toLocaleString("ru-RU")}</time>
+                <strong>{auditActionLabels[entry.action] ?? entry.action}</strong><time dateTime={entry.occurred_at}>{new Date(entry.occurred_at).toLocaleString("ru-RU")}</time>
                 <p>{reasonCodeLabels[entry.reason_code as ModerationReasonCode] ?? entry.reason_code.replaceAll("_", " ")} — {entry.reason}</p><span>{listingStatusLabels[String(entry.before_snapshot.status)] ?? String(entry.before_snapshot.status)} → {listingStatusLabels[String(entry.after_snapshot.status)] ?? String(entry.after_snapshot.status)}</span>
               </div>)}
             </div>}

@@ -95,14 +95,14 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
     await suspendDialog.getByRole("button", { name: "Подтвердить приостановку" }).click();
     await expect(card.getByText("Приостановлено", { exact: true })).toBeVisible();
     await card.getByRole("button", { name: "История аудита" }).click();
-    await expect(card.getByText(/Приостановить.*API-backed moderation acceptance/i)).toBeVisible();
+    await expect(card.getByText(/Приостановлено.*API-backed moderation acceptance/i)).toBeVisible();
 
     await card.getByRole("button", { name: "Восстановить", exact: true }).click();
     const restoreDialog = page.getByRole("dialog", { name: "Восстановить объявление" });
     await restoreDialog.getByLabel("Пояснение (5–500 символов)").fill("Fresh ownership verified for restoration");
     await restoreDialog.getByRole("button", { name: "Подтвердить восстановление" }).click();
     await expect(card.getByText("Активно", { exact: true })).toBeVisible();
-    await expect(card.getByText(/Восстановить.*Fresh ownership verified for restoration/i)).toBeVisible();
+    await expect(card.getByText(/Восстановлено.*Fresh ownership verified for restoration/i)).toBeVisible();
 
     const buyerPage = await context.newPage();
     await installTelegramBridge(buyerPage, regularBuyer);

@@ -208,7 +208,7 @@ test(
     await expect(reservationDialog).toContainText("E2E Published NFT");
     await expect(reservationDialog).toContainText("15,75 TON");
     await expect(reservationDialog).toContainText("E2E Seller");
-    await expect(reservationDialog).toContainText("Оплата не подключена, средства не списываются, NFT остаётся у продавца");
+    await expect(reservationDialog).toContainText("Это только резерв объявления. Оплата не проводится, средства не списываются, NFT остаётся у продавца.");
     expect(buyerApiRequests.some((item) => item === "POST /api/orders")).toBe(false);
 
     await reservationDialog.getByRole("button", { name: "Подтвердить резерв" }).click();
@@ -238,9 +238,9 @@ test(
     const orderId = persistedOrder!.id;
 
     await sellerPage.getByRole("button", { name: "Заказы", exact: true }).click();
-    await sellerPage.getByRole("tab", { name: /Sales/ }).click();
-    await sellerPage.getByRole("button", { name: /Open order E2E Published NFT/ }).click();
-    await expect(sellerPage.getByRole("heading", { name: "NFT transfer" })).toBeVisible();
+    await sellerPage.getByRole("tab", { name: /Продажи/ }).click();
+    await sellerPage.getByRole("button", { name: /Открыть заказ E2E Published NFT/ }).click();
+    await expect(sellerPage.getByRole("heading", { name: "Передача NFT" })).toBeVisible();
     await sellerPage.getByRole("button", { name: "Подготовить передачу" }).click();
     await expect(sellerPage.getByRole("button", { name: "Проверить и подписать в кошельке" })).toBeVisible();
 
