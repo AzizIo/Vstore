@@ -75,12 +75,12 @@ describe("seller listing management", () => {
   it("saves an optional expiration date through the listing API", async () => {
     await openDraft();
 
-    fireEvent.change(screen.getByLabelText("Listing expiration"), {
+    fireEvent.change(screen.getByLabelText("Срок действия объявления"), {
       target: { value: "2030-05-02T12:30" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить изменения" }));
 
-    expect(await screen.findByText("Listing details saved.")).toBeInTheDocument();
+    expect(await screen.findByText("Изменения сохранены.")).toBeInTheDocument();
     expect(mocks.updateListing).toHaveBeenCalledWith(
       draft.id,
       "seller-token",
@@ -100,15 +100,15 @@ describe("seller listing management", () => {
   it("requires an explicit confirmation before publication and reports the result", async () => {
     await openDraft();
 
-    fireEvent.click(screen.getByRole("button", { name: "Publish listing" }));
-    expect(screen.getByRole("group", { name: "Confirm listing publication" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Опубликовать объявление" }));
+    expect(screen.getByRole("group", { name: "Подтвердите публикацию объявления" })).toBeInTheDocument();
     expect(mocks.publishListing).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm publish" }));
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить публикацию" }));
 
-    expect(await screen.findByText("Listing published and is now visible in the marketplace.")).toBeInTheDocument();
+    expect(await screen.findByText("Объявление опубликовано и доступно в каталоге.")).toBeInTheDocument();
     expect(mocks.publishListing).toHaveBeenCalledWith(draft.id, "seller-token");
-    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(screen.getByText("Активно")).toBeInTheDocument();
   });
 
   it("saves only the permitted editable listing fields", async () => {
@@ -123,9 +123,9 @@ describe("seller listing management", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Listing description" }), {
       target: { value: "" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить изменения" }));
 
-    expect(await screen.findByText("Listing details saved.")).toBeInTheDocument();
+    expect(await screen.findByText("Изменения сохранены.")).toBeInTheDocument();
     expect(mocks.updateListing).toHaveBeenCalledWith(draft.id, "seller-token", {
       price_amount: "2.5",
       title: "Edited NFT",
@@ -136,15 +136,15 @@ describe("seller listing management", () => {
   it("requires confirmation before cancelling a draft", async () => {
     await openDraft();
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel draft" }));
-    expect(screen.getByRole("group", { name: "Confirm listing cancellation" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Отменить черновик" }));
+    expect(screen.getByRole("group", { name: "Подтвердите отмену объявления" })).toBeInTheDocument();
     expect(mocks.cancelListing).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить" }));
 
-    expect(await screen.findByText("Draft cancelled.")).toBeInTheDocument();
+    expect(await screen.findByText("Черновик отменён.")).toBeInTheDocument();
     expect(mocks.cancelListing).toHaveBeenCalledWith(draft.id, "seller-token");
-    expect(screen.getByText("Cancelled")).toBeInTheDocument();
+    expect(screen.getByText("Отменено")).toBeInTheDocument();
   });
 
   it("does not offer listing mutations while an order has reserved it", async () => {
@@ -154,19 +154,19 @@ describe("seller listing management", () => {
     fireEvent.click(await screen.findByRole("button", { name: /My NFT draft/ }));
 
     expect(await screen.findByText(/reserved by a pending order/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Publish listing" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Unpublish listing" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Опубликовать объявление" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Сохранить изменения" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Снять с публикации" })).not.toBeInTheDocument();
   });
 
   it("shows provider errors without changing the listing status", async () => {
     mocks.publishListing.mockRejectedValue(new Error("TON provider unavailable"));
     await openDraft();
 
-    fireEvent.click(screen.getByRole("button", { name: "Publish listing" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm publish" }));
+    fireEvent.click(screen.getByRole("button", { name: "Опубликовать объявление" }));
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить публикацию" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("TON provider unavailable");
-    expect(screen.getByText("Draft")).toBeInTheDocument();
+    expect(screen.getByText("Черновик")).toBeInTheDocument();
   });
 });

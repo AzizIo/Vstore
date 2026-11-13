@@ -99,7 +99,7 @@ const lifecycleCases: Array<{
   },
   {
     status: "cancelled",
-    label: "Cancelled",
+    label: "Отменено",
     explanation: /reservation was cancelled/,
     canCancel: false,
   },
@@ -137,14 +137,14 @@ describe("delivery lifecycle order UI contract", () => {
         await screen.findByText(label, { selector: ".order-status" }),
       ).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: /Open order Moon Lantern/ }));
-      expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Статус заказа" })).toBeInTheDocument();
       expect(await screen.findByText(explanation, { selector: ".order-guidance" })).toBeInTheDocument();
 
       if (canCancel) {
-        expect(screen.getByRole("button", { name: "Cancel order" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Отменить заказ" })).toBeInTheDocument();
         expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
       } else {
-        expect(screen.queryByRole("button", { name: "Cancel order" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Отменить заказ" })).not.toBeInTheDocument();
       }
     },
   );

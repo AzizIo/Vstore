@@ -51,13 +51,13 @@ describe("orders", () => {
       resolveRequest = resolve;
     }));
     render(<Orders accessToken="private-token" />);
-    expect(screen.getByText("Loading orders...")).toBeInTheDocument();
+    expect(screen.getByText("Загружаем заказы…")).toBeInTheDocument();
 
     resolveRequest?.(jsonResponse({ items: [order] }));
 
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Open order Moon Lantern/ }));
-    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Статус заказа" })).toBeInTheDocument();
     expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
   });
 
@@ -79,12 +79,12 @@ describe("orders", () => {
     });
     render(<Orders accessToken="private-token" />);
     fireEvent.click(await screen.findByRole("button", { name: /Open order Moon Lantern/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel order" }));
-    expect(await screen.findByText("Cancel this reservation?")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm cancellation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Отменить заказ" }));
+    expect(await screen.findByText("Отменить этот резерв?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить отмену" }));
 
-    await waitFor(() => expect(screen.getAllByText("Cancelled").length).toBeGreaterThan(0));
-    expect(screen.queryByRole("button", { name: "Cancel order" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("Отменено").length).toBeGreaterThan(0));
+    expect(screen.queryByRole("button", { name: "Отменить заказ" })).not.toBeInTheDocument();
   });
 
   it("shows seller sales without a buyer cancellation action", async () => {
@@ -95,17 +95,17 @@ describe("orders", () => {
     await waitFor(() => {
       expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("role=seller");
     });
-    expect(screen.queryByRole("button", { name: "Cancel order" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Отменить заказ" })).not.toBeInTheDocument();
   });
 
   it("renders API errors and an empty state", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ detail: "Orders offline" }, 503));
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ detail: "Не удалось загрузить заказы" }, 503));
     const { rerender } = render(<Orders accessToken="private-token" />);
-    expect(await screen.findByText("Orders offline")).toBeInTheDocument();
+    expect(await screen.findByText("Не удалось загрузить заказы")).toBeInTheDocument();
 
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ items: [] }));
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByText("No purchases yet")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
+    expect(await screen.findByText("Покупок пока нет")).toBeInTheDocument();
     rerender(<Orders accessToken="private-token" />);
   });
 });
@@ -128,8 +128,8 @@ describe("orders", () => {
       />,
     );
 
-    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
-    expect(screen.getByText("Seller · Sale")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Статус заказа" })).toBeInTheDocument();
+    expect(screen.getByText("Продавец · Продажа")).toBeInTheDocument();
     expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
     await waitFor(() => {
       expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/api/orders?role=seller"))).toBe(true);
@@ -159,7 +159,7 @@ describe("order workspace interactions", () => {
     expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
     expect(screen.queryByText("Golden Gift")).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search orders by asset title or order ID" }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: "Поиск по названию актива или ID заказа" }), {
       target: { value: "order-1" },
     });
     expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
@@ -169,25 +169,25 @@ describe("order workspace interactions", () => {
   it("opens order details, displays lifecycle facts and countdown, and returns to the workspace", async () => {
     render(<Orders accessToken="token" userId="buyer-1" />);
     fireEvent.click(await screen.findByRole("button", { name: /Open order Moon Lantern/ }));
-    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Event timeline" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Статус заказа" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "История событий" })).toBeInTheDocument();
     expect(screen.getByText("Order ID")).toBeInTheDocument();
     expect(screen.getByText(/remaining|Reservation expired/)).toBeInTheDocument();
     expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "← Back to orders" }));
-    expect(await screen.findByRole("heading", { name: "Order workspace" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "← Назад к заказам" }));
+    expect(await screen.findByRole("heading", { name: "Заказы" })).toBeInTheDocument();
   });
 
   it("sorts orders by price and offers a catalog action when empty", async () => {
     render(<Orders accessToken="token" onCatalog={vi.fn()} />);
     await screen.findByText("Golden Gift");
-    fireEvent.change(screen.getByRole("combobox", { name: "Sort orders" }), { target: { value: "price" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Сортировка заказов" }), { target: { value: "price" } });
     const cards = screen.getAllByRole("button", { name: /Open order/ });
     expect(cards[0]).toHaveAccessibleName(/Golden Gift/);
 
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ items: [] }));
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-    expect(await screen.findByText("No purchases yet")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Explore catalog" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Обновить" }));
+    expect(await screen.findByText("Покупок пока нет")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Перейти в каталог" })).toBeInTheDocument();
   });
 });

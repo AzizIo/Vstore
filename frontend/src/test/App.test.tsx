@@ -155,7 +155,7 @@ describe("marketplace catalog", () => {
   it("shows an empty state when the API returns no listings", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...page, items: [], total: 0 }));
     renderMarketplace();
-    expect(await screen.findByText("No listings found")).toBeInTheDocument();
+    expect(await screen.findByText("Объявления не найдены")).toBeInTheDocument();
   });
 
   it("shows an error when the API response does not match the listing contract", async () => {
@@ -164,26 +164,26 @@ describe("marketplace catalog", () => {
       items: [{ ...listing, asset: {} }],
     }));
     renderMarketplace();
-    expect(await screen.findByText("Catalog unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("Каталог недоступен")).toBeInTheDocument();
     expect(screen.getByText("The marketplace returned an invalid catalog response.")).toBeInTheDocument();
   });
 
   it("shows an error and retries the catalog request", async () => {
     vi.mocked(fetch).mockRejectedValueOnce(new Error("Offline")).mockResolvedValueOnce(jsonResponse(page));
     renderMarketplace();
-    expect(await screen.findByText("Catalog unavailable")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Каталог недоступен")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
   });
 
   it("sends search, asset type, and sort using supported query parameters", async () => {
     renderMarketplace();
     await screen.findByText("Moon Lantern");
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search listings" }), { target: { value: "lantern" } });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Поиск объявлений" }), { target: { value: "lantern" } });
     await waitFor(() => expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("search=lantern"));
-    fireEvent.change(screen.getByRole("combobox", { name: "Asset type" }), { target: { value: "telegram_gift" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "Price currency" }), { target: { value: "TON" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "Sort listings" }), { target: { value: "price_desc" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Тип актива" }), { target: { value: "telegram_gift" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Валюта" }), { target: { value: "TON" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Сортировка объявлений" }), { target: { value: "price_desc" } });
     await waitFor(() => {
       const requestUrl = String(vi.mocked(fetch).mock.calls.at(-1)?.[0]);
       expect(requestUrl).toContain("asset_type=telegram_gift");
@@ -196,11 +196,11 @@ describe("marketplace catalog", () => {
     renderMarketplace();
     await screen.findByText("Moon Lantern");
 
-    expect(screen.getByRole("combobox", { name: "Sort listings" }).querySelector('option[value="price_asc"]')).toBeDisabled();
-    expect(screen.getByRole("spinbutton", { name: "Minimum price" })).toBeDisabled();
-    fireEvent.change(screen.getByRole("combobox", { name: "Price currency" }), { target: { value: "XTR" } });
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Minimum price" }), { target: { value: "10" } });
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Maximum price" }), { target: { value: "50" } });
+    expect(screen.getByRole("combobox", { name: "Сортировка объявлений" }).querySelector('option[value="price_asc"]')).toBeDisabled();
+    expect(screen.getByRole("spinbutton", { name: "Минимальная цена" })).toBeDisabled();
+    fireEvent.change(screen.getByRole("combobox", { name: "Валюта" }), { target: { value: "XTR" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Минимальная цена" }), { target: { value: "10" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Максимальная цена" }), { target: { value: "50" } });
 
     await waitFor(() => {
       const url = new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost");
@@ -210,7 +210,7 @@ describe("marketplace catalog", () => {
       expect(url.searchParams.get("offset")).toBe("0");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
     await waitFor(() => {
       const url = new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost");
       expect(url.searchParams.has("currency")).toBe(false);
@@ -218,7 +218,7 @@ describe("marketplace catalog", () => {
       expect(url.searchParams.has("max_price")).toBe(false);
       expect(url.searchParams.get("sort")).toBe("newest");
     });
-    expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Сбросить фильтры" })).not.toBeInTheDocument();
   });
 
   it("loads successive server pages, removes duplicate IDs, and hides Load more at total", async () => {
@@ -234,12 +234,12 @@ describe("marketplace catalog", () => {
 
     expect(await screen.findByText("first listing 24")).toBeInTheDocument();
     expect(screen.getByText("Showing 24 of 25")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё" }));
 
     expect(await screen.findByText("Last server listing")).toBeInTheDocument();
     expect(screen.getAllByText("first listing 1")).toHaveLength(1);
     expect(screen.getByText("25 items")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Загрузить ещё" })).not.toBeInTheDocument();
     const pageRequests = vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input), "http://localhost"));
     expect(pageRequests.map((url) => url.searchParams.get("offset"))).toEqual(["0", "24"]);
   });
@@ -260,17 +260,17 @@ describe("marketplace catalog", () => {
     renderMarketplace();
 
     expect(await screen.findByText("initial listing 24")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё" }));
     expect(await screen.findByText("next-page listing 1")).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search listings" }), { target: { value: "rare" } });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Поиск объявлений" }), { target: { value: "rare" } });
     expect(await screen.findByText("Filtered result")).toBeInTheDocument();
     expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0");
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Asset type" }), { target: { value: "telegram_gift" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Тип актива" }), { target: { value: "telegram_gift" } });
     await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0"));
-    fireEvent.change(screen.getByRole("combobox", { name: "Price currency" }), { target: { value: "XTR" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Валюта" }), { target: { value: "XTR" } });
     await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("currency")).toBe("XTR"));
-    fireEvent.change(screen.getByRole("combobox", { name: "Sort listings" }), { target: { value: "price_desc" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Сортировка объявлений" }), { target: { value: "price_desc" } });
     await waitFor(() => expect(new URL(String(vi.mocked(fetch).mock.calls.at(-1)?.[0]), "http://localhost").searchParams.get("offset")).toBe("0"));
 
     expect(screen.getByText("Filtered result")).toBeInTheDocument();
@@ -293,7 +293,7 @@ describe("marketplace catalog", () => {
     renderMarketplace();
 
     expect(await screen.findByText("loaded listing 24")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё" }));
     expect(await screen.findByText("Temporary failure")).toBeInTheDocument();
     expect(screen.getByText("loaded listing 1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry loading more" }));
@@ -315,12 +315,12 @@ describe("marketplace catalog", () => {
     renderMarketplace();
 
     await screen.findByText("loaded listing 24");
-    const loadMore = screen.getByRole("button", { name: "Load more" });
+    const loadMore = screen.getByRole("button", { name: "Загрузить ещё" });
     fireEvent.click(loadMore);
     fireEvent.click(loadMore);
 
     expect(vi.mocked(fetch).mock.calls.filter(([input]) => new URL(String(input), "http://localhost").searchParams.get("offset") === "24")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Loading more..." })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Загружаем ещё…" })).toBeDisabled();
     resolveNextPage?.(jsonResponse({ items: [{ ...listing, id: "last", title: "Last listing" }], total: 25, limit: 24, offset: 24 }));
     expect(await screen.findByText("Last listing")).toBeInTheDocument();
   });
@@ -339,7 +339,7 @@ describe("marketplace catalog", () => {
     const { unmount } = renderMarketplace();
 
     await screen.findByText("loaded listing 24");
-    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё" }));
     unmount();
 
     expect(pageSignal?.aborted).toBe(true);
@@ -355,7 +355,7 @@ describe("marketplace catalog", () => {
     expect(screen.getByText("A collectible lantern.")).toBeInTheDocument();
     expect(screen.getByText("nft-001")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Back to catalog/ }));
-    await waitFor(() => expect(screen.getByText("Explore listings")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Объявления")).toBeInTheDocument());
   });
 
   it("shows the seller profile name and Telegram handle on listing detail", async () => {
@@ -531,9 +531,9 @@ describe("Buyer orders", () => {
 
     renderMarketplace();
 
-    expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Статус заказа" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: listing.title })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Orders" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Заказы" })).toHaveAttribute("aria-pressed", "true");
     expect(vi.mocked(fetch).mock.calls.some(([input]) =>
       String(input).endsWith(`/api/orders/${orderId}`)
     )).toBe(true);
@@ -553,9 +553,9 @@ describe("Buyer orders", () => {
     renderMarketplace();
 
     expect(await screen.findByRole("heading", { name: "Moon Lantern" })).toBeInTheDocument();
-    expect(screen.getByText("Open this Mini App in Telegram to sign in and place an order.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Place order" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Catalog" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Откройте VILTARA в Telegram, чтобы оформить резерв.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Зарезервировать" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Каталог" })).toHaveAttribute("aria-pressed", "true");
 
     const detailRequest = vi.mocked(fetch).mock.calls.find(([input]) =>
       String(input).endsWith(`/api/listings/${listingId}`)
@@ -575,9 +575,9 @@ describe("Buyer orders", () => {
     setTelegramInitData("", `product_${listingId.replace(/-/g, "")}`);
     renderMarketplace();
 
-    expect(await screen.findByText("Explore listings")).toBeInTheDocument();
+    expect(await screen.findByText("Объявления")).toBeInTheDocument();
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Catalog" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Каталог" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("heading", { name: "Moon Lantern" })).not.toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.some(([input]) =>
       String(input).endsWith(`/api/listings/${listingId}`)
@@ -606,16 +606,16 @@ describe("Buyer orders", () => {
     });
     renderMarketplace();
     fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Place order" }));
-    const confirmation = await screen.findByRole("dialog", { name: "Reserve this listing?" });
+    fireEvent.click(await screen.findByRole("button", { name: "Зарезервировать" }));
+    const confirmation = await screen.findByRole("dialog", { name: "Зарезервировать это объявление?" });
     expect(confirmation).toHaveTextContent("Moon Lantern");
     expect(confirmation).toHaveTextContent("12.5 TON");
     expect(confirmation).toHaveTextContent("Ari (@collector)");
-    expect(confirmation).toHaveTextContent("Payment is not enabled and no funds will be collected");
+    expect(confirmation).toHaveTextContent("Оплата не подключена, средства не списываются, NFT остаётся у продавца");
     expect(vi.mocked(fetch).mock.calls.some(([input, init]) => String(input).endsWith("/api/orders") && init?.method === "POST")).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Confirm reservation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить резерв" }));
 
-    expect(await screen.findByRole("heading", { name: "Reservation confirmed" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Резерв подтверждён" })).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toHaveTextContent("Payment is not enabled, no funds were collected");
     const orderRequest = vi.mocked(fetch).mock.calls.find(([input, init]) =>
       String(input).endsWith("/api/orders") && init?.method === "POST"
@@ -639,7 +639,7 @@ describe("Buyer orders", () => {
     });
     renderMarketplace();
     fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
-    const trigger = await screen.findByRole("button", { name: "Place order" });
+    const trigger = await screen.findByRole("button", { name: "Зарезервировать" });
     fireEvent.click(trigger);
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -669,14 +669,14 @@ describe("Buyer orders", () => {
     });
     renderMarketplace();
     fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Place order" }));
-    const confirm = await screen.findByRole("button", { name: "Confirm reservation" });
+    fireEvent.click(await screen.findByRole("button", { name: "Зарезервировать" }));
+    const confirm = await screen.findByRole("button", { name: "Подтвердить резерв" });
     fireEvent.click(confirm);
     fireEvent.click(confirm);
     expect(postCount).toBe(1);
     expect(confirm).toBeDisabled();
     resolvePost?.(jsonResponse(pendingOrder, 201));
-    expect(await screen.findByRole("heading", { name: "Reservation confirmed" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Резерв подтверждён" })).toBeInTheDocument();
     expect(postCount).toBe(1);
   });
 
@@ -700,13 +700,13 @@ describe("Buyer orders", () => {
     });
     renderMarketplace();
     fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Place order" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Confirm reservation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Зарезервировать" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Подтвердить резерв" }));
     expect(await screen.findByText(/Could not connect to orders/)).toBeInTheDocument();
     const firstRequest = vi.mocked(fetch).mock.calls.find(([input, init]) => String(input).endsWith("/api/orders") && init?.method === "POST");
     const firstKey = new Headers(firstRequest?.[1]?.headers).get("Idempotency-Key");
-    fireEvent.click(screen.getByRole("button", { name: "Confirm reservation" }));
-    expect(await screen.findByRole("heading", { name: "Reservation confirmed" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить резерв" }));
+    expect(await screen.findByRole("heading", { name: "Резерв подтверждён" })).toBeInTheDocument();
     const postRequests = vi.mocked(fetch).mock.calls.filter(([input, init]) => String(input).endsWith("/api/orders") && init?.method === "POST");
     expect(postRequests).toHaveLength(2);
     expect(new Headers(postRequests[1][1]?.headers).get("Idempotency-Key")).toBe(firstKey);
@@ -813,17 +813,17 @@ describe("TON Connect wallet UI", () => {
     });
 
     renderMarketplace();
-    expect(await screen.findByText("Wallet verified by VILTARA")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "My NFT" }));
+    expect(await screen.findByText("Кошелёк подтверждён VILTARA")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Мои NFT" }));
 
     expect(await screen.findByText("Selected wallet NFT")).toBeInTheDocument();
     expect(screen.getByText(/Showing verified NFTs for 0:aaaaaa…aaaaa · mainnet/)).toBeInTheDocument();
     expect(inventoryRequests).toEqual([{ walletId: selectedWallet.id, offset: "0" }]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Load more NFTs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё NFT" }));
     expect(await screen.findByText("Second selected wallet NFT")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Sync inventory" }));
+    fireEvent.click(screen.getByRole("button", { name: "Синхронизировать инвентарь" }));
     await waitFor(() => expect(syncRequests).toEqual([selectedWallet.id]));
     await waitFor(() => expect(inventoryRequests).toHaveLength(3));
     expect(inventoryRequests).toEqual([
@@ -856,9 +856,9 @@ describe("TON Connect wallet UI", () => {
     renderMarketplace();
 
     expect(await screen.findByText("0:abcd…7890")).toBeInTheDocument();
-    expect(screen.getByText("Mainnet")).toBeInTheDocument();
-    expect(screen.getByText("Connected only · proof verification required")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+    expect(screen.getByText("Основная сеть")).toBeInTheDocument();
+    expect(screen.getByText("Подключён · требуется подтверждение владения")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Отключить" })).toBeInTheDocument();
     expect(screen.queryByText(/verified/i)).not.toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.some(([input]) =>
       String(input).endsWith("/api/wallets/proof/verify"),
@@ -905,7 +905,7 @@ describe("TON Connect wallet UI", () => {
     };
     view.rerender(<QueryClientProvider client={view.queryClient}><App /></QueryClientProvider>);
 
-    expect(await screen.findByText("Wallet verified by VILTARA")).toBeInTheDocument();
+    expect(await screen.findByText("Кошелёк подтверждён VILTARA")).toBeInTheDocument();
     const verificationCall = vi.mocked(fetch).mock.calls.find(([input]) =>
       String(input).endsWith("/api/wallets/proof/verify"),
     );
@@ -925,15 +925,15 @@ describe("TON Connect wallet UI", () => {
       account: { address: `0:${"b".repeat(64)}`, chain: "-239" },
     };
     view.rerender(<QueryClientProvider client={view.queryClient}><App /></QueryClientProvider>);
-    expect(await screen.findByText("Connected only · proof verification required")).toBeInTheDocument();
+    expect(await screen.findByText("Подключён · требуется подтверждение владения")).toBeInTheDocument();
 
     // The same address on a different chain also is not the verified mainnet wallet.
     tonConnectMocks.wallet = {
       account: { address, chain: "-3" },
     };
     view.rerender(<QueryClientProvider client={view.queryClient}><App /></QueryClientProvider>);
-    expect(await screen.findByText("Testnet")).toBeInTheDocument();
-    expect(screen.getByText("Connected only · proof verification required")).toBeInTheDocument();
+    expect(await screen.findByText("Тестовая сеть")).toBeInTheDocument();
+    expect(screen.getByText("Подключён · требуется подтверждение владения")).toBeInTheDocument();
   });
 
   it("keeps a connected wallet unverified when backend proof verification fails", async () => {
@@ -972,7 +972,7 @@ describe("TON Connect wallet UI", () => {
     view.rerender(<QueryClientProvider client={view.queryClient}><App /></QueryClientProvider>);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Invalid or expired wallet proof");
-    expect(screen.queryByText("Wallet verified by VILTARA")).not.toBeInTheDocument();
+    expect(screen.queryByText("Кошелёк подтверждён VILTARA")).not.toBeInTheDocument();
   });
 
   it("shows testnet when reported by the connected wallet", async () => {
@@ -980,7 +980,7 @@ describe("TON Connect wallet UI", () => {
     tonConnectMocks.wallet = { account: { address: "0:abcdef1234567890", chain: "-3" } };
     renderMarketplace();
 
-    expect(await screen.findByText("Testnet")).toBeInTheDocument();
+    expect(await screen.findByText("Тестовая сеть")).toBeInTheDocument();
   });
 
   it("calls the SDK disconnect method", async () => {
@@ -989,7 +989,7 @@ describe("TON Connect wallet UI", () => {
     tonConnectMocks.disconnect.mockResolvedValue(undefined);
     renderMarketplace();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Disconnect" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Отключить" }));
     await waitFor(() => expect(tonConnectMocks.disconnect).toHaveBeenCalledOnce());
   });
 
@@ -1012,14 +1012,14 @@ describe("My Listings dashboard", () => {
   });
 
   async function openMyListings() {
-    fireEvent.click(screen.getByRole("button", { name: "My Listings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Мои объявления" }));
   }
 
   it("requires Telegram authentication and does not request private listings when unauthenticated", async () => {
     renderMarketplace();
     await openMyListings();
 
-    expect(await screen.findByText("Open VILTARA in Telegram")).toBeInTheDocument();
+    expect(await screen.findByText("Откройте VILTARA в Telegram")).toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/listings/me"))).toBe(false);
   });
 
@@ -1087,7 +1087,7 @@ describe("My Listings dashboard", () => {
     renderMarketplace();
     await openMyListings();
 
-    for (const label of ["Draft", "Active", "Reserved", "Sold", "Cancelled", "Expired", "Unknown status"]) {
+    for (const label of ["Черновик", "Активно", "Reserved", "Sold", "Отменено", "Expired", "Unknown status"]) {
       expect(await screen.findByText(label)).toBeInTheDocument();
     }
   });
@@ -1130,7 +1130,7 @@ describe("My Listings dashboard", () => {
     await openMyListings();
 
     expect(await screen.findByText(detail)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
     expect(await screen.findByText("My draft lantern")).toBeInTheDocument();
   });
 
@@ -1152,7 +1152,7 @@ describe("My Listings dashboard", () => {
     await openMyListings();
 
     expect(await screen.findByText(/Could not connect to the marketplace/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
     expect(await screen.findByText("My draft lantern")).toBeInTheDocument();
   });
 
@@ -1188,9 +1188,9 @@ describe("My Listings dashboard", () => {
     fireEvent.click(await screen.findByRole("button", { name: /My draft lantern/ }));
     await screen.findByRole("heading", { name: "My draft lantern" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Catalog" }));
+    fireEvent.click(screen.getByRole("button", { name: "Каталог" }));
 
-    expect(await screen.findByText("Explore listings")).toBeInTheDocument();
+    expect(await screen.findByText("Объявления")).toBeInTheDocument();
   });
   it("returns to the public catalog when the VILTARA brand is selected from a seller detail", async () => {
     setTelegramInitData();
@@ -1202,8 +1202,8 @@ describe("My Listings dashboard", () => {
 
     fireEvent.click(screen.getByRole("link", { name: "VILTARA" }));
 
-    expect(await screen.findByRole("heading", { name: "Explore listings" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Catalog" })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByRole("heading", { name: "Объявления" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Каталог" })).toHaveAttribute("aria-pressed", "true");
   });
 
 });

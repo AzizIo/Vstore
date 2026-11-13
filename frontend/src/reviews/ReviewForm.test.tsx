@@ -22,10 +22,10 @@ describe("ReviewForm", () => {
       return response({ id: "review-1", order_id: "order-1", rating: 5, comment: "Great", created_at: "2026-01-01T00:00:00Z" }, 201);
     });
     render(<ReviewForm orderId="order-1" accessToken="token" />);
-    expect(await screen.findByRole("heading", { name: "Leave a review" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Оставить отзыв" })).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("5 stars"));
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "  Great  " } });
-    fireEvent.click(screen.getByRole("button", { name: "Submit review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Отправить отзыв" }));
     await waitFor(() => expect(screen.getByText(/submitted/)).toBeInTheDocument());
     expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input).endsWith("/api/reviews")).length).toBe(1);
   });
@@ -33,8 +33,8 @@ describe("ReviewForm", () => {
   it("does not render a CTA for an already reviewed order", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(response({ order_id: "order-1", eligible: false, already_reviewed: true }));
     render(<ReviewForm orderId="order-1" accessToken="token" />);
-    expect(await screen.findByText("This order has already been reviewed.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Submit review" })).not.toBeInTheDocument();
+    expect(await screen.findByText("Вы уже оставили отзыв на этот заказ.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Отправить отзыв" })).not.toBeInTheDocument();
   });
   it("shows an error when create returns an invalid review response", async () => {
     vi.mocked(fetch).mockImplementation(async (input) => {
@@ -42,9 +42,9 @@ describe("ReviewForm", () => {
       return response({ malformed: true }, 201);
     });
     render(<ReviewForm orderId="order-1" accessToken="token" />);
-    await screen.findByRole("heading", { name: "Leave a review" });
+    await screen.findByRole("heading", { name: "Оставить отзыв" });
     fireEvent.click(screen.getByLabelText("5 stars"));
-    fireEvent.click(screen.getByRole("button", { name: "Submit review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Отправить отзыв" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("invalid");
   });
 
