@@ -320,7 +320,10 @@ async def test_late_successful_charge_is_marked_for_refund(
             result = await record_stars_success(
                 session,
                 **_payment_evidence(
-                    intent, ids, update_id=f"late-update-{uuid4()}", charge_id=f"late-charge-{uuid4()}"
+                    intent,
+                    ids,
+                    update_id=f"late-update-{uuid4()}",
+                    charge_id=f"late-charge-{uuid4()}"
                 ),
                 now=datetime.now(UTC) + timedelta(hours=1),
             )
