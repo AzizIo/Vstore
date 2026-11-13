@@ -313,7 +313,9 @@ async def get_moderation_queue(
     ]
     # Count respects the same status filter and actionability scope.
     count_statement = select(func.count(Listing.id)).where(
-        Listing.status.in_([ListingStatus.PENDING_REVIEW, ListingStatus.ACTIVE, ListingStatus.SUSPENDED]),
+        Listing.status.in_(
+            [ListingStatus.PENDING_REVIEW, ListingStatus.ACTIVE, ListingStatus.SUSPENDED]
+        ),
         *([Listing.status == status_filter] if status_filter is not None else []),
     )
     total = await session.scalar(count_statement) or 0
@@ -478,7 +480,9 @@ async def decide_listing(
                     select(Listing.id).where(
                         Listing.asset_id == listing.asset_id,
                         Listing.id != listing.id,
-                        Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]),
+                        Listing.status.in_(
+                            [ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]
+                        ),
                     ).limit(1)
                 )
                 if conflicting is not None:
