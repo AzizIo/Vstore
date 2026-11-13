@@ -4,6 +4,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
 import { AdminPage } from "./admin/AdminPage";
 import "./index.css";
+import "./telegram-miniapp.css";
+import "./catalog-ui.css";
+import "./workspace-ui.css";
+import "./shell-ui.css";
 
 const queryClient = new QueryClient();
 const Root = window.location.pathname === "/admin" || window.location.pathname === "/admin/"

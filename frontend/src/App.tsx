@@ -57,7 +57,7 @@ function AssetArtwork({ imageUrl, name }: { imageUrl: string | null; name: strin
       {imageUrl && !imageFailed ? (
         <img src={imageUrl} alt={name} loading="lazy" onError={() => setImageFailed(true)} />
       ) : (
-        <div className="artwork-placeholder" aria-label="Изображение недоступно"><span>V</span></div>
+        <div className="artwork-placeholder" role="img" aria-label={`Изображение ${name} недоступно`}><span aria-hidden="true">V</span></div>
       )}
     </div>
   );
@@ -65,13 +65,29 @@ function AssetArtwork({ imageUrl, name }: { imageUrl: string | null; name: strin
 
 function ListingCard({ listing, onOpen }: { listing: Listing; onOpen: () => void }) {
   const title = listing.title || listing.asset.name || "Без названия";
+  const collection = listing.asset.collection?.name;
+  const seller = listing.seller.username
+    ? `@${listing.seller.username}`
+    : listing.seller.first_name || "Продавец";
+
   return (
     <button className="listing-card" type="button" onClick={onOpen}>
       <AssetArtwork imageUrl={listing.asset.image_url} name={title} />
       <span className="listing-card-content">
-        <span className="listing-card-type">{assetTypeLabels[listing.asset.asset_type]}</span>
+        <span className="listing-card-topline">
+          <span className="listing-card-type">{assetTypeLabels[listing.asset.asset_type]}</span>
+          {listing.asset.verification_status === "verified" && (
+            <span className="listing-card-verified">
+              <span aria-hidden="true">✓</span> Проверен
+            </span>
+          )}
+        </span>
+        {collection && <span className="listing-card-collection">{collection}</span>}
         <span className="listing-card-title">{title}</span>
-        <span className="listing-card-price">{formatPrice(listing.price_amount, listing.price_currency)}</span>
+        <span className="listing-card-footer">
+          <span className="listing-card-price">{formatPrice(listing.price_amount, listing.price_currency)}</span>
+          <span className="listing-card-seller">{seller}</span>
+        </span>
       </span>
     </button>
   );
@@ -146,7 +162,13 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [confirmationOpen, orderCreated]);
 
-  if (loading) return <p className="detail-message" role="status">Загружаем объявление…</p>;
+  if (loading) return (
+    <section className="detail-loading-state" role="status" aria-busy="true">
+      <span className="sr-only">Загружаем объявление…</span>
+      <div className="detail-loading-artwork" />
+      <div className="detail-loading-copy"><i /><i /><i /><i /></div>
+    </section>
+  );
   if (error || !listing) {
     return (
       <section className="detail-message" role="alert">
@@ -184,11 +206,33 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
         <span aria-hidden="true">←</span> Назад в каталог
       </button>
       <div className="detail-layout">
-        <AssetArtwork imageUrl={listing.asset.image_url} name={title} />
+        <div className="detail-media-column">
+          <div className="detail-media-frame">
+            <AssetArtwork imageUrl={listing.asset.image_url} name={title} />
+            {listing.asset.verification_status === "verified" && (
+              <span className="detail-verified-badge">
+                <span aria-hidden="true">✓</span> Проверен
+              </span>
+            )}
+          </div>
+          <div className="detail-media-meta">
+            <span>{assetTypeLabels[listing.asset.asset_type]}</span>
+            <span>{listing.asset.collection ? (listing.asset.collection.network === "mainnet" ? "TON Mainnet" : `TON ${listing.asset.collection.network.toUpperCase()}`) : "Коллекционный актив"}</span>
+          </div>
+        </div>
         <div className="detail-copy">
-          <p className="eyebrow">{assetTypeLabels[listing.asset.asset_type]}</p>
+          <div className="detail-kicker-row">
+            <p className="eyebrow">{assetTypeLabels[listing.asset.asset_type]}</p>
+            {listing.asset.verification_status === "verified" && (
+              <span className="detail-verification-label"><span aria-hidden="true">✓</span> Владение подтверждено</span>
+            )}
+          </div>
           <h1 id="detail-title">{title}</h1>
-          <p className="detail-price">{formatPrice(listing.price_amount, listing.price_currency)}</p>
+          <div className="detail-price-card">
+            <span className="detail-price-label">Цена объявления</span>
+            <p className="detail-price">{formatPrice(listing.price_amount, listing.price_currency)}</p>
+            <span className="detail-price-note">Цена указана продавцом</span>
+          </div>
           <section className="seller-profile" aria-label="Профиль продавца">
             <div className="seller-profile-avatar" aria-hidden="true">
               {(seller.trim().charAt(0) || "S").toUpperCase()}
@@ -246,8 +290,13 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
               </section>
             </div>
           )}
-          {listing.description && <p className="detail-description">{listing.description}</p>}
-          {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
+          {(listing.description || listing.asset.description) && (
+            <section className="detail-description-panel" aria-label="Описание актива">
+              <p className="detail-section-label">ОБ АКТИВЕ</p>
+              {listing.description && <p className="detail-description">{listing.description}</p>}
+              {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
+            </section>
+          )}
           <dl className="detail-facts">
             <div>
               <dt>Коллекция</dt>
@@ -335,6 +384,7 @@ function MarketplaceApp() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [assetType, setAssetType] = useState<AssetType | "all">("all");
   const [currency, setCurrency] = useState<PriceCurrency | "all">("all");
   const [minPrice, setMinPrice] = useState("");
@@ -350,6 +400,11 @@ function MarketplaceApp() {
   const requestVersion = useRef(0);
   const loadingMoreRef = useRef(false);
   const loadMoreController = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 280);
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
 
   useEffect(() => {
     if (!startParam) return;
@@ -380,7 +435,7 @@ function MarketplaceApp() {
     setListings([]);
     setTotal(0);
     setNextOffset(0);
-    fetchListings({ search, assetType, currency, minPrice, maxPrice, sort, limit: CATALOG_PAGE_SIZE, offset: 0 }, controller.signal)
+    fetchListings({ search: debouncedSearch, assetType, currency, minPrice, maxPrice, sort, limit: CATALOG_PAGE_SIZE, offset: 0 }, controller.signal)
       .then((page) => {
         if (controller.signal.aborted || version !== requestVersion.current) return;
         setListings(page.items);
@@ -404,9 +459,22 @@ function MarketplaceApp() {
       loadingMoreRef.current = false;
       if (requestVersion.current === version) requestVersion.current += 1;
     };
-  }, [search, assetType, currency, minPrice, maxPrice, sort, retry]);
+  }, [debouncedSearch, assetType, currency, minPrice, maxPrice, sort, retry]);
 
   const hasMore = listings.length < total && nextOffset < total;
+  const hasActiveCatalogFilters = Boolean(
+    search.trim() || assetType !== "all" || currency !== "all" || minPrice || maxPrice || sort !== "newest",
+  );
+
+  function resetCatalogFilters() {
+    setSearch("");
+    setDebouncedSearch("");
+    setAssetType("all");
+    setCurrency("all");
+    setMinPrice("");
+    setMaxPrice("");
+    setSort("newest");
+  }
 
   async function loadMore() {
     if (!hasMore || loading || error || loadingMoreRef.current) return;
@@ -420,7 +488,7 @@ function MarketplaceApp() {
 
     try {
       const page = await fetchListings(
-        { search, assetType, currency, minPrice, maxPrice, sort, limit: CATALOG_PAGE_SIZE, offset: nextOffset },
+        { search: debouncedSearch, assetType, currency, minPrice, maxPrice, sort, limit: CATALOG_PAGE_SIZE, offset: nextOffset },
         controller.signal,
       );
       if (controller.signal.aborted || version !== requestVersion.current) return;
@@ -477,7 +545,8 @@ function MarketplaceApp() {
             setSection("catalog");
           }}
         >
-          Каталог
+          <span className="navigation-icon" aria-hidden="true">▦</span>
+          <span className="navigation-label">Каталог</span>
         </button>
         <button
           className="navigation-tab"
@@ -488,7 +557,8 @@ function MarketplaceApp() {
             setSection("my-nft");
           }}
         >
-          Мои NFT
+          <span className="navigation-icon" aria-hidden="true">◇</span>
+          <span className="navigation-label">Мои NFT</span>
         </button>
         <button
           className="navigation-tab"
@@ -499,7 +569,8 @@ function MarketplaceApp() {
             setSection("my-listings");
           }}
         >
-          Мои объявления
+          <span className="navigation-icon" aria-hidden="true">▤</span>
+          <span className="navigation-label">Мои объявления</span>
         </button>
         <button
           className="navigation-tab"
@@ -510,7 +581,8 @@ function MarketplaceApp() {
             setSection("orders");
           }}
         >
-          Заказы
+          <span className="navigation-icon" aria-hidden="true">↗</span>
+          <span className="navigation-label">Заказы</span>
         </button>
       </nav>
 
@@ -552,7 +624,7 @@ function MarketplaceApp() {
               <h2>Объявления</h2>
               {!loading && !error && <span className="result-count">{formatItemCount(total)}</span>}
             </div>
-            <form className="catalog-controls" onSubmit={(event) => event.preventDefault()}>
+            <form className="catalog-controls" onSubmit={(event) => { event.preventDefault(); setDebouncedSearch(search.trim()); }}>
               <label className="search-control">
                 <span className="sr-only">Поиск объявлений</span>
                 <span aria-hidden="true">⌕</span>
@@ -609,14 +681,7 @@ function MarketplaceApp() {
                 <button
                   className="clear-filters-button"
                   type="button"
-                  onClick={() => {
-                    setSearch("");
-                    setAssetType("all");
-                    setCurrency("all");
-                    setMinPrice("");
-                    setMaxPrice("");
-                    setSort("newest");
-                  }}
+                  onClick={resetCatalogFilters}
                 >
                   Сбросить фильтры
                 </button>
@@ -642,7 +707,9 @@ function MarketplaceApp() {
               </div>
             ) : listings.length === 0 ? (
               <div className="catalog-message" role="status">
-                <h3>Объявления не найдены</h3><p>Измените поисковый запрос или тип актива.</p>
+                <h3>Объявления не найдены</h3>
+                <p>Попробуйте изменить запрос или параметры фильтрации.</p>
+                {hasActiveCatalogFilters && <button className="text-button" type="button" onClick={resetCatalogFilters}>Сбросить фильтры</button>}
               </div>
             ) : (
               <>

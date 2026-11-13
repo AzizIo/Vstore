@@ -38,6 +38,19 @@ function getTitle(listing: Listing) {
   return listing.title || listing.asset.name || "Без названия";
 }
 
+function formatListingsCount(count: number) {
+  const remainder100 = count % 100;
+  const remainder10 = count % 10;
+  const word = remainder100 >= 11 && remainder100 <= 14
+    ? "объявлений"
+    : remainder10 === 1
+      ? "объявление"
+      : remainder10 >= 2 && remainder10 <= 4
+        ? "объявления"
+        : "объявлений";
+  return `${count} ${word}`;
+}
+
 function getCreatedDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
@@ -432,7 +445,7 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
           <p className="eyebrow">КАБИНЕТ ПРОДАВЦА</p>
           <h1 id="my-listings-title">Мои объявления</h1>
         </div>
-        {!loading && !error && <span className="my-listings-count">{listings.length} total</span>}
+        {!loading && !error && <span className="my-listings-count">{formatListingsCount(listings.length)}</span>}
         <button className="load-more-button create-listing-action" type="button" onClick={() => setCreating(true)}>
           Создать объявление
         </button>
@@ -461,7 +474,17 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
       )}
 
       {loading ? (
-        <div className="my-listings-message" role="status">Загружаем ваши объявления…</div>
+        <div className="my-listings-loading-state" role="status" aria-busy="true">
+          <span className="sr-only">Загружаем ваши объявления…</span>
+          <div className="my-listings-grid my-listings-skeleton-grid" aria-hidden="true">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div className="my-listing-skeleton-card" key={index}>
+                <span className="my-listing-skeleton-artwork" />
+                <span className="my-listing-skeleton-copy"><i /><i /><i /></span>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : error ? (
         <div className="my-listings-message" role="alert">
           <h2>Объявления недоступны</h2>

@@ -194,10 +194,24 @@ export function CreateListing({
       </button>
       <p className="eyebrow">КАБИНЕТ ПРОДАВЦА</p>
       <h1 id="create-listing-title">Создать черновик объявления</h1>
-      <p className="create-listing-note">Черновики видны только вам и не публикуются на площадке.</p>
+      <p className="create-listing-note">Выберите подтверждённый TON NFT, задайте цену и подготовьте объявление к публикации.</p>
+      <div className="create-listing-progress" aria-label={selectedAsset ? "Шаг 2 из 2" : "Шаг 1 из 2"}>
+        <span className={selectedAsset ? "create-listing-progress-step is-complete" : "create-listing-progress-step is-current"}>
+          <span>01</span> Актив
+        </span>
+        <span className={selectedAsset ? "create-listing-progress-line is-complete" : "create-listing-progress-line"} aria-hidden="true" />
+        <span className={selectedAsset ? "create-listing-progress-step is-current" : "create-listing-progress-step"}>
+          <span>02</span> Условия
+        </span>
+      </div>
 
       {selectedAsset ? (
         <form className="draft-form" onSubmit={submitDraft}>
+          <div className="draft-form-heading">
+            <p className="eyebrow">ШАГ 02 · УСЛОВИЯ ОБЪЯВЛЕНИЯ</p>
+            <h2>Настройте предложение</h2>
+            <p>Черновик будет сохранён приватно. Публикация выполняется отдельно.</p>
+          </div>
           <div className="selected-inventory-asset">
             <InventoryImage asset={selectedAsset} />
             <span>{assetTitle(selectedAsset)}</span>
@@ -239,6 +253,11 @@ export function CreateListing({
             />
             <small>Оставьте поле пустым, чтобы отключить автоматическое истечение срока.</small>
           </label>
+          <div className="draft-price-preview" aria-live="polite">
+            <span>Предпросмотр цены</span>
+            <strong>{priceAmount ? `${priceAmount} ${priceCurrency === "TON" ? "TON" : "Звёзд"}` : "Укажите цену"}</strong>
+            <small>Черновик не виден покупателям до публикации.</small>
+          </div>
           {submitError && <p className="creation-error" role="alert">{submitError}</p>}
           <button className="load-more-button" type="submit" disabled={submitting}>
             {submitting ? "Создаём черновик…" : "Сохранить черновик"}
@@ -266,6 +285,14 @@ export function CreateListing({
         </div>
       ) : (
         <>
+          <div className="asset-picker-heading">
+            <div>
+              <p className="eyebrow">ШАГ 01 · ВЫБОР АКТИВА</p>
+              <h2>Выберите NFT для продажи</h2>
+              <p>Доступны только активы с подтверждённым владением.</p>
+            </div>
+            <span className="asset-picker-count">{assets.length} доступно</span>
+          </div>
           <div className="inventory-grid">
             {assets.map((asset) => (
               <button
@@ -273,10 +300,14 @@ export function CreateListing({
                 type="button"
                 key={asset.id}
                 onClick={() => setSelectedAsset(asset)}
+                aria-label={`Выбрать NFT ${assetTitle(asset)}`}
               >
-                <InventoryImage asset={asset} />
+                <span className="inventory-selection-media">
+                  <InventoryImage asset={asset} />
+                  <span className="inventory-selection-action">Выбрать</span>
+                </span>
                 <span className="inventory-card-copy">
-                  <span className="listing-type-label">Подтверждённый TON NFT</span>
+                  <span className="listing-type-label">✓ Подтверждённый TON NFT</span>
                   <span className="inventory-card-title">{assetTitle(asset)}</span>
                   <span className="inventory-card-address">{asset.item_address.slice(0, 8)}…{asset.item_address.slice(-5)}</span>
                 </span>

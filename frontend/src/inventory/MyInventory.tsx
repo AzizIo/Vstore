@@ -259,8 +259,18 @@ export function MyInventory({
       )}
 
       {loading ? (
-        <div className="inventory-message" role="status" aria-busy="true">
-          Проверяем выбранный подтверждённый кошелёк и владение его NFT…
+        <div className="inventory-loading-state" role="status" aria-busy="true">
+          <span className="sr-only">Проверяем выбранный подтверждённый кошелёк и владение его NFT…</span>
+          <div className="inventory-grid inventory-skeleton-grid" aria-hidden="true">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div className="inventory-skeleton-card" key={index}>
+                <span className="inventory-skeleton-artwork" />
+                <span className="inventory-skeleton-copy">
+                  <i /><i /><i />
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       ) : !selectedWallet ? (
         <div className="inventory-message" role="status">
