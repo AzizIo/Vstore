@@ -129,7 +129,7 @@ describe("listing API client", () => {
       search: "",
       assetType: "all",
       sort: "newest",
-    })).rejects.toThrow("invalid catalog response");
+    })).rejects.toThrow("некорректный каталог");
   });
 
   it("rejects pagination metadata that does not match the requested page", async () => {
@@ -141,7 +141,7 @@ describe("listing API client", () => {
       sort: "newest",
       limit: 24,
       offset: 48,
-    })).rejects.toThrow("invalid catalog response");
+    })).rejects.toThrow("некорректный каталог");
   });
 
   it("rejects a catalog containing an invalid listing", async () => {
@@ -154,7 +154,7 @@ describe("listing API client", () => {
       search: "",
       assetType: "all",
       sort: "newest",
-    })).rejects.toThrow("invalid catalog response");
+    })).rejects.toThrow("некорректный каталог");
   });
 
   it("loads a detail by an encoded listing ID", async () => {
@@ -181,13 +181,13 @@ describe("listing API client", () => {
   it("rejects a private listings response containing an invalid item", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse([{ ...listing, asset: {} }]));
 
-    await expect(fetchMyListings("current-session-token")).rejects.toThrow("invalid listings response");
+    await expect(fetchMyListings("current-session-token")).rejects.toThrow("некорректный список объявлений");
   });
 
   it("rejects an invalid detail payload", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...listing, asset: {} }));
 
-    await expect(fetchListing("listing-1")).rejects.toThrow("invalid listing");
+    await expect(fetchListing("listing-1")).rejects.toThrow("некорректные данные объявления");
   });
 
   it("surfaces a structured API error detail", async () => {
@@ -203,13 +203,13 @@ describe("listing API client", () => {
       json: vi.fn().mockRejectedValue(new Error("not JSON")),
     } as unknown as Response);
 
-    await expect(fetchListing("listing-1")).rejects.toThrow("Request failed (503)");
+    await expect(fetchListing("listing-1")).rejects.toThrow("Запрос завершился ошибкой (503)");
   });
 
   it("normalizes connection failures", async () => {
     vi.mocked(fetch).mockRejectedValue(new TypeError("Network unavailable"));
 
-    await expect(fetchListing("listing-1")).rejects.toThrow("Could not connect to the marketplace");
+    await expect(fetchListing("listing-1")).rejects.toThrow("Не удалось связаться с маркетплейсом");
   });
 
   it("reports malformed successful JSON", async () => {
@@ -219,7 +219,7 @@ describe("listing API client", () => {
       json: vi.fn().mockRejectedValue(new SyntaxError("Unexpected token")),
     } as unknown as Response);
 
-    await expect(fetchListing("listing-1")).rejects.toThrow("invalid response");
+    await expect(fetchListing("listing-1")).rejects.toThrow("некорректный ответ");
   });
 
   it("publishes a listing with the seller session token", async () => {
@@ -289,7 +289,7 @@ describe("listing API client", () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...listing, seller: null }));
 
     await expect(cancelListing("listing-1", "seller-token"))
-      .rejects.toThrow("invalid listing response");
+      .rejects.toThrow("некорректный ответ объявления");
   });
 
 });

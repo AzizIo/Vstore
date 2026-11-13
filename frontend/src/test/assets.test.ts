@@ -71,17 +71,17 @@ describe("seller asset API", () => {
       walletId: "connected-wallet-id",
       limit: 24,
       offset: 0,
-    })).rejects.toThrow("inventory for a different wallet");
+    })).rejects.toThrow("инвентарь другого кошелька");
   });
 
   it("rejects inventory records that are not verified and eligible", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...inventory, items: [{ ...asset, eligible_for_listing: false }] }));
-    await expect(fetchMyInventory("session-token")).rejects.toThrow("invalid inventory response");
+    await expect(fetchMyInventory("session-token")).rejects.toThrow("некорректный инвентарь");
   });
 
   it("rejects a pagination cursor that does not advance when more items exist", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...inventory, has_more: true, next_offset: 0 }));
-    await expect(fetchMyInventory("session-token")).rejects.toThrow("invalid inventory response");
+    await expect(fetchMyInventory("session-token")).rejects.toThrow("некорректный инвентарь");
   });
 
   it("sends only the existing draft request fields with bearer auth", async () => {
@@ -107,7 +107,7 @@ describe("seller asset API", () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...listing, status: "active" }, 201));
     await expect(createListingDraft("session-token", {
       asset_id: asset.id, price_amount: "1", price_currency: "TON",
-    })).rejects.toThrow("invalid draft response");
+    })).rejects.toThrow("некорректный ответ при создании черновика");
   });
   it("requests a server-side full inventory sync and validates the result", async () => {
     const synced = {
@@ -138,7 +138,7 @@ describe("seller asset API", () => {
       verified_count: 0,
     }));
 
-    await expect(syncMyInventory("session-token")).rejects.toThrow("invalid inventory sync response");
+    await expect(syncMyInventory("session-token")).rejects.toThrow("некорректный ответ синхронизации инвентаря");
   });
 
 });
