@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://viltara:viltara@localhost:5432/viltara"
     redis_url: str = "redis://localhost:6379/0"
     bot_token: str | None = None
+    # Isolated Telegram Stars test bot; never reuse the production bot token.
+    telegram_stars_test_enabled: bool = False
+    telegram_stars_test_bot_token: SecretStr | None = None
     auth_secret_key: str | None = None
     auth_token_ttl_seconds: int = 3600
     # Server-side allowlist; an empty list disables admin access.
