@@ -469,7 +469,7 @@ describe("marketplace catalog", () => {
     });
     renderMarketplace();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to verify your Telegram session");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Не удалось подтвердить сессию Telegram. Каталог доступен в режиме просмотра.");
     fireEvent.click(screen.getByRole("button", { name: "Повторить проверку" }));
 
     expect(await screen.findByText("Вы вошли как Alex Example · @alex")).toBeInTheDocument();
@@ -616,7 +616,7 @@ describe("Buyer orders", () => {
     fireEvent.click(screen.getByRole("button", { name: "Подтвердить резерв" }));
 
     expect(await screen.findByRole("heading", { name: "Резерв подтверждён" })).toBeInTheDocument();
-    expect(screen.getByRole("dialog")).toHaveTextContent("Payment is not enabled, no funds were collected");
+    expect(screen.getByRole("dialog")).toHaveTextContent("Оплата не подключена, средства не списываются, NFT остаётся у продавца");
     const orderRequest = vi.mocked(fetch).mock.calls.find(([input, init]) =>
       String(input).endsWith("/api/orders") && init?.method === "POST"
     );
