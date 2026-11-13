@@ -103,3 +103,85 @@ test("keeps seller listings and order cards compact on Telegram phone widths", a
     expect(orderLayout.scrollWidth).toBeLessThanOrEqual(orderLayout.viewportWidth);
   }
 });
+
+
+test("listing detail product layout stays within Telegram viewport", async ({ page }) => {
+  await mockMarketplaceApi(page);
+  await page.goto("/");
+
+  for (const width of [320, 360, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.getByRole("button", { name: /Moon Lantern/ }).click();
+
+    await expect(page.getByRole("heading", { name: "Moon Lantern" })).toBeVisible();
+    await expect(page.locator(".detail-media-frame")).toBeVisible();
+    await expect(page.locator(".detail-price-card")).toContainText("12,5 TON");
+    await expect(page.locator(".detail-verification-label")).toContainText("Владение подтверждено");
+
+    const layout = await page.evaluate(() => {
+      const media = document.querySelector(".detail-media-column")?.getBoundingClientRect();
+      const copy = document.querySelector(".detail-copy")?.getBoundingClientRect();
+      return {
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+        mediaLeft: media?.left ?? -1,
+        mediaRight: media?.right ?? Infinity,
+        copyLeft: copy?.left ?? -1,
+        copyRight: copy?.right ?? Infinity,
+      };
+    });
+
+    expect(layout.scrollWidth, `detail page overflow at ${width}px`).toBeLessThanOrEqual(layout.clientWidth);
+    expect(layout.mediaLeft).toBeGreaterThanOrEqual(0);
+    expect(layout.mediaRight).toBeLessThanOrEqual(width);
+    expect(layout.copyLeft).toBeGreaterThanOrEqual(0);
+    expect(layout.copyRight).toBeLessThanOrEqual(width);
+
+    await page.getByRole("button", { name: /Назад в каталог/ }).click();
+  }
+});
+
+test("seller draft builder is usable at Telegram phone widths", async ({ page }) => {
+  await mockMarketplaceApi(page, { authenticated: true });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Мои объявления", exact: true }).click();
+  await page.getByRole("button", { name: "Создать объявление" }).click();
+
+  await expect(page.getByRole("heading", { name: "Выберите NFT для продажи" })).toBeVisible();
+  const assetChoice = page.getByRole("button", { name: "Выбрать NFT Moon Lantern NFT" });
+  await expect(assetChoice).toBeVisible();
+
+  for (const width of [320, 360, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    const layout = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+      right: document.querySelector(".asset-picker-heading")?.getBoundingClientRect().right ?? Infinity,
+    }));
+    expect(layout.scrollWidth, `asset picker overflow at ${width}px`).toBeLessThanOrEqual(layout.clientWidth);
+    expect(layout.right).toBeLessThanOrEqual(width);
+  }
+
+  await assetChoice.click();
+  await expect(page.getByRole("heading", { name: "Настройте предложение" })).toBeVisible();
+  await expect(page.getByText("Укажите цену")).toBeVisible();
+
+  for (const width of [320, 360, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    const layout = await page.evaluate(() => {
+      const form = document.querySelector(".draft-form")?.getBoundingClientRect();
+      return {
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+        left: form?.left ?? -1,
+        right: form?.right ?? Infinity,
+      };
+    });
+    expect(layout.scrollWidth, `draft form overflow at ${width}px`).toBeLessThanOrEqual(layout.clientWidth);
+    expect(layout.left).toBeGreaterThanOrEqual(0);
+    expect(layout.right).toBeLessThanOrEqual(width);
+  }
+
+  await page.getByRole("spinbutton", { name: "Цена" }).fill("1.5");
+  await expect(page.locator(".draft-price-preview")).toContainText("1.5 TON");
+});
