@@ -212,7 +212,7 @@ export function CreateListing({
               />
               <select aria-label="Валюта" value={priceCurrency} onChange={(event) => setPriceCurrency(event.target.value as PriceCurrency)}>
                 <option value="TON">TON</option>
-                <option value="XTR">XTR</option>
+                <option value="XTR">Звёзды (XTR)</option>
               </select>
             </span>
           </label>

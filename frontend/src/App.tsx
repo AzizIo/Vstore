@@ -29,6 +29,17 @@ function formatItemCount(count: number) {
   return `${count} ${noun}`;
 }
 
+function formatVerificationStatus(status: string) {
+  const labels: Record<string, string> = {
+    verified: "Подтверждён",
+    stale: "Устарел",
+    invalid: "Не подтверждён",
+    unsupported: "Не поддерживается",
+    provider_unavailable: "Провайдер недоступен",
+  };
+  return labels[status] ?? "Неизвестно";
+}
+
 function formatPrice(amount: string, currency: string) {
   const numericAmount = Number(amount);
   const formattedAmount = Number.isFinite(numericAmount)
@@ -249,7 +260,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
               </dd>
             </div>
             <div><dt>ID актива</dt><dd>{listing.asset.external_id}</dd></div>
-            <div><dt>Проверка</dt><dd>{listing.asset.verification_status}</dd></div>
+            <div><dt>Проверка</dt><dd>{formatVerificationStatus(listing.asset.verification_status)}</dd></div>
           </dl>
           <SellerReviews
             sellerId={listing.seller.id}

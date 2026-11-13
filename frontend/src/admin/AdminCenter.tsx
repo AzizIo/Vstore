@@ -8,6 +8,9 @@ const reasonLabels: Record<string, string> = {
   asset_owner_mismatch: "Владелец актива не совпадает с продавцом", listing_expired: "Срок объявления истёк",
 };
 const actionLabels: Record<ModerationAction, string> = { approve: "Одобрить", reject: "Отклонить", suspend: "Приостановить", restore: "Восстановить" };
+const actionConfirmLabels: Record<ModerationAction, string> = {
+  approve: "одобрение", reject: "отклонение", suspend: "приостановку", restore: "восстановление",
+};
 const reasonCodeLabels: Record<ModerationReasonCode, string> = {
   policy_violation: "Нарушение правил", ownership_unverified: "Не удалось подтвердить владение",
   misleading_metadata: "Недостоверные метаданные", duplicate_listing: "Дубликат объявления", other: "Другое",
@@ -142,7 +145,7 @@ export function AdminCenter({ accessToken, active }: Props) {
           <label>Пояснение (5–500 символов)<textarea value={reason} minLength={5} maxLength={500} required onChange={(event) => setReason(event.target.value)} placeholder="Опишите причину решения…" rows={4} /></label>
           <div className="admin-dialog-actions">
             <button type="button" className="admin-secondary" onClick={() => setSelected(null)} disabled={submitting}>Отмена</button>
-            <button type="submit" className={action === "reject" || action === "suspend" ? "admin-danger" : "admin-primary"} disabled={submitting || reason.trim().length < 5}>{submitting ? "Сохраняем…" : "Подтвердить " + actionLabels[action].toLowerCase()}</button>
+            <button type="submit" className={action === "reject" || action === "suspend" ? "admin-danger" : "admin-primary"} disabled={submitting || reason.trim().length < 5}>{submitting ? "Сохраняем…" : "Подтвердить " + actionConfirmLabels[action]}</button>
           </div>
         </form>
       </section></div>}

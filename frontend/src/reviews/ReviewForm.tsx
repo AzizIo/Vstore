@@ -5,6 +5,14 @@ import "./reviews.css";
 
 const MAX_COMMENT_LENGTH = 2000;
 
+function ratingWord(value: number) {
+  const mod10 = value % 10;
+  const mod100 = value % 100;
+  if (mod10 === 1 && mod100 !== 11) return "звезда";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "звезды";
+  return "звёзд";
+}
+
 export function ReviewForm({ orderId, accessToken, onSubmitted }: { orderId: string; accessToken: string; onSubmitted?: () => void }) {
   const [eligible, setEligible] = useState(false);
   const [alreadyReviewed, setAlreadyReviewed] = useState(false);
@@ -63,8 +71,8 @@ export function ReviewForm({ orderId, accessToken, onSubmitted }: { orderId: str
         <legend>Ваша оценка</legend>
         <div className="review-rating-options">
           {[1, 2, 3, 4, 5].map((value) => <label key={value}>
-            <input aria-label={`${value} ${value === 1 ? "звезда" : "звёзд"}`} type="radio" name={`review-rating-${orderId}`} value={value} checked={rating === value} onChange={() => setRating(value)} required />
-            <span aria-hidden="true">{value} ★</span><span className="sr-only">{value} {value === 1 ? "звезда" : "звёзд"}</span>
+            <input aria-label={`${value} ${ratingWord(value)}`} type="radio" name={`review-rating-${orderId}`} value={value} checked={rating === value} onChange={() => setRating(value)} required />
+            <span aria-hidden="true">{value} ★</span><span className="sr-only">{value} {ratingWord(value)}</span>
           </label>)}
         </div>
       </fieldset>
