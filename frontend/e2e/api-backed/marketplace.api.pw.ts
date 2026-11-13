@@ -120,30 +120,47 @@ test(
     );
     expect(redisChallenge.status()).toBe(200);
     expect(typeof (await redisChallenge.json()).payload).toBe("string");
+    const inventoryPreflight = await sellerContext.request.get(
+      "http://127.0.0.1:5173/api/assets/me?limit=24&offset=0",
+      { headers: { Authorization: `Bearer ${bootstrapSession.access_token}` } },
+    );
+    const inventoryPreflightBody = await inventoryPreflight.json() as {
+      items: Array<{ name: string | null; verification_status: string; eligible_for_listing: boolean }>;
+    };
+    expect(inventoryPreflight.status()).toBe(200);
+    expect(inventoryPreflightBody.items, JSON.stringify(inventoryPreflightBody)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "E2E Verified NFT",
+          verification_status: "verified",
+          eligible_for_listing: true,
+        }),
+      ]),
+    );
 
     await sellerPage.goto("/");
-    await expect(sellerPage.getByText(/Signed in as E2E Seller/)).toBeVisible();
+    await expect(sellerPage.getByText(/Вы вошли как E2E Seller/)).toBeVisible();
 
-    await sellerPage.getByRole("button", { name: "My Listings", exact: true }).click();
-    await sellerPage.getByRole("button", { name: "Create listing", exact: true }).click();
-    await expect(sellerPage.getByRole("heading", { name: "Create listing draft" })).toBeVisible();
+    await sellerPage.getByRole("button", { name: "Мои объявления", exact: true }).click();
+    await sellerPage.getByRole("button", { name: "Создать объявление", exact: true }).click();
+    await expect(sellerPage.getByRole("heading", { name: "Создать черновик объявления" })).toBeVisible();
 
     const inventoryAsset = sellerPage.getByRole("button", { name: /E2E Verified NFT/ });
     await expect(inventoryAsset).toBeVisible();
     await inventoryAsset.click();
 
-    await sellerPage.getByRole("spinbutton", { name: "Price amount" }).fill("15.75");
+    await sellerPage.getByRole("spinbutton", { name: "Цена" }).fill("15.75");
     await sellerPage.locator(".draft-form input[maxlength='200']").fill("E2E Published NFT");
-    await sellerPage.getByRole("button", { name: "Create private draft" }).click();
-    await expect(sellerPage.getByRole("heading", { name: "Draft created" })).toBeVisible();
-    await sellerPage.getByRole("button", { name: "View My Listings" }).click();
+    await sellerPage.getByRole("button", { name: "Сохранить черновик" }).click();
+    await expect(sellerPage.getByRole("heading", { name: "Черновик создан" })).toBeVisible();
+    await sellerPage.getByRole("button", { name: "К моим объявлениям" }).click();
 
     const draftCard = sellerPage.getByRole("button", { name: /E2E Published NFT/ });
     await expect(draftCard).toBeVisible();
     await draftCard.click();
-    await sellerPage.getByRole("button", { name: "Publish listing", exact: true }).click();
-    await sellerPage.getByRole("button", { name: "Confirm publish", exact: true }).click();
-    await expect(sellerPage.locator(".listing-status-active")).toHaveText("Active");
+    await sellerPage.getByRole("button", { name: "Опубликовать объявление", exact: true }).click();
+    await sellerPage.getByRole("button", { name: "Подтвердить публикацию", exact: true }).click();
+    await expect(sellerPage.locator(".listing-status-active")).toHaveText("Активно");
 
     // Exercise the real catalog endpoint after publication: price ranges and
     // sorting must remain isolated to one currency, never TON vs XTR together.
@@ -181,30 +198,30 @@ test(
     expect(buyerBootstrap.status()).toBe(200);
     const buyerSession = await buyerBootstrap.json() as { access_token: string };
     await buyerPage.goto("/");
-    await expect(buyerPage.getByText(/Signed in as E2E Buyer/)).toBeVisible();
+    await expect(buyerPage.getByText(/Вы вошли как E2E Buyer/)).toBeVisible();
 
     await buyerPage.getByRole("button", { name: /E2E Published NFT/ }).click();
     await expect(buyerPage.getByRole("heading", { name: "E2E Published NFT" })).toBeVisible();
-    await expect(buyerPage.getByText(/^15\.75(?:0+)? TON$/)).toBeVisible();
-    await buyerPage.getByRole("button", { name: "Place order", exact: true }).click();
-    const reservationDialog = buyerPage.getByRole("dialog", { name: "Reserve this listing?" });
+    await expect(buyerPage.getByText(/15,75(?:0+)? TON/)).toBeVisible();
+    await buyerPage.getByRole("button", { name: "Зарезервировать", exact: true }).click();
+    const reservationDialog = buyerPage.getByRole("dialog", { name: "Зарезервировать это объявление?" });
     await expect(reservationDialog).toContainText("E2E Published NFT");
-    await expect(reservationDialog).toContainText("15.75 TON");
+    await expect(reservationDialog).toContainText("15,75 TON");
     await expect(reservationDialog).toContainText("E2E Seller");
-    await expect(reservationDialog).toContainText("Payment is not enabled and no funds will be collected");
+    await expect(reservationDialog).toContainText("Это только резерв объявления. Оплата не проводится, средства не списываются, NFT остаётся у продавца.");
     expect(buyerApiRequests.some((item) => item === "POST /api/orders")).toBe(false);
 
-    await reservationDialog.getByRole("button", { name: "Confirm reservation" }).click();
-    const reservationSuccess = buyerPage.getByRole("dialog", { name: "Reservation confirmed" });
-    await expect(reservationSuccess).toContainText("Payment is not enabled, no funds were collected");
-    await reservationSuccess.getByRole("button", { name: "View Orders" }).click();
+    await reservationDialog.getByRole("button", { name: "Подтвердить резерв" }).click();
+    const reservationSuccess = buyerPage.getByRole("dialog", { name: "Резерв подтверждён" });
+    await expect(reservationSuccess).toContainText("Резерв для «E2E Published NFT» создан. Оплата не проводилась, NFT пока остаётся у продавца.");
+    await reservationSuccess.getByRole("button", { name: "Мои заказы" }).click();
 
-    await expect(buyerPage.getByRole("heading", { name: "Order workspace" })).toBeVisible();
-    await expect(buyerPage.getByText("Reservation pending", { exact: true })).toBeVisible();
-    await expect(buyerPage.getByText(/^15\.75(?:0+)? TON$/)).toBeVisible();
-    await buyerPage.getByRole("button", { name: /Open order E2E Published NFT/ }).click();
-    await expect(buyerPage.getByRole("heading", { name: "Lifecycle" })).toBeVisible();
-    await expect(buyerPage.getByText(/Payments are not enabled/)).toBeVisible();
+    await expect(buyerPage.getByRole("heading", { name: "Заказы" })).toBeVisible();
+    await expect(buyerPage.getByText("Ожидает передачи", { exact: true })).toBeVisible();
+    await expect(buyerPage.getByText(/15,75(?:0+)? TON/)).toBeVisible();
+    await buyerPage.getByRole("button", { name: /Открыть заказ E2E Published NFT/ }).click();
+    await expect(buyerPage.getByRole("heading", { name: "Статус заказа" })).toBeVisible();
+    await expect(buyerPage.getByText(/Оплата в VILTARA SHOP пока не подключена/)).toBeVisible();
 
     // Continue through the real delivery APIs. Only the external TON Connect
     // wallet boundary and loopback TON Center provider are simulated.
@@ -220,12 +237,12 @@ test(
     expect(persistedOrder).toBeTruthy();
     const orderId = persistedOrder!.id;
 
-    await sellerPage.getByRole("button", { name: "Orders", exact: true }).click();
-    await sellerPage.getByRole("tab", { name: /Sales/ }).click();
-    await sellerPage.getByRole("button", { name: /Open order E2E Published NFT/ }).click();
-    await expect(sellerPage.getByRole("heading", { name: "NFT transfer" })).toBeVisible();
-    await sellerPage.getByRole("button", { name: "Prepare transfer" }).click();
-    await expect(sellerPage.getByRole("button", { name: "Review and sign in wallet" })).toBeVisible();
+    await sellerPage.getByRole("button", { name: "Заказы", exact: true }).click();
+    await sellerPage.getByRole("tab", { name: /Продажи/ }).click();
+    await sellerPage.getByRole("button", { name: /Открыть заказ E2E Published NFT/ }).click();
+    await expect(sellerPage.getByRole("heading", { name: "Передача NFT" })).toBeVisible();
+    await sellerPage.getByRole("button", { name: "Подготовить передачу" }).click();
+    await expect(sellerPage.getByRole("button", { name: "Проверить и подписать в кошельке" })).toBeVisible();
 
     const deliveryStateResponse = await sellerContext.request.get(
       `http://127.0.0.1:5173/api/orders/${orderId}/delivery`,
@@ -249,7 +266,7 @@ test(
       response.url().includes(`/api/orders/${orderId}/delivery/submissions`) &&
       response.request().method() === "POST",
     );
-    await sellerPage.getByRole("button", { name: "Review and sign in wallet" }).click();
+    await sellerPage.getByRole("button", { name: "Проверить и подписать в кошельке" }).click();
     const submissionResponse = await submissionResponsePromise;
     expect(submissionResponse.status()).toBe(200);
 
@@ -289,11 +306,11 @@ test(
       return order.status;
     }, { timeout: 45_000, intervals: [500, 1000, 2000] }).toBe("completed");
 
-    await sellerPage.getByRole("button", { name: "Refresh verification status" }).click();
-    await expect(sellerPage.getByText("Transfer independently verified", { exact: true })).toBeVisible();
-    await buyerPage.getByRole("button", { name: "Refresh verification status" }).click();
-    await expect(buyerPage.getByText("Transfer independently verified", { exact: true })).toBeVisible();
-    await expect(buyerPage.getByText("Completed", { exact: true }).first()).toBeVisible();
+    await sellerPage.getByRole("button", { name: "Обновить статус проверки" }).click();
+    await expect(sellerPage.getByText("Передача подтверждена независимо", { exact: true })).toBeVisible();
+    await buyerPage.getByRole("button", { name: "Обновить статус проверки" }).click();
+    await expect(buyerPage.getByText("Передача подтверждена независимо", { exact: true })).toBeVisible();
+    await expect(buyerPage.getByText("Завершён", { exact: true }).first()).toBeVisible();
 
     expect(sellerApiRequests).toContain("POST /api/auth/telegram");
     expect(sellerApiRequests).toContain("GET /api/assets/me");
@@ -316,8 +333,8 @@ test(
   "anonymous browser can read the public catalog but cannot call protected write endpoints",
   async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "My Listings", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Объявления" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Мои объявления", exact: true })).toBeVisible();
 
   const catalog = await page.evaluate(async () => {
     const response = await fetch("/api/listings");

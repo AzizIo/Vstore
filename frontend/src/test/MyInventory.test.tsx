@@ -98,7 +98,7 @@ const lastPage: InventoryPage = {
   has_more: false,
 };
 
-describe("My NFT inventory", () => {
+describe("Мои NFT", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     inventoryApi.syncMyInventory.mockResolvedValue(syncResponse);
@@ -111,7 +111,7 @@ describe("My NFT inventory", () => {
   it("syncs server-side, displays verified inventory and supports pagination", async () => {
     render(<MyInventory accessToken="session-token" selectedWallet={selectedWallet} />);
 
-    expect(await screen.findByRole("heading", { name: "My NFT inventory" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Мои NFT" })).toBeInTheDocument();
     expect(await screen.findByText("Moon Lantern NFT")).toBeInTheDocument();
     expect(inventoryApi.syncMyInventory).not.toHaveBeenCalled();
     expect(inventoryApi.fetchMyInventory).toHaveBeenCalledWith(
@@ -120,19 +120,19 @@ describe("My NFT inventory", () => {
       expect.any(AbortSignal),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Sync inventory" }));
+    fireEvent.click(screen.getByRole("button", { name: "Синхронизировать инвентарь" }));
     await waitFor(() => expect(inventoryApi.syncMyInventory).toHaveBeenCalledWith(
       "session-token",
       "wallet-1",
       expect.any(AbortSignal),
     ));
-    expect(await screen.findByText(/24 verified/)).toBeInTheDocument();
+    expect(await screen.findByText(/Подтверждено NFT: 24/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Load more NFTs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё NFT" }));
     expect(await screen.findByText("Star Sail NFT")).toBeInTheDocument();
     expect(screen.getAllByText("Moon Lantern NFT")).toHaveLength(1);
-    expect(screen.getAllByText("Item address")).toHaveLength(2);
-    expect(screen.queryByRole("button", { name: "Load more NFTs" })).not.toBeInTheDocument();
+    expect(screen.getAllByText("Адрес NFT")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Загрузить ещё NFT" })).not.toBeInTheDocument();
   });
 
   it("asks the user to verify a wallet when the backend reports no verified wallet", async () => {
@@ -145,13 +145,13 @@ describe("My NFT inventory", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "A verified TON wallet is required to discover NFT inventory",
     );
-    expect(screen.getByText(/Connecting a wallet alone does not verify ownership/i)).toBeInTheDocument();
+    expect(screen.getByText(/Одного подключения недостаточно для подтверждения владения/i)).toBeInTheDocument();
   });
 
   it("does not request inventory until a verified wallet is selected", async () => {
     render(<MyInventory accessToken="session-token" selectedWallet={null} />);
 
-    expect(await screen.findByRole("heading", { name: "Connect and verify a wallet" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Подключить и подтвердить кошелёк" })).toBeInTheDocument();
     expect(inventoryApi.fetchMyInventory).not.toHaveBeenCalled();
     expect(inventoryApi.syncMyInventory).not.toHaveBeenCalled();
   });
@@ -202,7 +202,7 @@ describe("My NFT inventory", () => {
     );
     expect(await screen.findByText("Moon Lantern NFT")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Load more NFTs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё NFT" }));
     await waitFor(() => expect(inventoryApi.fetchMyInventory).toHaveBeenCalledTimes(2));
 
     view.rerender(
@@ -221,7 +221,7 @@ describe("My NFT inventory", () => {
     });
     await waitFor(() => expect(screen.queryByText("Star Sail NFT")).not.toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: "Load more NFTs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё NFT" }));
     expect(await screen.findByText("Wallet B second NFT")).toBeInTheDocument();
     expect(inventoryApi.fetchMyInventory).toHaveBeenLastCalledWith(
       "session-token",
@@ -259,17 +259,17 @@ describe("My NFT inventory", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: "No verified NFTs on this page" }),
+      await screen.findByRole("heading", { name: "На этой странице нет подтверждённых NFT" }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Load more NFTs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё NFT" }));
 
     expect(
-      await screen.findByRole("heading", { name: "No verified NFTs on this page" }),
+      await screen.findByRole("heading", { name: "На этой странице нет подтверждённых NFT" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Moon Lantern NFT")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Load more NFTs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё NFT" }));
 
     expect(await screen.findByText("Moon Lantern NFT")).toBeInTheDocument();
     expect(inventoryApi.fetchMyInventory).toHaveBeenNthCalledWith(
@@ -284,7 +284,7 @@ describe("My NFT inventory", () => {
       { limit: 24, offset: 48, walletId: selectedWallet.id },
       expect.any(AbortSignal),
     );
-    expect(screen.queryByText("No verified NFTs found")).not.toBeInTheDocument();
+    expect(screen.queryByText("Подтверждённые NFT не найдены")).not.toBeInTheDocument();
   });
 
   it("shows empty inventory after a successful sync", async () => {
@@ -297,7 +297,7 @@ describe("My NFT inventory", () => {
 
     render(<MyInventory accessToken="session-token" selectedWallet={selectedWallet} />);
 
-    expect(await screen.findByText("No verified NFTs found")).toBeInTheDocument();
+    expect(await screen.findByText("Подтверждённые NFT не найдены")).toBeInTheDocument();
   });
 
   it("does not render untrusted non-HTTPS metadata image URLs", async () => {
@@ -318,7 +318,7 @@ describe("My NFT inventory", () => {
     render(<MyInventory accessToken="session-token" selectedWallet={selectedWallet} />);
     await screen.findByText("Moon Lantern NFT");
 
-    fireEvent.click(screen.getByRole("button", { name: "Sync inventory" }));
+    fireEvent.click(screen.getByRole("button", { name: "Синхронизировать инвентарь" }));
 
     await waitFor(() => expect(inventoryApi.syncMyInventory).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(inventoryApi.fetchMyInventory).toHaveBeenCalledTimes(2));

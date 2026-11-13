@@ -13,7 +13,7 @@ function localDateTimeMinimum() {
 }
 
 function assetTitle(asset: InventoryAsset) {
-  return asset.name || "Untitled TON NFT";
+  return asset.name || "TON NFT без названия";
 }
 
 function InventoryImage({ asset }: { asset: InventoryAsset }) {
@@ -91,7 +91,7 @@ export function CreateListing({
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : "Unable to load your verified NFT inventory.");
+          setError(reason instanceof Error ? reason.message : "Не удалось загрузить инвентарь подтверждённых NFT.");
         }
       })
       .finally(() => {
@@ -121,12 +121,16 @@ export function CreateListing({
         controller.signal,
       );
       if (controller.signal.aborted) return;
-      setAssets((current) => appendUniqueAssets(current, page.items));
+      const merged = appendUniqueAssets(assets, page.items);
+      if (merged.length === assets.length && page.has_more && page.next_offset <= nextOffset) {
+        throw new Error("Не удалось перейти к следующей странице. Обновите страницу и попробуйте снова.");
+      }
+      setAssets(merged);
       setNextOffset(page.next_offset);
       setHasMore(page.has_more);
     } catch (reason) {
       if (!controller.signal.aborted) {
-        setLoadMoreError(reason instanceof Error ? reason.message : "Unable to load more NFTs.");
+        setLoadMoreError(reason instanceof Error ? reason.message : "Не удалось загрузить остальные NFT.");
       }
     } finally {
       if (!controller.signal.aborted) {
@@ -158,7 +162,7 @@ export function CreateListing({
       onDraftCreated(draft);
     } catch (reason) {
       if (!controller.signal.aborted) {
-        setSubmitError(reason instanceof Error ? reason.message : "Unable to create the listing draft.");
+        setSubmitError(reason instanceof Error ? reason.message : "Не удалось создать черновик объявления.");
       }
     } finally {
       if (!controller.signal.aborted) {
@@ -171,13 +175,13 @@ export function CreateListing({
   if (createdListing) {
     return (
       <section className="create-listing-view" aria-labelledby="create-listing-title">
-        <p className="eyebrow">SELLER SPACE</p>
-        <h1 id="create-listing-title">Draft created</h1>
+        <p className="eyebrow">КАБИНЕТ ПРОДАВЦА</p>
+        <h1 id="create-listing-title">Черновик создан</h1>
         <div className="creation-success" role="status">
-          <span className="listing-status listing-status-draft">Draft — not published</span>
-          <h2>{createdListing.title || createdListing.asset.name || "TON NFT listing"}</h2>
+          <span className="listing-status listing-status-draft">Черновик · не опубликован</span>
+          <h2>{createdListing.title || createdListing.asset.name || "Объявление TON NFT"}</h2>
           <p>{createdListing.price_amount} {createdListing.price_currency}</p>
-          <button className="text-button" type="button" onClick={onCancel}>View My Listings</button>
+          <button className="text-button" type="button" onClick={onCancel}>К моим объявлениям</button>
         </div>
       </section>
     );
@@ -186,11 +190,11 @@ export function CreateListing({
   return (
     <section className="create-listing-view" aria-labelledby="create-listing-title">
       <button className="text-button back-button" type="button" onClick={selectedAsset ? () => setSelectedAsset(null) : onCancel}>
-        <span aria-hidden="true">←</span> {selectedAsset ? "Back to inventory" : "Back to My Listings"}
+        <span aria-hidden="true">←</span> {selectedAsset ? "Назад в инвентарь" : "Назад к объявлениям"}
       </button>
-      <p className="eyebrow">SELLER SPACE</p>
-      <h1 id="create-listing-title">Create listing draft</h1>
-      <p className="create-listing-note">Drafts are private and are not published to the marketplace.</p>
+      <p className="eyebrow">КАБИНЕТ ПРОДАВЦА</p>
+      <h1 id="create-listing-title">Создать черновик объявления</h1>
+      <p className="create-listing-note">Черновики видны только вам и не публикуются на площадке.</p>
 
       {selectedAsset ? (
         <form className="draft-form" onSubmit={submitDraft}>
@@ -199,10 +203,10 @@ export function CreateListing({
             <span>{assetTitle(selectedAsset)}</span>
           </div>
           <label>
-            <span>Price</span>
+            <span>Цена</span>
             <span className="price-field">
               <input
-                aria-label="Price amount"
+                aria-label="Цена"
                 type="number"
                 min="0.000000001"
                 step="0.000000001"
@@ -210,55 +214,55 @@ export function CreateListing({
                 value={priceAmount}
                 onChange={(event) => setPriceAmount(event.target.value)}
               />
-              <select aria-label="Price currency" value={priceCurrency} onChange={(event) => setPriceCurrency(event.target.value as PriceCurrency)}>
+              <select aria-label="Валюта" value={priceCurrency} onChange={(event) => setPriceCurrency(event.target.value as PriceCurrency)}>
                 <option value="TON">TON</option>
-                <option value="XTR">XTR</option>
+                <option value="XTR">Звёзды (XTR)</option>
               </select>
             </span>
           </label>
           <label>
-            <span>Title <small>Optional</small></span>
-            <input maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} />
+            <span>Название <small>необязательно</small></span>
+            <input aria-label="Название (необязательно)" maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} />
           </label>
           <label>
-            <span>Description <small>Optional</small></span>
-            <textarea maxLength={4000} rows={4} value={description} onChange={(event) => setDescription(event.target.value)} />
+            <span>Описание <small>необязательно</small></span>
+            <textarea aria-label="Описание (необязательно)" maxLength={4000} rows={4} value={description} onChange={(event) => setDescription(event.target.value)} />
           </label>
           <label>
-            <span>Expiration <small>Optional</small></span>
+            <span>Срок действия <small>необязательно</small></span>
             <input
-              aria-label="Listing expiration"
+              aria-label="Срок действия объявления"
               type="datetime-local"
               min={localDateTimeMinimum()}
               value={expiresAt}
               onChange={(event) => setExpiresAt(event.target.value)}
             />
-            <small>Leave empty for no automatic expiry.</small>
+            <small>Оставьте поле пустым, чтобы отключить автоматическое истечение срока.</small>
           </label>
           {submitError && <p className="creation-error" role="alert">{submitError}</p>}
           <button className="load-more-button" type="submit" disabled={submitting}>
-            {submitting ? "Creating draft..." : "Create private draft"}
+            {submitting ? "Создаём черновик…" : "Сохранить черновик"}
           </button>
         </form>
       ) : loading ? (
-        <div className="my-listings-message" role="status">Checking verified TON NFT inventory...</div>
-      ) : error.includes("verified TON wallet is required") ? (
+        <div className="my-listings-message" role="status">Проверяем инвентарь подтверждённых TON NFT…</div>
+      ) : /verified TON wallet is required|необходимо подтвердить TON-кошелёк/i.test(error) ? (
         <div className="my-listings-message" role="alert">
-          <h2>Verify a wallet first</h2>
-          <p>A TON wallet must be verified before its NFTs can be listed. Connecting a wallet alone does not prove ownership.</p>
-          <a className="text-button" href="#wallet-connect">Open wallet connection</a>
-          <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Check again</button>
+          <h2>Сначала подтвердите кошелёк</h2>
+          <p>Перед публикацией NFT необходимо подтвердить TON-кошелёк. Одного подключения недостаточно для подтверждения владения.</p>
+          <a className="text-button" href="#wallet-connect">Подключить кошелёк</a>
+          <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Проверить ещё раз</button>
         </div>
       ) : error ? (
         <div className="my-listings-message" role="alert">
-          <h2>Inventory unavailable</h2>
+          <h2>Инвентарь недоступен</h2>
           <p>{error}</p>
-          <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button>
+          <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Повторить</button>
         </div>
       ) : assets.length === 0 && !hasMore ? (
         <div className="my-listings-message" role="status">
-          <h2>No eligible TON NFTs found</h2>
-          <p>Only NFTs currently owned by a verified wallet can be used for a listing draft.</p>
+          <h2>Подтверждённые TON NFT не найдены</h2>
+          <p>В черновик можно добавить только NFT, которыми сейчас владеет подтверждённый кошелёк.</p>
         </div>
       ) : (
         <>
@@ -272,7 +276,7 @@ export function CreateListing({
               >
                 <InventoryImage asset={asset} />
                 <span className="inventory-card-copy">
-                  <span className="listing-type-label">Verified TON NFT</span>
+                  <span className="listing-type-label">Подтверждённый TON NFT</span>
                   <span className="inventory-card-title">{assetTitle(asset)}</span>
                   <span className="inventory-card-address">{asset.item_address.slice(0, 8)}…{asset.item_address.slice(-5)}</span>
                 </span>
@@ -282,7 +286,7 @@ export function CreateListing({
           {loadMoreError && <p className="creation-error" role="alert">{loadMoreError}</p>}
           {hasMore && (
             <button className="load-more-button inventory-load-more" type="button" disabled={loadingMore} onClick={loadMore}>
-              {loadingMore ? "Loading more NFTs..." : loadMoreError ? "Retry inventory page" : "Load more NFTs"}
+              {loadingMore ? "Загружаем остальные NFT…" : loadMoreError ? "Повторить загрузку" : "Загрузить ещё NFT"}
             </button>
           )}
         </>

@@ -31,7 +31,7 @@ describe("SellerReviews", () => {
   it("shows an empty state", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(response({ ...page, review_count: 0, average_rating: 0, items: [] }));
     render(<SellerReviews sellerId="seller-1" accessToken={null} />);
-    expect(await screen.findByText("No verified reviews yet.")).toBeInTheDocument();
+    expect(await screen.findByText("Пока нет подтверждённых отзывов.")).toBeInTheDocument();
   });
 
   it("loads the next bounded page", async () => {
@@ -40,7 +40,7 @@ describe("SellerReviews", () => {
       .mockResolvedValueOnce(response({ ...page, offset: 1, items: [{ ...page.items[0], id: "review-2" }], has_more: false }));
     render(<SellerReviews sellerId="seller-1" accessToken={null} />);
     await screen.findByText("Verified transfer");
-    fireEvent.click(screen.getByRole("button", { name: "Load more reviews" }));
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё отзывы" }));
     await waitFor(() => expect(screen.getAllByText("Verified transfer")).toHaveLength(2));
     expect(String(vi.mocked(fetch).mock.calls[1][0])).toContain("offset=1");
   });

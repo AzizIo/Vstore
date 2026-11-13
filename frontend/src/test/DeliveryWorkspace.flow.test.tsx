@@ -126,7 +126,7 @@ describe("DeliveryWorkspace", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Review and sign in wallet" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Проверить и подписать в кошельке" }));
 
     await waitFor(() => expect(mocks.sendTransaction).toHaveBeenCalledTimes(1));
     const request = mocks.sendTransaction.mock.calls[0][0];
@@ -149,8 +149,8 @@ describe("DeliveryWorkspace", () => {
     expect(submittedOrderId).toBe("order-123");
     expect(reference).toMatch(/^[a-f0-9]{64}$/);
     expect(token).toBe("test-token");
-    expect(screen.getByText(/Transfer submitted · verifying/)).toBeTruthy();
-    expect(screen.queryByText(/Transfer independently verified/)).toBeNull();
+    expect(screen.getByText(/Перевод отправлен · проверяем/)).toBeTruthy();
+    expect(screen.queryByText(/Передача подтверждена независимо/)).toBeNull();
     expect(onRefreshOrder).toHaveBeenCalled();
   });
 
@@ -167,7 +167,7 @@ describe("DeliveryWorkspace", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Prepare transfer" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Подготовить передачу" }));
     await waitFor(() => expect(mocks.prepareDelivery).toHaveBeenCalledTimes(1));
     expect(mocks.prepareDelivery).toHaveBeenCalledWith(
       "order-123",
@@ -191,8 +191,8 @@ describe("DeliveryWorkspace", () => {
       />,
     );
 
-    expect(await screen.findByText("Watching chain · awaiting seller wallet action")).toBeTruthy();
-    expect(await screen.findByRole("button", { name: "Review and sign in wallet" })).toBeEnabled();
+    expect(await screen.findByText("Ожидаем действие продавца в кошельке")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Проверить и подписать в кошельке" })).toBeEnabled();
   });
 
   it("does not submit a candidate when the seller rejects the wallet request", async () => {
@@ -206,8 +206,8 @@ describe("DeliveryWorkspace", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Review and sign in wallet" }));
-    expect(await screen.findByText(/wallet request was rejected or cancelled/i)).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Проверить и подписать в кошельке" }));
+    expect(await screen.findByText(/запрос кошелька отклонён или отменён/i)).toBeTruthy();
     expect(mocks.submitDeliveryCandidate).not.toHaveBeenCalled();
   });
 
@@ -222,10 +222,10 @@ describe("DeliveryWorkspace", () => {
       />,
     );
 
-    const action = await screen.findByRole("button", { name: "Review and sign in wallet" });
+    const action = await screen.findByRole("button", { name: "Проверить и подписать в кошельке" });
     fireEvent.click(action);
     await waitFor(() => expect(action).toBeDisabled());
-    expect(screen.getByText(/wallet result is uncertain/i)).toBeTruthy();
+    expect(screen.getByText(/результат запроса к кошельку неизвестен/i)).toBeTruthy();
     expect(mocks.submitDeliveryCandidate).not.toHaveBeenCalled();
   });
 
@@ -240,7 +240,7 @@ describe("DeliveryWorkspace", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Connect seller wallet" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Подключить кошелёк продавца" }));
     expect(mocks.openModal).toHaveBeenCalledTimes(1);
     expect(mocks.submitDeliveryCandidate).not.toHaveBeenCalled();
   });

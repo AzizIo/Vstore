@@ -19,14 +19,31 @@ import type { WalletRecord } from "./wallet/api";
 
 const assetTypeLabels: Record<AssetType, string> = {
   ton_nft: "TON NFT",
-  telegram_gift: "Telegram gift",
+  telegram_gift: "Подарок Telegram",
 };
 const CATALOG_PAGE_SIZE = 24;
+
+function formatItemCount(count: number) {
+  const category = new Intl.PluralRules("ru-RU").select(count);
+  const noun = category === "one" ? "предмет" : category === "few" ? "предмета" : "предметов";
+  return `${count} ${noun}`;
+}
+
+function formatVerificationStatus(status: string) {
+  const labels: Record<string, string> = {
+    verified: "Подтверждён",
+    stale: "Устарел",
+    invalid: "Не подтверждён",
+    unsupported: "Не поддерживается",
+    provider_unavailable: "Провайдер недоступен",
+  };
+  return labels[status] ?? "Неизвестно";
+}
 
 function formatPrice(amount: string, currency: string) {
   const numericAmount = Number(amount);
   const formattedAmount = Number.isFinite(numericAmount)
-    ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(numericAmount)
+    ? new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 4 }).format(numericAmount)
     : amount;
   return `${formattedAmount} ${currency}`;
 }
@@ -40,14 +57,14 @@ function AssetArtwork({ imageUrl, name }: { imageUrl: string | null; name: strin
       {imageUrl && !imageFailed ? (
         <img src={imageUrl} alt={name} loading="lazy" onError={() => setImageFailed(true)} />
       ) : (
-        <div className="artwork-placeholder" aria-label="Image unavailable"><span>V</span></div>
+        <div className="artwork-placeholder" aria-label="Изображение недоступно"><span>V</span></div>
       )}
     </div>
   );
 }
 
 function ListingCard({ listing, onOpen }: { listing: Listing; onOpen: () => void }) {
-  const title = listing.title || listing.asset.name || "Untitled asset";
+  const title = listing.title || listing.asset.name || "Без названия";
   return (
     <button className="listing-card" type="button" onClick={onOpen}>
       <AssetArtwork imageUrl={listing.asset.image_url} name={title} />
@@ -96,7 +113,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
       .then(setListing)
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : "Unable to load this listing.");
+          setError(reason instanceof Error ? reason.message : "Не удалось загрузить объявление.");
         }
       })
       .finally(() => {
@@ -129,18 +146,18 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [confirmationOpen, orderCreated]);
 
-  if (loading) return <p className="detail-message" role="status">Loading listing...</p>;
+  if (loading) return <p className="detail-message" role="status">Загружаем объявление…</p>;
   if (error || !listing) {
     return (
       <section className="detail-message" role="alert">
-        <p>{error || "This listing is unavailable."}</p>
-        <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button>
+        <p>{error || "Это объявление недоступно."}</p>
+        <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Повторить</button>
       </section>
     );
   }
 
-  const title = listing.title || listing.asset.name || "Untitled asset";
-  const seller = listing.seller.first_name || listing.seller.username || "Seller";
+  const title = listing.title || listing.asset.name || "Без названия";
+  const seller = listing.seller.first_name || listing.seller.username || "Продавец";
   const canOrder = session.status === "authenticated" && session.user.id !== listing.seller.id;
 
   async function handleOrder() {
@@ -154,7 +171,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
       await createOrder(listingId, session.accessToken, idempotencyKey.current);
       setOrderCreated(true);
     } catch (reason) {
-      setOrderError(reason instanceof Error ? reason.message : "Unable to create this reservation. Please retry.");
+      setOrderError(reason instanceof Error ? reason.message : "Не удалось создать резерв. Попробуйте ещё раз.");
     } finally {
       submittingRef.current = false;
       setOrdering(false);
@@ -164,7 +181,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
   return (
     <section className="detail-view" aria-labelledby="detail-title">
       <button className="text-button back-button" type="button" onClick={onBack}>
-        <span aria-hidden="true">←</span> Back to catalog
+        <span aria-hidden="true">←</span> Назад в каталог
       </button>
       <div className="detail-layout">
         <AssetArtwork imageUrl={listing.asset.image_url} name={title} />
@@ -172,57 +189,57 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
           <p className="eyebrow">{assetTypeLabels[listing.asset.asset_type]}</p>
           <h1 id="detail-title">{title}</h1>
           <p className="detail-price">{formatPrice(listing.price_amount, listing.price_currency)}</p>
-          <section className="seller-profile" aria-label="Seller profile">
+          <section className="seller-profile" aria-label="Профиль продавца">
             <div className="seller-profile-avatar" aria-hidden="true">
               {(seller.trim().charAt(0) || "S").toUpperCase()}
             </div>
             <div className="seller-profile-copy">
               <strong>{seller}</strong>
-              <span>{listing.seller.username ? `@${listing.seller.username}` : "Telegram seller"}</span>
+              <span>{listing.seller.username ? `@${listing.seller.username}` : "Продавец в Telegram"}</span>
             </div>
           </section>
           {canOrder ? (
             <div className="order-action">
               <button ref={reserveTriggerRef} className="primary-button" type="button" disabled={ordering || orderCreated} onClick={() => { setOrderError(""); setConfirmationOpen(true); }}>
-                {ordering ? "Reserving listing..." : orderCreated ? "Reservation created" : "Place order"}
+                {ordering ? "Создаём резерв…" : orderCreated ? "Резерв создан" : "Зарезервировать"}
               </button>
               {orderError && !confirmationOpen && <p role="alert">{orderError}</p>}
               {orderCreated && (
                 <div className="reservation-success" role="status">
-                  <p>Reservation created for {title}. Payment is not enabled and no funds were collected. No NFT transfer has happened.</p>
-                  <button className="primary-button" type="button" onClick={onOrders}>View Orders</button>
+                  <p>Резерв для «{title}» создан. Оплата не проводилась, NFT пока остаётся у продавца.</p>
+                  <button className="primary-button" type="button" onClick={onOrders}>Мои заказы</button>
                 </div>
               )}
             </div>
           ) : session.status === "authenticated" ? (
-            <p className="detail-description">You cannot order your own listing.</p>
+            <p className="detail-description">Нельзя зарезервировать собственное объявление.</p>
           ) : (
-            <p className="detail-description">Open this Mini App in Telegram to sign in and place an order.</p>
+            <p className="detail-description">Откройте VILTARA в Telegram, чтобы оформить резерв.</p>
           )}
           {confirmationOpen && (
             <div className="reservation-dialog-backdrop">
               <section ref={dialogRef} className="reservation-dialog" role="dialog" aria-modal="true" aria-labelledby="reservation-dialog-title" aria-describedby="reservation-dialog-description">
                 {orderCreated ? (
                   <>
-                    <p className="eyebrow">RESERVATION CREATED</p>
-                    <h2 id="reservation-dialog-title">Reservation confirmed</h2>
-                    <p id="reservation-dialog-description">The order reservation was created for {title}. Payment is not enabled, no funds were collected, and no NFT transfer has happened.</p>
-                    <button className="primary-button" type="button" onClick={onOrders}>View Orders</button>
+                    <p className="eyebrow">РЕЗЕРВ СОЗДАН</p>
+                    <h2 id="reservation-dialog-title">Резерв подтверждён</h2>
+                    <p id="reservation-dialog-description">Резерв для «{title}» создан. Оплата не проводилась, NFT пока остаётся у продавца.</p>
+                    <button className="primary-button" type="button" onClick={onOrders}>Мои заказы</button>
                   </>
                 ) : (
                   <>
-                    <p className="eyebrow">REVIEW RESERVATION</p>
-                    <h2 id="reservation-dialog-title">Reserve this listing?</h2>
+                    <p className="eyebrow">ПОДТВЕРЖДЕНИЕ РЕЗЕРВА</p>
+                    <h2 id="reservation-dialog-title">Зарезервировать это объявление?</h2>
                     <dl className="reservation-summary">
-                      <div><dt>Listing</dt><dd>{title}</dd></div>
-                      <div><dt>Price</dt><dd>{formatPrice(listing.price_amount, listing.price_currency)}</dd></div>
-                      <div><dt>Seller</dt><dd>{seller}{listing.seller.username ? ` (@${listing.seller.username})` : ""}</dd></div>
+                      <div><dt>Объявление</dt><dd>{title}</dd></div>
+                      <div><dt>Цена</dt><dd>{formatPrice(listing.price_amount, listing.price_currency)}</dd></div>
+                      <div><dt>Продавец</dt><dd>{seller}{listing.seller.username ? ` (@${listing.seller.username})` : ""}</dd></div>
                     </dl>
-                    <p id="reservation-dialog-description" className="reservation-disclaimer">This creates a reservation/order only. Payment is not enabled and no funds will be collected. No NFT transfer happens as part of this action.</p>
-                    {orderError && <p className="reservation-error" role="alert">{orderError} Your reservation request may have reached the server; retrying uses the same idempotency key.</p>}
+                    <p id="reservation-dialog-description" className="reservation-disclaimer">Это только резерв объявления. Оплата не проводится, средства не списываются, NFT остаётся у продавца.</p>
+                    {orderError && <p className="reservation-error" role="alert">{orderError} Запрос мог быть обработан сервером. Повторная попытка не создаст дубликат резерва.</p>}
                     <div className="reservation-dialog-actions">
-                      <button className="text-button" type="button" disabled={ordering} onClick={() => { setConfirmationOpen(false); setOrderError(""); window.setTimeout(() => reserveTriggerRef.current?.focus(), 0); }}>Cancel</button>
-                      <button ref={confirmButtonRef} className="primary-button" type="button" disabled={ordering} onClick={() => void handleOrder()}>{ordering ? "Creating reservation…" : "Confirm reservation"}</button>
+                      <button className="text-button" type="button" disabled={ordering} onClick={() => { setConfirmationOpen(false); setOrderError(""); window.setTimeout(() => reserveTriggerRef.current?.focus(), 0); }}>Отмена</button>
+                      <button ref={confirmButtonRef} className="primary-button" type="button" disabled={ordering} onClick={() => void handleOrder()}>{ordering ? "Создаём резерв…" : "Подтвердить резерв"}</button>
                     </div>
                   </>
                 )}
@@ -233,17 +250,17 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
           {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
           <dl className="detail-facts">
             <div>
-              <dt>Collection</dt>
-              <dd>{listing.asset.collection?.name ?? "Uncollected NFT"}</dd>
+              <dt>Коллекция</dt>
+              <dd>{listing.asset.collection?.name ?? "Без коллекции"}</dd>
             </div>
             <div>
-              <dt>Item address</dt>
+              <dt>Адрес NFT</dt>
               <dd>
-                <code className="mono">{listing.asset.item_address ?? "Not available"}</code>
+                <code className="mono">{listing.asset.item_address ?? "Недоступно"}</code>
               </dd>
             </div>
-            <div><dt>Asset ID</dt><dd>{listing.asset.external_id}</dd></div>
-            <div><dt>Verification</dt><dd>{listing.asset.verification_status}</dd></div>
+            <div><dt>ID актива</dt><dd>{listing.asset.external_id}</dd></div>
+            <div><dt>Проверка</dt><dd>{formatVerificationStatus(listing.asset.verification_status)}</dd></div>
           </dl>
           <SellerReviews
             sellerId={listing.seller.id}
@@ -267,12 +284,12 @@ function SessionBanner() {
   const session = useSession();
   const retrySession = useRetrySession();
   if (session.status === "loading") {
-    return <p className="session-banner" role="status">Checking Telegram session...</p>;
+    return <p className="session-banner" role="status">Проверяем сессию Telegram…</p>;
   }
   if (session.status === "authenticated") {
     const name = [session.user.first_name, session.user.last_name].filter(Boolean).join(" ");
     const username = session.user.username ? ` · @${session.user.username}` : "";
-    return <p className="session-banner session-authenticated" role="status">Signed in as {name || session.user.username}{username}</p>;
+    return <p className="session-banner session-authenticated" role="status">Вы вошли как {name || session.user.username}{username}</p>;
   }
   if (session.status === "error") {
     return (
@@ -280,7 +297,7 @@ function SessionBanner() {
         <span>{session.message}</span>
         {session.retryable && (
           <button className="text-button" type="button" onClick={retrySession}>
-            Retry session
+            Повторить проверку
           </button>
         )}
       </div>
@@ -289,8 +306,8 @@ function SessionBanner() {
   return (
     <p className="session-banner" role="status">
       {session.reason === "missing_init_data"
-        ? "Open this mini app in Telegram to sign in. The public catalog is available."
-        : "Telegram session could not be verified. Reopen this mini app in Telegram."}
+        ? "Откройте VILTARA в Telegram, чтобы войти. Каталог доступен без авторизации."
+        : "Не удалось подтвердить сессию Telegram. Откройте мини-приложение повторно."}
     </p>
   );
 }
@@ -372,7 +389,7 @@ function MarketplaceApp() {
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted && version === requestVersion.current) {
-          setError(reason instanceof Error ? reason.message : "Unable to load the catalog.");
+          setError(reason instanceof Error ? reason.message : "Не удалось загрузить каталог.");
           setListings([]);
           setTotal(0);
         }
@@ -408,7 +425,7 @@ function MarketplaceApp() {
       );
       if (controller.signal.aborted || version !== requestVersion.current) return;
       if (page.items.length === 0 && page.offset < page.total) {
-        setLoadMoreError("No new listings were returned. Please try again.");
+        setLoadMoreError("Новых объявлений нет. Попробуйте ещё раз.");
         return;
       }
       setListings((current) => appendUniqueListings(current, page.items));
@@ -416,7 +433,7 @@ function MarketplaceApp() {
       setNextOffset(page.offset + page.items.length);
     } catch (reason) {
       if (!controller.signal.aborted && version === requestVersion.current) {
-        setLoadMoreError(reason instanceof Error ? reason.message : "Unable to load more listings.");
+        setLoadMoreError(reason instanceof Error ? reason.message : "Не удалось загрузить следующие объявления.");
       }
     } finally {
       if (version === requestVersion.current && !controller.signal.aborted) {
@@ -442,7 +459,7 @@ function MarketplaceApp() {
           <span className="brand-name">VILTARA</span>
         </a>
         <div className="header-actions">
-          <span className="network-label">TON MARKET</span>
+          <span className="network-label">МАРКЕТПЛЕЙС TON</span>
           <WalletConnection
             accessToken={sessionAccessToken}
             onSelectedWalletChange={onSelectedWalletChange}
@@ -450,7 +467,7 @@ function MarketplaceApp() {
         </div>
       </header>
       <SessionBanner />
-      <nav className="app-navigation" aria-label="Marketplace sections">
+      <nav className="app-navigation" aria-label="Разделы маркетплейса">
         <button
           className="navigation-tab"
           type="button"
@@ -460,7 +477,7 @@ function MarketplaceApp() {
             setSection("catalog");
           }}
         >
-          Catalog
+          Каталог
         </button>
         <button
           className="navigation-tab"
@@ -471,7 +488,7 @@ function MarketplaceApp() {
             setSection("my-nft");
           }}
         >
-          My NFT
+          Мои NFT
         </button>
         <button
           className="navigation-tab"
@@ -482,7 +499,7 @@ function MarketplaceApp() {
             setSection("my-listings");
           }}
         >
-          My Listings
+          Мои объявления
         </button>
         <button
           className="navigation-tab"
@@ -493,7 +510,7 @@ function MarketplaceApp() {
             setSection("orders");
           }}
         >
-          Orders
+          Заказы
         </button>
       </nav>
 
@@ -502,8 +519,8 @@ function MarketplaceApp() {
           <Orders accessToken={session.accessToken} userId={session.user.id} initialOrderId={initialOrderId} onCatalog={() => setSection("catalog")} />
         ) : (
           <div className="orders-message" role="status">
-            <h2>Sign in to view orders</h2>
-            <p>Order history is private and requires a verified Telegram session.</p>
+            <h2>Мои заказы</h2>
+            <p>Откройте VILTARA в Telegram, чтобы посмотреть покупки и продажи.</p>
           </div>
         )
       ) : section === "my-listings" ? (
@@ -517,8 +534,8 @@ function MarketplaceApp() {
           />
         ) : (
           <div className="inventory-message" role="status">
-            <h2>Sign in to view your inventory</h2>
-            <p>Your NFT inventory requires a verified Telegram session and a TON wallet confirmed by backend proof.</p>
+            <h2>Мои NFT</h2>
+            <p>Чтобы посмотреть NFT, откройте VILTARA в Telegram и подключите кошелёк с подтверждённым владением.</p>
           </div>
         )
       ) : listingId ? (
@@ -526,33 +543,33 @@ function MarketplaceApp() {
       ) : (
         <>
           <section className="catalog-intro" id="catalog">
-            <p className="eyebrow">DIGITAL COLLECTIBLES · TON</p>
-            <h1>Find your next<br /><span>favorite thing.</span></h1>
-            <p className="intro-copy">A live catalog of listed digital collectibles.</p>
+            <p className="eyebrow">ЦИФРОВЫЕ КОЛЛЕКЦИОННЫЕ ПРЕДМЕТЫ · TON</p>
+            <h1>Найдите свой<br /><span>следующий цифровой актив.</span></h1>
+            <p className="intro-copy">Каталог цифровых предметов, выставленных владельцами на продажу.</p>
           </section>
-          <section className="catalog" aria-label="Marketplace catalog">
+          <section className="catalog" aria-label="Каталог маркетплейса">
             <div className="catalog-heading">
-              <h2>Explore listings</h2>
-              {!loading && !error && <span className="result-count">{total} {total === 1 ? "item" : "items"}</span>}
+              <h2>Объявления</h2>
+              {!loading && !error && <span className="result-count">{formatItemCount(total)}</span>}
             </div>
             <form className="catalog-controls" onSubmit={(event) => event.preventDefault()}>
               <label className="search-control">
-                <span className="sr-only">Search listings</span>
+                <span className="sr-only">Поиск объявлений</span>
                 <span aria-hidden="true">⌕</span>
-                <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search collectibles" />
+                <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск коллекционных предметов" />
               </label>
               <label className="select-control">
-                <span className="sr-only">Asset type</span>
+                <span className="sr-only">Тип актива</span>
                 <select value={assetType} onChange={(event) => setAssetType(event.target.value as AssetType | "all")}>
-                  <option value="all">All assets</option>
+                  <option value="all">Все активы</option>
                   <option value="ton_nft">TON NFT</option>
-                  <option value="telegram_gift">Telegram gift</option>
+                  <option value="telegram_gift">Подарок Telegram</option>
                 </select>
               </label>
               <label className="select-control">
-                <span className="sr-only">Price currency</span>
+                <span className="sr-only">Валюта</span>
                 <select
-                  aria-label="Price currency"
+                  aria-label="Валюта"
                   value={currency}
                   onChange={(event) => {
                     const value = event.target.value as PriceCurrency | "all";
@@ -564,28 +581,28 @@ function MarketplaceApp() {
                     }
                   }}
                 >
-                  <option value="all">All currencies</option>
+                  <option value="all">Все валюты</option>
                   <option value="TON">TON</option>
-                  <option value="XTR">Stars (XTR)</option>
+                  <option value="XTR">Звёзды (XTR)</option>
                 </select>
               </label>
               <label className="price-control">
-                <span className="sr-only">Minimum price</span>
-                <input aria-label="Minimum price" type="number" min="0.000000001" step="0.000000001" placeholder="Min price" disabled={currency === "all"} value={minPrice} onChange={(event) => setMinPrice(event.target.value)} />
+                <span className="sr-only">Минимальная цена</span>
+                <input aria-label="Минимальная цена" type="number" min="0.000000001" step="0.000000001" placeholder="Мин. цена" disabled={currency === "all"} value={minPrice} onChange={(event) => setMinPrice(event.target.value)} />
               </label>
               <label className="price-control">
-                <span className="sr-only">Maximum price</span>
-                <input aria-label="Maximum price" type="number" min="0.000000001" step="0.000000001" placeholder="Max price" disabled={currency === "all"} value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} />
+                <span className="sr-only">Максимальная цена</span>
+                <input aria-label="Максимальная цена" type="number" min="0.000000001" step="0.000000001" placeholder="Макс. цена" disabled={currency === "all"} value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} />
               </label>
               <label className="select-control">
-                <span className="sr-only">Sort listings</span>
+                <span className="sr-only">Сортировка объявлений</span>
                 <select
                   value={sort}
                   onChange={(event) => setSort(event.target.value as ListingSort)}
                 >
-                  <option value="newest">Newest</option>
-                  <option value="price_asc" disabled={currency === "all"}>Price: low to high</option>
-                  <option value="price_desc" disabled={currency === "all"}>Price: high to low</option>
+                  <option value="newest">Сначала новые</option>
+                  <option value="price_asc" disabled={currency === "all"}>Сначала дешевле</option>
+                  <option value="price_desc" disabled={currency === "all"}>Сначала дороже</option>
                 </select>
               </label>
               {(search || assetType !== "all" || currency !== "all" || minPrice || maxPrice || sort !== "newest") && (
@@ -601,31 +618,31 @@ function MarketplaceApp() {
                     setSort("newest");
                   }}
                 >
-                  Clear filters
+                  Сбросить фильтры
                 </button>
               )}
             </form>
             {(minPrice || maxPrice) && currency === "all" && (
-              <p className="filter-hint" role="status">Choose TON or Stars to apply a price range.</p>
+              <p className="filter-hint" role="status">Выберите TON или Звёзды, чтобы задать диапазон цены.</p>
             )}
             {currency === "all" && sort !== "newest" && (
-              <p className="filter-hint" role="status">Choose a currency to compare prices fairly.</p>
+              <p className="filter-hint" role="status">Выберите валюту, чтобы корректно сравнить цены.</p>
             )}
 
             {loading ? (
-              <div className="listing-grid" aria-label="Listings loading" aria-busy="true">
+              <div className="listing-grid" aria-label="Загружаем объявления…" aria-busy="true">
                 {Array.from({ length: 8 }, (_, index) => (
                   <div className="listing-skeleton" key={index} aria-hidden="true"><span /><i /><i /></div>
                 ))}
               </div>
             ) : error ? (
               <div className="catalog-message" role="alert">
-                <h3>Catalog unavailable</h3><p>{error}</p>
-                <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button>
+                <h3>Каталог недоступен</h3><p>{error}</p>
+                <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Повторить</button>
               </div>
             ) : listings.length === 0 ? (
               <div className="catalog-message" role="status">
-                <h3>No listings found</h3><p>Try changing your search or asset type.</p>
+                <h3>Объявления не найдены</h3><p>Измените поисковый запрос или тип актива.</p>
               </div>
             ) : (
               <>
@@ -636,10 +653,10 @@ function MarketplaceApp() {
                 </div>
                 {(hasMore || loadingMore || loadMoreError) && (
                   <div className="catalog-pagination">
-                    <p className="pagination-count" role="status">Showing {listings.length} of {total}</p>
+                    <p className="pagination-count" role="status">Показано {listings.length} из {total}</p>
                     {loadMoreError && <p className="pagination-error" role="alert">{loadMoreError}</p>}
                     <button className="load-more-button" type="button" onClick={loadMore} disabled={loadingMore || !hasMore}>
-                      {loadingMore ? "Loading more..." : loadMoreError ? "Retry loading more" : "Load more"}
+                      {loadingMore ? "Загружаем ещё…" : loadMoreError ? "Повторить загрузку" : "Загрузить ещё"}
                     </button>
                   </div>
                 )}
@@ -648,7 +665,7 @@ function MarketplaceApp() {
           </section>
         </>
       )}
-      <footer>VILTARA SHOP <span>·</span> Built on TON</footer>
+      <footer>VILTARA SHOP <span>·</span> Работает на TON</footer>
     </main>
   );
 }

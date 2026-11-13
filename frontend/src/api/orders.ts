@@ -1,3 +1,4 @@
+import { getApiErrorMessage } from "./errors";
 import { API_BASE_URL } from "./config";
 import type { AssetType, PriceCurrency } from "./listings";
 
@@ -97,16 +98,14 @@ async function requestJson<T>(url: string, accessToken: string, init?: RequestIn
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new Error("Could not connect to orders. Please try again.");
+    throw new Error("Не удалось связаться с сервисом заказов. Попробуйте ещё раз.");
   }
 
   if (!response.ok) {
-    let message = `Request failed (${response.status}).`;
+    let message = `Запрос завершился ошибкой (${response.status}).`;
     try {
       const body: unknown = await response.json();
-      if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
-        message = body.detail;
-      }
+      message = getApiErrorMessage(body, message);
     } catch {
       // Keep the HTTP status message when the response is not JSON.
     }
@@ -116,7 +115,7 @@ async function requestJson<T>(url: string, accessToken: string, init?: RequestIn
   try {
     return (await response.json()) as T;
   } catch {
-    throw new Error("Orders returned an invalid response.");
+    throw new Error("Сервис заказов вернул некорректный ответ.");
   }
 }
 
@@ -133,7 +132,7 @@ export async function createOrder(
     },
     body: JSON.stringify({ listing_id: listingId }),
   });
-  if (!isOrder(order)) throw new Error("Orders returned an invalid order.");
+  if (!isOrder(order)) throw new Error("Сервис заказов вернул некорректные данные заказа.");
   return order;
 }
 
@@ -152,7 +151,7 @@ export async function fetchOrders(
     !Array.isArray((response as { items?: unknown }).items) ||
     !(response as { items: unknown[] }).items.every(isOrder)
   ) {
-    throw new Error("Orders returned an invalid list.");
+    throw new Error("Сервис заказов вернул некорректный список.");
   }
   return (response as { items: MarketplaceOrder[] }).items;
 }
@@ -166,7 +165,7 @@ export async function cancelOrder(
     accessToken,
     { method: "POST" },
   );
-  if (!isOrder(order)) throw new Error("Orders returned an invalid order.");
+  if (!isOrder(order)) throw new Error("Сервис заказов вернул некорректные данные заказа.");
   return order;
 }
 
@@ -181,7 +180,7 @@ export async function fetchOrder(
     accessToken,
     { signal },
   );
-  if (!isOrder(order)) throw new Error("Orders returned an invalid order.");
+  if (!isOrder(order)) throw new Error("Сервис заказов вернул некорректные данные заказа.");
   return order;
 }
 
@@ -215,7 +214,7 @@ async function requestDeliveryState(
   init?: RequestInit,
 ): Promise<OrderDeliveryState> {
   const state = await requestJson<unknown>(url, accessToken, init);
-  if (!isDeliveryState(state)) throw new Error("Orders returned an invalid delivery state.");
+  if (!isDeliveryState(state)) throw new Error("Сервис заказов вернул некорректный статус передачи.");
   return state;
 }
 

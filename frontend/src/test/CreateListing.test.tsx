@@ -66,11 +66,11 @@ describe("CreateListing seller flow", () => {
       expect.any(AbortSignal),
     );
     fireEvent.click(screen.getByRole("button", { name: /Verified collectible/ }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Price amount" }), { target: { value: "1.5" } });
-    fireEvent.change(screen.getByRole("textbox", { name: "Title Optional" }), { target: { value: "My collectible" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create private draft" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Цена" }), { target: { value: "1.5" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Название (необязательно)" }), { target: { value: "My collectible" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
 
-    expect(await screen.findByText("Draft — not published")).toBeInTheDocument();
+    expect(await screen.findByText("Черновик · не опубликован")).toBeInTheDocument();
     expect(apiMocks.createListingDraft).toHaveBeenCalledWith(
       "memory-session-token",
       {
@@ -88,13 +88,13 @@ describe("CreateListing seller flow", () => {
     renderCreateListing();
 
     fireEvent.click(await screen.findByRole("button", { name: /Verified collectible/ }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Price amount" }), { target: { value: "1.5" } });
-    fireEvent.change(screen.getByLabelText("Listing expiration"), {
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Цена" }), { target: { value: "1.5" } });
+    fireEvent.change(screen.getByLabelText("Срок действия объявления"), {
       target: { value: "2030-05-02T12:30" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Create private draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
 
-    expect(await screen.findByText("Draft — not published")).toBeInTheDocument();
+    expect(await screen.findByText("Черновик · не опубликован")).toBeInTheDocument();
     expect(apiMocks.createListingDraft).toHaveBeenCalledWith(
       "memory-session-token",
       expect.objectContaining({
@@ -113,16 +113,16 @@ describe("CreateListing seller flow", () => {
     );
     renderCreateListing();
 
-    expect(await screen.findByText("Verify a wallet first")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open wallet connection" })).toHaveAttribute("href", "#wallet-connect");
-    expect(screen.getByText(/Connecting a wallet alone does not prove ownership/)).toBeInTheDocument();
+    expect(await screen.findByText("Сначала подтвердите кошелёк")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Подключить кошелёк" })).toHaveAttribute("href", "#wallet-connect");
+    expect(screen.getByText(/Одного подключения недостаточно для подтверждения владения/)).toBeInTheDocument();
   });
 
   it("shows an empty inventory state without enabling a draft", async () => {
     apiMocks.fetchMyInventory.mockResolvedValue({ ...inventoryPage, items: [], has_more: false });
     renderCreateListing();
 
-    expect(await screen.findByText("No eligible TON NFTs found")).toBeInTheDocument();
+    expect(await screen.findByText("Подтверждённые TON NFT не найдены")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Create private draft/ })).not.toBeInTheDocument();
   });
 
@@ -132,8 +132,8 @@ describe("CreateListing seller flow", () => {
       .mockResolvedValueOnce(inventoryPage);
     renderCreateListing();
 
-    expect(await screen.findByText("Inventory unavailable")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Инвентарь недоступен")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
     expect(await screen.findByText("Verified collectible")).toBeInTheDocument();
     expect(apiMocks.fetchMyInventory).toHaveBeenCalledTimes(2);
   });
@@ -151,7 +151,7 @@ describe("CreateListing seller flow", () => {
     renderCreateListing();
 
     expect(await screen.findByText("Verified collectible")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Load more NFTs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё NFT" }));
     expect(await screen.findByText("Second verified NFT")).toBeInTheDocument();
     expect(apiMocks.fetchMyInventory).toHaveBeenLastCalledWith(
       "memory-session-token",
@@ -160,15 +160,28 @@ describe("CreateListing seller flow", () => {
     );
   });
 
+  it("stops pagination when the provider repeats the same page cursor", async () => {
+    apiMocks.fetchMyInventory
+      .mockResolvedValueOnce({ ...inventoryPage, has_more: true, next_offset: 24 })
+      .mockResolvedValueOnce({ ...inventoryPage, has_more: true, next_offset: 24 });
+    renderCreateListing();
+
+    expect(await screen.findByText("Verified collectible")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё NFT" }));
+
+    expect(await screen.findByText("Не удалось перейти к следующей странице. Обновите страницу и попробуйте снова.")).toBeInTheDocument();
+    expect(screen.getAllByText("Verified collectible")).toHaveLength(1);
+  });
+
   it("keeps the form open and explains draft failures", async () => {
     apiMocks.createListingDraft.mockRejectedValue(new Error("NFT ownership could not be freshly verified"));
     renderCreateListing();
 
     fireEvent.click(await screen.findByRole("button", { name: /Verified collectible/ }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Price amount" }), { target: { value: "1" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create private draft" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Цена" }), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("NFT ownership could not be freshly verified");
-    expect(screen.getByRole("button", { name: "Create private draft" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeInTheDocument();
   });
 });

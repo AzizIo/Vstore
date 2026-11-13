@@ -11,22 +11,33 @@ describe("AdminCenter", () => {
     vi.mocked(fetch).mockImplementation(async (input) => String(input).includes("/audit") ? response(auditPage) : response(page));
     render(<AdminCenter accessToken="verified-session" active />);
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Audit history" }));
-    expect(await screen.findByText("No moderation decisions recorded.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "История аудита" }));
+    expect(await screen.findByText("Решения модерации пока не зафиксированы.")).toBeInTheDocument();
+  });
+  it("keeps unknown API statuses and queue reasons in Russian", async () => {
+    const futureListing = {
+      ...listing,
+      status: "future_status",
+      queue_reasons: ["future_reason"],
+    };
+    vi.mocked(fetch).mockResolvedValue(response({ ...page, items: [futureListing] }));
+    render(<AdminCenter accessToken="verified-session" active />);
+    expect(await screen.findByText("Неизвестный статус")).toBeInTheDocument();
+    expect(screen.getByText("Дополнительная причина")).toBeInTheDocument();
   });
   it("requires a reason before confirming a moderation decision", async () => {
     render(<AdminCenter accessToken="verified-session" active />);
     await screen.findByText("Moon Lantern");
-    fireEvent.click(screen.getByRole("button", { name: "Suspend" }));
-    expect(screen.getByRole("dialog", { name: "Suspend listing" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Confirm suspend" })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Explanation (5–500 characters)"), { target: { value: "Policy review required" } });
-    expect(screen.getByRole("button", { name: "Confirm suspend" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Приостановить" }));
+    expect(screen.getByRole("dialog", { name: "Приостановить объявление" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Подтвердить приостановку" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Пояснение (5–500 символов)"), { target: { value: "Policy review required" } });
+    expect(screen.getByRole("button", { name: "Подтвердить приостановку" })).toBeEnabled();
   });
   it("shows a retryable error if the queue API is forbidden", async () => {
-    vi.mocked(fetch).mockResolvedValue(response({ detail: "Administrator access required" }, 403));
+    vi.mocked(fetch).mockResolvedValue(response({ detail: "Требуются права администратора" }, 403));
     render(<AdminCenter accessToken="regular-user-token" active />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Administrator access required");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Требуются права администратора");
     await waitFor(() => expect(fetch).toHaveBeenCalled());
   });
 });

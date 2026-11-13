@@ -75,38 +75,38 @@ const lifecycleCases: Array<{
 }> = [
   {
     status: "reserved",
-    label: "Reservation pending",
-    explanation: /seller has not started the NFT transfer/,
+    label: "Ожидает передачи",
+    explanation: /Продавец ещё не начал передачу NFT/,
     canCancel: true,
   },
   {
     status: "awaiting_transfer",
-    label: "Awaiting transfer",
-    explanation: /preparing a direct NFT transfer to the buyer/,
+    label: "Ожидает перевода",
+    explanation: /Продавец готовит прямую передачу NFT покупателю/,
     canCancel: false,
   },
   {
     status: "observing_transfer",
-    label: "Verifying transfer",
-    explanation: /checked against on-chain evidence/,
+    label: "Проверяем перевод",
+    explanation: /Проверяем перевод по данным блокчейна/,
     canCancel: false,
   },
   {
     status: "completed",
-    label: "Completed",
-    explanation: /server confirmed the exact NFT transfer to the buyer/,
+    label: "Завершён",
+    explanation: /Сервер подтвердил передачу нужного NFT покупателю/,
     canCancel: false,
   },
   {
     status: "cancelled",
-    label: "Cancelled",
-    explanation: /reservation was cancelled/,
+    label: "Отменено",
+    explanation: /Резерв отменён/,
     canCancel: false,
   },
   {
     status: "expired",
-    label: "Expired",
-    explanation: /reservation expired before completion/,
+    label: "Срок истёк",
+    explanation: /Срок резерва истёк до завершения заказа/,
     canCancel: false,
   },
 ];
@@ -136,15 +136,15 @@ describe("delivery lifecycle order UI contract", () => {
       expect(
         await screen.findByText(label, { selector: ".order-status" }),
       ).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: /Open order Moon Lantern/ }));
-      expect(await screen.findByRole("heading", { name: "Lifecycle" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /Открыть заказ Moon Lantern/ }));
+      expect(await screen.findByRole("heading", { name: "Статус заказа" })).toBeInTheDocument();
       expect(await screen.findByText(explanation, { selector: ".order-guidance" })).toBeInTheDocument();
 
       if (canCancel) {
-        expect(screen.getByRole("button", { name: "Cancel order" })).toBeInTheDocument();
-        expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Отменить заказ" })).toBeInTheDocument();
+        expect(screen.getByText(/Оплата в VILTARA SHOP пока не подключена/)).toBeInTheDocument();
       } else {
-        expect(screen.queryByRole("button", { name: "Cancel order" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Отменить заказ" })).not.toBeInTheDocument();
       }
     },
   );

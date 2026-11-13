@@ -53,7 +53,7 @@ export async function getTransferPayload(attempt: DeliveryAttempt): Promise<stri
   const { Address, beginCell } = await loadTonCore();
   const queryId = BigInt(attempt.query_id);
   if (queryId < 0n || queryId > 0xffffffffffffffffn) {
-    throw new Error("The prepared transfer contains an invalid query ID.");
+    throw new Error("Подготовленная передача содержит некорректный ID запроса.");
   }
 
   // TEP-62 transfer: exact buyer snapshot + preparation query_id. This cell is
@@ -83,13 +83,13 @@ async function walletReference(boc: string): Promise<string> {
 }
 
 function deliveryStatus(attempt: DeliveryAttempt | null, orderStatus: MarketplaceOrder["status"]) {
-  if (orderStatus === "completed" || attempt?.status === "verified") return "Transfer independently verified";
-  if (attempt?.status === "manual_review") return "Manual review required";
-  if (attempt?.status === "failed") return "Transfer not verified";
-  if (attempt?.candidate_transaction_hash || attempt?.submitted_at) return "Transfer submitted · verifying";
-  if (orderStatus === "observing_transfer" || attempt?.status === "observing") return "Watching chain · awaiting seller wallet action";
-  if (attempt?.status === "prepared" || orderStatus === "awaiting_transfer") return "Awaiting seller wallet action";
-  return "Delivery not prepared";
+  if (orderStatus === "completed" || attempt?.status === "verified") return "Передача подтверждена независимо";
+  if (attempt?.status === "manual_review") return "Требуется ручная проверка";
+  if (attempt?.status === "failed") return "Передача не подтверждена";
+  if (attempt?.candidate_transaction_hash || attempt?.submitted_at) return "Перевод отправлен · проверяем";
+  if (orderStatus === "observing_transfer" || attempt?.status === "observing") return "Ожидаем действие продавца в кошельке";
+  if (attempt?.status === "prepared" || orderStatus === "awaiting_transfer") return "Ожидаем действие продавца в кошельке";
+  return "Передача не подготовлена";
 }
 
 function DeliveryPanel({
@@ -135,7 +135,7 @@ function DeliveryPanel({
         setWalletResultUncertain(false);
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Delivery status is unavailable.");
+      setError(reason instanceof Error ? reason.message : "Статус передачи недоступен.");
     } finally {
       setLoading(false);
     }
@@ -154,7 +154,7 @@ function DeliveryPanel({
     try {
       const connectedNetwork = wallet ? networkForChain(wallet.account.chain) : null;
       if (!wallet || !connectedNetwork) {
-        throw new Error("Connect a supported TON wallet on mainnet or testnet first.");
+        throw new Error("Сначала подключите совместимый TON-кошелёк в основной или тестовой сети.");
       }
       const records = await fetchMyWallets(accessToken);
       const { Address } = await loadTonCore();
@@ -165,15 +165,15 @@ function DeliveryPanel({
         Address.parse(record.address).toRawString() === connectedAddress,
       );
       if (!linked) {
-        throw new Error("This connected wallet is not verified for your seller account. Verify it in Wallets first.");
+        throw new Error("Этот кошелёк не подтверждён для вашего аккаунта продавца. Сначала подтвердите его в разделе кошельков.");
       }
       prepareKeyRef.current ??= crypto.randomUUID();
       const state = await prepareDelivery(order.id, linked.id, accessToken, prepareKeyRef.current);
       setDelivery(state);
-      setMessage("Delivery intent saved. Review the recipient and deadline before opening your wallet.");
+      setMessage("Запрос на передачу сохранён. Проверьте адрес получателя и срок действия перед открытием кошелька.");
       onRefreshOrder();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not prepare the NFT transfer.");
+      setError(reason instanceof Error ? reason.message : "Не удалось подготовить передачу NFT.");
     } finally {
       actionLockRef.current = false;
       setBusy(false);
@@ -183,7 +183,7 @@ function DeliveryPanel({
   async function requestWalletTransfer() {
     if (actionLockRef.current || role !== "seller" || !delivery?.attempt) return;
     if (walletResultUncertain) {
-      setError("The previous wallet result is uncertain. Refresh status and check wallet activity before retrying.");
+      setError("Результат предыдущего запроса к кошельку неизвестен. Обновите статус и проверьте историю кошелька перед повторной попыткой.");
       return;
     }
     actionLockRef.current = true;
@@ -197,22 +197,22 @@ function DeliveryPanel({
         attempt.status === "prepared" ||
         (attempt.status === "observing" && !attempt.candidate_transaction_hash && !attempt.submitted_at);
       if (!waitingForSellerTransfer) {
-        throw new Error("This delivery intent is no longer waiting for a wallet transfer.");
+        throw new Error("Этот запрос на передачу больше не ожидает перевода из кошелька.");
       }
       const connectedNetwork = wallet ? networkForChain(wallet.account.chain) : null;
       if (!wallet || !connectedNetwork) {
-        throw new Error("Reconnect the seller wallet before requesting a transfer.");
+        throw new Error("Повторно подключите кошелёк продавца перед запросом передачи.");
       }
       if (connectedNetwork !== attempt.network) {
-        throw new Error(`Wrong wallet network. This delivery requires TON ${attempt.network}.`);
+        throw new Error(`Неверная сеть кошелька. Для этой передачи требуется TON ${attempt.network}.`);
       }
       if (Date.parse(attempt.deadline) <= Date.now()) {
-        throw new Error("The 15-minute delivery preparation window has expired. Refresh status before taking action.");
+        throw new Error("Срок подготовки передачи (15 минут) истёк. Обновите статус перед дальнейшими действиями.");
       }
 
       const { Address } = await loadTonCore();
       if (Address.parse(wallet.account.address).toRawString() !== Address.parse(attempt.seller_address).toRawString()) {
-        throw new Error("The connected wallet does not match the snapshotted seller source.");
+        throw new Error("Подключённый кошелёк не совпадает с кошельком продавца, указанным в заказе.");
       }
       const payload = await getTransferPayload(attempt);
       const item = Address.parse(attempt.item_address).toString({
@@ -232,18 +232,18 @@ function DeliveryPanel({
         : await tonConnectUI.sendTransaction(walletRequest);
       const reference = await walletReference(result.boc);
       setRetryReference(reference);
-      setMessage("Wallet returned a signed message. Sending its reference for lookup; this is not proof of delivery.");
+      setMessage("Кошелёк вернул подписанное сообщение. Отправляем ссылку для проверки — это ещё не подтверждение передачи.");
       try {
         const submitted = await submitDeliveryCandidate(order.id, reference, accessToken);
         setDelivery(submitted);
         setRetryReference("");
         setWalletResultUncertain(false);
-        setMessage("Reference submitted. The backend observer is checking the exact on-chain transfer; do not send it again.");
+        setMessage("Ссылка отправлена. Сервер проверяет перевод в блокчейне. Не отправляйте её повторно.");
         onRefreshOrder();
       } catch (reason) {
         setWalletResultUncertain(true);
-        setError(reason instanceof Error ? reason.message : "Reference submission failed.");
-        setMessage("The wallet may already have broadcast the transfer. Retry submitting this same reference; do not sign another transfer.");
+        setError(reason instanceof Error ? reason.message : "Не удалось отправить ссылку на транзакцию.");
+        setMessage("Кошелёк мог уже отправить перевод в сеть. Повторно отправьте эту же ссылку, не подписывая новый перевод.");
       }
     } catch (reason) {
       const walletError = reason && typeof reason === "object"
@@ -253,12 +253,12 @@ function DeliveryPanel({
       if (walletRequestStarted && !rejected) setWalletResultUncertain(true);
       if (rejected) {
         setWalletResultUncertain(false);
-        setError("The wallet request was rejected or cancelled. No delivery success was recorded; you can review the request and try again.");
+        setError("Запрос кошелька отклонён или отменён. Передача не подтверждена. Проверьте запрос и попробуйте снова.");
       } else if (walletRequestStarted) {
-        const detail = reason instanceof Error ? reason.message : "Wallet request did not return a confirmed result.";
-        setError(`Wallet result is uncertain: ${detail} Refresh delivery status and check wallet activity before retrying.`);
+        const detail = reason instanceof Error ? reason.message : "Кошелёк не вернул подтверждённый результат.";
+        setError(`Результат запроса к кошельку неизвестен: ${detail} Обновите статус передачи и проверьте историю кошелька перед повторной попыткой.`);
       } else {
-        setError(reason instanceof Error ? reason.message : "Wallet request did not complete.");
+        setError(reason instanceof Error ? reason.message : "Не удалось завершить запрос кошелька.");
       }
     } finally {
       actionLockRef.current = false;
@@ -276,10 +276,10 @@ function DeliveryPanel({
       setDelivery(submitted);
       setRetryReference("");
       setWalletResultUncertain(false);
-      setMessage("Reference submitted. Wait for independent on-chain verification.");
+      setMessage("Ссылка отправлена. Дождитесь независимой проверки в блокчейне.");
       onRefreshOrder();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not submit the existing reference.");
+      setError(reason instanceof Error ? reason.message : "Не удалось отправить сохранённую ссылку.");
     } finally {
       actionLockRef.current = false;
       setBusy(false);
@@ -291,7 +291,7 @@ function DeliveryPanel({
     try {
       await tonConnectUI.openModal();
     } catch {
-      setError("Wallet connection could not be opened. Check that the Mini App is running on its configured HTTPS origin.");
+      setError("Не удалось открыть подключение кошелька. Проверьте, что мини-приложение запущено на настроенном HTTPS-адресе.");
     }
   }
 
@@ -307,61 +307,60 @@ function DeliveryPanel({
   return (
     <section className="workspace-section delivery-workspace" aria-labelledby="delivery-workspace-title">
       <div className="workspace-section-heading">
-        <div><p className="eyebrow">NON-CUSTODIAL DELIVERY</p><h2 id="delivery-workspace-title">NFT transfer</h2></div>
+        <div><p className="eyebrow">ПЕРЕДАЧА БЕЗ ХРАНЕНИЯ СРЕДСТВ</p><h2 id="delivery-workspace-title">Передача NFT</h2></div>
         <span className={`order-status order-status-${order.status}`}>{deliveryStatus(attempt, order.status)}</span>
       </div>
       <p className="order-guidance">
-        The seller signs the TEP-62 transfer in their own wallet. The submitted reference is untrusted;
-        only the backend observer can confirm delivery from finalized on-chain evidence.
+        Продавец подписывает перевод TEP-62 в собственном кошельке. Ссылка на отправку сама по себе не подтверждает доставку: сервер проверит завершённую транзакцию в блокчейне.
       </p>
-      {loading && <p className="workspace-muted" role="status">Loading delivery details…</p>}
+      {loading && <p className="workspace-muted" role="status">Загружаем данные о передаче…</p>}
       {error && <p className="orders-error" role="alert">{error}</p>}
       {message && <p className="workspace-muted" role="status">{message}</p>}
       {showDetails && attempt && (
         <dl className="delivery-snapshot">
-          <div><dt>Network</dt><dd>TON {attempt.network}</dd></div>
-          <div><dt>NFT item</dt><dd><code>{attempt.item_address}</code></dd></div>
-          <div><dt>Seller source</dt><dd><code>{attempt.seller_address}</code></dd></div>
-          <div><dt>Buyer destination</dt><dd><code>{attempt.buyer_address}</code></dd></div>
-          <div><dt>Transfer query ID</dt><dd><code>{attempt.query_id}</code></dd></div>
-          <div><dt>Preparation deadline</dt><dd>{new Date(attempt.deadline).toLocaleString()}</dd></div>
-          {attempt.transaction_hash && <div><dt>Verified transaction</dt><dd><code>{attempt.transaction_hash}</code></dd></div>}
-          {attempt.masterchain_seqno !== null && <div><dt>Masterchain sequence</dt><dd>{attempt.masterchain_seqno}</dd></div>}
-          {attempt.verified_at && <div><dt>Verified at</dt><dd>{new Date(attempt.verified_at).toLocaleString()}</dd></div>}
+          <div><dt>Сеть</dt><dd>{attempt.network === "mainnet" ? "Основная сеть TON" : "Тестовая сеть TON"}</dd></div>
+          <div><dt>NFT</dt><dd><code>{attempt.item_address}</code></dd></div>
+          <div><dt>Кошелёк продавца</dt><dd><code>{attempt.seller_address}</code></dd></div>
+          <div><dt>Кошелёк покупателя</dt><dd><code>{attempt.buyer_address}</code></dd></div>
+          <div><dt>ID запроса передачи</dt><dd><code>{attempt.query_id}</code></dd></div>
+          <div><dt>Срок подготовки</dt><dd>{new Date(attempt.deadline).toLocaleString("ru-RU")}</dd></div>
+          {attempt.transaction_hash && <div><dt>Подтверждённая транзакция</dt><dd><code>{attempt.transaction_hash}</code></dd></div>}
+          {attempt.masterchain_seqno !== null && <div><dt>Последовательность Masterchain</dt><dd>{attempt.masterchain_seqno}</dd></div>}
+          {attempt.verified_at && <div><dt>Подтверждено</dt><dd>{new Date(attempt.verified_at).toLocaleString("ru-RU")}</dd></div>}
         </dl>
       )}
       {walletActionsEnabled && role === "seller" && !wallet && order.status !== "completed" && (
-        <button className="secondary-button" type="button" onClick={() => void openWallet()}>Connect seller wallet</button>
+        <button className="secondary-button" type="button" onClick={() => void openWallet()}>Подключить кошелёк продавца</button>
       )}
       {role === "seller" && !walletActionsEnabled && (
-        <p className="workspace-muted" role="status">TON Connect is not configured for this Mini App. Wallet signing is disabled.</p>
+        <p className="workspace-muted" role="status">TON Connect не настроен для этого мини-приложения. Подписание операций отключено.</p>
       )}
       {canPrepare && (
         <button className="primary-button" type="button" disabled={busy || loading} onClick={() => void prepare()}>
-          {busy ? "Preparing…" : "Prepare transfer"}
+          {busy ? "Подготавливаем…" : "Подготовить передачу"}
         </button>
       )}
       {canRequestTransfer && (
         <button className="primary-button" type="button" disabled={busy || loading || walletResultUncertain || Boolean(retryReference)} onClick={() => void requestWalletTransfer()}>
-          {busy ? "Waiting for wallet…" : "Review and sign in wallet"}
+          {busy ? "Ожидаем кошелёк…" : "Проверить и подписать в кошельке"}
         </button>
       )}
       {retryReference && (
         <button className="secondary-button" type="button" disabled={busy} onClick={() => void retrySubmission()}>
-          {busy ? "Submitting…" : "Retry submitting same reference"}
+          {busy ? "Отправляем…" : "Повторно отправить ту же ссылку"}
         </button>
       )}
       {attempt?.status === "manual_review" && (
         <p className="lifecycle-terminal lifecycle-terminal-expired" role="status">
-          Delivery needs reconciliation. Do not send another NFT transfer; completion has not been confirmed.
+          Требуется дополнительная проверка передачи. Не отправляйте NFT повторно: завершение ещё не подтверждено.
         </p>
       )}
       {(attempt || role === "buyer") && (
         <button className="secondary-button" type="button" disabled={loading} onClick={() => { void refreshDelivery(); onRefreshOrder(); }}>
-          Refresh verification status
+          Обновить статус проверки
         </button>
       )}
-      <p className="payment-disclaimer">No payment or escrow is involved. Your wallet may ask for network fees; the marketplace never receives or signs the NFT transfer.</p>
+      <p className="payment-disclaimer">Оплата и эскроу не используются. Кошелёк может запросить комиссию сети. Маркетплейс не получает NFT и не подписывает перевод.</p>
     </section>
   );
 }
@@ -382,7 +381,7 @@ export function DeliveryWorkspace({
   const manifestUrl = configuredManifestUrl ||
     (typeof window !== "undefined" ? `${window.location.origin}/tonconnect-manifest.json` : "");
   if (!manifestUrl) {
-    return <section className="workspace-section" aria-label="NFT transfer"><p className="eyebrow">NON-CUSTODIAL DELIVERY</p><h2>NFT transfer</h2><p className="workspace-muted">Delivery status is unavailable in this environment.</p></section>;
+    return <section className="workspace-section" aria-label="Передача NFT"><p className="eyebrow">ПЕРЕДАЧА БЕЗ ХРАНЕНИЯ СРЕДСТВ</p><h2>Передача NFT</h2><p className="workspace-muted">Статус передачи недоступен в этой среде.</p></section>;
   }
 
   return (

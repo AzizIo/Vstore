@@ -14,13 +14,20 @@ const listingStatuses = ["draft", "active", "reserved", "sold", "cancelled", "ex
 type KnownStatus = (typeof listingStatuses)[number];
 type StatusFilter = "all" | KnownStatus | "other";
 
+const verificationStatusLabels: Record<string, string> = {
+  verified: "Подтверждён",
+  stale: "Устарел",
+  invalid: "Не подтверждён",
+  unsupported: "Не поддерживается",
+  provider_unavailable: "Провайдер недоступен",
+};
 const statusLabels: Record<KnownStatus, string> = {
-  draft: "Draft",
-  active: "Active",
-  reserved: "Reserved",
-  sold: "Sold",
-  cancelled: "Cancelled",
-  expired: "Expired",
+  draft: "Черновик",
+  active: "Активно",
+  reserved: "Зарезервировано",
+  sold: "Продано",
+  cancelled: "Отменено",
+  expired: "Срок истёк",
 };
 
 function isKnownStatus(status: string): status is KnownStatus {
@@ -28,14 +35,14 @@ function isKnownStatus(status: string): status is KnownStatus {
 }
 
 function getTitle(listing: Listing) {
-  return listing.title || listing.asset.name || "Untitled asset";
+  return listing.title || listing.asset.name || "Без названия";
 }
 
 function getCreatedDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
-    ? "Date unavailable"
-    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
+    ? "Дата недоступна"
+    : new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium" }).format(date);
 }
 
 function toLocalDateTimeInput(value: string | null | undefined) {
@@ -55,11 +62,11 @@ function localDateTimeMinimum() {
 }
 
 function getExpirationLabel(value: string | null | undefined) {
-  if (!value) return "No expiry";
+  if (!value) return "Без срока";
   const date = new Date(value);
   return Number.isNaN(date.getTime())
-    ? "Date unavailable"
-    : new Intl.DateTimeFormat(undefined, {
+    ? "Дата недоступна"
+    : new Intl.DateTimeFormat("ru-RU", {
         dateStyle: "medium",
         timeStyle: "short",
       }).format(date);
@@ -75,7 +82,7 @@ function ListingImage({ listing }: { listing: Listing }) {
       {listing.asset.image_url && !failed ? (
         <img src={listing.asset.image_url} alt={title} loading="lazy" onError={() => setFailed(true)} />
       ) : (
-        <span aria-label="Image unavailable">V</span>
+        <span aria-label="Изображение недоступно">V</span>
       )}
     </div>
   );
@@ -85,7 +92,7 @@ function StatusBadge({ status }: { status: string }) {
   const known = isKnownStatus(status);
   return (
     <span className={`listing-status ${known ? `listing-status-${status}` : "listing-status-unknown"}`}>
-      {known ? statusLabels[status] : "Unknown status"}
+      {known ? statusLabels[status] : "Неизвестный статус"}
     </span>
   );
 }
@@ -138,9 +145,9 @@ function MyListingDetail({
       setExpiresAt(updatedExpiration);
       setInitialExpiresAt(updatedExpiration);
       onUpdated(updated);
-      setSuccess("Listing details saved.");
+      setSuccess("Изменения сохранены.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to save listing details.");
+      setError(reason instanceof Error ? reason.message : "Не удалось сохранить изменения.");
     } finally {
       setWorking("");
     }
@@ -155,9 +162,9 @@ function MyListingDetail({
       const updated = await publishListing(listing.id, accessToken);
       onUpdated(updated);
       setConfirmPublish(false);
-      setSuccess("Listing published and is now visible in the marketplace.");
+      setSuccess("Объявление опубликовано и доступно в каталоге.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to publish this listing.");
+      setError(reason instanceof Error ? reason.message : "Не удалось опубликовать объявление.");
     } finally {
       setWorking("");
     }
@@ -174,11 +181,11 @@ function MyListingDetail({
       setConfirmCancel(false);
       setSuccess(
         listing.status === "active"
-          ? "Listing unpublished. It is no longer visible in the marketplace."
-          : "Draft cancelled.",
+          ? "Объявление снято с публикации и больше не отображается в каталоге."
+          : "Черновик отменён.",
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to cancel this listing.");
+      setError(reason instanceof Error ? reason.message : "Не удалось отменить объявление.");
     } finally {
       setWorking("");
     }
@@ -187,13 +194,13 @@ function MyListingDetail({
   return (
     <section className="my-listing-detail" aria-labelledby="my-listing-detail-title">
       <button className="text-button back-button" type="button" onClick={onBack}>
-        <span aria-hidden="true">←</span> Back to my listings
+        <span aria-hidden="true">←</span> Назад к моим объявлениям
       </button>
       <div className="my-listing-detail-layout">
         <ListingImage listing={listing} />
         <div className="my-listing-detail-copy">
           <StatusBadge status={listing.status} />
-          <p className="eyebrow">{listing.asset.asset_type === "ton_nft" ? "TON NFT" : "Telegram gift"}</p>
+          <p className="eyebrow">{listing.asset.asset_type === "ton_nft" ? "TON NFT" : "Подарок Telegram"}</p>
           <h1 id="my-listing-detail-title">{getTitle(listing)}</h1>
           <p className="detail-price">
             {listing.price_amount} {listing.price_currency}
@@ -201,22 +208,22 @@ function MyListingDetail({
           {listing.description && <p className="detail-description">{listing.description}</p>}
           {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
           <dl className="detail-facts">
-            <div><dt>Created</dt><dd>{getCreatedDate(listing.created_at)}</dd></div>
-            <div><dt>Expires</dt><dd>{getExpirationLabel(listing.expires_at)}</dd></div>
-            <div><dt>Asset ID</dt><dd>{listing.asset.external_id}</dd></div>
-            <div><dt>Verification</dt><dd>{listing.asset.verification_status}</dd></div>
+            <div><dt>Создан</dt><dd>{getCreatedDate(listing.created_at)}</dd></div>
+            <div><dt>Истекает</dt><dd>{getExpirationLabel(listing.expires_at)}</dd></div>
+            <div><dt>ID актива</dt><dd>{listing.asset.external_id}</dd></div>
+            <div><dt>Проверка</dt><dd>{verificationStatusLabels[listing.asset.verification_status] ?? "Неизвестно"}</dd></div>
           </dl>
         </div>
       </div>
 
       {isEditable ? (
         <div className="listing-management">
-          <h2>Manage listing</h2>
+          <h2>Управление объявлением</h2>
           <form className="listing-edit-form" onSubmit={saveChanges}>
             <label>
-              <span>Price ({listing.price_currency})</span>
+              <span>Цена ({listing.price_currency})</span>
               <input
-                aria-label="Listing price"
+                aria-label="Цена объявления"
                 type="number"
                 min="0.000000001"
                 step="0.000000001"
@@ -226,18 +233,18 @@ function MyListingDetail({
               />
             </label>
             <label>
-              <span>Title <small>Optional</small></span>
+              <span>Название <small>необязательно</small></span>
               <input
-                aria-label="Listing title"
+                aria-label="Название объявления"
                 maxLength={200}
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
               />
             </label>
             <label>
-              <span>Description <small>Optional</small></span>
+              <span>Описание <small>необязательно</small></span>
               <textarea
-                aria-label="Listing description"
+                aria-label="Описание объявления"
                 maxLength={4000}
                 rows={4}
                 value={description}
@@ -245,19 +252,19 @@ function MyListingDetail({
               />
             </label>
             <label>
-              <span>Expiration <small>Optional</small></span>
+              <span>Срок действия <small>необязательно</small></span>
               <input
-                aria-label="Listing expiration"
+                aria-label="Срок действия объявления"
                 type="datetime-local"
                 min={localDateTimeMinimum()}
                 value={expiresAt}
                 onChange={(event) => setExpiresAt(event.target.value)}
               />
-              <small>Clear the field to remove automatic expiry.</small>
+              <small>Очистите поле, чтобы отключить автоматическое истечение срока.</small>
             </label>
             <div className="listing-management-actions">
               <button className="load-more-button" type="submit" disabled={Boolean(working)}>
-                {working === "saving" ? "Saving..." : "Save changes"}
+                {working === "saving" ? "Сохраняем…" : "Сохранить изменения"}
               </button>
               {canPublish && (
                 <button
@@ -270,7 +277,7 @@ function MyListingDetail({
                     setConfirmPublish(true);
                   }}
                 >
-                  Publish listing
+                  Опубликовать объявление
                 </button>
               )}
               <button
@@ -283,14 +290,14 @@ function MyListingDetail({
                   setConfirmCancel(true);
                 }}
               >
-                {listing.status === "active" ? "Unpublish listing" : "Cancel draft"}
+                {listing.status === "active" ? "Снять с публикации" : "Отменить черновик"}
               </button>
             </div>
           </form>
           {confirmPublish && (
-            <div className="listing-confirmation" role="group" aria-label="Confirm listing publication">
+            <div className="listing-confirmation" role="group" aria-label="Подтвердите публикацию объявления">
               <p>
-                Publish this NFT? The server will re-check its current on-chain owner before making it public.
+                Опубликовать этот NFT? Перед публикацией сервер повторно проверит текущего владельца в блокчейне.
               </p>
               <button
                 className="primary-button"
@@ -298,7 +305,7 @@ function MyListingDetail({
                 disabled={Boolean(working)}
                 onClick={() => void publish()}
               >
-                {working === "publishing" ? "Verifying NFT ownership..." : "Confirm publish"}
+                {working === "publishing" ? "Проверяем владение NFT…" : "Подтвердить публикацию"}
               </button>
               <button
                 className="text-button"
@@ -306,21 +313,21 @@ function MyListingDetail({
                 disabled={Boolean(working)}
                 onClick={() => setConfirmPublish(false)}
               >
-                Not now
+                Не сейчас
               </button>
             </div>
           )}
           {listing.status === "draft" && !canPublish && (
             <p className="listing-management-note" role="status">
-              This draft cannot be published because its TON NFT record is not currently eligible for publication.
+              Этот черновик нельзя опубликовать: TON NFT сейчас не соответствует требованиям публикации.
             </p>
           )}
           {confirmCancel && (
-            <div className="listing-confirmation" role="group" aria-label="Confirm listing cancellation">
+            <div className="listing-confirmation" role="group" aria-label="Подтвердите отмену объявления">
               <p>
                 {listing.status === "active"
-                  ? "Unpublish this listing? Buyers will no longer see it in the marketplace."
-                  : "Cancel this private draft? This action cannot be undone."}
+                  ? "Снять объявление с публикации? Покупатели больше не увидят его в каталоге."
+                  : "Отменить этот черновик? Действие нельзя будет отменить."}
               </p>
               <button
                 className="primary-button"
@@ -328,7 +335,7 @@ function MyListingDetail({
                 disabled={Boolean(working)}
                 onClick={() => void confirmAndCancel()}
               >
-                {working === "cancelling" ? "Cancelling..." : "Confirm"}
+                {working === "cancelling" ? "Отменяем…" : "Подтвердить"}
               </button>
               <button
                 className="text-button"
@@ -336,7 +343,7 @@ function MyListingDetail({
                 disabled={Boolean(working)}
                 onClick={() => setConfirmCancel(false)}
               >
-                Keep listing
+                Оставить объявление
               </button>
             </div>
           )}
@@ -344,8 +351,8 @@ function MyListingDetail({
       ) : (
         <p className="listing-management-note" role="status">
           {listing.status === "reserved"
-            ? "This listing is reserved by a pending order. Editing and unpublishing are disabled until the reservation ends."
-            : "This listing is closed and can no longer be edited or published."}
+            ? "Объявление зарезервировано активным заказом. Редактирование и снятие с публикации недоступны до завершения резерва."
+            : "Объявление закрыто: его больше нельзя редактировать или публиковать."}
         </p>
       )}
       {error && <p className="listing-management-error" role="alert">{error}</p>}
@@ -371,7 +378,7 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
       .then(setListings)
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : "Unable to load your listings.");
+          setError(reason instanceof Error ? reason.message : "Не удалось загрузить ваши объявления.");
           setListings([]);
         }
       })
@@ -422,21 +429,21 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
     <section className="my-listings" aria-labelledby="my-listings-title">
       <div className="my-listings-heading">
         <div>
-          <p className="eyebrow">SELLER SPACE</p>
-          <h1 id="my-listings-title">My Listings</h1>
+          <p className="eyebrow">КАБИНЕТ ПРОДАВЦА</p>
+          <h1 id="my-listings-title">Мои объявления</h1>
         </div>
         {!loading && !error && <span className="my-listings-count">{listings.length} total</span>}
         <button className="load-more-button create-listing-action" type="button" onClick={() => setCreating(true)}>
-          Create listing
+          Создать объявление
         </button>
       </div>
 
       {!loading && !error && listings.length > 0 && (
         <div className="my-listings-toolbar">
           <label className="select-control">
-            <span className="sr-only">Filter my listings by status</span>
+            <span className="sr-only">Фильтр моих объявлений по статусу</span>
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
-              <option value="all">All statuses ({listings.length})</option>
+              <option value="all">Все статусы ({listings.length})</option>
               {availableStatuses.map((status) => (
                 <option key={status} value={status}>
                   {statusLabels[status]} ({listings.filter((listing) => listing.status === status).length})
@@ -444,32 +451,32 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
               ))}
               {hasUnknownStatus && (
                 <option value="other">
-                  Other status ({listings.filter((listing) => !isKnownStatus(listing.status)).length})
+                  Другие статусы ({listings.filter((listing) => !isKnownStatus(listing.status)).length})
                 </option>
               )}
             </select>
           </label>
-          <span className="my-listings-filter-count">Showing {filteredListings.length}</span>
+          <span className="my-listings-filter-count">Показано: {filteredListings.length}</span>
         </div>
       )}
 
       {loading ? (
-        <div className="my-listings-message" role="status">Loading your listings...</div>
+        <div className="my-listings-message" role="status">Загружаем ваши объявления…</div>
       ) : error ? (
         <div className="my-listings-message" role="alert">
-          <h2>Listings unavailable</h2>
+          <h2>Объявления недоступны</h2>
           <p>{error}</p>
-          <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button>
+          <button className="text-button" type="button" onClick={() => setRetry((value) => value + 1)}>Повторить</button>
         </div>
       ) : listings.length === 0 ? (
         <div className="my-listings-message" role="status">
-          <h2>No listings yet</h2>
-          <p>Your own listings will appear here.</p>
+          <h2>Пока нет объявлений</h2>
+          <p>Здесь будут отображаться ваши объявления.</p>
         </div>
       ) : filteredListings.length === 0 ? (
         <div className="my-listings-message" role="status">
-          <h2>No listings with this status</h2>
-          <p>Choose another status to see more listings.</p>
+          <h2>Нет объявлений с таким статусом</h2>
+          <p>Выберите другой статус, чтобы увидеть остальные объявления.</p>
         </div>
       ) : (
         <div className="my-listings-grid">
@@ -484,7 +491,7 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
               <span className="my-listing-card-copy">
                 <span className="my-listing-card-topline">
                   <span className="listing-type-label">
-                    {listing.asset.asset_type === "ton_nft" ? "TON NFT" : "Telegram gift"}
+                    {listing.asset.asset_type === "ton_nft" ? "TON NFT" : "Подарок Telegram"}
                   </span>
                   <StatusBadge status={listing.status} />
                 </span>
@@ -507,16 +514,16 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
 export function MyListings() {
   const session = useSession();
   if (session.status === "loading") {
-    return <section className="my-listings-message" role="status">Waiting for Telegram session verification...</section>;
+    return <section className="my-listings-message" role="status">Ожидаем подтверждения сессии Telegram…</section>;
   }
   if (session.status === "unauthenticated") {
     return (
       <section className="my-listings-gate" aria-labelledby="my-listings-title">
-        <p className="eyebrow">SELLER SPACE</p>
-        <h1 id="my-listings-title">My Listings</h1>
+        <p className="eyebrow">КАБИНЕТ ПРОДАВЦА</p>
+        <h1 id="my-listings-title">Мои объявления</h1>
         <div className="my-listings-message" role="status">
-          <h2>Open VILTARA in Telegram</h2>
-          <p>Sign in through the Telegram Mini App to view your listings.</p>
+          <h2>Откройте VILTARA в Telegram</h2>
+          <p>Войдите через мини-приложение Telegram, чтобы посмотреть свои объявления.</p>
         </div>
       </section>
     );
@@ -524,10 +531,10 @@ export function MyListings() {
   if (session.status === "error") {
     return (
       <section className="my-listings-gate" aria-labelledby="my-listings-title">
-        <p className="eyebrow">SELLER SPACE</p>
-        <h1 id="my-listings-title">My Listings</h1>
+        <p className="eyebrow">КАБИНЕТ ПРОДАВЦА</p>
+        <h1 id="my-listings-title">Мои объявления</h1>
         <div className="my-listings-message" role="alert">
-          <h2>Session unavailable</h2>
+          <h2>Сессия недоступна</h2>
           <p>{session.message}</p>
         </div>
       </section>

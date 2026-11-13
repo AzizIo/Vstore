@@ -1,3 +1,4 @@
+import { getApiErrorMessage } from "../api/errors";
 import { API_BASE_URL } from "../api/config";
 
 export type ModerationAction = "approve" | "reject" | "suspend" | "restore";
@@ -31,20 +32,20 @@ async function request<T>(path: string, accessToken: string, init: RequestInit =
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new Error("Could not connect to the moderation service. Please retry.");
+    throw new Error("Не удалось связаться с сервисом модерации. Попробуйте ещё раз.");
   }
   if (!response.ok) {
-    let message = "Moderation request failed (" + response.status + ").";
+    let message = "Ошибка запроса модерации (" + response.status + ").";
     try {
       const body: unknown = await response.json();
-      if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") message = body.detail;
+      message = getApiErrorMessage(body, message);
     } catch { /* Keep HTTP status message. */ }
     const apiError = new Error(message) as Error & { status?: number };
     apiError.status = response.status;
     throw apiError;
   }
   try { return await response.json() as T; }
-  catch { throw new Error("The moderation service returned invalid data."); }
+  catch { throw new Error("Сервис модерации вернул некорректные данные."); }
 }
 export async function fetchAdminAccess(accessToken: string, signal?: AbortSignal): Promise<boolean> {
   const result = await request<{ is_admin: boolean }>("/access", accessToken, { signal });

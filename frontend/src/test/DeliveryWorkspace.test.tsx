@@ -46,6 +46,6 @@ describe("getTransferPayload", () => {
 
   it("rejects a query_id outside the unsigned 64-bit range", async () => {
     await expect(getTransferPayload(preparedAttempt({ query_id: "18446744073709551616" })))
-      .rejects.toThrow("invalid query ID");
+      .rejects.toThrow("некорректный ID запроса");
   });
 });

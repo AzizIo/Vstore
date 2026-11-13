@@ -27,7 +27,7 @@ export class AuthApiError extends Error {
 }
 
 async function parseError(response: Response): Promise<AuthApiError> {
-  let message = `Authentication request failed (${response.status}).`;
+  let message = `Ошибка авторизации (${response.status}).`;
   try {
     const body: unknown = await response.json();
     if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
@@ -68,7 +68,7 @@ async function readJson(response: Response): Promise<unknown> {
   try {
     return await response.json();
   } catch {
-    throw new Error("The authentication service returned an invalid response.");
+    throw new Error("Сервис авторизации вернул некорректный ответ.");
   }
 }
 
@@ -83,12 +83,12 @@ export async function authenticateTelegram(initData: string, signal?: AbortSigna
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new Error("Could not connect to the authentication service.");
+    throw new Error("Не удалось связаться с сервисом авторизации.");
   }
 
   const body = await readJson(response);
   if (!isTelegramAuthResponse(body)) {
-    throw new Error("The authentication service returned an invalid session.");
+    throw new Error("Сервис авторизации вернул некорректную сессию.");
   }
   return body.access_token;
 }
@@ -102,12 +102,12 @@ export async function fetchCurrentUser(accessToken: string, signal?: AbortSignal
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new Error("Could not connect to the profile service.");
+    throw new Error("Не удалось связаться с сервисом профиля.");
   }
 
   const body = await readJson(response);
   if (!isUserProfile(body)) {
-    throw new Error("The profile service returned an invalid response.");
+    throw new Error("Сервис профиля вернул некорректный ответ.");
   }
   return body;
 }

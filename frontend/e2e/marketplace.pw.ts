@@ -12,43 +12,43 @@ test.describe("public catalog", () => {
     await mockMarketplaceApi(page);
     await page.goto("/");
 
-    await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Объявления" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Dragon Egg/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Rose Bouquet/ })).toBeVisible();
-    await expect(page.getByText("3 items")).toBeVisible();
+    await expect(page.getByText("3 предмета")).toBeVisible();
   });
 
   test("searches listings and shows only matching results", async ({ page }) => {
     await mockMarketplaceApi(page);
     await page.goto("/");
 
-    await page.getByRole("searchbox", { name: "Search listings" }).fill("dragon");
+    await page.getByRole("searchbox", { name: "Поиск объявлений" }).fill("dragon");
 
     await expect(page.getByRole("button", { name: /Dragon Egg/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toHaveCount(0);
-    await expect(page.getByText("1 item")).toBeVisible();
+    await expect(page.getByText("1 предмет")).toBeVisible();
   });
 
   test("filters listings by asset type", async ({ page }) => {
     await mockMarketplaceApi(page);
     await page.goto("/");
 
-    await page.getByRole("combobox", { name: "Asset type" }).selectOption("telegram_gift");
+    await page.getByRole("combobox", { name: "Тип актива" }).selectOption("telegram_gift");
 
     await expect(page.getByRole("button", { name: /Rose Bouquet/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toHaveCount(0);
-    await expect(page.getByText("1 item")).toBeVisible();
+    await expect(page.getByText("1 предмет")).toBeVisible();
   });
 
   test("sorts catalog results by price from high to low", async ({ page }) => {
     await mockMarketplaceApi(page);
     await page.goto("/");
 
-    await page.getByRole("combobox", { name: "Price currency" }).selectOption("TON");
-    await page.getByRole("combobox", { name: "Sort listings" }).selectOption("price_desc");
+    await page.getByRole("combobox", { name: "Валюта" }).selectOption("TON");
+    await page.getByRole("combobox", { name: "Сортировка объявлений" }).selectOption("price_desc");
 
-    const catalogCards = page.getByRole("region", { name: "Marketplace catalog" }).locator(".listing-card");
+    const catalogCards = page.getByRole("region", { name: "Каталог маркетплейса" }).locator(".listing-card");
     await expect(catalogCards).toHaveCount(2);
     await expect(catalogCards.first()).toContainText("Moon Lantern");
     await expect(catalogCards.nth(1)).toContainText("Dragon Egg");
@@ -58,16 +58,16 @@ test.describe("public catalog", () => {
     await mockMarketplaceApi(page);
     await page.goto("/");
 
-    await page.getByRole("combobox", { name: "Price currency" }).selectOption("XTR");
-    await page.getByRole("spinbutton", { name: "Minimum price" }).fill("15");
-    await page.getByRole("spinbutton", { name: "Maximum price" }).fill("25");
+    await page.getByRole("combobox", { name: "Валюта" }).selectOption("XTR");
+    await page.getByRole("spinbutton", { name: "Минимальная цена" }).fill("15");
+    await page.getByRole("spinbutton", { name: "Максимальная цена" }).fill("25");
 
     await expect(page.getByRole("button", { name: /Rose Bouquet/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Dragon Egg/ })).toHaveCount(0);
-    await expect(page.getByText("1 item")).toBeVisible();
+    await expect(page.getByText("1 предмет")).toBeVisible();
 
-    await page.getByRole("button", { name: "Clear filters" }).click();
+    await page.getByRole("button", { name: "Сбросить фильтры" }).click();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Dragon Egg/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Rose Bouquet/ })).toBeVisible();
@@ -77,9 +77,9 @@ test.describe("public catalog", () => {
     await mockMarketplaceApi(page);
     await page.goto("/");
 
-    await page.getByRole("searchbox", { name: "Search listings" }).fill("no-such-collectible");
+    await page.getByRole("searchbox", { name: "Поиск объявлений" }).fill("no-such-collectible");
 
-    await expect(page.getByRole("heading", { name: "No listings found" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Объявления не найдены" })).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toHaveCount(0);
   });
 
@@ -87,13 +87,13 @@ test.describe("public catalog", () => {
     await mockMarketplaceApi(page, { catalogFailures: 2 });
     await page.goto("/");
 
-    await expect(page.getByRole("heading", { name: "Catalog unavailable" })).toBeVisible();
-    await expect(page.getByRole("alert")).toContainText("Catalog temporarily unavailable.");
+    await expect(page.getByRole("heading", { name: "Каталог недоступен" })).toBeVisible();
+    await expect(page.getByRole("alert")).toContainText("Каталог временно недоступен.");
 
-    await page.getByRole("button", { name: "Try again" }).click();
+    await page.getByRole("button", { name: "Повторить" }).click();
 
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Catalog unavailable" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Каталог недоступен" })).toHaveCount(0);
   });
 });
 
@@ -105,13 +105,13 @@ test.describe("listing details", () => {
     await page.getByRole("button", { name: /Moon Lantern/ }).click();
 
     await expect(page.getByRole("heading", { name: "Moon Lantern" })).toBeVisible();
-    await expect(page.getByText("12.5 TON")).toBeVisible();
+    await expect(page.getByText("12,5 TON")).toBeVisible();
     await expect(page.getByText("Ari")).toBeVisible();
     await expect(page.getByText("@collector")).toBeVisible();
 
-    await page.getByRole("button", { name: /Back to catalog/ }).click();
+    await page.getByRole("button", { name: /Назад в каталог/ }).click();
 
-    await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Объявления" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
   });
 
@@ -121,8 +121,8 @@ test.describe("listing details", () => {
 
     await page.getByRole("button", { name: /Moon Lantern/ }).click();
 
-    await expect(page.getByRole("alert")).toContainText("Listing not found.");
-    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+    await expect(page.getByRole("alert")).toContainText("Объявление не найдено.");
+    await expect(page.getByRole("button", { name: "Повторить" })).toBeVisible();
   });
 });
 
@@ -140,50 +140,50 @@ test.describe("listing details", () => {
     }));
     expect(detailLayout.scrollWidth).toBeLessThanOrEqual(detailLayout.clientWidth);
 
-    await page.getByRole("button", { name: "Place order" }).click();
-    const dialog = page.getByRole("dialog", { name: "Reserve this listing?" });
+    await page.getByRole("button", { name: "Зарезервировать" }).click();
+    const dialog = page.getByRole("dialog", { name: "Зарезервировать это объявление?" });
     await expect(dialog).toContainText("Moon Lantern");
-    await expect(dialog).toContainText("12.5 TON");
+    await expect(dialog).toContainText("12,5 TON");
     await expect(dialog).toContainText("Ari (@collector)");
-    await expect(dialog).toContainText("Payment is not enabled and no funds will be collected");
+    await expect(dialog).toContainText("Это только резерв объявления. Оплата не проводится, средства не списываются, NFT остаётся у продавца.");
     expect(requests.some((request) => request === "POST /api/orders")).toBe(false);
 
-    await dialog.getByRole("button", { name: "Confirm reservation" }).click();
-    await expect(page.getByRole("dialog", { name: "Reservation confirmed" })).toBeVisible();
+    await dialog.getByRole("button", { name: "Подтвердить резерв" }).click();
+    await expect(page.getByRole("dialog", { name: "Резерв подтверждён" })).toBeVisible();
     expect(requests.filter((request) => request === "POST /api/orders")).toHaveLength(1);
 
-    await page.getByRole("dialog").getByRole("button", { name: "View Orders" }).click();
-    await expect(page.getByRole("heading", { name: "Order workspace" })).toBeVisible();
+    await page.getByRole("dialog").getByRole("button", { name: "Мои заказы" }).click();
+    await expect(page.getByRole("heading", { name: "Заказы" })).toBeVisible();
   });
 
 test.describe("order workspace", () => {
   test("filters, opens details, confirms cancellation, and captures desktop/mobile views", async ({ page }) => {
     const requests = await mockMarketplaceApi(page, { authenticated: true });
     await page.goto("/");
-    await page.getByRole("button", { name: "Orders" }).click();
+    await page.getByRole("button", { name: "Заказы" }).click();
 
-    await expect(page.getByRole("heading", { name: "Order workspace" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: /Purchases/ })).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByRole("button", { name: /Open order Moon Lantern/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Заказы" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /Покупки/ })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("button", { name: /Открыть заказ Moon Lantern/ })).toBeVisible();
 
     await page.screenshot({ path: "test-results/order-workspace-desktop.png", fullPage: true });
-    await page.getByRole("button", { name: /Active/ }).click();
-    await expect(page.getByRole("button", { name: /Open order Moon Lantern/ })).toBeVisible();
-    await page.getByRole("searchbox", { name: "Search orders by asset title or order ID" }).fill(orderId);
-    await expect(page.getByRole("button", { name: /Open order Moon Lantern/ })).toBeVisible();
+    await page.getByRole("button", { name: /Активные/ }).click();
+    await expect(page.getByRole("button", { name: /Открыть заказ Moon Lantern/ })).toBeVisible();
+    await page.getByRole("searchbox", { name: "Поиск по названию актива или ID заказа" }).fill(orderId);
+    await expect(page.getByRole("button", { name: /Открыть заказ Moon Lantern/ })).toBeVisible();
 
-    await page.getByRole("button", { name: /Open order Moon Lantern/ }).click();
-    await expect(page.getByRole("heading", { name: "Lifecycle" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Event timeline" })).toBeVisible();
-    await expect(page.getByText(/Payments are not enabled/)).toBeVisible();
+    await page.getByRole("button", { name: /Открыть заказ Moon Lantern/ }).click();
+    await expect(page.getByRole("heading", { name: "Статус заказа" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "История событий" })).toBeVisible();
+    await expect(page.getByText(/Оплата в VILTARA SHOP пока не подключена/)).toBeVisible();
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: "test-results/order-details-mobile.png", fullPage: true });
 
-    await page.getByRole("button", { name: "Cancel order" }).click();
-    await expect(page.getByText("Cancel this reservation?")).toBeVisible();
-    await page.getByRole("button", { name: "Confirm cancellation" }).click();
-    await expect(page.getByText("Cancelled").first()).toBeVisible();
+    await page.getByRole("button", { name: "Отменить заказ" }).click();
+    await expect(page.getByText("Отменить этот резерв?")).toBeVisible();
+    await page.getByRole("button", { name: "Подтвердить отмену" }).click();
+    await expect(page.getByText("Отменено").first()).toBeVisible();
     expect(requests).toContain(`POST /api/orders/${orderId}/cancel`);
   });
 });
@@ -195,9 +195,9 @@ test.describe("Telegram deep links", () => {
     await page.goto(`/?startapp=${startParam}`);
 
     await expect(page.getByRole("heading", { name: moonLantern.title })).toBeVisible();
-    await expect(page.getByText("Open this Mini App in Telegram to sign in and place an order.")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Place order" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Catalog", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText("Откройте VILTARA в Telegram, чтобы оформить резерв.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Зарезервировать" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Каталог", exact: true })).toHaveAttribute("aria-pressed", "true");
     expect(requests).toContain(`GET /api/listings/${listingIds.moon}`);
     expect(requests.some((request) => request === "POST /api/auth/telegram")).toBe(false);
     expect(requests.some((request) => request.startsWith("POST /api/orders"))).toBe(false);
@@ -211,9 +211,9 @@ test.describe("Telegram deep links", () => {
     });
     await page.goto(`/?startapp=${startParam}`);
 
-    await expect(page.getByRole("heading", { name: "Lifecycle" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Статус заказа" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Moon Lantern" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Orders", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Заказы", exact: true })).toHaveAttribute("aria-pressed", "true");
     expect(requests).toContain(`GET /api/orders/${orderId}`);
   });
 
@@ -223,9 +223,9 @@ test.describe("Telegram deep links", () => {
     });
     await page.goto("/?startapp=listing_not-a-32-character-hex-id");
 
-    await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Объявления" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Catalog" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Каталог" })).toHaveAttribute("aria-pressed", "true");
     expect(requests.some((request) => request.startsWith("GET /api/listings/"))).toBe(false);
   });
 });
@@ -237,17 +237,17 @@ test.describe("navigation and unauthenticated access", () => {
 
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
 
-    await page.getByRole("button", { name: "My NFT" }).click();
-    await expect(page.getByRole("heading", { name: "Sign in to view your inventory" })).toBeVisible();
+    await page.getByRole("button", { name: "Мои NFT" }).click();
+    await expect(page.getByRole("heading", { name: "Мои NFT" })).toBeVisible();
 
-    await page.getByRole("button", { name: "My Listings" }).click();
-    await expect(page.getByRole("heading", { name: "My Listings" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Open VILTARA in Telegram" })).toBeVisible();
+    await page.getByRole("button", { name: "Мои объявления" }).click();
+    await expect(page.getByRole("heading", { name: "Мои объявления" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Откройте VILTARA в Telegram" })).toBeVisible();
 
-    await page.getByRole("button", { name: "Orders" }).click();
-    await expect(page.getByRole("heading", { name: "Sign in to view orders" })).toBeVisible();
+    await page.getByRole("button", { name: "Заказы" }).click();
+    await expect(page.getByRole("heading", { name: "Мои заказы" })).toBeVisible();
 
-    await page.getByRole("button", { name: "Catalog" }).click();
+    await page.getByRole("button", { name: "Каталог" }).click();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
 
     expect(requests.some((request) => request.startsWith("GET /api/assets/me"))).toBe(false);
@@ -259,13 +259,13 @@ test.describe("navigation and unauthenticated access", () => {
     await mockMarketplaceApi(page);
     await page.goto("/");
 
-    await page.getByRole("button", { name: "My Listings" }).click();
-    await expect(page.getByRole("heading", { name: "Open VILTARA in Telegram" })).toBeVisible();
+    await page.getByRole("button", { name: "Мои объявления" }).click();
+    await expect(page.getByRole("heading", { name: "Откройте VILTARA в Telegram" })).toBeVisible();
 
     await page.getByRole("link", { name: "VILTARA" }).click();
 
-    await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Catalog", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("heading", { name: "Объявления" }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Каталог", exact: true })).toHaveAttribute("aria-pressed", "true");
   });
 
   test("applies Telegram safe-area insets without introducing horizontal overflow on a phone viewport", async ({ page }) => {
@@ -281,23 +281,26 @@ test.describe("navigation and unauthenticated access", () => {
       }`,
     });
 
-    const layout = await page.evaluate(() => ({
-      paddingTop: getComputedStyle(document.body).paddingTop,
-      paddingRight: getComputedStyle(document.body).paddingRight,
-      paddingBottom: getComputedStyle(document.body).paddingBottom,
-      paddingLeft: getComputedStyle(document.body).paddingLeft,
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    }));
+    for (const width of [320, 360, 390, 430, 768, 1024]) {
+      await page.setViewportSize({ width, height: 844 });
+      const layout = await page.evaluate(() => ({
+        paddingTop: getComputedStyle(document.body).paddingTop,
+        paddingRight: getComputedStyle(document.body).paddingRight,
+        paddingBottom: getComputedStyle(document.body).paddingBottom,
+        paddingLeft: getComputedStyle(document.body).paddingLeft,
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      }));
 
-    expect(layout).toMatchObject({
-      paddingTop: "20px",
-      paddingRight: "12px",
-      paddingBottom: "28px",
-      paddingLeft: "14px",
-    });
-    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
-    await expect(page.getByRole("heading", { name: "Explore listings" })).toBeVisible();
+      expect(layout).toMatchObject({
+        paddingTop: "20px",
+        paddingRight: "12px",
+        paddingBottom: "28px",
+        paddingLeft: "14px",
+      });
+      expect(layout.scrollWidth, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(layout.clientWidth);
+    }
+    await expect(page.getByRole("heading", { name: "Объявления" }).first()).toBeVisible();
   });
 
 });

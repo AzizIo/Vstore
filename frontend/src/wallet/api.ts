@@ -1,3 +1,4 @@
+import { getApiErrorMessage } from "../api/errors";
 import { API_BASE_URL } from "../api/config";
 
 export interface WalletRecord {
@@ -32,16 +33,14 @@ async function readResponse(response: Response): Promise<unknown> {
     try {
       return await response.json();
     } catch {
-      throw new Error("Wallet service returned an invalid response.");
+      throw new Error("Сервис кошельков вернул некорректный ответ.");
     }
   }
 
-  let message = `Wallet request failed (${response.status}).`;
+  let message = `Ошибка запроса кошелька (${response.status}).`;
   try {
     const body: unknown = await response.json();
-    if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
-      message = body.detail;
-    }
+    message = getApiErrorMessage(body, message);
   } catch {
     // Keep the HTTP status message when the server does not return JSON.
   }
@@ -75,7 +74,7 @@ export async function fetchMyWallets(
   });
   const body = await readResponse(response);
   if (!Array.isArray(body) || !body.every(isWalletRecord)) {
-    throw new Error("Wallet service returned an invalid wallet list.");
+    throw new Error("Сервис кошельков вернул некорректный список.");
   }
   return body;
 }
@@ -96,7 +95,7 @@ export async function createWalletProofChallenge(
     !("expires_at" in body) ||
     typeof body.expires_at !== "string"
   ) {
-    throw new Error("Wallet service returned an invalid proof challenge.");
+    throw new Error("Сервис кошельков вернул некорректный запрос подтверждения.");
   }
   return { payload: body.payload, expires_at: body.expires_at };
 }
@@ -124,7 +123,7 @@ export async function verifyConnectedWallet(
   });
   const body = await readResponse(response);
   if (!isWalletRecord(body)) {
-    throw new Error("Wallet service returned an invalid verification result.");
+    throw new Error("Сервис кошельков вернул некорректный результат проверки.");
   }
   return body;
 }
@@ -139,7 +138,7 @@ export async function setPrimaryWallet(
   });
   const body = await readResponse(response);
   if (!isWalletRecord(body)) {
-    throw new Error("Wallet service returned an invalid primary-wallet result.");
+    throw new Error("Сервис кошельков вернул некорректный результат смены основного кошелька.");
   }
   return body;
 }
@@ -154,12 +153,10 @@ export async function unlinkWallet(accessToken: string, walletId: string): Promi
   );
   if (response.ok) return;
 
-  let message = `Wallet request failed (${response.status}).`;
+  let message = `Ошибка запроса кошелька (${response.status}).`;
   try {
     const body: unknown = await response.json();
-    if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
-      message = body.detail;
-    }
+    message = getApiErrorMessage(body, message);
   } catch {
     // Keep the HTTP status message when the server does not return JSON.
   }

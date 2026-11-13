@@ -13,15 +13,15 @@ export function createTonConnectManifest(appUrl: string): TonConnectManifest {
   try {
     parsed = new URL(appUrl);
   } catch {
-    throw new Error("VITE_TONCONNECT_APP_URL must be an absolute URL.");
+    throw new Error("Укажите корректный абсолютный адрес VITE_TONCONNECT_APP_URL.");
   }
 
   const isLocalhost = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
   if (parsed.protocol !== "https:" && !(isLocalhost && parsed.protocol === "http:")) {
-    throw new Error("TON Connect requires HTTPS outside localhost development.");
+    throw new Error("Для подключения TON Connect требуется HTTPS. Исключение — локальная разработка.");
   }
   if (parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
-    throw new Error("VITE_TONCONNECT_APP_URL must contain only the app origin.");
+    throw new Error("VITE_TONCONNECT_APP_URL должен содержать только адрес сайта без пути и параметров.");
   }
 
   const origin = parsed.origin;

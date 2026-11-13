@@ -41,10 +41,10 @@ async function requestJson<T>(url: string, token?: string, init?: RequestInit): 
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new Error("Could not connect to reviews. Please try again.");
+    throw new Error("Не удалось связаться с сервисом отзывов. Попробуйте ещё раз.");
   }
   if (!response.ok) {
-    let message = `Request failed (${response.status}).`;
+    let message = `Запрос завершился ошибкой (${response.status}).`;
     try {
       const body: unknown = await response.json();
       if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") message = body.detail;
@@ -81,13 +81,13 @@ function isCreatedReview(value: unknown): value is CreatedReview {
 
 export async function fetchSellerReviews(sellerId: string, limit = 10, offset = 0, signal?: AbortSignal): Promise<SellerReviewPage> {
   const value = await requestJson<unknown>(`${API_BASE_URL}/api/reviews/sellers/${encodeURIComponent(sellerId)}?limit=${limit}&offset=${offset}`, undefined, { signal });
-  if (!isReviewPage(value)) throw new Error("Reviews returned an invalid response.");
+  if (!isReviewPage(value)) throw new Error("Сервис отзывов вернул некорректный ответ.");
   return value;
 }
 
 export async function fetchReviewEligibility(orderId: string, token: string, signal?: AbortSignal): Promise<ReviewEligibility> {
   const value = await requestJson<unknown>(`${API_BASE_URL}/api/reviews/eligibility?order_id=${encodeURIComponent(orderId)}`, token, { signal });
-  if (!isEligibility(value)) throw new Error("Reviews returned an invalid eligibility response.");
+  if (!isEligibility(value)) throw new Error("Сервис отзывов вернул некорректный ответ о возможности публикации.");
   return value;
 }
 
@@ -97,6 +97,6 @@ export async function createReview(orderId: string, rating: number, comment: str
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ order_id: orderId, rating, comment }),
   });
-  if (!isCreatedReview(value)) throw new Error("Reviews returned an invalid review response.");
+  if (!isCreatedReview(value)) throw new Error("Сервис отзывов вернул некорректные данные отзыва.");
   return value;
 }

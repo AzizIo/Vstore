@@ -116,7 +116,7 @@ export function MyInventory({
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted && version === requestVersion.current) {
-          setError(reason instanceof Error ? reason.message : "Unable to load your NFT inventory.");
+          setError(reason instanceof Error ? reason.message : "Не удалось загрузить инвентарь NFT.");
         }
       })
       .finally(() => {
@@ -163,7 +163,7 @@ export function MyInventory({
       const sync = await syncMyInventory(accessToken, selectedWalletId, controller.signal);
       if (controller.signal.aborted || version !== requestVersion.current) return;
       if (sync.wallet_id !== selectedWalletId) {
-        throw new Error("The inventory sync returned a different wallet.");
+        throw new Error("Синхронизация вернула данные другого кошелька.");
       }
       setSyncResult(sync);
       const page = await fetchMyInventory(
@@ -177,7 +177,7 @@ export function MyInventory({
       setHasMore(page.has_more);
     } catch (reason) {
       if (!controller.signal.aborted && version === requestVersion.current) {
-        setError(reason instanceof Error ? reason.message : "Unable to sync your NFT inventory.");
+        setError(reason instanceof Error ? reason.message : "Не удалось синхронизировать инвентарь NFT.");
       }
     } finally {
       if (!controller.signal.aborted && version === requestVersion.current) {
@@ -204,14 +204,14 @@ export function MyInventory({
       if (controller.signal.aborted || version !== requestVersion.current) return;
       const merged = mergeUniqueAssets(assets, page.items);
       if (merged.length === assets.length && page.has_more && page.next_offset <= nextOffset) {
-        throw new Error("The inventory page did not advance. Please refresh and try again.");
+        throw new Error("Не удалось перейти к следующей странице. Обновите страницу и попробуйте снова.");
       }
       setAssets(merged);
       setNextOffset(page.next_offset);
       setHasMore(page.has_more);
     } catch (reason) {
       if (!controller.signal.aborted && version === requestVersion.current) {
-        setLoadMoreError(reason instanceof Error ? reason.message : "Unable to load more NFTs.");
+        setLoadMoreError(reason instanceof Error ? reason.message : "Не удалось загрузить остальные NFT.");
       }
     } finally {
       if (!controller.signal.aborted && version === requestVersion.current) {
@@ -226,16 +226,16 @@ export function MyInventory({
     <section className="inventory-view" aria-labelledby="inventory-title">
       <div className="inventory-heading">
         <div>
-          <p className="eyebrow">COLLECTOR SPACE</p>
-          <h1 id="inventory-title">My NFT inventory</h1>
+          <p className="eyebrow">КОЛЛЕКЦИОНЕР</p>
+          <h1 id="inventory-title">Мои NFT</h1>
           <p className="inventory-intro">
             {selectedWallet ? (
               <>
-                Showing verified NFTs for {selectedWallet.address.slice(0, 8)}…
-                {selectedWallet.address.slice(-5)} · {selectedWallet.network}
+                Показываем NFT кошелька {selectedWallet.address.slice(0, 8)}…
+                {selectedWallet.address.slice(-5)} · {selectedWallet.network === "mainnet" ? "основная сеть" : "тестовая сеть"}
               </>
             ) : (
-              "Connect and verify a TON wallet to view its NFT inventory. A different primary wallet is never selected automatically."
+              "Подключите и подтвердите TON-кошелёк, чтобы посмотреть его NFT. Другой основной кошелёк автоматически выбран не будет."
             )}
           </p>
         </div>
@@ -245,47 +245,47 @@ export function MyInventory({
           onClick={() => void runSync()}
           disabled={loading || loadingMore || !selectedWalletId}
         >
-          {loading ? "Loading..." : "Sync inventory"}
+          {loading ? "Загрузка…" : "Синхронизировать инвентарь"}
         </button>
       </div>
 
       {syncResult && !loading && !error && (
         <p className="inventory-sync-summary" role="status">
-          Last synced {new Date(syncResult.synced_at).toLocaleString()} · {syncResult.verified_count} verified
-          {syncResult.stale_count > 0 ? ` · ${syncResult.stale_count} marked stale` : ""}
-          {syncResult.invalid_count > 0 ? ` · ${syncResult.invalid_count} could not be verified` : ""}
-          {syncResult.unsupported_count > 0 ? ` · ${syncResult.unsupported_count} unsupported` : ""}
+          Последняя синхронизация: {new Date(syncResult.synced_at).toLocaleString("ru-RU")} · Подтверждено NFT: {syncResult.verified_count}
+          {syncResult.stale_count > 0 ? ` · ${syncResult.stale_count} помечено как устаревшие` : ""}
+          {syncResult.invalid_count > 0 ? ` · ${syncResult.invalid_count} не удалось подтвердить` : ""}
+          {syncResult.unsupported_count > 0 ? ` · ${syncResult.unsupported_count} не поддерживается` : ""}
         </p>
       )}
 
       {loading ? (
         <div className="inventory-message" role="status" aria-busy="true">
-          Checking the selected verified wallet and its NFT ownership...
+          Проверяем выбранный подтверждённый кошелёк и владение его NFT…
         </div>
       ) : !selectedWallet ? (
         <div className="inventory-message" role="status">
-          <h2>Connect and verify a wallet</h2>
-          <p>Connect the wallet you want to inspect and complete TON Proof verification. No primary-wallet fallback is used.</p>
+          <h2>Подключить и подтвердить кошелёк</h2>
+          <p>Подключите нужный кошелёк и подтвердите владение через TON Proof. Другой основной кошелёк автоматически выбран не будет.</p>
         </div>
       ) : error ? (
         <div className="inventory-message" role="alert">
-          <h2>Inventory unavailable</h2>
+          <h2>Инвентарь недоступен</h2>
           <p>{error}</p>
-          {/verified TON wallet/i.test(error) ? (
-            <p>Connect and verify a TON wallet first. Connecting a wallet alone does not verify ownership.</p>
+          {/verified TON wallet|необходимо подтвердить TON-кошелёк/i.test(error) ? (
+            <p>Сначала подключите и подтвердите TON-кошелёк. Одного подключения недостаточно для подтверждения владения.</p>
           ) : null}
           <button className="text-button" type="button" onClick={() => setInitialLoadRetry((value) => value + 1)}>
-            Try again
+            Повторить
           </button>
         </div>
       ) : assets.length === 0 ? (
         <div className="inventory-message" role="status">
           {hasMore ? (
             <>
-              <h2>No verified NFTs on this page</h2>
+              <h2>На этой странице нет подтверждённых NFT</h2>
               <p>
-                None of the items on this page could be confirmed as currently owned by you.
-                More inventory pages are available and may contain verified NFTs.
+                Не удалось подтвердить, что вы владеете NFT на этой странице.
+                В следующих страницах инвентаря могут быть другие подтверждённые NFT.
               </p>
               {loadMoreError && <p role="alert">{loadMoreError}</p>}
               <button
@@ -294,39 +294,39 @@ export function MyInventory({
                 onClick={() => void loadMore()}
                 disabled={loading || loadingMore || !hasMore}
               >
-                {loadingMore ? "Loading more..." : loadMoreError ? "Retry loading more" : "Load more NFTs"}
+                {loadingMore ? "Загружаем ещё…" : loadMoreError ? "Повторить загрузку" : "Загрузить ещё NFT"}
               </button>
             </>
           ) : (
             <>
-              <h2>No verified NFTs found</h2>
-              <p>This wallet returned no assets that could be confirmed as currently owned by you.</p>
+              <h2>Подтверждённые NFT не найдены</h2>
+              <p>В этом кошельке не найдено активов, владение которыми удалось подтвердить.</p>
             </>
           )}
         </div>
       ) : (
         <>
-          <div className="inventory-grid" aria-label="My verified NFTs">
+          <div className="inventory-grid" aria-label="Мои подтверждённые NFT">
             {assets.map((asset) => (
               <article className="inventory-card" key={asset.id}>
                 <InventoryArtwork asset={asset} />
                 <div className="inventory-card-copy">
                   <div className="inventory-card-heading">
-                    <p className="inventory-card-type">TON NFT · verified</p>
-                    <span className="inventory-verified">Verified</span>
+                    <p className="inventory-card-type">TON NFT · подтверждён</p>
+                    <span className="inventory-verified">Подтверждён</span>
                   </div>
-                  <h2>{asset.name || "Untitled TON NFT"}</h2>
+                  <h2>{asset.name || "TON NFT без названия"}</h2>
                   {asset.collection_address && (
                     <p className="inventory-collection">
-                      <span>Collection</span>
+                      <span>Коллекция</span>
                       <code>{asset.collection_address}</code>
                     </p>
                   )}
                   <p className="inventory-address">
-                    <span>Item address</span>
+                    <span>Адрес NFT</span>
                     <code>{asset.item_address}</code>
                   </p>
-                  <p className="inventory-card-note">Current owner checked on-chain. Eligible for draft listing.</p>
+                  <p className="inventory-card-note">Владелец проверен в блокчейне. NFT можно добавить в черновик объявления.</p>
                 </div>
               </article>
             ))}
@@ -341,7 +341,7 @@ export function MyInventory({
                 onClick={() => void loadMore()}
                 disabled={loading || loadingMore || !hasMore}
               >
-                {loadingMore ? "Loading more..." : loadMoreError ? "Retry loading more" : "Load more NFTs"}
+                {loadingMore ? "Загружаем ещё…" : loadMoreError ? "Повторить загрузку" : "Загрузить ещё NFT"}
               </button>
             </div>
           )}

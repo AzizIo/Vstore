@@ -82,7 +82,7 @@ function WalletControls({
       ]))
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : "Could not load linked wallets.");
+          setError(reason instanceof Error ? reason.message : "Не удалось загрузить подключённые кошельки.");
         }
       });
     return () => controller.abort();
@@ -97,11 +97,11 @@ function WalletControls({
     tonConnectUI.setConnectRequestParameters({ state: "loading" });
 
     if (!proofReply || !("proof" in proofReply)) {
-      setError("This wallet did not return TON Proof. Reconnect with a wallet that supports proof authentication.");
+      setError("Кошелёк не вернул TON Proof. Подключите кошелёк с поддержкой подтверждения владения.");
       return;
     }
     if (proofReply.proof.payload !== expectedPayload) {
-      setError("The wallet returned a proof for a different login challenge. Reconnect and try again.");
+      setError("Кошелёк вернул подтверждение для другого запроса. Подключитесь повторно и попробуйте ещё раз.");
       return;
     }
 
@@ -124,7 +124,7 @@ function WalletControls({
           record.address !== expectedAccount.address ||
           record.network !== expectedNetwork
         ) {
-          throw new Error("The backend did not confirm this wallet.");
+          throw new Error("Сервер не подтвердил этот кошелёк.");
         }
 
         // Re-fetch the persisted record after proof verification. The POST response
@@ -146,7 +146,7 @@ function WalletControls({
             item.network === expectedNetwork,
         );
         if (!confirmed) {
-          throw new Error("The backend did not confirm this wallet in the linked-wallet list.");
+          throw new Error("Сервер не нашёл подтверждённый кошелёк в списке подключённых.");
         }
         setWallets((current) => [
           ...current.filter((item) => item.id !== confirmed.id),
@@ -154,7 +154,7 @@ function WalletControls({
         ]);
       })
       .catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : "Wallet proof verification failed.");
+        setError(reason instanceof Error ? reason.message : "Не удалось подтвердить владение кошельком.");
       })
       .finally(() => setIsVerifying(false));
   }, [wallet, accessToken]);
@@ -168,7 +168,7 @@ function WalletControls({
       const challenge = await createWalletProofChallenge(accessToken);
       const challengeExpiresAt = Date.parse(challenge.expires_at);
       if (!Number.isFinite(challengeExpiresAt) || challengeExpiresAt <= Date.now()) {
-        throw new Error("Wallet proof challenge expired. Please try again.");
+        throw new Error("Срок действия запроса TON Proof истёк. Попробуйте ещё раз.");
       }
 
       // Restored sessions do not contain a fresh proof. Disconnect first so the
@@ -184,7 +184,7 @@ function WalletControls({
     } catch (reason) {
       challengeRef.current = null;
       tonConnectUI.setConnectRequestParameters({ state: "loading" });
-      setError(reason instanceof Error ? reason.message : "Could not start wallet verification.");
+      setError(reason instanceof Error ? reason.message : "Не удалось начать проверку кошелька.");
     } finally {
       setIsPreparing(false);
     }
@@ -201,7 +201,7 @@ function WalletControls({
       const updated = await setPrimaryWallet(accessToken, current.id);
       setWallets((items) => items.map((item) => ({ ...item, is_primary: item.id === updated.id })));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not update the primary wallet.");
+      setError(reason instanceof Error ? reason.message : "Не удалось изменить основной кошелёк.");
     } finally {
       setIsSettingPrimary(false);
     }
@@ -222,7 +222,7 @@ function WalletControls({
       await unlinkWallet(accessToken, current.id);
       setWallets((items) => items.filter((item) => item.id !== current.id));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not unlink this wallet.");
+      setError(reason instanceof Error ? reason.message : "Не удалось отвязать этот кошелёк.");
       setIsUnlinking(false);
       return;
     }
@@ -230,7 +230,7 @@ function WalletControls({
     try {
       await tonConnectUI.disconnect();
     } catch {
-      setError("The wallet was unlinked, but the TonConnect session could not be disconnected.");
+      setError("Кошелёк отвязан, но завершить сессию TonConnect не удалось.");
     } finally {
       setIsUnlinking(false);
     }
@@ -243,7 +243,7 @@ function WalletControls({
     try {
       await tonConnectUI.disconnect();
     } catch {
-      setError("Could not disconnect the wallet. Please try again.");
+      setError("Не удалось отключить кошелёк. Попробуйте ещё раз.");
     }
   }
 
@@ -267,7 +267,7 @@ function WalletControls({
           onClick={() => void connectAndVerify()}
           disabled={isPreparing || isVerifying}
         >
-          {isPreparing ? "Preparing..." : "Connect & verify"}
+          {isPreparing ? "Подготавливаем…" : "Подключить и подтвердить"}
         </button>
         {error && <span className="wallet-error" role="alert">{error}</span>}
       </div>
@@ -277,10 +277,10 @@ function WalletControls({
   const address = wallet.account.address;
   const shortAddress = `${address.slice(0, 6)}…${address.slice(-4)}`;
   const networkLabel = network === "mainnet"
-    ? "Mainnet"
+    ? "Основная сеть"
     : network === "testnet"
-      ? "Testnet"
-      : "Unsupported network";
+      ? "Тестовая сеть"
+      : "Неподдерживаемая сеть";
 
   return (
     <div id="wallet-connect" className="wallet-control">
@@ -288,7 +288,7 @@ function WalletControls({
         <span className="wallet-address">{shortAddress}</span>
         <span className="wallet-network">{networkLabel}</span>
         <span className="wallet-disclaimer">
-          {verified ? "Wallet verified by VILTARA" : "Connected only · proof verification required"}
+          {verified ? "Кошелёк подтверждён VILTARA" : "Подключён · требуется подтверждение владения"}
         </span>
       </span>
       <button
@@ -297,7 +297,7 @@ function WalletControls({
         onClick={() => void connectAndVerify()}
         disabled={isPreparing || isVerifying}
       >
-        {isPreparing ? "Preparing..." : isVerifying ? "Verifying..." : verified ? "Reconnect" : "Reconnect & verify"}
+        {isPreparing ? "Подготавливаем…" : isVerifying ? "Проверяем…" : verified ? "Подключить повторно" : "Подключить и подтвердить"}
       </button>
       {verified && !wallets.some(
         (item) => item.address === wallet.account.address && item.network === network && item.is_primary,
@@ -308,7 +308,7 @@ function WalletControls({
           onClick={() => void makePrimary()}
           disabled={isSettingPrimary}
         >
-          {isSettingPrimary ? "Updating..." : "Make primary"}
+          {isSettingPrimary ? "Обновляем…" : "Сделать основным"}
         </button>
       )}
       {verified && (
@@ -318,7 +318,7 @@ function WalletControls({
           onClick={() => void unlinkCurrentWallet()}
           disabled={isUnlinking}
         >
-          {isUnlinking ? "Unlinking..." : "Unlink wallet"}
+          {isUnlinking ? "Отвязываем…" : "Отвязать кошелёк"}
         </button>
       )}
       <button
@@ -326,7 +326,7 @@ function WalletControls({
         type="button"
         onClick={() => void disconnectWallet()}
       >
-        Disconnect
+        Отключить
       </button>
       {error && <span className="wallet-error" role="alert">{error}</span>}
     </div>
