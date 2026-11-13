@@ -68,6 +68,12 @@ _ERROR_MESSAGES: dict[str, str] = {
         "Этот TON-кошелёк уже привязан к другому "
         "аккаунту."
     ),
+    "Close active listings and pending orders before unlinking a wallet.": (
+        "Перед отвязкой кошелька завершите активные объявления и ожидающие заказы."
+    ),
+    "The verified wallet address is not supported for TON NFT inventory": (
+        "Этот адрес подтверждённого TON-кошелька не поддерживается для инвентаря NFT."
+    ),
     "Wallet not found": "Кошелёк не найден.",
     "Only a verified wallet can be primary": (
         "Основным можно сделать только подтверждённый "
