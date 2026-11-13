@@ -151,6 +151,23 @@ def upgrade() -> None:
     op.create_index(
         "ix_payment_events_intent_created", "payment_events", ["payment_intent_id", "created_at"]
     )
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION prevent_payment_event_mutation()
+        RETURNS trigger AS $
+        BEGIN
+            RAISE EXCEPTION 'payment_events is append-only';
+        END;
+        $ LANGUAGE plpgsql;
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER trg_payment_events_append_only
+        BEFORE UPDATE OR DELETE ON payment_events
+        FOR EACH ROW EXECUTE FUNCTION prevent_payment_event_mutation();
+        """
+    )
 
 
 def downgrade() -> None:
@@ -170,6 +187,10 @@ def downgrade() -> None:
             "preserve the financial history."
         )
 
+    op.execute(
+        "DROP TRIGGER IF EXISTS trg_payment_events_append_only ON payment_events"
+    )
+    op.execute("DROP FUNCTION IF EXISTS prevent_payment_event_mutation()")
     op.drop_index("ix_payment_events_intent_created", table_name="payment_events")
     op.drop_table("payment_events")
     op.drop_index("ix_payment_transactions_intent_status", table_name="payment_transactions")
