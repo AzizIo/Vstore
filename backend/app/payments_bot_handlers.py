@@ -9,7 +9,6 @@ from aiogram.filters import Command
 from aiogram.types import Message, PreCheckoutQuery
 from sqlalchemy import select
 
-from app.core.config import get_settings
 from app.db.models import User
 from app.db.session import async_session_factory
 from app.orders.payment_service import (
