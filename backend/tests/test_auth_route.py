@@ -52,7 +52,9 @@ def test_telegram_auth_rejects_invalid_init_data_without_database_access() -> No
             response = client.post("/api/auth/telegram", json={"init_data": "tampered"})
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Сеанс Telegram недействителен или истёк. Откройте Mini App заново."
+    assert response.json()["detail"] == (
+        "Сеанс Telegram недействителен или истёк. Откройте Mini App заново."
+    )
     session_factory.assert_not_called()
 
 
