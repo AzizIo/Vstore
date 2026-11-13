@@ -288,9 +288,15 @@ _ERROR_MESSAGES: dict[str, str] = {
     "Price must be greater than zero": "Цена должна быть больше нуля.",
     "Expiration must include a timezone": "Укажите часовой пояс в дате окончания объявления.",
     "Expiration must be in the future": "Дата окончания объявления должна быть в будущем.",
+    "Only draft, pending-review or active listings can be edited": (
+        "Изменять можно только черновики, объявления на модерации и активные объявления."
+    ),
     "Only draft or active listings can be edited": (
         "Изменять можно только черновики и активные "
         "объявления."
+    ),
+    "Only draft, pending-review or active listings can be cancelled": (
+        "Отменить можно только черновик, заявку на модерацию или активное объявление."
     ),
     "Only draft or active listings can be cancelled": (
         "Отменить можно только черновик или активное "
