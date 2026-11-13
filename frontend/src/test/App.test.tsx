@@ -354,7 +354,7 @@ describe("marketplace catalog", () => {
     expect(await screen.findByRole("heading", { name: "Moon Lantern" })).toBeInTheDocument();
     expect(screen.getByText("A collectible lantern.")).toBeInTheDocument();
     expect(screen.getByText("nft-001")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Back to catalog/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Назад в каталог/ }));
     await waitFor(() => expect(screen.getByText("Объявления")).toBeInTheDocument());
   });
 
@@ -1087,7 +1087,7 @@ describe("My Listings dashboard", () => {
     renderMarketplace();
     await openMyListings();
 
-    for (const label of ["Черновик", "Активно", "Зарезервировано", "Sold", "Отменено", "Срок резерва истёк", "Unknown status"]) {
+    for (const label of ["Черновик", "Активно", "Зарезервировано", "Продано", "Отменено", "Срок резерва истёк", "Unknown status"]) {
       expect(await screen.findByText(label)).toBeInTheDocument();
     }
   });
@@ -1105,7 +1105,7 @@ describe("My Listings dashboard", () => {
 
     expect(screen.getByText("My draft lantern")).toBeInTheDocument();
     expect(screen.queryByText("My active lantern")).not.toBeInTheDocument();
-    expect(screen.getByText("Showing 1")).toBeInTheDocument();
+    expect(screen.getByText("Показано: 1")).toBeInTheDocument();
   });
 
   it.each([
@@ -1151,7 +1151,7 @@ describe("My Listings dashboard", () => {
     renderMarketplace();
     await openMyListings();
 
-    expect(await screen.findByText(/Could not connect to the marketplace/)).toBeInTheDocument();
+    expect(await screen.findByText(/Не удалось связаться с маркетплейсом/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
     expect(await screen.findByText("My draft lantern")).toBeInTheDocument();
   });

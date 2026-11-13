@@ -106,7 +106,7 @@ const lifecycleCases: Array<{
   {
     status: "expired",
     label: "Срок истёк",
-    explanation: /reservation expired before completion/,
+    explanation: /Срок резерва истёк до завершения заказа/,
     canCancel: false,
   },
 ];
