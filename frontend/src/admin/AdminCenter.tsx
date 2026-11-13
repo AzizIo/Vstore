@@ -102,7 +102,7 @@ export function AdminCenter({ accessToken, active }: Props) {
               {item.status === "suspended" && <button type="button" className="admin-primary" onClick={() => startAction(item, "restore")}>Восстановить</button>}
               <button type="button" className="admin-secondary" onClick={() => void openAudit(item)}>История аудита</button>
             </div>
-            {auditFor === item.id && <div className="admin-audit" aria-label={"Audit history for " + (item.title || "listing")}>
+            {auditFor === item.id && <div className="admin-audit" aria-label={"История аудита: " + (item.title || "listing")}>
               <h3>История аудита</h3>{auditError && <p role="alert">{auditError}</p>}
               {!auditError && audit.length === 0 && <p>Решения модерации пока не зафиксированы.</p>}
               {audit.map((entry) => <div className="admin-audit-entry" key={entry.id}>
@@ -113,7 +113,7 @@ export function AdminCenter({ accessToken, active }: Props) {
           </div>
         </article>)}
       </div>
-      <nav className="admin-pagination" aria-label="Moderation pagination">
+      <nav className="admin-pagination" aria-label="Навигация по страницам модерации">
         <button type="button" className="admin-secondary" onClick={() => setOffset(Math.max(0, offset - pageSize))} disabled={offset === 0 || loading}>Назад</button>
         <span>{total === 0 ? 0 : offset + 1}–{Math.min(offset + pageSize, total)} of {total}</span>
         <button type="button" className="admin-secondary" onClick={() => setOffset(offset + pageSize)} disabled={offset + pageSize >= total || loading}>Далее</button>
@@ -122,13 +122,13 @@ export function AdminCenter({ accessToken, active }: Props) {
         <h2 id="admin-dialog-title">{actionLabels[action]} listing</h2><p>{selected.title || selected.asset.name || "Объявление без названия"} · current status: {selected.status}</p>
         {(action === "approve" || action === "restore") && <p className="admin-warning">Для этого действия сервер должен заново подтвердить владение NFT.</p>}
         <form onSubmit={(event) => void submitDecision(event)}>
-          <label>Reason code<select value={reasonCode} onChange={(event) => setReasonCode(event.target.value as ModerationReasonCode)}>
+          <label>Причина<select value={reasonCode} onChange={(event) => setReasonCode(event.target.value as ModerationReasonCode)}>
             {Object.entries(reasonCodeLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
           </select></label>
           <label>Пояснение (5–500 символов)<textarea value={reason} minLength={5} maxLength={500} required onChange={(event) => setReason(event.target.value)} placeholder="Опишите причину решения…" rows={4} /></label>
           <div className="admin-dialog-actions">
             <button type="button" className="admin-secondary" onClick={() => setSelected(null)} disabled={submitting}>Отмена</button>
-            <button type="submit" className={action === "reject" || action === "suspend" ? "admin-danger" : "admin-primary"} disabled={submitting || reason.trim().length < 5}>{submitting ? "Saving…" : "Confirm " + actionLabels[action].toLowerCase()}</button>
+            <button type="submit" className={action === "reject" || action === "suspend" ? "admin-danger" : "admin-primary"} disabled={submitting || reason.trim().length < 5}>{submitting ? "Сохраняем…" : "Подтвердить " + actionLabels[action].toLowerCase()}</button>
           </div>
         </form>
       </section></div>}

@@ -154,7 +154,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
       await createOrder(listingId, session.accessToken, idempotencyKey.current);
       setOrderCreated(true);
     } catch (reason) {
-      setOrderError(reason instanceof Error ? reason.message : "Unable to create this reservation. Please retry.");
+      setOrderError(reason instanceof Error ? reason.message : "Не удалось создать резерв. Попробуйте ещё раз.");
     } finally {
       submittingRef.current = false;
       setOrdering(false);
@@ -450,7 +450,7 @@ function MarketplaceApp() {
         </div>
       </header>
       <SessionBanner />
-      <nav className="app-navigation" aria-label="Marketplace sections">
+      <nav className="app-navigation" aria-label="Разделы маркетплейса">
         <button
           className="navigation-tab"
           type="button"
@@ -530,7 +530,7 @@ function MarketplaceApp() {
             <h1>Find your next<br /><span>favorite thing.</span></h1>
             <p className="intro-copy">A live catalog of listed digital collectibles.</p>
           </section>
-          <section className="catalog" aria-label="Marketplace catalog">
+          <section className="catalog" aria-label="Каталог маркетплейса">
             <div className="catalog-heading">
               <h2>Объявления</h2>
               {!loading && !error && <span className="result-count">{total} {total === 1 ? "item" : "items"}</span>}
@@ -539,7 +539,7 @@ function MarketplaceApp() {
               <label className="search-control">
                 <span className="sr-only">Поиск объявлений</span>
                 <span aria-hidden="true">⌕</span>
-                <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search collectibles" />
+                <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск коллекционных предметов" />
               </label>
               <label className="select-control">
                 <span className="sr-only">Тип актива</span>
@@ -570,12 +570,12 @@ function MarketplaceApp() {
                 </select>
               </label>
               <label className="price-control">
-                <span className="sr-only">Minimum price</span>
-                <input aria-label="Minimum price" type="number" min="0.000000001" step="0.000000001" placeholder="Min price" disabled={currency === "all"} value={minPrice} onChange={(event) => setMinPrice(event.target.value)} />
+                <span className="sr-only">Минимальная цена</span>
+                <input aria-label="Минимальная цена" type="number" min="0.000000001" step="0.000000001" placeholder="Min price" disabled={currency === "all"} value={minPrice} onChange={(event) => setMinPrice(event.target.value)} />
               </label>
               <label className="price-control">
-                <span className="sr-only">Maximum price</span>
-                <input aria-label="Maximum price" type="number" min="0.000000001" step="0.000000001" placeholder="Max price" disabled={currency === "all"} value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} />
+                <span className="sr-only">Максимальная цена</span>
+                <input aria-label="Максимальная цена" type="number" min="0.000000001" step="0.000000001" placeholder="Max price" disabled={currency === "all"} value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} />
               </label>
               <label className="select-control">
                 <span className="sr-only">Sort listings</span>
@@ -613,7 +613,7 @@ function MarketplaceApp() {
             )}
 
             {loading ? (
-              <div className="listing-grid" aria-label="Listings loading" aria-busy="true">
+              <div className="listing-grid" aria-label="Загружаем объявления…" aria-busy="true">
                 {Array.from({ length: 8 }, (_, index) => (
                   <div className="listing-skeleton" key={index} aria-hidden="true"><span /><i /><i /></div>
                 ))}

@@ -83,7 +83,7 @@ async function walletReference(boc: string): Promise<string> {
 }
 
 function deliveryStatus(attempt: DeliveryAttempt | null, orderStatus: MarketplaceOrder["status"]) {
-  if (orderStatus === "completed" || attempt?.status === "verified") return "Передача подтверждена независимо";
+  if (orderStatus === "completed" || attempt?.status === "подтверждённый") return "Передача подтверждена независимо";
   if (attempt?.status === "manual_review") return "Требуется ручная проверка";
   if (attempt?.status === "failed") return "Передача не подтверждена";
   if (attempt?.candidate_transaction_hash || attempt?.submitted_at) return "Перевод отправлен · проверяем";
@@ -204,7 +204,7 @@ function DeliveryPanel({
         throw new Error("Повторно подключите кошелёк продавца перед запросом передачи.");
       }
       if (connectedNetwork !== attempt.network) {
-        throw new Error(`Wrong wallet network. This delivery requires TON ${attempt.network}.`);
+        throw new Error(`Неверная сеть кошелька. Для этой передачи требуется TON ${attempt.network}.`);
       }
       if (Date.parse(attempt.deadline) <= Date.now()) {
         throw new Error("Срок подготовки передачи (15 минут) истёк. Обновите статус перед дальнейшими действиями.");
@@ -256,7 +256,7 @@ function DeliveryPanel({
         setError("Запрос кошелька отклонён или отменён. Передача не подтверждена. Проверьте запрос и попробуйте снова.");
       } else if (walletRequestStarted) {
         const detail = reason instanceof Error ? reason.message : "Кошелёк не вернул подтверждённый результат.";
-        setError(`Wallet result is uncertain: ${detail} Refresh delivery status and check wallet activity before retrying.`);
+        setError(`Результат запроса к кошельку неизвестен: ${detail} Обновите статус передачи и проверьте историю кошелька перед повторной попыткой.`);
       } else {
         setError(reason instanceof Error ? reason.message : "Не удалось завершить запрос кошелька.");
       }

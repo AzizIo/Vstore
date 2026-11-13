@@ -175,7 +175,7 @@ export function CreateListing({
         <h1 id="create-listing-title">Черновик создан</h1>
         <div className="creation-success" role="status">
           <span className="listing-status listing-status-draft">Черновик · не опубликован</span>
-          <h2>{createdListing.title || createdListing.asset.name || "TON NFT listing"}</h2>
+          <h2>{createdListing.title || createdListing.asset.name || "Объявление TON NFT"}</h2>
           <p>{createdListing.price_amount} {createdListing.price_currency}</p>
           <button className="text-button" type="button" onClick={onCancel}>К моим объявлениям</button>
         </div>

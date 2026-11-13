@@ -226,8 +226,8 @@ export function MyInventory({
     <section className="inventory-view" aria-labelledby="inventory-title">
       <div className="inventory-heading">
         <div>
-          <p className="eyebrow">COLLECTOR SPACE</p>
-          <h1 id="inventory-title">My NFT inventory</h1>
+          <p className="eyebrow">КОЛЛЕКЦИОНЕР</p>
+          <h1 id="inventory-title">Мои NFT</h1>
           <p className="inventory-intro">
             {selectedWallet ? (
               <>

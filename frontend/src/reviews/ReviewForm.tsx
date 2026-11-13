@@ -63,8 +63,8 @@ export function ReviewForm({ orderId, accessToken, onSubmitted }: { orderId: str
         <legend>Ваша оценка</legend>
         <div className="review-rating-options">
           {[1, 2, 3, 4, 5].map((value) => <label key={value}>
-            <input aria-label={`${value} ${value === 1 ? "star" : "stars"}`} type="radio" name={`review-rating-${orderId}`} value={value} checked={rating === value} onChange={() => setRating(value)} required />
-            <span aria-hidden="true">{value} ★</span><span className="sr-only">{value} {value === 1 ? "star" : "stars"}</span>
+            <input aria-label={`${value} ${value === 1 ? "звезда" : "звёзд"}`} type="radio" name={`review-rating-${orderId}`} value={value} checked={rating === value} onChange={() => setRating(value)} required />
+            <span aria-hidden="true">{value} ★</span><span className="sr-only">{value} {value === 1 ? "звезда" : "звёзд"}</span>
           </label>)}
         </div>
       </fieldset>

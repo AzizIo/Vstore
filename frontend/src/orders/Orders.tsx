@@ -244,7 +244,7 @@ function OrderDetails({
           <section className="workspace-section order-facts">
             <p className="eyebrow">ИНФОРМАЦИЯ О ЗАКАЗЕ</p>
             <dl>
-              <div><dt>Ваша роль</dt><dd>{role === "buyer" ? "Buyer · Purchase" : "Seller · Sale"}</dd></div>
+              <div><dt>Ваша роль</dt><dd>{role === "buyer" ? "Покупатель · Покупка" : "Продавец · Продажа"}</dd></div>
               <div><dt>ID заказа</dt><dd className="order-id-value"><code>{order.id}</code><button className="copy-id-button" type="button" onClick={() => void copyOrderId()} aria-label="Скопировать ID заказа">{copied ? "Скопировано" : "Копировать ID"}</button></dd></div>
               {copyError && <p className="copy-id-error" role="status">{copyError}</p>}
               <div><dt>ID объявления</dt><dd><code>{order.listing_id}</code></dd></div>
@@ -259,10 +259,10 @@ function OrderDetails({
               {!confirmCancel ? (
                 <><strong>Хотите отменить?</strong><p>Вы можете отменить заказ, пока он находится в резерве.</p><button className="danger-button" type="button" onClick={() => setConfirmCancel(true)}>Отменить заказ</button></>
               ) : (
-                <div className="cancel-confirmation" role="group" aria-label="Confirm order cancellation">
+                <div className="cancel-confirmation" role="group" aria-label="Подтвердите отмену заказа">
                   <strong>Отменить этот резерв?</strong>
                   <p>Это действие нельзя отменить. Оплата и возврат средств не проводятся.</p>
-                  <div><button className="danger-button" type="button" disabled={busy} onClick={() => onCancel(order.id)}>{busy ? "Cancelling…" : "Confirm cancellation"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmCancel(false)}>Оставить заказ</button></div>
+                  <div><button className="danger-button" type="button" disabled={busy} onClick={() => onCancel(order.id)}>{busy ? "Cancelling…" : "Подтвердить отмену"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmCancel(false)}>Оставить заказ</button></div>
                 </div>
               )}
             </section>
@@ -313,14 +313,14 @@ export function Orders({
     fetchOrder(initialOrderId, accessToken, controller.signal)
       .then((order) => {
         if (order.buyer_id !== userId && order.seller_id !== userId) {
-          throw new Error("This order is not available for this account.");
+          throw new Error("Этот заказ недоступен для вашего аккаунта.");
         }
         setLinkedOrder(order);
         setRole(order.buyer_id === userId ? "buyer" : "seller");
         setSelectedOrder(order);
       })
       .catch((reason: unknown) => {
-        if (!controller.signal.aborted) setLinkedOrderError(reason instanceof Error ? reason.message : "Unable to open this order.");
+        if (!controller.signal.aborted) setLinkedOrderError(reason instanceof Error ? reason.message : "Не удалось открыть заказ.");
       });
     return () => controller.abort();
   }, [accessToken, initialOrderId, userId]);
@@ -333,7 +333,7 @@ export function Orders({
       .then(setOrders)
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : "Unable to load orders.");
+          setError(reason instanceof Error ? reason.message : "Не удалось загрузить заказы.");
           setOrders([]);
         }
       })
@@ -353,13 +353,13 @@ export function Orders({
     try {
       const fullOrder = await fetchOrder(order.id, accessToken);
       if (userId && fullOrder.buyer_id !== userId && fullOrder.seller_id !== userId) {
-        throw new Error("This order is not available for this account.");
+        throw new Error("Этот заказ недоступен для вашего аккаунта.");
       }
       setSelectedOrder(fullOrder);
       setOrders((current) => current.map((item) => item.id === fullOrder.id ? fullOrder : item));
       setLinkedOrder((current) => current?.id === fullOrder.id ? fullOrder : current);
     } catch (reason) {
-      setDetailError(reason instanceof Error ? reason.message : "Unable to load order details.");
+      setDetailError(reason instanceof Error ? reason.message : "Не удалось загрузить данные заказа.");
     } finally {
       setDetailLoading(false);
     }
@@ -374,7 +374,7 @@ export function Orders({
       setLinkedOrder((current) => current?.id === updated.id ? updated : current);
       setSelectedOrder((current) => current?.id === updated.id ? updated : current);
     } catch (reason) {
-      setActionError(reason instanceof Error ? reason.message : "Unable to cancel this order.");
+      setActionError(reason instanceof Error ? reason.message : "Не удалось отменить заказ.");
     } finally {
       setBusyOrderId("");
     }
@@ -421,7 +421,7 @@ export function Orders({
         <button className="secondary-button refresh-button" type="button" disabled={loading} onClick={() => { setRefreshing(true); setRetry((value) => value + 1); }}><span aria-hidden="true">↻</span> {refreshing ? "Refreshing…" : "Refresh"}</button>
       </div>
 
-      <div className="workspace-role-tabs" role="tablist" aria-label="Order type">
+      <div className="workspace-role-tabs" role="tablist" aria-label="Тип заказа">
         <button role="tab" id="purchases-tab" aria-selected={role === "buyer"} type="button" onClick={() => { setRole("buyer"); setFilter("all"); }}><span>Покупки</span><span className="workspace-tab-count">{role === "buyer" ? counts.all : "—"}</span></button>
         <button role="tab" id="sales-tab" aria-selected={role === "seller"} type="button" onClick={() => { setRole("seller"); setFilter("all"); }}><span>Продажи</span><span className="workspace-tab-count">{role === "seller" ? counts.all : "—"}</span></button>
       </div>
@@ -430,11 +430,11 @@ export function Orders({
       {linkedOrderError && <p className="orders-error" role="alert">{linkedOrderError}</p>}
 
       <div className="workspace-toolbar">
-        <label className="workspace-search"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск по названию актива или ID заказа</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search title or order ID" /></label>
+        <label className="workspace-search"><span aria-hidden="true">⌕</span><span className="sr-only">Поиск по названию актива или ID заказа</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск по названию или ID заказа" /></label>
         <label className="workspace-sort"><span className="sr-only">Сортировка заказов</span><select value={sort} onChange={(event) => setSort(event.target.value as SortMode)}><option value="newest">Сначала новые</option><option value="oldest">Сначала старые</option><option value="price">Сначала дорогие</option></select></label>
       </div>
 
-      <div className="workspace-filter-row" role="group" aria-label="Filter orders by status">
+      <div className="workspace-filter-row" role="group" aria-label="Фильтр заказов по статусу">
         {([{ value: "all", label: "All", count: counts.all }, { value: "active", label: "Активно", count: counts.active }, { value: "completed", label: "Завершён", count: counts.completed }, { value: "closed", label: "Cancelled / expired", count: counts.closed }] as const).map((item) => (
           <button key={item.value} type="button" className={filter === item.value ? "workspace-filter is-active" : "workspace-filter"} aria-pressed={filter === item.value} onClick={() => setFilter(item.value)}>{item.label}<span>{item.count}</span></button>
         ))}
@@ -445,7 +445,7 @@ export function Orders({
       ) : error ? (
         <div className="orders-message workspace-empty" role="alert"><span className="workspace-empty-icon" aria-hidden="true">!</span><h2>Заказы недоступны</h2><p>{error}</p><button className="primary-button" type="button" onClick={() => setRetry((value) => value + 1)}>Повторить</button></div>
       ) : visibleOrders.length === 0 ? (
-        <div className="orders-message workspace-empty" role="status"><span className="workspace-empty-icon" aria-hidden="true">◇</span><h2>{search || filter !== "all" ? "No matching orders" : `No ${role === "buyer" ? "purchases" : "sales"} yet`}</h2><p>{search || filter !== "all" ? "Try another search or status filter." : "When you reserve a listing or sell an asset, your order activity will appear here."}</p>{search || filter !== "all" ? <button className="secondary-button" type="button" onClick={() => { setSearch(""); setFilter("all"); }}>Сбросить фильтры</button> : onCatalog ? <button className="primary-button" type="button" onClick={onCatalog}>Перейти в каталог</button> : null}</div>
+        <div className="orders-message workspace-empty" role="status"><span className="workspace-empty-icon" aria-hidden="true">◇</span><h2>{search || filter !== "all" ? "Заказы не найдены" : `No ${role === "buyer" ? "purchases" : "sales"} yet`}</h2><p>{search || filter !== "all" ? "Измените поисковый запрос или фильтр статуса." : "Здесь появятся ваши заказы после резервирования объявления или продажи актива."}</p>{search || filter !== "all" ? <button className="secondary-button" type="button" onClick={() => { setSearch(""); setFilter("all"); }}>Сбросить фильтры</button> : onCatalog ? <button className="primary-button" type="button" onClick={onCatalog}>Перейти в каталог</button> : null}</div>
       ) : (
         <>
           <div className="workspace-results-heading"><span>{visibleOrders.length} {visibleOrders.length === 1 ? "order" : "orders"}</span><span>Данные вашего аккаунта</span></div>
