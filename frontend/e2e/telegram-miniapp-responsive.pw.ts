@@ -55,3 +55,51 @@ test.describe("Telegram Mini App responsive shell", () => {
     await expect(page.getByRole("button", { name: "Каталог", exact: true })).toHaveAttribute("aria-pressed", "true");
   });
 });
+
+
+test("keeps seller listings and order cards compact on Telegram phone widths", async ({ page }) => {
+  await mockMarketplaceApi(page, { authenticated: true });
+  await page.goto("/");
+
+  for (const width of [320, 360, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+
+    await page.getByRole("button", { name: "Мои объявления", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Мои объявления" })).toBeVisible();
+    const listingCard = page.locator(".my-listing-card").first();
+    await expect(listingCard).toBeVisible();
+
+    const listingLayout = await listingCard.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        scrollWidth: document.documentElement.scrollWidth,
+        viewportWidth: window.innerWidth,
+      };
+    });
+    expect(listingLayout.left).toBeGreaterThanOrEqual(0);
+    expect(listingLayout.right).toBeLessThanOrEqual(width);
+    expect(listingLayout.scrollWidth).toBeLessThanOrEqual(listingLayout.viewportWidth);
+
+    await page.getByRole("button", { name: "Заказы", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Заказы" })).toBeVisible();
+    const orderCard = page.locator(".workspace-order-card").first();
+    await expect(orderCard).toBeVisible();
+
+    const orderLayout = await orderCard.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        scrollWidth: document.documentElement.scrollWidth,
+        viewportWidth: window.innerWidth,
+      };
+    });
+    expect(orderLayout.left).toBeGreaterThanOrEqual(0);
+    expect(orderLayout.right).toBeLessThanOrEqual(width);
+    expect(orderLayout.scrollWidth).toBeLessThanOrEqual(orderLayout.viewportWidth);
+  }
+});
