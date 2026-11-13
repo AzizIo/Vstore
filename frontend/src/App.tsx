@@ -162,7 +162,13 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [confirmationOpen, orderCreated]);
 
-  if (loading) return <p className="detail-message" role="status">Загружаем объявление…</p>;
+  if (loading) return (
+    <section className="detail-loading-state" role="status" aria-busy="true">
+      <span className="sr-only">Загружаем объявление…</span>
+      <div className="detail-loading-artwork" />
+      <div className="detail-loading-copy"><i /><i /><i /><i /></div>
+    </section>
+  );
   if (error || !listing) {
     return (
       <section className="detail-message" role="alert">
