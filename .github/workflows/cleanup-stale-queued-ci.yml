@@ -1,0 +1,112 @@
+name: Cleanup stale queued CI runs
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_age_minutes:
+        description: "Only consider queued CI runs older than this many minutes (minimum 60)"
+        required: true
+        type: number
+        default: 60
+      dry_run:
+        description: "Preview candidates without cancelling them"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: cleanup-stale-ci-queue
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Preview or cancel stale queued CI runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAX_AGE_MINUTES: ${{ inputs.max_age_minutes }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          if ! [[ "$MAX_AGE_MINUTES" =~ ^[0-9]+$ ]] || (( MAX_AGE_MINUTES < 60 )); then
+            echo "::error::max_age_minutes must be an integer greater than or equal to 60"
+            exit 1
+          fi
+
+          cutoff_epoch="$(date -u -d "$MAX_AGE_MINUTES minutes ago" +%s)"
+          runs_file="$(mktemp)"
+          trap 'rm -f "$runs_file"' EXIT
+
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/actions/runs?status=queued&per_page=100" \
+            --jq '.workflow_runs[]
+              | select((.name == "Backend CI" or .name == "Frontend CI")
+                and (.event == "push" or .event == "pull_request")
+                and .head_branch != "main")
+              | [.id, .name, .head_branch, .event, .created_at] | @tsv' \
+            > "$runs_file"
+
+          considered=0
+          cancelled=0
+          skipped=0
+
+          while IFS=$'\t' read -r run_id workflow branch event created_at; do
+            [[ -n "$run_id" ]] || continue
+            created_epoch="$(date -u -d "$created_at" +%s)"
+
+            if (( created_epoch <= cutoff_epoch )); then
+              considered=$((considered + 1))
+              printf 'Stale candidate: run=%s workflow=%q branch=%q event=%q created=%q\n' \
+                "$run_id" "$workflow" "$branch" "$event" "$created_at"
+
+              if [[ "$DRY_RUN" == "false" ]]; then
+                # A queued run can start after the initial list was fetched.
+                # Re-fetch immediately before cancellation so we do not cancel
+                # a run that is no longer a stale, eligible queue candidate.
+                current_run="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}")"
+                current_status="$(jq -r '.status // ""' <<< "$current_run")"
+                current_workflow="$(jq -r '.name // ""' <<< "$current_run")"
+                current_branch="$(jq -r '.head_branch // ""' <<< "$current_run")"
+                current_event="$(jq -r '.event // ""' <<< "$current_run")"
+                current_created_at="$(jq -r '.created_at // ""' <<< "$current_run")"
+
+                if [[ "$current_status" != "queued" ]] ||
+                   [[ "$current_workflow" != "Backend CI" && "$current_workflow" != "Frontend CI" ]] ||
+                   [[ "$current_branch" == "main" || "$current_branch" != "$branch" ]] ||
+                   [[ "$current_event" != "push" && "$current_event" != "pull_request" ]] ||
+                   [[ -z "$current_created_at" ]]; then
+                  echo "Skip run=$run_id: it is no longer an eligible queued CI run."
+                  skipped=$((skipped + 1))
+                  continue
+                fi
+
+                current_created_epoch="$(date -u -d "$current_created_at" +%s)"
+                if (( current_created_epoch > cutoff_epoch )); then
+                  echo "Skip run=$run_id: it no longer meets the stale-age threshold."
+                  skipped=$((skipped + 1))
+                  continue
+                fi
+
+                gh api --method POST \
+                  "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" \
+                  >/dev/null
+                cancelled=$((cancelled + 1))
+              fi
+            fi
+          done < "$runs_file"
+
+          echo "Stale candidates: $considered"
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "Dry run only; no workflow runs were cancelled."
+            echo "Run again with dry_run=false to cancel these queued candidates."
+          else
+            echo "Cancellation requests sent: $cancelled"
+            echo "Candidates skipped after recheck: $skipped"
+          fi
