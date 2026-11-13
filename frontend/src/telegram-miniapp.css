@@ -3617,3 +3617,123 @@ body {
     letter-spacing: -0.04em;
   }
 }
+
+
+/* Manrope typography system: crisp UI text with a tighter editorial headline rhythm. */
+:root {
+  --font-body: "Manrope", "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  --font-display: "Manrope", "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  font-family: var(--font-body);
+  font-optical-sizing: auto;
+  font-kerning: normal;
+  font-feature-settings: "ss01" 1, "cv11" 1;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-body);
+  font-optical-sizing: auto;
+}
+
+.catalog-intro h1,
+.detail-copy h1,
+.my-listings-heading h1,
+.my-listings-gate > h1,
+.my-listing-detail-copy h1,
+.create-listing-view > h1,
+.inventory-heading h1,
+.workspace-page-heading h1,
+.order-detail-heading h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -.055em;
+  line-height: 1.02;
+  font-feature-settings: "ss01" 1, "cv11" 1;
+  text-wrap: balance;
+}
+
+.catalog-intro h1 span {
+  font-weight: 500;
+  letter-spacing: -.06em;
+}
+
+.catalog-heading h2,
+.workspace-section-heading h2,
+.inventory-card-copy h2,
+.workspace-empty h2,
+.my-listings-message h2,
+.orders-message h2,
+.catalog-message h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -.035em;
+}
+
+.listing-card-title,
+.my-listing-card-title,
+.workspace-card-title,
+.order-detail-price,
+.listing-card-price,
+.my-listing-card-price,
+.workspace-card-price {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -.025em;
+  font-variant-numeric: tabular-nums;
+}
+
+.eyebrow,
+.listing-card-type,
+.listing-type-label,
+.workspace-asset-type,
+.order-status {
+  font-family: var(--font-body);
+  font-weight: 700;
+}
+
+.eyebrow {
+  letter-spacing: .15em;
+}
+
+button,
+input,
+select,
+textarea {
+  letter-spacing: -.01em;
+}
+
+input::placeholder,
+textarea::placeholder {
+  letter-spacing: 0;
+}
+
+code,
+.mono,
+.order-facts code,
+.inventory-collection code,
+.inventory-address code,
+.detail-facts .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: -.025em;
+}
+
+@media (max-width: 640px) {
+  .catalog-intro h1,
+  .detail-copy h1,
+  .my-listings-heading h1,
+  .my-listings-gate > h1,
+  .my-listing-detail-copy h1,
+  .create-listing-view > h1,
+  .inventory-heading h1,
+  .workspace-page-heading h1,
+  .order-detail-heading h1 {
+    letter-spacing: -.045em;
+  }
+
+  .eyebrow {
+    letter-spacing: .13em;
+  }
+}
