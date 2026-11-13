@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from aiogram import Bot, Dispatcher
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Chat, Message, Update
 
 from app import bot_handlers
@@ -340,3 +341,55 @@ async def test_register_bot_commands_exposes_russian_command_menu() -> None:
         ("app", "Открыть VILTARA SHOP"),
         ("help", "Справка и инструкции"),
     ]
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://@/miniapp",
+        "https://example.com:not-a-port/miniapp",
+        "https://example .com/miniapp",
+        "https://user:password@example.com/miniapp",
+    ),
+)
+def test_mini_app_button_rejects_malformed_or_credentialed_https_urls(
+    url: str,
+) -> None:
+    assert bot_handlers._mini_app_button(url) is None
+
+
+@pytest.mark.parametrize(
+    ("error_message", "should_raise"),
+    [
+        ("Bad Request: message is not modified", False),
+        ("Bad Request: message can't be edited", True),
+    ],
+)
+@pytest.mark.asyncio
+async def test_help_callback_suppresses_only_duplicate_message_edit_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    error_message: str,
+    should_raise: bool,
+) -> None:
+    message = Message(
+        message_id=10,
+        date=datetime.now(UTC),
+        chat=Chat(id=123, type="private"),
+        text="Existing help screen",
+    )
+    edit_error = TelegramBadRequest(
+        method=SimpleNamespace(),
+        message=error_message,
+    )
+    edit_text = AsyncMock(side_effect=edit_error)
+    monkeypatch.setattr(Message, "edit_text", edit_text)
+    callback = SimpleNamespace(answer=AsyncMock(), message=message)
+
+    if should_raise:
+        with pytest.raises(TelegramBadRequest, match="can't be edited"):
+            await bot_handlers.handle_help_callback(callback)  # type: ignore[arg-type]
+    else:
+        await bot_handlers.handle_help_callback(callback)  # type: ignore[arg-type]
+
+    callback.answer.assert_awaited_once()
+    edit_text.assert_awaited_once()

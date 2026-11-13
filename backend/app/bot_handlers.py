@@ -24,14 +24,19 @@ def _mini_app_button(url: str | None) -> InlineKeyboardButton | None:
     candidate = url.strip()
     try:
         parsed = urlsplit(candidate)
+        hostname = parsed.hostname
+        # Accessing .port validates malformed and out-of-range port values.
+        parsed.port
     except ValueError:
         return None
 
     if (
         parsed.scheme != "https"
         or not parsed.netloc
+        or not hostname
         or parsed.username
         or parsed.password
+        or any(character.isspace() for character in candidate)
     ):
         return None
 
