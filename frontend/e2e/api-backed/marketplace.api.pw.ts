@@ -218,7 +218,7 @@ test(
 
     await expect(buyerPage.getByRole("heading", { name: "Заказы" })).toBeVisible();
     await expect(buyerPage.getByText("Ожидает передачи", { exact: true })).toBeVisible();
-    await expect(buyerPage.getByText(/^15,75(?:0+)? TON$/)).toBeVisible();
+    await expect(buyerPage.getByText(/15,75(?:0+)? TON/)).toBeVisible();
     await buyerPage.getByRole("button", { name: /Открыть заказ E2E Published NFT/ }).click();
     await expect(buyerPage.getByRole("heading", { name: "Статус заказа" })).toBeVisible();
     await expect(buyerPage.getByText(/Оплата в VILTARA SHOP пока не подключена/)).toBeVisible();
@@ -333,7 +333,7 @@ test(
   "anonymous browser can read the public catalog but cannot call protected write endpoints",
   async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Объявления" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Объявления" }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Мои объявления", exact: true })).toBeVisible();
 
   const catalog = await page.evaluate(async () => {

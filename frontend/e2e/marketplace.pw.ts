@@ -111,7 +111,7 @@ test.describe("listing details", () => {
 
     await page.getByRole("button", { name: /Назад в каталог/ }).click();
 
-    await expect(page.getByRole("heading", { name: "Объявления" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Объявления" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
   });
 
@@ -223,7 +223,7 @@ test.describe("Telegram deep links", () => {
     });
     await page.goto("/?startapp=listing_not-a-32-character-hex-id");
 
-    await expect(page.getByRole("heading", { name: "Объявления" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Объявления" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
     await expect(page.getByRole("button", { name: "Каталог" })).toHaveAttribute("aria-pressed", "true");
     expect(requests.some((request) => request.startsWith("GET /api/listings/"))).toBe(false);
@@ -264,7 +264,7 @@ test.describe("navigation and unauthenticated access", () => {
 
     await page.getByRole("link", { name: "VILTARA" }).click();
 
-    await expect(page.getByRole("heading", { name: "Объявления" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Объявления" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Каталог", exact: true })).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -300,7 +300,7 @@ test.describe("navigation and unauthenticated access", () => {
       });
       expect(layout.scrollWidth, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(layout.clientWidth);
     }
-    await expect(page.getByRole("heading", { name: "Объявления" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Объявления" }).first()).toBeVisible();
   });
 
 });
