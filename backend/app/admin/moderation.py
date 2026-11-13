@@ -130,8 +130,8 @@ class AuditPageDTO(BaseModel):
 
 def _queue_reasons(listing: Listing, now: datetime) -> list[str]:
     reasons: list[str] = []
-    if listing.status is ListingStatus.DRAFT:
-        reasons.append("draft_pending_review")
+    if listing.status is ListingStatus.PENDING_REVIEW:
+        reasons.append("pending_admin_review")
     if listing.status is ListingStatus.SUSPENDED:
         reasons.append("moderator_suspended")
     if listing.status is ListingStatus.ACTIVE:
@@ -279,7 +279,7 @@ async def get_moderation_queue(
         .options(selectinload(Listing.asset), selectinload(Listing.seller))
         .where(
             Listing.status.in_(
-                [ListingStatus.DRAFT, ListingStatus.ACTIVE, ListingStatus.SUSPENDED]
+                [ListingStatus.PENDING_REVIEW, ListingStatus.ACTIVE, ListingStatus.SUSPENDED]
             )
         )
     )
@@ -387,8 +387,8 @@ async def decide_listing(
     verifier: Annotated[TONNFTVerifier, Depends(get_ton_nft_verifier)],
 ) -> AuditDTO:
     action_map = {
-        "approve": ("approved", ListingStatus.DRAFT, ListingStatus.ACTIVE),
-        "reject": ("rejected", ListingStatus.DRAFT, ListingStatus.CANCELLED),
+        "approve": ("approved", ListingStatus.PENDING_REVIEW, ListingStatus.ACTIVE),
+        "reject": ("rejected", ListingStatus.PENDING_REVIEW, ListingStatus.CANCELLED),
         "suspend": ("suspended", ListingStatus.ACTIVE, ListingStatus.SUSPENDED),
         "restore": ("restored", ListingStatus.SUSPENDED, ListingStatus.ACTIVE),
     }
