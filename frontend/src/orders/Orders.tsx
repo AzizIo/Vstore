@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   cancelOrder,
@@ -314,6 +314,7 @@ export function Orders({
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [sort, setSort] = useState<SortMode>("newest");
   const [refreshing, setRefreshing] = useState(false);
+  const detailRequestRef = useRef(0);
 
   useEffect(() => {
     if (!initialOrderId || !userId) {
@@ -361,11 +362,13 @@ export function Orders({
   }, [accessToken, retry, role]);
 
   async function openOrder(order: MarketplaceOrder) {
+    const requestId = ++detailRequestRef.current;
     setSelectedOrder(order);
     setDetailLoading(true);
     setDetailError("");
     try {
       const fullOrder = await fetchOrder(order.id, accessToken);
+      if (requestId !== detailRequestRef.current) return;
       if (userId && fullOrder.buyer_id !== userId && fullOrder.seller_id !== userId) {
         throw new Error("Этот заказ недоступен для вашего аккаунта.");
       }
@@ -373,9 +376,11 @@ export function Orders({
       setOrders((current) => current.map((item) => item.id === fullOrder.id ? fullOrder : item));
       setLinkedOrder((current) => current?.id === fullOrder.id ? fullOrder : current);
     } catch (reason) {
-      setDetailError(reason instanceof Error ? reason.message : "Не удалось загрузить данные заказа.");
+      if (requestId === detailRequestRef.current) {
+        setDetailError(reason instanceof Error ? reason.message : "Не удалось загрузить данные заказа.");
+      }
     } finally {
-      setDetailLoading(false);
+      if (requestId === detailRequestRef.current) setDetailLoading(false);
     }
   }
 
@@ -423,7 +428,7 @@ export function Orders({
       <div className="orders-view order-detail-view">
         {detailLoading && <p className="workspace-inline-loading" role="status">Обновляем данные заказа…</p>}
         {detailError && <div className="orders-error" role="alert"><span>{detailError}</span><button className="text-button" type="button" onClick={() => void openOrder(selectedOrder)}>Повторить</button></div>}
-        <OrderDetails order={selectedOrder} role={userId ? (selectedOrder.buyer_id === userId ? "buyer" : "seller") : role} busy={busyOrderId === selectedOrder.id} accessToken={accessToken} onClose={() => setSelectedOrder(null)} onCancel={(id) => void handleCancel(id)} onRefreshOrder={() => void openOrder(selectedOrder)} />
+        <OrderDetails order={selectedOrder} role={userId ? (selectedOrder.buyer_id === userId ? "buyer" : "seller") : role} busy={busyOrderId === selectedOrder.id} accessToken={accessToken} onClose={() => { detailRequestRef.current += 1; setDetailLoading(false); setSelectedOrder(null); }} onCancel={(id) => void handleCancel(id)} onRefreshOrder={() => void openOrder(selectedOrder)} />
       </div>
     );
   }
