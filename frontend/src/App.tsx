@@ -343,7 +343,7 @@ function MarketplaceApp() {
   useEffect(() => {
     if (!startParam) return;
 
-    if (startParam.type === "объявление") {
+    if (startParam.type === "listing") {
       setInitialOrderId(null);
       setListingId(startParam.id);
       setSection("catalog");
