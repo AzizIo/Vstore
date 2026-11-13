@@ -297,9 +297,9 @@ async def create_order(
 
     await session.rollback()
 
-    return await _reserve_listing(
-        session,
-        buyer_id=buyer_id,        idempotency_key=idempotency_key,
+    return await _reserve_listing(        session,
+        buyer_id=buyer_id,
+        idempotency_key=idempotency_key,
         snapshot=snapshot,
         ownership=ownership,
         current_time=current_time,
@@ -597,8 +597,8 @@ def _release_listing(
     listing: Listing | None,
     now: datetime,
     asset: NFTAsset | None,
-) -> None:
-    """Return a reserved listing to the catalog, unless it is no longer sellable.
+) -> None:    """Return a reserved listing to the catalog, unless it is no longer sellable.
+
     A stale or unverified asset must never be re-exposed by cancelling or
     expiring an order: the catalog filters on listing status alone, so promoting
     such a listing back to ACTIVE would offer an NFT the seller no longer owns.
@@ -897,8 +897,7 @@ async def prepare_delivery(
         wallets_by_id = {wallet.id: wallet for wallet in locked_wallets}
         asset = await session.scalar(
             select(NFTAsset).where(NFTAsset.id == snapshot.asset_id).with_for_update()
-        )
-        order = await session.scalar(
+        )        order = await session.scalar(
             select(Order).where(Order.id == snapshot.order_id).with_for_update()
         )
         if order is None or order.seller_id != seller_id:
@@ -914,7 +913,8 @@ async def prepare_delivery(
             same_key_attempt = await session.scalar(
                 select(OrderDeliveryAttempt)
                 .where(
-                    OrderDeliveryAttempt.order_id == order.id,                    OrderDeliveryAttempt.prepare_idempotency_key == idempotency_key,
+                    OrderDeliveryAttempt.order_id == order.id,
+                    OrderDeliveryAttempt.prepare_idempotency_key == idempotency_key,
                 )
                 .with_for_update()
             )
