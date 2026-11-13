@@ -57,6 +57,7 @@ export function AdminCenter({ accessToken, active }: Props) {
   const [globalAuditLoading, setGlobalAuditLoading] = useState(false);
   const [globalAuditError, setGlobalAuditError] = useState("");
   const [globalAuditAction, setGlobalAuditAction] = useState("");
+  const [globalAuditOffset, setGlobalAuditOffset] = useState(0);
   const pageSize = 25;
 
   const loadQueue = useCallback(async (signal?: AbortSignal) => {
@@ -76,14 +77,14 @@ export function AdminCenter({ accessToken, active }: Props) {
     return () => controller.abort();
   }, [active, loadQueue]);
 
-  async function openGlobalAudit() {
+  async function openGlobalAudit(offset = globalAuditOffset) {
     setShowGlobalAudit(true);
     setGlobalAuditLoading(true);
     setGlobalAuditError("");
     try {
       const page = await fetchAdminAuditLog(accessToken, {
         limit: pageSize,
-        offset: 0,
+        offset,
         ...(globalAuditAction ? { action: globalAuditAction } : {}),
       });
       setGlobalAudit(page.items);
@@ -135,7 +136,7 @@ export function AdminCenter({ accessToken, active }: Props) {
           <h2 id="admin-global-audit-title">Общий журнал аудита</h2>
           <button type="button" className="admin-secondary" onClick={() => setShowGlobalAudit(false)}>Скрыть</button>
         </div>
-        <label>Тип действия<select value={globalAuditAction} onChange={(event) => setGlobalAuditAction(event.target.value)}>
+        <label>Тип действия<select value={globalAuditAction} onChange={(event) => { setGlobalAuditAction(event.target.value); setGlobalAuditOffset(0); }}>
           <option value="">Все действия</option>
           <option value="approved">Одобрение</option>
           <option value="rejected">Отклонение</option>
@@ -154,6 +155,19 @@ export function AdminCenter({ accessToken, active }: Props) {
           <p>{reasonCodeLabels[entry.reason_code] ?? "Другая причина"} — {entry.reason}</p>
           <span>Объявление: {entry.target_id} · {listingStatusLabels[String(entry.before_snapshot.status)] ?? "—"} → {listingStatusLabels[String(entry.after_snapshot.status)] ?? "—"}</span>
         </article>)}
+        {globalAuditTotal > pageSize && <nav className="admin-pagination" aria-label="Страницы общего журнала аудита">
+          <button type="button" className="admin-secondary" disabled={globalAuditOffset === 0 || globalAuditLoading} onClick={() => {
+            const next = Math.max(0, globalAuditOffset - pageSize);
+            setGlobalAuditOffset(next);
+            void openGlobalAudit(next);
+          }}>Назад</button>
+          <span>{globalAuditOffset + 1}–{Math.min(globalAuditOffset + pageSize, globalAuditTotal)} из {globalAuditTotal}</span>
+          <button type="button" className="admin-secondary" disabled={globalAuditOffset + pageSize >= globalAuditTotal || globalAuditLoading} onClick={() => {
+            const next = globalAuditOffset + pageSize;
+            setGlobalAuditOffset(next);
+            void openGlobalAudit(next);
+          }}>Далее</button>
+        </nav>}
       </section>}
       <div className="admin-toolbar">
         <label>Статус объявления<select value={statusFilter} onChange={(event) => { setOffset(0); setStatusFilter(event.target.value); }}>
