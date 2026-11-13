@@ -22,7 +22,8 @@ Product boundaries and decisions approved for the current MVP are recorded in [d
 | Full inventory reconciliation/sync and dedicated My NFT screen | Implemented in main via [PR #58](https://github.com/AzizIo/Vstore/pull/58); live testnet/provider acceptance remains open in [Issue #44](https://github.com/AzizIo/Vstore/issues/44) |
 | Server-side verification that a reserved NFT was delivered to the buyer | B1–B6 implemented on `main`: read-only evidence adapter, immutable attempt snapshots, leased observer, preparation/submission APIs, wallet-driven transfer UX, transactional delivery notifications. Live testnet acceptance remains outstanding; see [Issue #46](https://github.com/AzizIo/Vstore/issues/46). |
 | Order-verified seller reviews and reputation | Implemented; immutable reviews require backend-confirmed completed NFT delivery and expose safe aggregates |
-| Telegram Gifts adapter, deal chat, admin panel | Not implemented |
+| Admin moderation queue, approval/rejection, suspension/restoration and immutable audit | Implemented; admin allowlist and live Telegram/VPS acceptance must be configured |
+| Telegram Gifts adapter, deal chat | Not implemented |
 | Payments, checkout, escrow/guarantee, refunds, commissions and seller payouts | Not implemented |
 
 The B2 migration renames historical `pending_payment` order/event rows to `reserved` without changing their IDs, price/currency snapshots, idempotency keys, or event history. Delivery preparation snapshots the exact NFT item, network, seller source, buyer destination, query ID and deadline. The seller wallet signs the TEP-62 transfer; submitted references are untrusted hints. Only independently verified finalized evidence can complete the order.
