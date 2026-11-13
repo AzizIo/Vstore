@@ -154,6 +154,22 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    connection = op.get_bind()
+    has_payment_intents = connection.execute(
+        sa.text("SELECT EXISTS (SELECT 1 FROM payment_intents)")
+    ).scalar_one()
+    has_payment_transactions = connection.execute(
+        sa.text("SELECT EXISTS (SELECT 1 FROM payment_transactions)")
+    ).scalar_one()
+    has_payment_events = connection.execute(
+        sa.text("SELECT EXISTS (SELECT 1 FROM payment_events)")
+    ).scalar_one()
+    if has_payment_intents or has_payment_transactions or has_payment_events:
+        raise RuntimeError(
+            "Cannot downgrade payment ledger after payment evidence has been recorded; "
+            "preserve the financial history."
+        )
+
     op.drop_index("ix_payment_events_intent_created", table_name="payment_events")
     op.drop_table("payment_events")
     op.drop_index("ix_payment_transactions_intent_status", table_name="payment_transactions")
