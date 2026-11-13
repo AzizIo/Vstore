@@ -322,11 +322,13 @@ export function Orders({
       setLinkedOrderError("");
       return;
     }
+    const requestId = ++detailRequestRef.current;
     const controller = new AbortController();
     setLinkedOrder(null);
     setLinkedOrderError("");
     fetchOrder(initialOrderId, accessToken, controller.signal)
       .then((order) => {
+        if (controller.signal.aborted || requestId !== detailRequestRef.current) return;
         if (order.buyer_id !== userId && order.seller_id !== userId) {
           throw new Error("Этот заказ недоступен для вашего аккаунта.");
         }
@@ -335,9 +337,14 @@ export function Orders({
         setSelectedOrder(order);
       })
       .catch((reason: unknown) => {
-        if (!controller.signal.aborted) setLinkedOrderError(reason instanceof Error ? reason.message : "Не удалось открыть заказ.");
+        if (!controller.signal.aborted && requestId === detailRequestRef.current) {
+          setLinkedOrderError(reason instanceof Error ? reason.message : "Не удалось открыть заказ.");
+        }
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (requestId === detailRequestRef.current) detailRequestRef.current += 1;
+    };
   }, [accessToken, initialOrderId, userId]);
 
   useEffect(() => {
