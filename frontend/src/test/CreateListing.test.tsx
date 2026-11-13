@@ -132,7 +132,7 @@ describe("CreateListing seller flow", () => {
       .mockResolvedValueOnce(inventoryPage);
     renderCreateListing();
 
-    expect(await screen.findByText("Inventory unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("Инвентарь недоступен")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
     expect(await screen.findByText("Verified collectible")).toBeInTheDocument();
     expect(apiMocks.fetchMyInventory).toHaveBeenCalledTimes(2);

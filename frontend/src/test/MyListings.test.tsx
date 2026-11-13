@@ -94,7 +94,7 @@ describe("seller listing management", () => {
     render(<MyListings />);
 
     fireEvent.click(await screen.findByRole("button", { name: /My NFT draft/ }));
-    expect(await screen.findByText("No expiry")).toBeInTheDocument();
+    expect(await screen.findByText("Без срока")).toBeInTheDocument();
   });
 
   it("requires an explicit confirmation before publication and reports the result", async () => {
@@ -114,13 +114,13 @@ describe("seller listing management", () => {
   it("saves only the permitted editable listing fields", async () => {
     await openDraft();
 
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Listing price" }), {
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Цена объявления" }), {
       target: { value: "2.5" },
     });
-    fireEvent.change(screen.getByRole("textbox", { name: "Listing title" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Название объявления" }), {
       target: { value: "Edited NFT" },
     });
-    fireEvent.change(screen.getByRole("textbox", { name: "Listing description" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Описание объявления" }), {
       target: { value: "" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить изменения" }));

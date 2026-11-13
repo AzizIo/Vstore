@@ -122,11 +122,11 @@ test(
     expect(typeof (await redisChallenge.json()).payload).toBe("string");
 
     await sellerPage.goto("/");
-    await expect(sellerPage.getByText(/Signed in as E2E Seller/)).toBeVisible();
+    await expect(sellerPage.getByText(/Вы вошли как E2E Seller/)).toBeVisible();
 
     await sellerPage.getByRole("button", { name: "Мои объявления", exact: true }).click();
-    await sellerPage.getByRole("button", { name: "Create listing", exact: true }).click();
-    await expect(sellerPage.getByRole("heading", { name: "Create listing draft" })).toBeVisible();
+    await sellerPage.getByRole("button", { name: "Создать объявление", exact: true }).click();
+    await expect(sellerPage.getByRole("heading", { name: "Создать черновик объявления" })).toBeVisible();
 
     const inventoryAsset = sellerPage.getByRole("button", { name: /E2E Verified NFT/ });
     await expect(inventoryAsset).toBeVisible();
@@ -181,7 +181,7 @@ test(
     expect(buyerBootstrap.status()).toBe(200);
     const buyerSession = await buyerBootstrap.json() as { access_token: string };
     await buyerPage.goto("/");
-    await expect(buyerPage.getByText(/Signed in as E2E Buyer/)).toBeVisible();
+    await expect(buyerPage.getByText(/Вы вошли как E2E Buyer/)).toBeVisible();
 
     await buyerPage.getByRole("button", { name: /E2E Published NFT/ }).click();
     await expect(buyerPage.getByRole("heading", { name: "E2E Published NFT" })).toBeVisible();
@@ -290,9 +290,9 @@ test(
     }, { timeout: 45_000, intervals: [500, 1000, 2000] }).toBe("completed");
 
     await sellerPage.getByRole("button", { name: "Refresh verification status" }).click();
-    await expect(sellerPage.getByText("Transfer independently verified", { exact: true })).toBeVisible();
+    await expect(sellerPage.getByText("Передача подтверждена независимо", { exact: true })).toBeVisible();
     await buyerPage.getByRole("button", { name: "Refresh verification status" }).click();
-    await expect(buyerPage.getByText("Transfer independently verified", { exact: true })).toBeVisible();
+    await expect(buyerPage.getByText("Передача подтверждена независимо", { exact: true })).toBeVisible();
     await expect(buyerPage.getByText("Completed", { exact: true }).first()).toBeVisible();
 
     expect(sellerApiRequests).toContain("POST /api/auth/telegram");

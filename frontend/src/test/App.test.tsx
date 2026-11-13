@@ -141,7 +141,7 @@ describe("marketplace catalog", () => {
   it("shows a loading state while the catalog request is pending", () => {
     vi.mocked(fetch).mockReturnValue(new Promise(() => undefined));
     renderMarketplace();
-    expect(screen.getByLabelText("Listings loading")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByLabelText("Загружаем объявления…")).toHaveAttribute("aria-busy", "true");
   });
 
   it("renders listings returned by the public API", async () => {
@@ -149,7 +149,7 @@ describe("marketplace catalog", () => {
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
     expect(screen.getByText("12.5 TON")).toBeInTheDocument();
     expect(screen.getByText("TON NFT", { selector: ".listing-card-type" })).toBeInTheDocument();
-    expect(screen.getByText("1 item")).toBeInTheDocument();
+    expect(screen.getByText("1 предмет")).toBeInTheDocument();
   });
 
   it("shows an empty state when the API returns no listings", async () => {
@@ -165,7 +165,7 @@ describe("marketplace catalog", () => {
     }));
     renderMarketplace();
     expect(await screen.findByText("Каталог недоступен")).toBeInTheDocument();
-    expect(screen.getByText("The marketplace returned an invalid catalog response.")).toBeInTheDocument();
+    expect(screen.getByText("Маркетплейс вернул некорректный каталог.")).toBeInTheDocument();
   });
 
   it("shows an error and retries the catalog request", async () => {
@@ -233,12 +233,12 @@ describe("marketplace catalog", () => {
     renderMarketplace();
 
     expect(await screen.findByText("first listing 24")).toBeInTheDocument();
-    expect(screen.getByText("Showing 24 of 25")).toBeInTheDocument();
+    expect(screen.getByText("Показано 24 из 25")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё" }));
 
     expect(await screen.findByText("Last server listing")).toBeInTheDocument();
     expect(screen.getAllByText("first listing 1")).toHaveLength(1);
-    expect(screen.getByText("25 items")).toBeInTheDocument();
+    expect(screen.getByText("25 предметов")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Загрузить ещё" })).not.toBeInTheDocument();
     const pageRequests = vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input), "http://localhost"));
     expect(pageRequests.map((url) => url.searchParams.get("offset"))).toEqual(["0", "24"]);

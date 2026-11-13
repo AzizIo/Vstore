@@ -16,7 +16,7 @@ test.describe("public catalog", () => {
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Dragon Egg/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Rose Bouquet/ })).toBeVisible();
-    await expect(page.getByText("3 items")).toBeVisible();
+    await expect(page.getByText("3 предмета")).toBeVisible();
   });
 
   test("searches listings and shows only matching results", async ({ page }) => {
@@ -27,7 +27,7 @@ test.describe("public catalog", () => {
 
     await expect(page.getByRole("button", { name: /Dragon Egg/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toHaveCount(0);
-    await expect(page.getByText("1 item")).toBeVisible();
+    await expect(page.getByText("1 предмет")).toBeVisible();
   });
 
   test("filters listings by asset type", async ({ page }) => {
@@ -38,7 +38,7 @@ test.describe("public catalog", () => {
 
     await expect(page.getByRole("button", { name: /Rose Bouquet/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toHaveCount(0);
-    await expect(page.getByText("1 item")).toBeVisible();
+    await expect(page.getByText("1 предмет")).toBeVisible();
   });
 
   test("sorts catalog results by price from high to low", async ({ page }) => {
@@ -48,7 +48,7 @@ test.describe("public catalog", () => {
     await page.getByRole("combobox", { name: "Валюта" }).selectOption("TON");
     await page.getByRole("combobox", { name: "Сортировка объявлений" }).selectOption("price_desc");
 
-    const catalogCards = page.getByRole("region", { name: "Marketplace catalog" }).locator(".listing-card");
+    const catalogCards = page.getByRole("region", { name: "Каталог маркетплейса" }).locator(".listing-card");
     await expect(catalogCards).toHaveCount(2);
     await expect(catalogCards.first()).toContainText("Moon Lantern");
     await expect(catalogCards.nth(1)).toContainText("Dragon Egg");
@@ -65,7 +65,7 @@ test.describe("public catalog", () => {
     await expect(page.getByRole("button", { name: /Rose Bouquet/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Dragon Egg/ })).toHaveCount(0);
-    await expect(page.getByText("1 item")).toBeVisible();
+    await expect(page.getByText("1 предмет")).toBeVisible();
 
     await page.getByRole("button", { name: "Сбросить фильтры" }).click();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
@@ -88,7 +88,7 @@ test.describe("public catalog", () => {
     await page.goto("/");
 
     await expect(page.getByRole("heading", { name: "Каталог недоступен" })).toBeVisible();
-    await expect(page.getByRole("alert")).toContainText("Catalog temporarily unavailable.");
+    await expect(page.getByRole("alert")).toContainText("Каталог временно недоступен.");
 
     await page.getByRole("button", { name: "Повторить" }).click();
 

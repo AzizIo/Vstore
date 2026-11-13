@@ -131,7 +131,7 @@ describe("Мои NFT", () => {
     fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё NFT" }));
     expect(await screen.findByText("Star Sail NFT")).toBeInTheDocument();
     expect(screen.getAllByText("Moon Lantern NFT")).toHaveLength(1);
-    expect(screen.getAllByText("Item address")).toHaveLength(2);
+    expect(screen.getAllByText("Адрес NFT")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "Загрузить ещё NFT" })).not.toBeInTheDocument();
   });
 

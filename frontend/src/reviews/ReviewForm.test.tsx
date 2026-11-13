@@ -23,10 +23,10 @@ describe("ReviewForm", () => {
     });
     render(<ReviewForm orderId="order-1" accessToken="token" />);
     expect(await screen.findByRole("heading", { name: "Оставить отзыв" })).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText("5 stars"));
+    fireEvent.click(screen.getByLabelText("5 звёзд"));
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "  Great  " } });
     fireEvent.click(screen.getByRole("button", { name: "Отправить отзыв" }));
-    await waitFor(() => expect(screen.getByText(/submitted/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Отзыв отправлен/)).toBeInTheDocument());
     expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input).endsWith("/api/reviews")).length).toBe(1);
   });
 
@@ -43,7 +43,7 @@ describe("ReviewForm", () => {
     });
     render(<ReviewForm orderId="order-1" accessToken="token" />);
     await screen.findByRole("heading", { name: "Оставить отзыв" });
-    fireEvent.click(screen.getByLabelText("5 stars"));
+    fireEvent.click(screen.getByLabelText("5 звёзд"));
     fireEvent.click(screen.getByRole("button", { name: "Отправить отзыв" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("invalid");
   });

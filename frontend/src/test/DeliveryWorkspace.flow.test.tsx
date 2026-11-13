@@ -207,7 +207,7 @@ describe("DeliveryWorkspace", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Проверить и подписать в кошельке" }));
-    expect(await screen.findByText(/wallet request was rejected or cancelled/i)).toBeTruthy();
+    expect(await screen.findByText(/запрос кошелька отклонён или отменён/i)).toBeTruthy();
     expect(mocks.submitDeliveryCandidate).not.toHaveBeenCalled();
   });
 
@@ -225,7 +225,7 @@ describe("DeliveryWorkspace", () => {
     const action = await screen.findByRole("button", { name: "Проверить и подписать в кошельке" });
     fireEvent.click(action);
     await waitFor(() => expect(action).toBeDisabled());
-    expect(screen.getByText(/wallet result is uncertain/i)).toBeTruthy();
+    expect(screen.getByText(/результат запроса к кошельку неизвестен/i)).toBeTruthy();
     expect(mocks.submitDeliveryCandidate).not.toHaveBeenCalled();
   });
 

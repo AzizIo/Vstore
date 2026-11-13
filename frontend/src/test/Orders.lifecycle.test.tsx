@@ -136,13 +136,13 @@ describe("delivery lifecycle order UI contract", () => {
       expect(
         await screen.findByText(label, { selector: ".order-status" }),
       ).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: /Open order Moon Lantern/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Открыть заказ Moon Lantern/ }));
       expect(await screen.findByRole("heading", { name: "Статус заказа" })).toBeInTheDocument();
       expect(await screen.findByText(explanation, { selector: ".order-guidance" })).toBeInTheDocument();
 
       if (canCancel) {
         expect(screen.getByRole("button", { name: "Отменить заказ" })).toBeInTheDocument();
-        expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
+        expect(screen.getByText(/Оплата в VILTARA SHOP пока не подключена/)).toBeInTheDocument();
       } else {
         expect(screen.queryByRole("button", { name: "Отменить заказ" })).not.toBeInTheDocument();
       }

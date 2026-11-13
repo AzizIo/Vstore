@@ -56,9 +56,9 @@ describe("orders", () => {
     resolveRequest?.(jsonResponse({ items: [order] }));
 
     expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Open order Moon Lantern/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Открыть заказ Moon Lantern/ }));
     expect(await screen.findByRole("heading", { name: "Статус заказа" })).toBeInTheDocument();
-    expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
+    expect(screen.getByText(/Оплата в VILTARA SHOP пока не подключена/)).toBeInTheDocument();
   });
 
   it("cancels a pending buyer order and updates its displayed state", async () => {
@@ -78,7 +78,7 @@ describe("orders", () => {
       return jsonResponse({ items: [order] });
     });
     render(<Orders accessToken="private-token" />);
-    fireEvent.click(await screen.findByRole("button", { name: /Open order Moon Lantern/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть заказ Moon Lantern/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Отменить заказ" }));
     expect(await screen.findByText("Отменить этот резерв?")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Подтвердить отмену" }));
@@ -155,7 +155,7 @@ describe("order workspace interactions", () => {
   it("searches titles and IDs and filters by lifecycle state", async () => {
     render(<Orders accessToken="token" onCatalog={vi.fn()} />);
     expect(await screen.findByText("Golden Gift")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Active/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Активные/ }));
     expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
     expect(screen.queryByText("Golden Gift")).not.toBeInTheDocument();
 
@@ -168,12 +168,12 @@ describe("order workspace interactions", () => {
 
   it("opens order details, displays lifecycle facts and countdown, and returns to the workspace", async () => {
     render(<Orders accessToken="token" userId="buyer-1" />);
-    fireEvent.click(await screen.findByRole("button", { name: /Open order Moon Lantern/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть заказ Moon Lantern/ }));
     expect(await screen.findByRole("heading", { name: "Статус заказа" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "История событий" })).toBeInTheDocument();
-    expect(screen.getByText("Order ID")).toBeInTheDocument();
-    expect(screen.getByText(/remaining|Reservation expired/)).toBeInTheDocument();
-    expect(screen.getByText(/Payments are not enabled/)).toBeInTheDocument();
+    expect(screen.getByText("ID заказа")).toBeInTheDocument();
+    expect(screen.getByText(/осталось|Срок резерва истёк/)).toBeInTheDocument();
+    expect(screen.getByText(/Оплата в VILTARA SHOP пока не подключена/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "← Назад к заказам" }));
     expect(await screen.findByRole("heading", { name: "Заказы" })).toBeInTheDocument();
   });
