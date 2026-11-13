@@ -6,12 +6,12 @@ import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.models import Order, OrderStatus, PriceCurrency, User
-from app.db.payments import PaymentEvent, PaymentIntent
+from app.db.payments import PaymentEvent, PaymentIntent, PaymentTransaction
 
 
 class PaymentConflict(Exception):
@@ -27,7 +27,9 @@ def _assert_test_stars_enabled() -> None:
     if not settings.telegram_stars_test_enabled:
         raise PaymentConflict("Telegram Stars test payments are disabled")
     if settings.environment.lower() not in {"local", "development", "test"}:
-        raise PaymentConflict("Telegram Stars test payments are unavailable outside test environments")
+        raise PaymentConflict(
+            "Telegram Stars test payments are unavailable outside test environments"
+        )
     if settings.telegram_stars_test_bot_token is None:
         raise PaymentConflict("A dedicated Telegram Stars test bot token is required")
 
@@ -147,11 +149,7 @@ async def record_stars_success(
     provider_event_id: str,
     now: datetime | None = None,
 ) -> str:
-    """Persist trusted successful_payment evidence; return paid or refund_pending.
-
-    A late or mismatched charge is not silently discarded: it is recorded as
-    refund_pending so the bot worker can issue/reconcile a full Stars refund.
-    """
+    """Persist a provider charge; any extra, late or mismatched charge is refundable."""
 
     _assert_test_stars_enabled()
     current_time = now or datetime.now(UTC)
@@ -172,19 +170,25 @@ async def record_stars_success(
     )
 
     async with session.begin():
-        duplicate = await session.scalar(
+        duplicate_event = await session.scalar(
             select(PaymentEvent).where(
                 PaymentEvent.provider == "telegram_stars",
                 PaymentEvent.provider_event_id == provider_event_id,
             )
         )
-        if duplicate is not None:
-            if duplicate.payload_sha256 != digest:
+        if duplicate_event is not None:
+            if duplicate_event.payload_sha256 != digest:
                 raise PaymentConflict("Telegram update ID was replayed with different payment data")
-            intent = await session.scalar(
-                select(PaymentIntent).where(PaymentIntent.id == duplicate.payment_intent_id)
+            transaction = (
+                await session.scalar(
+                    select(PaymentTransaction).where(
+                        PaymentTransaction.id == duplicate_event.payment_transaction_id
+                    )
+                )
+                if duplicate_event.payment_transaction_id is not None
+                else None
             )
-            return intent.status if intent is not None else "unknown"
+            return transaction.status if transaction is not None else "duplicate"
 
         order_id = await session.scalar(
             select(PaymentIntent.order_id).where(
@@ -194,8 +198,7 @@ async def record_stars_success(
         if order_id is None:
             raise PaymentConflict("Successful payment references an unknown invoice")
 
-        # Keep the global lock order identical to delivery preparation:
-        # order first, then payment intent. This prevents callback/delivery deadlocks.
+        # The order row is always locked before its payment rows to match delivery preparation.
         order = await session.scalar(
             select(Order).where(Order.id == order_id).with_for_update()
         )
@@ -212,24 +215,26 @@ async def record_stars_success(
         if intent is None:
             raise PaymentConflict("Payment intent changed while processing the update")
 
-        if intent.status == "paid":
-            if intent.telegram_payment_charge_id == telegram_payment_charge_id:
-                return "paid"
-            raise PaymentConflict("A different Telegram charge already paid this intent")
-        if intent.status in {"refunded", "refund_pending"}:
-            return intent.status
-        if intent.status != "pending":
-            raise PaymentConflict("Payment intent is not accepting successful payments")
+        existing_charge = await session.scalar(
+            select(PaymentTransaction).where(
+                PaymentTransaction.telegram_payment_charge_id == telegram_payment_charge_id
+            )
+        )
+        if existing_charge is not None:
+            if existing_charge.payment_intent_id != intent.id:
+                raise PaymentConflict("Telegram charge ID is already bound to another invoice")
+            return existing_charge.status
 
         amount_matches = (
             intent.amount == intent.amount.to_integral_value()
             and total_amount == int(intent.amount)
         )
+        expected_payer = await session.scalar(
+            select(User.telegram_id).where(User.id == order.buyer_id)
+        )
         payer_matches = (
             payer_telegram_id == intent.payer_telegram_id
-            and payer_telegram_id == (
-                await session.scalar(select(User.telegram_id).where(User.id == order.buyer_id))
-            )
+            and payer_telegram_id == expected_payer
         )
         order_is_live = (
             order.status is OrderStatus.RESERVED
@@ -243,30 +248,154 @@ async def record_stars_success(
             and payer_matches
             and order_is_live
         )
+        is_first_payment = intent.status == "pending" and valid
+        transaction_status = "captured" if is_first_payment else "refund_pending"
 
-        intent.telegram_payment_charge_id = telegram_payment_charge_id
-        intent.provider_payment_charge_id = provider_payment_charge_id or None
-        if valid:
+        error_code = (
+            "currency_mismatch"
+            if currency != "XTR"
+            else "amount_mismatch"
+            if not amount_matches
+            else "payer_mismatch"
+            if not payer_matches
+            else "duplicate_charge"
+            if intent.status == "paid"
+            else "order_not_live"
+            if not order_is_live
+            else "intent_not_pending"
+        )
+        transaction = PaymentTransaction(
+            payment_intent_id=intent.id,
+            telegram_payment_charge_id=telegram_payment_charge_id,
+            provider_payment_charge_id=provider_payment_charge_id or None,
+            amount=Decimal(total_amount),
+            currency=currency,
+            payer_telegram_id=payer_telegram_id,
+            status=transaction_status,
+            captured_at=current_time,
+            refund_requested_at=None if is_first_payment else current_time,
+            last_error_code=None if is_first_payment else error_code,
+        )
+        session.add(transaction)
+        await session.flush()
+
+        if is_first_payment:
             intent.status = "paid"
             intent.paid_at = current_time
-            event_type = "payment_succeeded"
-        else:
+        elif intent.status == "pending":
             intent.status = "refund_pending"
-            intent.last_error_code = (
-                "currency_mismatch"
-                if currency != "XTR"
-                else "amount_mismatch"
-                if not amount_matches
-                else "payer_mismatch"
-                if not payer_matches
-                else "order_not_live"
-            )
             intent.refund_requested_at = current_time
-            event_type = "payment_rejected"
+            intent.last_error_code = error_code
 
         session.add(
             PaymentEvent(
                 payment_intent_id=intent.id,
+                payment_transaction_id=transaction.id,
+                provider="telegram_stars",
+                provider_event_id=provider_event_id,
+                event_type=(
+                    "payment_succeeded" if is_first_payment else "payment_rejected"
+                ),
+                payload_sha256=digest,
+            )
+        )
+        await session.flush()
+        return transaction.status
+
+
+async def record_stars_refund_result(
+    session: AsyncSession,
+    *,
+    transaction_id: uuid.UUID,
+    provider_event_id: str,
+    succeeded: bool,
+    error_code: str | None = None,
+    now: datetime | None = None,
+) -> str:
+    """Persist the result of a Stars refund API call without assuming timeout means failure."""
+
+    _assert_test_stars_enabled()
+    current_time = now or datetime.now(UTC)
+    if not provider_event_id:
+        raise PaymentConflict("Refund event ID is required")
+
+    async with session.begin():
+        transaction_header = await session.execute(
+            select(PaymentTransaction.payment_intent_id, PaymentIntent.order_id)
+            .join(PaymentIntent, PaymentIntent.id == PaymentTransaction.payment_intent_id)
+            .where(PaymentTransaction.id == transaction_id)
+        )
+        header = transaction_header.first()
+        if header is None:
+            raise PaymentConflict("Payment transaction not found")
+        intent_id, order_id = header
+
+        order = await session.scalar(
+            select(Order).where(Order.id == order_id).with_for_update()
+        )
+        intent = await session.scalar(
+            select(PaymentIntent).where(PaymentIntent.id == intent_id).with_for_update()
+        )
+        transaction = await session.scalar(
+            select(PaymentTransaction)
+            .where(PaymentTransaction.id == transaction_id)
+            .with_for_update()
+        )
+        if order is None or intent is None or transaction is None:
+            raise PaymentConflict("Payment refund target no longer exists")
+
+        digest = _digest(
+            f"{transaction.id}:{transaction.telegram_payment_charge_id}:"
+            f"{'succeeded' if succeeded else 'failed'}:{error_code or ''}"
+        )
+        duplicate = await session.scalar(
+            select(PaymentEvent).where(
+                PaymentEvent.provider == "telegram_stars",
+                PaymentEvent.provider_event_id == provider_event_id,
+            )
+        )
+        if duplicate is not None:
+            if duplicate.payload_sha256 != digest:
+                raise PaymentConflict("Refund event ID was replayed with different data")
+            return transaction.status
+
+        if transaction.status == "refunded":
+            return "refunded"
+        if transaction.status != "refund_pending":
+            raise PaymentConflict("Payment transaction is not awaiting a refund")
+
+        if succeeded:
+            transaction.status = "refunded"
+            transaction.refunded_at = current_time
+            event_type = "refund_succeeded"
+        else:
+            transaction.last_error_code = error_code or "refund_failed"
+            event_type = "refund_failed"
+
+        captured_count = await session.scalar(
+            select(func.count())
+            .select_from(PaymentTransaction)
+            .where(
+                PaymentTransaction.payment_intent_id == intent.id,
+                PaymentTransaction.status == "captured",
+            )
+        )
+        pending_count = await session.scalar(
+            select(func.count())
+            .select_from(PaymentTransaction)
+            .where(
+                PaymentTransaction.payment_intent_id == intent.id,
+                PaymentTransaction.status == "refund_pending",
+            )
+        )
+        if captured_count == 0 and pending_count == 0:
+            intent.status = "refunded"
+            intent.refunded_at = current_time
+
+        session.add(
+            PaymentEvent(
+                payment_intent_id=intent.id,
+                payment_transaction_id=transaction.id,
                 provider="telegram_stars",
                 provider_event_id=provider_event_id,
                 event_type=event_type,
@@ -274,4 +403,4 @@ async def record_stars_success(
             )
         )
         await session.flush()
-        return intent.status
+        return transaction.status
