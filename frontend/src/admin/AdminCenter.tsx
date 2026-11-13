@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { fetchAuditHistory, fetchModerationQueue, submitModerationDecision, type AuditEntry, type ModerationAction, type ModerationItem, type ModerationReasonCode } from "./api";
+import { fetchAdminAuditLog, fetchAuditHistory, fetchModerationQueue, submitModerationDecision, type AuditEntry, type ModerationAction, type ModerationItem, type ModerationReasonCode } from "./api";
 import "./admin.css";
 
 const reasonLabels: Record<string, string> = {
@@ -51,6 +51,12 @@ export function AdminCenter({ accessToken, active }: Props) {
   const [auditFor, setAuditFor] = useState<string | null>(null);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [auditError, setAuditError] = useState("");
+  const [showGlobalAudit, setShowGlobalAudit] = useState(false);
+  const [globalAudit, setGlobalAudit] = useState<AuditEntry[]>([]);
+  const [globalAuditTotal, setGlobalAuditTotal] = useState(0);
+  const [globalAuditLoading, setGlobalAuditLoading] = useState(false);
+  const [globalAuditError, setGlobalAuditError] = useState("");
+  const [globalAuditAction, setGlobalAuditAction] = useState("");
   const pageSize = 25;
 
   const loadQueue = useCallback(async (signal?: AbortSignal) => {
@@ -69,6 +75,25 @@ export function AdminCenter({ accessToken, active }: Props) {
     void loadQueue(controller.signal);
     return () => controller.abort();
   }, [active, loadQueue]);
+
+  async function openGlobalAudit() {
+    setShowGlobalAudit(true);
+    setGlobalAuditLoading(true);
+    setGlobalAuditError("");
+    try {
+      const page = await fetchAdminAuditLog(accessToken, {
+        limit: pageSize,
+        offset: 0,
+        ...(globalAuditAction ? { action: globalAuditAction } : {}),
+      });
+      setGlobalAudit(page.items);
+      setGlobalAuditTotal(page.total);
+    } catch (caught) {
+      setGlobalAuditError(caught instanceof Error ? caught.message : "Не удалось загрузить общий журнал аудита.");
+    } finally {
+      setGlobalAuditLoading(false);
+    }
+  }
 
   async function openAudit(item: ModerationItem) {
     setAuditFor(item.id); setAudit([]); setAuditError("");
@@ -98,10 +123,38 @@ export function AdminCenter({ accessToken, active }: Props) {
     <section className="admin-center" aria-labelledby="admin-center-title">
       <header className="admin-center-header">
         <div><p className="admin-eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ</p><h1 id="admin-center-title">Модерация и аудит</h1><p>Для каждого решения требуется причина. Все действия сохраняются в журнале.</p></div>
-        <button type="button" className="admin-secondary" onClick={() => setRetry((value) => value + 1)} disabled={loading}>{loading ? "Обновляем…" : "Обновить очередь"}</button>
+        <div className="admin-header-actions">
+          <button type="button" className="admin-secondary" onClick={() => void openGlobalAudit()}>Общий журнал аудита</button>
+          <button type="button" className="admin-secondary" onClick={() => setRetry((value) => value + 1)} disabled={loading}>{loading ? "Обновляем…" : "Обновить очередь"}</button>
+        </div>
       </header>
       {success && <p className="admin-success" role="status">{success}</p>}
       {error && <div className="admin-error" role="alert"><span>{error}</span><button type="button" onClick={() => setRetry((value) => value + 1)}>Повторить</button></div>}
+      {showGlobalAudit && <section className="admin-audit admin-global-audit" aria-labelledby="admin-global-audit-title">
+        <div className="admin-global-audit-heading">
+          <h2 id="admin-global-audit-title">Общий журнал аудита</h2>
+          <button type="button" className="admin-secondary" onClick={() => setShowGlobalAudit(false)}>Скрыть</button>
+        </div>
+        <label>Тип действия<select value={globalAuditAction} onChange={(event) => setGlobalAuditAction(event.target.value)}>
+          <option value="">Все действия</option>
+          <option value="approved">Одобрение</option>
+          <option value="rejected">Отклонение</option>
+          <option value="suspended">Приостановка</option>
+          <option value="restored">Восстановление</option>
+        </select></label>
+        <button type="button" className="admin-secondary" onClick={() => void openGlobalAudit()} disabled={globalAuditLoading}>
+          {globalAuditLoading ? "Загружаем…" : "Применить фильтр"}
+        </button>
+        {globalAuditError && <p role="alert">{globalAuditError}</p>}
+        {!globalAuditLoading && !globalAuditError && globalAudit.length === 0 && <p>Записей аудита пока нет.</p>}
+        <p className="admin-count">Всего записей: {globalAuditTotal} · Показаны последние {globalAudit.length}</p>
+        {globalAudit.map((entry) => <article className="admin-audit-entry" key={entry.id}>
+          <strong>{auditActionLabels[entry.action] ?? "Действие модерации"}</strong>
+          <time dateTime={entry.occurred_at}>{new Date(entry.occurred_at).toLocaleString("ru-RU")}</time>
+          <p>{reasonCodeLabels[entry.reason_code] ?? "Другая причина"} — {entry.reason}</p>
+          <span>Объявление: {entry.target_id} · {listingStatusLabels[String(entry.before_snapshot.status)] ?? "—"} → {listingStatusLabels[String(entry.after_snapshot.status)] ?? "—"}</span>
+        </article>)}
+      </section>}
       <div className="admin-toolbar">
         <label>Статус объявления<select value={statusFilter} onChange={(event) => { setOffset(0); setStatusFilter(event.target.value); }}>
           <option value="">Все статусы, требующие действий</option><option value="pending_review">На модерации</option><option value="active">Активно</option><option value="suspended">Приостановлено</option>
