@@ -223,7 +223,7 @@ describe("listing API client", () => {
   });
 
   it("publishes a listing with the seller session token", async () => {
-    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...listing, status: "active" }));
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...listing, status: "pending_review" }));
     const controller = new AbortController();
 
     await expect(publishListing("listing/one", "seller-token", controller.signal))
