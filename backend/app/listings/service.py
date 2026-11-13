@@ -271,10 +271,15 @@ async def update_listing(
         )
         if listing is None:
             raise ListingNotFound("Listing not found")
-        if listing.status not in {ListingStatus.DRAFT, ListingStatus.ACTIVE}:
+        if listing.status not in {ListingStatus.DRAFT, ListingStatus.PENDING_REVIEW, ListingStatus.ACTIVE}:
             raise ListingConflict(
-                "Only draft or active listings can be edited"
+                "Only draft, pending-review or active listings can be edited"
             )
+
+        # Any seller edit withdraws the submission back to a private draft.
+        # This prevents approving content that changed after it entered review.
+        if listing.status is ListingStatus.PENDING_REVIEW:
+            listing.status = ListingStatus.DRAFT
 
         if "price_amount" in fields_set:
             listing.price_amount = price_amount  # type: ignore[assignment]
