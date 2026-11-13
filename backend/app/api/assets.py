@@ -567,7 +567,7 @@ async def sync_my_verified_inventory(
                             select(Listing)
                             .where(
                                 Listing.asset_id == asset_id,
-                                Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED]),
+                                Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]),
                             )
                             .order_by(Listing.id)
                             .with_for_update()
