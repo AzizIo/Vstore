@@ -49,7 +49,8 @@ async def publish_listing(
 
     All provider calls happen after the initial read transaction is rolled back.
     The listing, asset, and selected verified wallet are locked and revalidated
-    in a new transaction before the status changes to PENDING_REVIEW. Only an administrator can make it publicly ACTIVE.
+    in a new transaction before the status changes to PENDING_REVIEW. Only an
+    administrator can make it publicly ACTIVE.
     """
 
     settings = get_settings()
@@ -215,7 +216,9 @@ async def publish_listing(
         conflicting_listing_id = await session.scalar(
             select(Listing.id).where(
                 Listing.asset_id == asset_id,
-                Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]),
+                Listing.status.in_(
+                    [ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]
+                ),
             )
         )
         if conflicting_listing_id is not None:
@@ -271,7 +274,11 @@ async def update_listing(
         )
         if listing is None:
             raise ListingNotFound("Listing not found")
-        if listing.status not in {ListingStatus.DRAFT, ListingStatus.PENDING_REVIEW, ListingStatus.ACTIVE}:
+        if listing.status not in {
+            ListingStatus.DRAFT,
+            ListingStatus.PENDING_REVIEW,
+            ListingStatus.ACTIVE,
+        }:
             raise ListingConflict(
                 "Only draft, pending-review or active listings can be edited"
             )
