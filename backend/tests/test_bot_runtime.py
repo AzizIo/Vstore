@@ -18,6 +18,7 @@ class _SessionContext:
 class _FakeBot:
     def __init__(self) -> None:
         self.session = SimpleNamespace(close=AsyncMock())
+        self.set_my_commands = AsyncMock()
 
 
 def _settings(*, bot_token: str | None = "123456:test-token") -> SimpleNamespace:
