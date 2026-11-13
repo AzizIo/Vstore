@@ -407,7 +407,7 @@ async def create_listing_draft(
     conflicting_listing_id = await session.scalar(
         select(Listing.id).where(
             Listing.asset_id == locked_asset.id,
-            Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED]),
+            Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]),
         )
     )
     if conflicting_listing_id is not None:
