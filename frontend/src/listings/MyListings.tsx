@@ -277,7 +277,7 @@ function MyListingDetail({
                     setConfirmPublish(true);
                   }}
                 >
-                  Publish listing
+                  Опубликовать объявление
                 </button>
               )}
               <button

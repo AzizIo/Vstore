@@ -242,7 +242,7 @@ export function CreateListing({
         </form>
       ) : loading ? (
         <div className="my-listings-message" role="status">Проверяем инвентарь подтверждённых TON NFT…</div>
-      ) : error.includes("verified TON wallet is required") ? (
+      ) : /verified TON wallet is required|необходимо подтвердить TON-кошелёк/i.test(error) ? (
         <div className="my-listings-message" role="alert">
           <h2>Сначала подтвердите кошелёк</h2>
           <p>Перед публикацией NFT необходимо подтвердить TON-кошелёк. Одного подключения недостаточно для подтверждения владения.</p>

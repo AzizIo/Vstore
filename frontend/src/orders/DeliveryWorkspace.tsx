@@ -358,7 +358,7 @@ function DeliveryPanel({
       )}
       {(attempt || role === "buyer") && (
         <button className="secondary-button" type="button" disabled={loading} onClick={() => { void refreshDelivery(); onRefreshOrder(); }}>
-          Refresh verification status
+          Обновить статус проверки
         </button>
       )}
       <p className="payment-disclaimer">Оплата и эскроу не используются. Кошелёк может запросить комиссию сети. Маркетплейс не получает NFT и не подписывает перевод.</p>

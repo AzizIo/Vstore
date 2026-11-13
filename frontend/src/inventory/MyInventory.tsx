@@ -271,11 +271,11 @@ export function MyInventory({
         <div className="inventory-message" role="alert">
           <h2>Инвентарь недоступен</h2>
           <p>{error}</p>
-          {/verified TON wallet/i.test(error) ? (
+          {/verified TON wallet|необходимо подтвердить TON-кошелёк/i.test(error) ? (
             <p>Сначала подключите и подтвердите TON-кошелёк. Одного подключения недостаточно для подтверждения владения.</p>
           ) : null}
           <button className="text-button" type="button" onClick={() => setInitialLoadRetry((value) => value + 1)}>
-            Try again
+            Повторить
           </button>
         </div>
       ) : assets.length === 0 ? (
