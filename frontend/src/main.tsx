@@ -3,12 +3,13 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
 
-const AdminPage = lazy(() => import("./admin/AdminPage").then((module) => ({ default: module.AdminPage })));
 import "./index.css";
 import "./telegram-miniapp.css";
 import "./catalog-ui.css";
 import "./workspace-ui.css";
 import "./shell-ui.css";
+
+const AdminPage = lazy(() => import("./admin/AdminPage").then((module) => ({ default: module.AdminPage })));
 
 const queryClient = new QueryClient();
 const Root = window.location.pathname === "/admin" || window.location.pathname === "/admin/"
