@@ -25,7 +25,16 @@ from app.db.models import (
     NFTAsset,
     Wallet,
 )
-from app.db.session import async_session_factory
+from app.db.session import async_session_factory, dispose_engine
+
+
+def address_matches(address: str | None, expected: str) -> bool | None:
+    if not address:
+        return None
+    try:
+        return normalize_address(address) == normalize_address(expected)
+    except (TypeError, ValueError):
+        return False
 
 
 def suffix(address: str | None) -> str | None:
@@ -84,7 +93,11 @@ async def run(wallet_id: UUID, limit: int, offset: int) -> dict[str, object]:
                             select(Listing).where(
                                 Listing.asset_id == asset.id,
                                 Listing.status.in_(
-                                    [ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]
+                                    [
+                                        ListingStatus.ACTIVE,
+                                        ListingStatus.RESERVED,
+                                        ListingStatus.PENDING_REVIEW,
+                                    ]
                                 ),
                             )
                         )
@@ -117,17 +130,11 @@ async def run(wallet_id: UUID, limit: int, offset: int) -> dict[str, object]:
                             else str(result.status)
                         ),
                         "verifier_owner_suffix": suffix(result.owner_address),
-                        "verifier_owner_matches_selected_wallet": (
-                            normalize_address(result.owner_address)
-                            == normalize_address(wallet.address)
-                            if result.owner_address
-                            else None
+                        "verifier_owner_matches_selected_wallet": address_matches(
+                            result.owner_address, wallet.address
                         ),
-                        "verifier_expected_owner_matches_selected_wallet": (
-                            normalize_address(result.expected_owner_address)
-                            == normalize_address(wallet.address)
-                            if result.expected_owner_address
-                            else None
+                        "verifier_expected_owner_matches_selected_wallet": address_matches(
+                            result.expected_owner_address, wallet.address
                         ),
                         "db_rows": db_rows,
                         "upsert": "not_executed_read_only",
@@ -169,7 +176,10 @@ async def run(wallet_id: UUID, limit: int, offset: int) -> dict[str, object]:
                 ],
             }
     finally:
-        await verifier.provider.aclose()
+        try:
+            await verifier.provider.aclose()
+        finally:
+            await dispose_engine()
 
 
 def main() -> None:
