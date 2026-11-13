@@ -111,6 +111,19 @@ describe("seller listing management", () => {
     expect(screen.getByText("На модерации")).toBeInTheDocument();
   });
 
+  it("returns a pending submission to draft when the seller edits it", async () => {
+    const pending = { ...draft, status: "pending_review" as const };
+    mocks.fetchMyListings.mockResolvedValue([pending]);
+    mocks.updateListing.mockResolvedValue({ ...draft, status: "draft", title: "Revised after review" });
+    render(<MyListings />);
+    fireEvent.click(await screen.findByRole("button", { name: /My NFT draft/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Название объявления" }), {
+      target: { value: "Revised after review" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить изменения" }));
+    expect(await screen.findByText("Изменения сохранены. Заявка снята с модерации — отправьте объявление повторно.")).toBeInTheDocument();
+  });
+
   it("saves only the permitted editable listing fields", async () => {
     await openDraft();
 
