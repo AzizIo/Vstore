@@ -258,7 +258,10 @@ async def test_worker_delivers_and_does_not_claim_delivered_rows_again(
     assert second.claimed == 0
     assert len(sender.sent) == 2
     assert all("<b>Сумма:</b> <code>1.25 TON</code>" in message for _, message in sender.sent)
-    assert all("Оплата внутри платформы пока не подключена" in message for _, message in sender.sent)
+    assert all(
+        "Оплата внутри платформы пока не подключена" in message
+        for _, message in sender.sent
+    )
     rows = await _outbox_rows(notification_session)
     assert {row.status for row in rows} == {"delivered"}
     assert all(row.delivered_at is not None for row in rows)
