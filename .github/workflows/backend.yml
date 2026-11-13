@@ -2,6 +2,8 @@ name: Backend CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "backend/**"
       - "docker-compose.yml"
@@ -15,6 +17,8 @@ on:
       - "docker-compose.preview.yml"
       - ".env.example"
       - ".github/workflows/backend.yml"
+
+  workflow_dispatch:
 
 permissions:
   contents: read
