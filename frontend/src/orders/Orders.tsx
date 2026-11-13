@@ -26,6 +26,14 @@ function getOrderTitle(order: MarketplaceOrder) {
   return order.title || order.asset_name || "Без названия";
 }
 
+function formatOrderPrice(amount: string, currency: string) {
+  const value = Number(amount);
+  const formatted = Number.isFinite(value)
+    ? new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(value)
+    : amount;
+  return `${formatted} ${currency}`;
+}
+
 function getDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
@@ -119,7 +127,7 @@ function OrderCard({
         <span className={`order-status order-status-${order.status}`}>{statusLabel(order.status)}</span>
       </span>
       <span className="workspace-card-title">{title}</span>
-      <span className="workspace-card-price">{order.price_amount} {order.price_currency}</span>
+      <span className="workspace-card-price">{formatOrderPrice(order.price_amount, order.price_currency)}</span>
       <span className="workspace-card-meta">
         <span>{role === "buyer" ? "Покупка" : "Продажа"} · {getDate(order.created_at)}</span>
         <span className="workspace-card-arrow" aria-hidden="true">↗</span>
@@ -175,7 +183,7 @@ function OrderDetails({
         <div className="order-detail-heading">
           <p className="eyebrow">{order.asset_type === "ton_nft" ? "TON NFT" : "ПОДАРОК TELEGRAM"}</p>
           <h1 id="order-detail-title">{getOrderTitle(order)}</h1>
-          <p className="order-detail-price">{order.price_amount} {order.price_currency}</p>
+          <p className="order-detail-price">{formatOrderPrice(order.price_amount, order.price_currency)}</p>
         </div>
         <span className={`order-status order-status-${order.status}`}>{statusLabel(order.status)}</span>
       </div>
