@@ -2,7 +2,7 @@
 
 - **Статус:** продуктовые решения утверждены в рамках Issue #54 и PR #55.
 - **Последняя сверка реализации:** 2026-11-13.
-- **Проверенная база:** main, commit f22d9e2f1b37c9c358ce7a093d8cd0db562a64ca.
+- **Проверенная база:** main, commit 9593f1a003a4f976cf3e6b3b20cb1d3830d83018.
 - **Назначение документа:** фиксирует продуктовые ограничения и фактический статус кода на main. Открытые PR не считаются реализованными, пока не смёржены.
 
 ---
@@ -50,7 +50,9 @@ Seed-фразы и приватные ключи никогда не запра�
 | **Reservation / Order** | Покупатель, продавец, объявление, снимок цены/валюты, срок, idempotency key и история событий | Реализован; резерв не является оплатой |
 | **Delivery** | Снимок item/network/source/destination/query/deadline, попытки, submission hints, observer и подтверждение доставки | B1–B6 реализованы на main; live acceptance не завершён |
 | **Notification outbox** | Транзакционные уведомления buyer/seller по событиям заказа и доставки, worker с retry/dedupe | Реализован; worker запускается отдельно через bot profile |
-| **Admin moderation** | Очередь модерации, обязательный `pending_review`, approve/reject/suspend/restore, append-only аудит | Реализован; PR #135 добавляет обязательное одобрение до публичной публикации; доступ закрыт по умолчанию |
+| **Admin moderation** | Очередь модерации, обязательный `pending_review`, approve/reject/suspend/restore, append-only аудит | Реализован; публичная публикация только после одобрения; доступ закрыт по умолчанию |
+| **Seller profile and reviews** | Публичный профиль, доступные объявления, отзывы и безопасная репутация | Реализован; отзывы доступны только по заказам с независимо подтверждённой передачей NFT |
+| **Seller overview** | Личные счётчики объявлений/заказов, последняя активность и снимки цен по валютам | Реализован; доступ только для аутентифицированного пользователя; `pending_review` учитывается отдельно |
 | **Payment** | Приём, списание и подтверждение средств | Не реализован |
 | **Escrow / guarantee** | Удержание средств/актива, возвраты, споры и выплаты | Не реализован |
 | **Telegram Gifts** | Отдельный тип актива и transfer adapter | Не реализован |
@@ -78,6 +80,8 @@ Seed-фразы и приватные ключи никогда не запра�
 | Stage B B1–B6 | Read-only transfer evidence adapter, миграции и immutable snapshots, leased observer, prepare/submit/read API, атомарное completion после независимой финальной проверки, seller TON Connect flow и notifications |
 | Telegram notifications | Durable outbox; сообщения buyer/seller создаются в той же транзакции, что и соответствующие lifecycle changes; отправка — отдельным worker |
 | Admin moderation | Отдельный /admin workspace; публикация через `pending_review`; bounded queue; approve/reject/suspend/restore; обязательная причина и Idempotency-Key; append-only audit history; PostgreSQL блокирует UPDATE/DELETE/TRUNCATE журнала |
+| Public seller profile | Безопасные публичные сведения о продавце, доступные объявления и отзывы только по завершённым заказам с подтверждённой передачей NFT |
+| Private seller overview | User-scoped счётчики объявлений/заказов, последняя активность и отдельные суммы по TON/XTR; резервные суммы не являются платежами |
 
 ### Важные детали TON Connect
 
