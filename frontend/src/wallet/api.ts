@@ -1,3 +1,4 @@
+import { getApiErrorMessage } from "../api/errors";
 import { API_BASE_URL } from "../api/config";
 
 export interface WalletRecord {
@@ -39,9 +40,7 @@ async function readResponse(response: Response): Promise<unknown> {
   let message = `Ошибка запроса кошелька (${response.status}).`;
   try {
     const body: unknown = await response.json();
-    if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
-      message = body.detail;
-    }
+    message = getApiErrorMessage(body, message);
   } catch {
     // Keep the HTTP status message when the server does not return JSON.
   }
@@ -157,9 +156,7 @@ export async function unlinkWallet(accessToken: string, walletId: string): Promi
   let message = `Ошибка запроса кошелька (${response.status}).`;
   try {
     const body: unknown = await response.json();
-    if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
-      message = body.detail;
-    }
+    message = getApiErrorMessage(body, message);
   } catch {
     // Keep the HTTP status message when the server does not return JSON.
   }
