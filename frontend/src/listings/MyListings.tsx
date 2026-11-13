@@ -159,7 +159,9 @@ function MyListingDetail({
       setExpiresAt(updatedExpiration);
       setInitialExpiresAt(updatedExpiration);
       onUpdated(updated);
-      setSuccess("Изменения сохранены.");
+      setSuccess(updated.status === "draft" && listing.status === "pending_review"
+        ? "Изменения сохранены. Заявка снята с модерации — отправьте объявление повторно."
+        : "Изменения сохранены.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось сохранить изменения.");
     } finally {
@@ -313,7 +315,7 @@ function MyListingDetail({
           {confirmPublish && (
             <div className="listing-confirmation" role="group" aria-label="Подтвердите публикацию объявления">
               <p>
-                Опубликовать этот NFT? Перед публикацией сервер повторно проверит текущего владельца в блокчейне.
+                Отправить этот NFT на модерацию? Сервер повторно проверит владение. В каталоге объявление появится только после одобрения администратора.
               </p>
               <button
                 className="primary-button"
@@ -335,7 +337,7 @@ function MyListingDetail({
           )}
           {listing.status === "pending_review" && (
             <p className="listing-management-note" role="status">
-              Объявление отправлено на проверку. Пока оно на модерации, его нельзя редактировать без отзыва заявки.
+              Объявление ожидает проверки. Если изменить его, заявка автоматически вернётся в черновик и потребует повторной отправки.
             </p>
           )}
           {listing.status === "draft" && !canPublish && (
