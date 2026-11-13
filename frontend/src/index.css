@@ -887,3 +887,959 @@ button:disabled { cursor:not-allowed; }
   .listing-card:hover,.my-listing-card:hover,.inventory-card:hover,.workspace-order-card:hover { box-shadow:none; transform:none; }
   .listing-card:hover .artwork img { transform:none; }
 }
+
+
+/* VILTARA Telegram Mini App adaptive shell */
+:root {
+  --app-bg: #0d100d;
+  --app-panel: #151a15;
+  --app-panel-raised: #1b211a;
+  --app-line: #2b342a;
+  --app-accent: #d0dc70;
+  --app-muted: #9ba397;
+  color-scheme: dark;
+  background: var(--app-bg);
+  accent-color: var(--app-accent);
+}
+
+html {
+  min-width: 320px;
+  background: var(--app-bg);
+  scroll-padding-top: 20px;
+  scroll-padding-bottom: calc(92px + var(--app-safe-bottom));
+}
+
+body {
+  background:
+    radial-gradient(ellipse at 50% -24%, rgb(91 107 50 / 15%), transparent 47%),
+    var(--app-bg);
+  overscroll-behavior-y: contain;
+  overflow-x: hidden;
+}
+
+button, input, select, textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button, a, select, input {
+  touch-action: manipulation;
+}
+
+.app-shell {
+  width: min(100% - 48px, 1180px);
+}
+
+.topbar {
+  min-width: 0;
+  border-color: var(--app-line);
+}
+
+.brand-mark {
+  width: 38px;
+  border-color: var(--app-accent);
+  color: var(--app-accent);
+  background: rgb(208 220 112 / 5%);
+}
+
+.brand-name {
+  font-size: 12px;
+  letter-spacing: .2em;
+}
+
+.app-navigation {
+  gap: clamp(18px, 3vw, 34px);
+  border-color: var(--app-line);
+}
+
+.navigation-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 50px;
+  font-size: 12px;
+}
+
+.navigation-icon {
+  display: none;
+}
+
+.catalog-intro h1 {
+  letter-spacing: -.025em;
+}
+
+.catalog-intro .eyebrow {
+  color: var(--app-accent);
+}
+
+.catalog {
+  min-width: 0;
+}
+
+.search-control, .select-control, .price-control {
+  border-color: var(--app-line);
+  background: var(--app-panel);
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.search-control:focus-within, .select-control:focus-within, .price-control:focus-within {
+  border-color: #748044;
+  background: #192019;
+}
+
+.listing-card {
+  border-radius: 12px;
+  border-color: var(--app-line);
+  background: var(--app-panel);
+}
+
+.listing-card:hover {
+  border-color: #687541;
+}
+
+.listing-card-content {
+  padding: 12px;
+}
+
+.artwork {
+  background: #202820;
+}
+
+.primary-button, .secondary-button, .danger-button, .load-more-button {
+  min-height: 44px;
+  border-radius: 10px;
+}
+
+.secondary-button, .load-more-button {
+  background: var(--app-panel);
+}
+
+.seller-profile, .workspace-section, .workspace-order-card, .order-detail-hero,
+.inventory-card, .my-listing-card {
+  border-radius: 14px;
+}
+
+footer {
+  border-color: var(--app-line);
+}
+
+/* Tablet */
+@media (min-width: 641px) and (max-width: 900px) {
+  .app-shell {
+    width: min(100% - 36px, 820px);
+  }
+
+  .listing-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px 13px;
+  }
+
+  .inventory-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Telegram Mini App / phone layout */
+@media (max-width: 640px) {
+  html, body, #root {
+    width: 100%;
+    min-width: 320px;
+    max-width: 100%;
+  }
+
+  body {
+    min-height: 100svh;
+    min-height: 100dvh;
+    padding: var(--app-safe-top) 0 0;
+  }
+
+  .app-shell {
+    width: 100%;
+    min-height: 100svh;
+    min-height: 100dvh;
+    padding: 0 17px calc(92px + var(--app-safe-bottom));
+    margin: 0;
+    overflow-x: clip;
+  }
+
+  .topbar {
+    display: flex;
+    height: auto;
+    min-height: 62px;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 10px;
+    padding: 13px 0 12px;
+    border-bottom: 1px solid var(--app-line);
+  }
+
+  .brand {
+    min-height: 38px;
+    gap: 9px;
+  }
+
+  .brand-mark {
+    width: 36px;
+    font-size: 21px;
+  }
+
+  .brand-name {
+    font-size: 11px;
+    letter-spacing: .18em;
+  }
+
+  .header-actions {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 100%;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0;
+  }
+
+  .network-label {
+    display: none;
+  }
+
+  #wallet-connect {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .wallet-control {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 7px;
+  }
+
+  .wallet-account {
+    display: flex;
+    width: 100%;
+    flex: 1 1 100%;
+    align-items: flex-start;
+    gap: 3px;
+    padding: 9px 11px;
+    border: 1px solid var(--app-line);
+    border-radius: 11px;
+    background: var(--app-panel);
+    font-size: 10px;
+  }
+
+  .wallet-address {
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .wallet-network, .wallet-disclaimer {
+    font-size: 10px;
+  }
+
+  .wallet-button {
+    display: inline-flex;
+    min-width: 0;
+    min-height: 42px;
+    flex: 1 1 calc(50% - 7px);
+    align-items: center;
+    justify-content: center;
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 10px;
+    line-height: 1.3;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .wallet-config-message {
+    width: 100%;
+    max-width: none;
+    padding: 10px 11px;
+    border: 1px solid var(--app-line);
+    border-radius: 11px;
+    background: var(--app-panel);
+    font-size: 11px;
+    line-height: 1.45;
+    text-align: left;
+  }
+
+  .wallet-error {
+    width: 100%;
+    flex-basis: 100%;
+    padding: 3px 2px;
+    font-size: 11px;
+    text-align: left;
+  }
+
+  .session-banner {
+    padding: 9px 0;
+    margin: 0;
+    border-bottom: 1px solid var(--app-line);
+    font-size: 10px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
+  .session-error {
+    align-items: flex-start;
+  }
+
+  .app-navigation {
+    position: fixed;
+    z-index: 900;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 3px;
+    width: 100%;
+    padding: 8px max(10px, var(--app-safe-right)) max(9px, var(--app-safe-bottom)) max(10px, var(--app-safe-left));
+    border: 0;
+    border-top: 1px solid rgb(208 220 112 / 13%);
+    border-radius: 17px 17px 0 0;
+    background: rgb(17 21 17 / 96%);
+    box-shadow: 0 -12px 32px rgb(0 0 0 / 28%);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+  }
+
+  .navigation-tab {
+    display: flex;
+    min-width: 0;
+    min-height: 56px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 5px 2px;
+    border: 1px solid transparent;
+    border-radius: 11px;
+    color: #929b8e;
+    font-size: 9px;
+    line-height: 1.1;
+    text-align: center;
+  }
+
+  .navigation-tab[aria-pressed="true"] {
+    border-color: rgb(208 220 112 / 18%);
+    background: rgb(208 220 112 / 8%);
+    color: var(--app-accent);
+  }
+
+  .navigation-tab::after {
+    display: none;
+  }
+
+  .navigation-icon {
+    display: block;
+    font-size: 19px;
+    line-height: 1;
+  }
+
+  .navigation-label {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .catalog-intro {
+    padding: 25px 0 22px;
+  }
+
+  .catalog-intro .eyebrow {
+    margin-bottom: 14px;
+    font-size: 9px;
+    line-height: 1.5;
+    letter-spacing: .14em;
+  }
+
+  .catalog-intro h1 {
+    max-width: 540px;
+    font-size: clamp(35px, 10vw, 48px);
+    line-height: 1.02;
+    letter-spacing: -.035em;
+  }
+
+  .intro-copy {
+    max-width: 420px;
+    margin-top: 12px;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .catalog {
+    padding: 0 0 22px;
+  }
+
+  .catalog-heading {
+    align-items: baseline;
+    gap: 9px;
+    margin-bottom: 13px;
+  }
+
+  .catalog-heading h2 {
+    font-size: 16px;
+    font-weight: 650;
+  }
+
+  .result-count {
+    font-size: 10px;
+  }
+
+  .catalog-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .search-control {
+    grid-column: 1 / -1;
+    min-width: 0;
+    min-height: 46px;
+    padding: 0 12px;
+    border-radius: 11px;
+  }
+
+  .search-control input {
+    min-width: 0;
+    font-size: 12px;
+  }
+
+  .select-control {
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 10px;
+    border-radius: 10px;
+  }
+
+  .select-control select {
+    width: 100%;
+    min-width: 0;
+    font-size: 11px;
+  }
+
+  .price-control {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 10px;
+    border-radius: 10px;
+  }
+
+  .price-control input {
+    min-width: 0;
+    font-size: 12px;
+  }
+
+  .clear-filters-button {
+    min-height: 44px;
+    border-radius: 10px;
+    font-size: 11px;
+  }
+
+  .filter-hint {
+    margin: 0 0 12px;
+    font-size: 10px;
+    line-height: 1.5;
+  }
+
+  .listing-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 11px 9px;
+  }
+
+  .listing-card {
+    min-width: 0;
+    border-radius: 12px;
+  }
+
+  .artwork {
+    aspect-ratio: 1 / 1;
+  }
+
+  .listing-card-content {
+    gap: 6px;
+    padding: 10px 9px 11px;
+  }
+
+  .listing-card-type {
+    font-size: 8px;
+    letter-spacing: .09em;
+  }
+
+  .listing-card-title {
+    width: 100%;
+    font-size: 15px;
+  }
+
+  .listing-card-price {
+    font-size: 11px;
+  }
+
+  .catalog-message, .detail-message {
+    padding: 32px 0;
+  }
+
+  .catalog-message h3 {
+    font-size: 22px;
+  }
+
+  .catalog-message p, .detail-message p {
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .catalog-pagination {
+    padding: 20px 0 0;
+  }
+
+  .load-more-button, .primary-button, .secondary-button, .danger-button {
+    min-height: 44px;
+    border-radius: 10px;
+  }
+
+  .detail-view {
+    padding: 19px 0 24px;
+  }
+
+  .back-button {
+    margin-bottom: 15px;
+  }
+
+  .detail-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 17px;
+  }
+
+  .detail-layout > .artwork {
+    width: 100%;
+    max-height: none;
+    aspect-ratio: 1 / .92;
+    border-radius: 15px;
+  }
+
+  .detail-copy {
+    min-width: 0;
+    padding-top: 0;
+  }
+
+  .detail-copy h1 {
+    font-size: clamp(32px, 9vw, 42px);
+    line-height: 1.03;
+  }
+
+  .detail-price {
+    margin: 14px 0;
+    font-size: 17px;
+  }
+
+  .detail-description {
+    font-size: 12px;
+    line-height: 1.65;
+  }
+
+  .seller-profile {
+    gap: 10px;
+    padding: 12px;
+    margin: 16px 0;
+    border-radius: 12px;
+  }
+
+  .detail-facts {
+    margin-top: 20px;
+  }
+
+  .detail-facts div {
+    gap: 10px;
+    padding: 11px 0;
+    font-size: 11px;
+  }
+
+  .my-listings, .my-listings-gate {
+    padding: 26px 0 30px;
+  }
+
+  .my-listings-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .my-listings-heading h1, .my-listings-gate > h1 {
+    font-size: clamp(32px, 9vw, 40px);
+  }
+
+  .my-listings-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .my-listing-card {
+    grid-template-columns: 104px minmax(0, 1fr);
+    border-radius: 12px;
+  }
+
+  .my-listing-card-copy {
+    gap: 7px;
+    padding: 10px;
+  }
+
+  .my-listing-card-title {
+    font-size: 16px;
+  }
+
+  .my-listing-detail {
+    padding: 18px 0 28px;
+  }
+
+  .my-listing-detail-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 15px;
+  }
+
+  .my-listing-detail-layout > .my-listing-image {
+    max-height: none;
+    border-radius: 14px;
+  }
+
+  .my-listing-detail-copy {
+    padding-top: 0;
+  }
+
+  .create-listing-view {
+    padding: 22px 0 28px;
+  }
+
+  .create-listing-view > h1 {
+    font-size: clamp(32px, 9vw, 40px);
+  }
+
+  .create-listing-note {
+    margin: 10px 0 18px;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .draft-form {
+    width: 100%;
+    max-width: none;
+    gap: 14px;
+  }
+
+  .draft-form input, .draft-form textarea, .draft-form select,
+  .listing-edit-form input, .listing-edit-form textarea {
+    min-height: 46px;
+    border-radius: 10px;
+    font-size: 16px;
+  }
+
+  .price-field {
+    grid-template-columns: minmax(0, 1fr) 104px;
+  }
+
+  .inventory-view {
+    padding: 24px 0 28px;
+  }
+
+  .inventory-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 15px;
+  }
+
+  .inventory-heading h1 {
+    font-size: clamp(32px, 9vw, 40px);
+  }
+
+  .inventory-intro {
+    margin-top: 9px;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .inventory-sync-summary {
+    margin-bottom: 16px;
+    font-size: 10px;
+  }
+
+  .inventory-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .inventory-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-width: 0;
+    padding: 0;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .inventory-artwork {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+  }
+
+  .inventory-card-copy {
+    padding: 9px;
+  }
+
+  .inventory-card-heading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .inventory-card-copy h2 {
+    font-size: 15px;
+    line-height: 1.2;
+  }
+
+  .inventory-card-type, .inventory-verified {
+    font-size: 8px;
+  }
+
+  .inventory-collection, .inventory-address {
+    margin-top: 8px;
+    font-size: 9px;
+  }
+
+  .inventory-collection code, .inventory-address code {
+    font-size: 9px;
+  }
+
+  .inventory-message {
+    padding: 26px 0;
+    font-size: 12px;
+  }
+
+  .inventory-message h2 {
+    font-size: 22px;
+  }
+
+  .selected-inventory-asset {
+    gap: 10px;
+    margin: 16px 0;
+    font-size: 16px;
+  }
+
+  .orders-view {
+    min-width: 0;
+    padding: 23px 0 28px;
+  }
+
+  .workspace-page-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
+  .workspace-page-heading h1 {
+    font-size: clamp(30px, 8.5vw, 38px);
+  }
+
+  .workspace-subtitle {
+    margin-top: 8px;
+    font-size: 11px;
+    line-height: 1.55;
+  }
+
+  .refresh-button {
+    min-height: 40px;
+    margin-left: auto;
+    border-radius: 9px;
+  }
+
+  .workspace-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .workspace-search, .workspace-sort select {
+    min-height: 46px;
+    border-radius: 10px;
+    font-size: 12px;
+  }
+
+  .workspace-order-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .workspace-order-card {
+    min-height: 142px;
+    gap: 10px;
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  .workspace-card-title {
+    font-size: 19px;
+  }
+
+  .workspace-filter-row {
+    gap: 7px;
+    padding-bottom: 9px;
+  }
+
+  .workspace-filter {
+    min-height: 36px;
+    border-radius: 9px;
+  }
+
+  .workspace-empty {
+    min-height: 220px;
+    padding: 24px 16px;
+    border-radius: 13px;
+  }
+
+  .order-detail-view {
+    padding-top: 12px;
+  }
+
+  .order-detail-toolbar {
+    margin-bottom: 13px;
+  }
+
+  .order-detail-hero {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 10px;
+    padding: 14px;
+    border-radius: 13px;
+  }
+
+  .order-detail-symbol {
+    width: 48px;
+    height: 48px;
+    grid-row: span 2;
+    font-size: 27px;
+  }
+
+  .order-detail-heading h1 {
+    font-size: 25px;
+  }
+
+  .order-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .workspace-section {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  .workspace-section-heading {
+    margin-bottom: 14px;
+  }
+
+  .workspace-section-heading h2 {
+    font-size: 21px;
+  }
+
+  .event-timeline li {
+    grid-template-columns: 12px minmax(0, 1fr);
+  }
+
+  .event-timeline time {
+    grid-column: 2;
+    max-width: none;
+    text-align: left;
+  }
+
+  .order-facts dl > div {
+    grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr);
+    gap: 8px;
+  }
+
+  .reservation-dialog-backdrop {
+    align-items: end;
+    padding: 12px 10px max(10px, var(--app-safe-bottom));
+  }
+
+  .reservation-dialog {
+    width: 100%;
+    max-height: min(88dvh, 760px);
+    padding: 21px 17px calc(18px + var(--app-safe-bottom));
+    border-radius: 18px 18px 12px 12px;
+    background: #171c16;
+  }
+
+  .reservation-dialog-actions {
+    display: grid;
+    grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+    gap: 9px;
+  }
+
+  .reservation-dialog-actions > button {
+    min-height: 46px;
+    border-radius: 10px;
+  }
+
+  .creation-success {
+    padding: 18px 0;
+  }
+
+  footer {
+    padding: 18px 0 8px;
+    margin-top: 24px;
+    font-size: 8px;
+    letter-spacing: .12em;
+  }
+}
+
+@media (max-width: 370px) {
+  .app-shell {
+    padding-right: 13px;
+    padding-left: 13px;
+  }
+
+  .catalog-intro h1 {
+    font-size: 34px;
+  }
+
+  .navigation-tab {
+    font-size: 8px;
+  }
+
+  .listing-card-content {
+    padding: 8px;
+  }
+
+  .inventory-card-copy {
+    padding: 8px;
+  }
+
+  .wallet-button {
+    font-size: 9px;
+  }
+}
+
+@media (min-width: 641px) {
+  .navigation-icon {
+    display: none;
+  }
+}
+
+@media (hover: none) {
+  .listing-card:hover, .workspace-order-card:hover {
+    transform: none;
+  }
+}
