@@ -1,0 +1,355 @@
+/*
+ * Agent 3 — Telegram Mini App shell and shared controls.
+ * Owns topbar, wallet block, navigation, shared form controls and safe areas.
+ * Preserve Telegram auth and TON Connect behavior.
+ */
+
+:root {
+  --shell-header-border: rgb(151 165 129 / 15%);
+  --shell-control-bg: #171d16;
+}
+
+html {
+  scroll-padding-top: 18px;
+  scroll-padding-bottom: calc(100px + var(--app-safe-bottom, 0px));
+}
+
+body {
+  overscroll-behavior-x: none;
+}
+
+.app-shell {
+  isolation: isolate;
+}
+
+.topbar {
+  min-width: 0;
+  min-height: 76px;
+  border-color: var(--shell-header-border);
+}
+
+.brand {
+  min-width: 0;
+  gap: 12px;
+}
+
+.brand-mark {
+  width: 40px;
+  border: 1px solid rgb(208 220 112 / 50%);
+  border-radius: 13px;
+  background: linear-gradient(145deg, rgb(208 220 112 / 13%), rgb(208 220 112 / 3%));
+  box-shadow: inset 0 1px rgb(255 255 255 / 4%), 0 5px 18px rgb(0 0 0 / 12%);
+  font-weight: 750;
+}
+
+.brand-name {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .17em;
+}
+
+.header-actions {
+  min-width: 0;
+  gap: 14px;
+}
+
+.network-label {
+  color: #a4ad9a;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .16em;
+}
+
+.wallet-control {
+  min-width: 0;
+}
+
+.wallet-account {
+  gap: 4px;
+  border-color: rgb(151 165 129 / 18%);
+  border-radius: 11px;
+  background: linear-gradient(140deg, rgb(208 220 112 / 7%), transparent 75%), var(--shell-control-bg);
+}
+
+.wallet-address {
+  color: #eef1e6;
+  font-size: 11px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.wallet-network {
+  color: #a3ad98;
+  font-size: 9px;
+}
+
+.wallet-disclaimer {
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.wallet-button {
+  min-height: 40px;
+  border: 1px solid rgb(208 220 112 / 44%);
+  border-radius: 11px;
+  background: rgb(208 220 112 / 8%);
+  color: var(--mini-accent);
+  font-size: 10px;
+  font-weight: 750;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.wallet-button:hover:not(:disabled) {
+  border-color: rgb(208 220 112 / 70%);
+  background: rgb(208 220 112 / 13%);
+}
+
+.wallet-button.wallet-disconnect {
+  border-color: rgb(151 165 129 / 20%);
+  background: transparent;
+  color: #a8b19e;
+}
+
+.wallet-config-message {
+  padding: 9px 11px;
+  border: 1px solid rgb(151 165 129 / 14%);
+  border-radius: 11px;
+  background: var(--shell-control-bg);
+  color: #a8b19e;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.session-banner {
+  border-color: var(--shell-header-border);
+  color: #a8b19e;
+  font-size: 11px;
+}
+
+.session-authenticated {
+  color: #c4d18a;
+}
+
+.app-navigation {
+  border-color: var(--shell-header-border);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-body);
+}
+
+input,
+select,
+textarea {
+  accent-color: var(--mini-accent);
+}
+
+.search-control,
+.select-control,
+.price-control,
+.workspace-search,
+.workspace-sort select,
+.draft-form input,
+.draft-form textarea,
+.draft-form select,
+.listing-edit-form input,
+.listing-edit-form textarea,
+.review-comment-label textarea {
+  color: var(--mini-text);
+}
+
+.search-control:focus-within,
+.select-control:focus-within,
+.price-control:focus-within,
+.workspace-search:focus-within,
+.draft-form input:focus-visible,
+.draft-form textarea:focus-visible,
+.draft-form select:focus-visible,
+.listing-edit-form input:focus-visible,
+.listing-edit-form textarea:focus-visible {
+  border-color: #87974d;
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(208 220 112 / 8%);
+}
+
+.draft-form > label {
+  color: #b0b9a7;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.draft-form input,
+.draft-form textarea,
+.draft-form select,
+.listing-edit-form input,
+.listing-edit-form textarea {
+  border-color: rgb(151 165 129 / 22%);
+  border-radius: 11px;
+  background: #111710;
+  color: #edf1e7;
+}
+
+.draft-form input::placeholder,
+.draft-form textarea::placeholder,
+.listing-edit-form input::placeholder,
+.listing-edit-form textarea::placeholder {
+  color: #808a7a;
+}
+
+.draft-form textarea,
+.listing-edit-form textarea {
+  line-height: 1.6;
+}
+
+.primary-button,
+.secondary-button,
+.danger-button,
+.load-more-button,
+.clear-filters-button {
+  font-family: var(--font-body);
+  font-weight: 750;
+  letter-spacing: -.015em;
+}
+
+:focus-visible {
+  outline-color: var(--mini-accent);
+}
+
+@media (min-width: 641px) {
+  .topbar {
+    gap: 24px;
+  }
+
+  .header-actions {
+    margin-left: auto;
+  }
+
+  .wallet-control {
+    justify-content: flex-end;
+  }
+
+  .app-navigation {
+    padding-block: 10px;
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    min-height: 0;
+    padding: 11px 0 12px;
+    gap: 10px;
+  }
+
+  .brand-mark {
+    width: 36px;
+    border-radius: 12px;
+  }
+
+  .brand-name {
+    font-size: 10px;
+    letter-spacing: .16em;
+  }
+
+  .header-actions {
+    gap: 8px;
+  }
+
+  .wallet-account {
+    padding: 9px 10px;
+  }
+
+  .wallet-address {
+    font-size: 11px;
+  }
+
+  .wallet-button {
+    min-height: 43px;
+    border-radius: 10px;
+    font-size: 10px;
+  }
+
+  .wallet-config-message {
+    padding: 10px 11px;
+    border-radius: 11px;
+  }
+
+  .session-banner {
+    padding-block: 8px;
+    font-size: 10px;
+  }
+
+  .app-navigation {
+    padding-top: 7px;
+    padding-bottom: max(9px, var(--app-safe-bottom, 0px));
+    border-top-color: rgb(208 220 112 / 20%);
+    background: rgb(17 22 16 / 97%);
+    box-shadow: 0 -9px 26px rgb(0 0 0 / 27%);
+  }
+
+  .navigation-tab {
+    min-height: 58px;
+    gap: 5px;
+  }
+
+  .navigation-tab[aria-pressed="true"] {
+    background: linear-gradient(180deg, rgb(208 220 112 / 9%), rgb(208 220 112 / 4%));
+  }
+
+  .navigation-tab .navigation-icon {
+    width: 34px;
+    height: 26px;
+    border-radius: 9px;
+    font-size: 19px;
+  }
+
+  .navigation-tab[aria-pressed="true"] .navigation-icon {
+    color: var(--mini-accent);
+  }
+
+  .navigation-label {
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .draft-form input,
+  .draft-form textarea,
+  .draft-form select,
+  .listing-edit-form input,
+  .listing-edit-form textarea {
+    min-height: 47px;
+    border-radius: 11px;
+    font-size: 16px;
+  }
+
+  .draft-form textarea,
+  .listing-edit-form textarea {
+    min-height: 110px;
+  }
+
+  .review-comment-label textarea {
+    min-height: 108px;
+    border-radius: 11px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 370px) {
+  .wallet-button {
+    min-height: 42px;
+    padding-inline: 7px;
+    font-size: 9px;
+  }
+
+  .navigation-tab .navigation-icon {
+    width: 30px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wallet-button {
+    transition: none;
+  }
+}
