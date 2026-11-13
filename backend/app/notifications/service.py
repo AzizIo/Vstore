@@ -196,61 +196,55 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
 
     if delivery.event_type == "order_created":
         description = (
-            "Your order was created and the listing is reserved."
+            "Ваш заказ создан, объявление зарезервировано."
             if delivery.recipient_role == "buyer"
-            else "A buyer reserved your listing."
+            else "Покупатель зарезервировал ваше объявление."
         )
-        status = "Reserved"
+        status = "Зарезервировано"
     elif delivery.event_type == "order_cancelled":
         description = (
-            "You cancelled the order."
+            "Вы отменили заказ."
             if delivery.recipient_role == "buyer"
-            else "The buyer cancelled the order."
+            else "Покупатель отменил заказ."
         )
-        status = "Cancelled"
+        status = "Отменён"
     elif delivery.event_type == "order_expired":
-        description = "The order reservation expired automatically."
-        status = "Expired"
+        description = "Срок резерва заказа истёк автоматически."
+        status = "Истёк"
     elif delivery.event_type == "delivery_prepared":
         description = (
-            "The seller prepared the direct NFT transfer. The NFT has not been confirmed delivered."
+            "Продавец подготовил прямую передачу NFT. Получение NFT ещё не подтверждено."
             if delivery.recipient_role == "buyer"
-            else "Action required: review and sign the exact NFT transfer in your own TON wallet."
+            else "Требуется действие: проверьте данные и подпишите перевод именно этого NFT в своём TON-кошельке."
         )
-        status = "Awaiting seller transfer"
+        status = "Ожидается перевод продавца"
     elif delivery.event_type == "delivery_submitted":
         description = (
-            "A transfer reference was submitted. The backend is independently "
-            "checking on-chain evidence."
+            "Данные о переводе получены. Сервис проверяет подтверждение в сети TON."
             if delivery.recipient_role == "buyer"
-            else (
-                "Your transfer reference was received. Wait for independent "
-                "on-chain verification."
-            )
+            else "Мы получили данные о переводе. Дождитесь независимой проверки в сети TON."
         )
-        status = "Verification in progress"
+        status = "Проверка перевода"
     elif delivery.event_type == "delivery_confirmed":
         description = (
-            "The backend independently confirmed the exact NFT transfer "
-            "to the snapshotted buyer wallet."
+            "Передача именно этого NFT на кошелёк покупателя подтверждена в блокчейне TON."
         )
-        status = "Transfer verified"
+        status = "Перевод подтверждён"
     elif delivery.event_type == "delivery_manual_review":
         description = (
-            "Delivery needs manual review. Do not assume the NFT was "
-            "delivered or submit another transfer."
+            "Передача требует ручной проверки. Не считайте NFT полученным и не отправляйте повторный перевод."
         )
-        status = "Manual review required"
+        status = "Требуется проверка"
     else:
         raise UnsupportedNotificationEvent(
             f"Unsupported Telegram notification event_type: {delivery.event_type!r}"
         )
 
     lines = [
-        f"VILTARA SHOP · Order #{order_reference}",
+        f"VILTARA SHOP · Заказ №{order_reference}",
         description,
-        f"Status: {status}",
-        f"Amount: {amount} {delivery.price_currency}",
+        f"Статус: {status}",
+        f"Сумма: {amount} {delivery.price_currency}",
     ]
     settings = get_settings()
     app_url = validate_telegram_direct_link(settings.telegram_mini_app_direct_link)
@@ -260,11 +254,10 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
             startapp=f"order_{delivery.order_id.hex}",
         )
         if order_url is not None:
-            lines.append(f"Open in Mini App: {order_url}")
+            lines.append(f"Открыть заказ в Mini App: {order_url}")
 
-    lines.append("Payment is not enabled. No payment has been received.")
+    lines.append("Оплата пока не подключена. Платёж не принимался.")
     return "\n".join(lines)
-
 
 async def process_due_notifications(
     session: AsyncSession,
