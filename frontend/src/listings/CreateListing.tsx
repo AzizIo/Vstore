@@ -121,7 +121,11 @@ export function CreateListing({
         controller.signal,
       );
       if (controller.signal.aborted) return;
-      setAssets((current) => appendUniqueAssets(current, page.items));
+      const merged = appendUniqueAssets(assets, page.items);
+      if (merged.length === assets.length && page.has_more && page.next_offset <= nextOffset) {
+        throw new Error("Не удалось перейти к следующей странице. Обновите страницу и попробуйте снова.");
+      }
+      setAssets(merged);
       setNextOffset(page.next_offset);
       setHasMore(page.has_more);
     } catch (reason) {
