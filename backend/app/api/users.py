@@ -82,7 +82,7 @@ async def remove_wallet(
         select(Listing.id)
         .where(
             Listing.seller_id == user.id,
-            Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED]),
+            Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]),
         )
         .limit(1)
     )
