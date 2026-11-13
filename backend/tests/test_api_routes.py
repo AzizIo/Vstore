@@ -66,7 +66,10 @@ def test_listing_catalog_rejects_invalid_limit(limit: str) -> None:
         response = client.get(f"/api/listings?limit={limit}")
     assert response.status_code == 422
     assert isinstance(response.json()["detail"], list)
-    assert all("msg" in error and "loc" in error and "type" in error for error in response.json()["detail"])
+    assert all(
+        "msg" in error and "loc" in error and "type" in error
+        for error in response.json()["detail"]
+    )
 
 
 def test_listing_catalog_rejects_negative_offset() -> None:
@@ -108,7 +111,9 @@ def test_listing_catalog_rejects_price_sort_without_currency() -> None:
     with TestClient(app) as client:
         response = client.get("/api/listings?sort=price_asc")
     assert response.status_code == 422
-    assert response.json()["detail"] == "Выберите валюту, чтобы фильтровать или сортировать объявления по цене."
+    assert response.json()["detail"] == (
+        "Выберите валюту, чтобы фильтровать или сортировать объявления по цене."
+    )
 
 
 def test_listing_catalog_rejects_unknown_sort_with_russian_validation_message() -> None:
