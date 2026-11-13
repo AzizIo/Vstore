@@ -404,3 +404,63 @@
     transition: none;
   }
 }
+
+
+/* Keyboard and assistive-technology affordances for personal workspaces. */
+.inventory-card:focus-visible,
+.my-listing-card:focus-visible,
+.workspace-order-card:focus-visible,
+.create-listing-action:focus-visible,
+.workspace-role-tabs button:focus-visible,
+.workspace-filter:focus-visible,
+.copy-id-button:focus-visible {
+  outline: 2px solid var(--mini-accent);
+  outline-offset: 3px;
+}
+
+.workspace-filter-row {
+  overscroll-behavior-inline: contain;
+}
+
+.workspace-order-card,
+.my-listing-card,
+.inventory-card,
+.workspace-section,
+.order-detail-hero,
+.cancel-order-card {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .order-detail-aside,
+  .order-detail-main {
+    min-width: 0;
+  }
+
+  .order-detail-hero,
+  .order-facts,
+  .cancel-order-card,
+  .workspace-section {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .order-facts code,
+  .inventory-address code,
+  .inventory-collection code {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}
+
+@media (forced-colors: active) {
+  .inventory-card:focus-visible,
+  .my-listing-card:focus-visible,
+  .workspace-order-card:focus-visible,
+  .create-listing-action:focus-visible,
+  .workspace-role-tabs button:focus-visible,
+  .workspace-filter:focus-visible,
+  .copy-id-button:focus-visible {
+    outline: 2px solid Highlight;
+  }
+}
