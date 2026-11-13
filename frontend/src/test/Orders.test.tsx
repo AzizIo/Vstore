@@ -166,6 +166,37 @@ describe("order workspace interactions", () => {
     expect(screen.queryByText("Silver Gift")).not.toBeInTheDocument();
   });
 
+  it("ignores stale detail responses when the user opens another order", async () => {
+    const firstOrder = { ...order, id: "order-1", title: "Moon Lantern" };
+    const secondOrder = { ...order, id: "order-2", title: "Golden Gift" };
+    let resolveFirst: ((value: Response) => void) | undefined;
+    let resolveSecond: ((value: Response) => void) | undefined;
+
+    vi.mocked(fetch).mockImplementation((input) => {
+      const url = String(input);
+      if (url.endsWith("/api/orders/order-1")) {
+        return new Promise((resolve) => { resolveFirst = resolve; });
+      }
+      if (url.endsWith("/api/orders/order-2")) {
+        return new Promise((resolve) => { resolveSecond = resolve; });
+      }
+      return Promise.resolve(jsonResponse({ items: [firstOrder, secondOrder] }));
+    });
+
+    render(<Orders accessToken="token" userId="buyer-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть заказ Moon Lantern/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Открыть заказ Golden Gift/ }));
+
+    resolveSecond?.(jsonResponse(secondOrder));
+    expect(await screen.findByRole("heading", { name: "Golden Gift" })).toBeInTheDocument();
+
+    resolveFirst?.(jsonResponse(firstOrder));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Golden Gift" })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Moon Lantern" })).not.toBeInTheDocument();
+    });
+  });
+
   it("opens order details, displays lifecycle facts and countdown, and returns to the workspace", async () => {
     render(<Orders accessToken="token" userId="buyer-1" />);
     fireEvent.click(await screen.findByRole("button", { name: /Открыть заказ Moon Lantern/ }));
