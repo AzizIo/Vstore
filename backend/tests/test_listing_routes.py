@@ -161,7 +161,7 @@ def test_listing_detail_returns_only_active_listing(api_client) -> None:
         app.dependency_overrides.pop(get_db_session, None)
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Listing not found"
+    assert response.json()["detail"] == "Объявление не найдено."
 
 
 def test_create_listing_rejects_asset_not_verified_or_not_owned(api_client, seller) -> None:
@@ -180,7 +180,9 @@ def test_create_listing_rejects_asset_not_verified_or_not_owned(api_client, sell
         app.dependency_overrides.pop(get_db_session, None)
 
     assert response.status_code == 409
-    assert "verified TON NFTs" in response.json()["detail"]
+    assert response.json()["detail"] == (
+        "Можно выставить только подтверждённый TON NFT, которым вы владеете сейчас."
+    )
     session.add.assert_not_called()
     session.commit.assert_not_awaited()
 
@@ -245,7 +247,7 @@ def test_create_listing_rejects_conflicting_open_listing(api_client, seller) -> 
         app.dependency_overrides.pop(get_db_session, None)
 
     assert response.status_code == 409
-    assert "active or reserved" in response.json()["detail"]
+    assert response.json()["detail"] == "Этот NFT уже выставлен на продажу или зарезервирован."
 
 
 def test_create_listing_rejects_stale_owner_and_marks_asset_stale(
@@ -283,7 +285,10 @@ def test_create_listing_rejects_stale_owner_and_marks_asset_stale(
         app.dependency_overrides.pop(get_ton_nft_verifier, None)
 
     assert response.status_code == 409
-    assert "freshly verified" in response.json()["detail"]
+    assert response.json()["detail"] == (
+        "Не удалось повторно подтвердить владение NFT. "
+        "Обновите инвентарь и попробуйте ещё раз."
+    )
     assert asset.owner_id is None
     assert asset.verification_status is AssetVerificationStatus.STALE
     session.commit.assert_awaited_once()
@@ -401,7 +406,7 @@ def test_publish_listing_maps_provider_outage_to_503(
         app.dependency_overrides.pop(get_db_session, None)
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "provider offline"
+    assert response.json()["detail"] == "Сервис временно недоступен. Попробуйте позже."
 
 
 def test_edit_listing_accepts_only_permitted_fields(

@@ -106,7 +106,9 @@ def test_create_order_reports_a_retryable_provider_outage(api_client, monkeypatc
     )
 
     assert response.status_code == 503
-    assert "temporarily unavailable" in response.json()["detail"]
+    assert response.json()["detail"] == (
+        "Проверка владения NFT в сети TON временно недоступна. Попробуйте позже."
+    )
 
 
 def test_create_order_passes_the_server_side_verifier(api_client, monkeypatch) -> None:

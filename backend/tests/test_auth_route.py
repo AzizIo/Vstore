@@ -13,15 +13,15 @@ from app.main import app
     [
         (
             SimpleNamespace(bot_token=None, auth_secret_key="s" * 32),
-            "Telegram authentication is not configured",
+            "Вход через Telegram временно недоступен. Попробуйте позже.",
         ),
         (
             SimpleNamespace(bot_token="bot-token", auth_secret_key=None),
-            "API authentication secret is not configured",
+            "Авторизация временно недоступна. Попробуйте позже.",
         ),
         (
             SimpleNamespace(bot_token="bot-token", auth_secret_key="short"),
-            "API authentication secret is not configured",
+            "Авторизация временно недоступна. Попробуйте позже.",
         ),
     ],
 )
@@ -52,7 +52,9 @@ def test_telegram_auth_rejects_invalid_init_data_without_database_access() -> No
             response = client.post("/api/auth/telegram", json={"init_data": "tampered"})
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid or expired Telegram initData"
+    assert response.json()["detail"] == (
+        "Сеанс Telegram недействителен или истёк. Откройте Mini App заново."
+    )
     session_factory.assert_not_called()
 
 

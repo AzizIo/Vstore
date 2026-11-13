@@ -48,6 +48,7 @@ def test_user_profile_requires_authentication() -> None:
     with TestClient(app) as client:
         response = client.get("/api/users/me")
     assert response.status_code == 401
+    assert response.json()["detail"] == "Для выполнения действия войдите в аккаунт."
 
 
 def test_user_profile_returns_only_current_user(client: TestClient) -> None:
@@ -64,6 +65,11 @@ def test_listing_catalog_rejects_invalid_limit(limit: str) -> None:
     with TestClient(app) as client:
         response = client.get(f"/api/listings?limit={limit}")
     assert response.status_code == 422
+    assert isinstance(response.json()["detail"], list)
+    assert all(
+        "msg" in error and "loc" in error and "type" in error
+        for error in response.json()["detail"]
+    )
 
 
 def test_listing_catalog_rejects_negative_offset() -> None:
@@ -105,16 +111,46 @@ def test_listing_catalog_rejects_price_sort_without_currency() -> None:
     with TestClient(app) as client:
         response = client.get("/api/listings?sort=price_asc")
     assert response.status_code == 422
-    assert "Select a price currency" in response.json()["detail"]
+    assert response.json()["detail"] == (
+        "Выберите валюту, чтобы фильтровать или сортировать объявления по цене."
+    )
 
 
-def test_listing_catalog_rejects_unknown_sort() -> None:
+def test_listing_catalog_rejects_unknown_sort_with_russian_validation_message() -> None:
     with TestClient(app) as client:
-        response = client.get("/api/listings?sort=random")
+        response = client.get("/api/listings?sort=random-value")
     assert response.status_code == 422
+    error = response.json()["detail"][0]
+    assert error["msg"] == "Значение не соответствует допустимому формату."
+    assert error["loc"] == ["query", "sort"]
+    assert error["input"] is None
+    assert "random-value" not in response.text
 
 
 def test_listing_detail_rejects_malformed_uuid() -> None:
     with TestClient(app) as client:
         response = client.get("/api/listings/not-a-uuid")
     assert response.status_code == 422
+
+
+def test_unknown_route_returns_localized_not_found() -> None:
+    with TestClient(app) as client:
+        response = client.get("/_route_that_does_not_exist")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Запрашиваемый ресурс не найден."
+
+
+def test_validation_errors_never_echo_submitted_secrets() -> None:
+    secret = "DO_NOT_ECHO_THIS_AUTH_SECRET"
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/auth/telegram",
+            json={"init_data": {"private_token": secret}},
+        )
+
+    assert response.status_code == 422
+    assert secret not in response.text
+    error = response.json()["detail"][0]
+    assert error["msg"] == "Введите текстовое значение."
+    assert error["loc"] == ["body", "init_data"]
+    assert set(error) == {"loc", "msg", "type", "input"}
