@@ -761,7 +761,7 @@ describe("TON Connect wallet UI", () => {
       name: "Selected wallet NFT",
       description: null,
       image_url: null,
-      verification_status: "Подтверждён",
+      verification_status: "verified",
       eligible_for_listing: true,
     };
     const nextAsset = {
