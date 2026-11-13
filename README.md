@@ -22,7 +22,10 @@ Product boundaries and decisions approved for the current MVP are recorded in [d
 | Full inventory reconciliation/sync and dedicated My NFT screen | Implemented in main via [PR #58](https://github.com/AzizIo/Vstore/pull/58); live testnet/provider acceptance remains open in [Issue #44](https://github.com/AzizIo/Vstore/issues/44) |
 | Server-side verification that a reserved NFT was delivered to the buyer | B1–B6 implemented on `main`: read-only evidence adapter, immutable attempt snapshots, leased observer, preparation/submission APIs, wallet-driven transfer UX, transactional delivery notifications. Live testnet acceptance remains outstanding; see [Issue #46](https://github.com/AzizIo/Vstore/issues/46). |
 | Order-verified seller reviews and reputation | Implemented; immutable reviews require backend-confirmed completed NFT delivery and expose safe aggregates |
-| Admin moderation queue, approval/rejection, suspension/restoration and immutable audit | Implemented; admin allowlist and live Telegram/VPS acceptance must be configured |
+| Admin moderation queue, approval/rejection, suspension/restoration and immutable audit | Implemented; listings stay private in `pending_review` until approved; admin allowlist and live Telegram/VPS acceptance must be configured |
+| Public seller profiles and delivery-verified reviews | Implemented; safe public fields, purchasable listings and reviews backed by independently verified completed NFT delivery |
+| Private seller overview | Implemented; authenticated listing/order metrics, recent activity and price snapshots grouped by currency |
+| Read-only operations diagnostics | Implemented; notification outbox health and inventory discrepancy tools; no automatic retry or inventory mutation |
 | Telegram Gifts adapter, deal chat | Not implemented |
 | Payments, checkout, escrow/guarantee, refunds, commissions and seller payouts | Not implemented |
 
@@ -117,19 +120,25 @@ Example current API routes (authenticate with a backend Bearer token where indic
 |---|---|---|
 | POST | /api/auth/telegram | Verify raw Telegram initData and issue an API session |
 | GET | /api/users/me | Current user |
+| GET | /api/users/me/overview | Private seller dashboard for the authenticated user |
+| GET | /api/sellers/{seller_id}/profile | Public seller profile, purchasable listings and verified reviews |
 | POST | /api/wallets/proof/challenge | Issue a short-lived user-bound TON proof challenge |
 | POST | /api/wallets/proof/verify | Cryptographically verify TON Connect Proof and link wallet |
 | GET | /api/wallets/me | Current user's linked wallets |
 | GET | /api/assets/me | Verified NFT inventory (server-side ownership recheck) |
 | GET | /api/listings?limit=24&offset=0&sort=newest | Public listings; supports `search`, `asset_type`, `currency`, `min_price`, `max_price` and currency-scoped price sorting |
 | POST | /api/listings | Create listing draft from a verified eligible asset |
-| POST | /api/listings/{listing_id}/publish | Publish after a fresh ownership check |
+| POST | /api/listings/{listing_id}/publish | Submit listing for admin moderation after a fresh ownership check |
 | POST | /api/orders | Reserve listing (requires Idempotency-Key; **not payment**) |
 | GET | /api/orders | Buyer's or seller's orders |
 | POST | /api/orders/{order_id}/cancel | Cancel an eligible reservation before delivery preparation |
 | POST | /api/orders/{order_id}/delivery/prepare | Snapshot buyer/seller wallets and prepare a time-limited direct transfer |
 | POST | /api/orders/{order_id}/delivery/submissions | Submit an untrusted transaction reference for observer lookup |
 | GET | /api/orders/{order_id}/delivery | Read the participant-scoped delivery attempt and verification status |
+| GET | /api/admin/access | Check admin allowlist access |
+| GET | /api/admin/moderation | Read the admin moderation queue |
+| POST | /api/admin/listings/{listing_id}/decision | Approve/reject/suspend/restore with reason and Idempotency-Key |
+| GET | /api/admin/audit | Read the moderation audit log |
 
 Price range filters and price sorting require an explicit `currency=TON` or `currency=XTR`. TON and Telegram Stars are separate units and are never compared or aggregated together. `min_price` and `max_price` are inclusive positive decimal bounds; the API rejects inverted ranges.
 
@@ -159,11 +168,20 @@ Frontend CI runs Vitest, TypeScript checks and a production Vite build. Use the 
 
 The API-backed Playwright suite runs the real React app against FastAPI, disposable PostgreSQL/Redis and a loopback TON provider fixture. It exercises reservation, seller delivery preparation, a mocked TON Connect wallet boundary, reference submission, independent observer completion, and completed status in both participant views. The wallet and provider are simulated only at their external boundaries; backend API calls and persistence are real. Live testnet wallet/provider acceptance remains required before claiming live transfer support. See [docs/API_BACKED_E2E.md](docs/API_BACKED_E2E.md).
 
+## Operations diagnostics
+
+Run from `backend/` with the application's configured environment. These commands are read-only:
+
+- `python -m scripts.notification_outbox_health --json` — inspect outbox backlog, failed rows and expired/missing processing leases. Exit codes: `0` healthy, `1` degraded, `2` diagnostic error. It does not retry or update notifications.
+- `python -m scripts.diagnose_inventory_discrepancy --wallet-id <VERIFIED_WALLET_UUID> --limit 24 --offset 0` — compare a selected verified wallet's provider page with network-scoped database rows. It does not call inventory GET/sync or write data; it redacts full wallet/NFT addresses. See [the Issue #44 diagnostic guide](docs/ISSUE_44_INVENTORY_DISCREPANCY.md).
+
+Do not run diagnostics against a production database/provider without explicit operational approval. A provider page and DB read are not an atomic blockchain snapshot.
+
 ## Roadmap
 
-1. **MVP — non-custodial NFT listing and direct-transfer verification (Issues #42–#47):** Stage A provides listings, ownership checks, reservations and expiry/cancellation. Stage B B1–B6 now provides preparation/submission APIs, a seller wallet-driven transfer flow, independent observer verification and transactional lifecycle notifications. Live testnet acceptance is still required.
+1. **MVP — non-custodial NFT listing and direct-transfer verification (Issues #42–#47):** Stage A provides listings, ownership checks, reservations and expiry/cancellation. Stage B B1–B6 provides preparation/submission APIs, a seller wallet-driven transfer flow, independent observer verification and transactional lifecycle notifications. Live testnet acceptance is still required.
 2. **Future — guaranteed transactions (not implemented):** a separate product phase requiring its own architecture, security, platform-policy and legal review. Do not assume a custody model, refund policy, payment method or seller settlement has been approved.
-3. **Other planned work:** Telegram Gifts (only if a supported transfer path is established), deal chat, admin and production operations.
+3. **Other planned work:** Telegram Gifts (only if a supported transfer path is established), deal chat and production operations.
 
 Prices are part of the Listing model and must not be removed to make the no-payment MVP appear “free”. A reservation is not a payment, and the future guarantee is not available in the current product.
 
