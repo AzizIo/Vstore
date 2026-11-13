@@ -11,7 +11,7 @@ Product boundaries and decisions approved for the current MVP are recorded in [d
 | Capability | Status on main |
 |---|---|
 | Public catalogue, filters, sorting and pagination | Implemented |
-| Listings with seller-set price/currency; create draft, publish, edit and unpublish | Implemented |
+| Listings with seller-set price/currency; draft → moderation → approved publication | Implemented |
 | Telegram Mini App initData verification and API bearer session | Implemented |
 | TON NFT (TEP-62) on-chain ownership verifier via TON Center v3 | Implemented |
 | NFT inventory GET /api/assets/me and full sync POST /api/assets/me/sync | Implemented; paginated reads, provider reconciliation, multi-wallet ownership checks and guarded stale-listing/order invalidation |
@@ -31,7 +31,7 @@ The B2 migration renames historical `pending_payment` order/event rows to `reser
 
 1. The Telegram Mini App authenticates the user's raw Telegram.WebApp.initData with the backend. Do not trust initDataUnsafe or client-supplied user fields.
 2. NFT inventory is sourced from backend-verified TON wallets. The My NFT screen uses the server-side inventory sync and TEP-62 ownership rechecks; wallet connection alone is not proof of wallet control, and client-supplied NFT metadata is not proof of ownership.
-3. A seller creates a draft for an eligible, verified asset. Publishing rechecks on-chain ownership immediately before making the listing active.
+3. A seller creates a private draft for an eligible, verified asset. Submission rechecks on-chain ownership and moves it to pending review; only administrator approval with another fresh ownership check makes it active and visible in the catalogue.
 4. A buyer reserves an active listing. The backend checks seller/asset state, takes a snapshot of price and currency, and uses idempotency/concurrency protections. The order expires or can be cancelled; the reservation does not lock the NFT on-chain.
 5. The seller can prepare and sign a direct TEP-62 transfer through their own TON Connect wallet. The backend observer independently checks the exact item, network, seller, buyer, query ID and finalized provider evidence before marking the order completed. A reservation is not payment, and a wallet callback is not delivery proof.
 
