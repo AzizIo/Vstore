@@ -59,8 +59,8 @@ def test_seller_overview_returns_private_counts_and_currency_safe_snapshots() ->
     assert response.status_code == 200
     payload = response.json()
     assert payload["listings"] == {
-        "draft": 1, "active": 3, "reserved": 0, "sold": 0,
-        "cancelled": 0, "expired": 0, "suspended": 2, "total": 6,
+        "draft": 1, "pending_review": 2, "active": 3, "reserved": 0, "sold": 0,
+        "cancelled": 0, "expired": 0, "suspended": 2, "total": 8,
     }
     assert payload["orders_as_seller"]["reserved"] == 2
     assert payload["orders_as_seller"]["completed"] == 1
