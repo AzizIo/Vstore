@@ -56,7 +56,7 @@ describe("seller listing management", () => {
   beforeEach(() => {
     mocks.session.status = "authenticated";
     mocks.fetchMyListings.mockReset().mockResolvedValue([draft]);
-    mocks.publishListing.mockReset().mockResolvedValue({ ...draft, status: "active" });
+    mocks.publishListing.mockReset().mockResolvedValue({ ...draft, status: "pending_review" });
     mocks.updateListing.mockReset().mockResolvedValue({
       ...draft,
       title: "Edited NFT",
@@ -106,9 +106,9 @@ describe("seller listing management", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Подтвердить публикацию" }));
 
-    expect(await screen.findByText("Объявление опубликовано и доступно в каталоге.")).toBeInTheDocument();
+    expect(await screen.findByText("Объявление отправлено на модерацию. Оно появится в каталоге после одобрения.")).toBeInTheDocument();
     expect(mocks.publishListing).toHaveBeenCalledWith(draft.id, "seller-token");
-    expect(screen.getByText("Активно")).toBeInTheDocument();
+    expect(screen.getByText("На модерации")).toBeInTheDocument();
   });
 
   it("saves only the permitted editable listing fields", async () => {
