@@ -14,6 +14,7 @@ import { MyListings } from "./listings/MyListings";
 import { MyInventory } from "./inventory/MyInventory";
 import { Orders } from "./orders/Orders";
 import { SellerReviews } from "./reviews/SellerReviews";
+import { SellerOverview } from "./overview/SellerOverview";
 import { WalletConnection } from "./wallet/WalletConnection";
 import type { WalletRecord } from "./wallet/api";
 
@@ -380,7 +381,7 @@ function MarketplaceApp() {
     : null;
   const startParam = useRef(getTelegramStartParam()).current;
   const [initialOrderId, setInitialOrderId] = useState<string | null>(null);
-  const [section, setSection] = useState<"catalog" | "my-listings" | "my-nft" | "orders">("catalog");
+  const [section, setSection] = useState<"catalog" | "my-listings" | "my-nft" | "orders" | "overview">("catalog");
   const [listings, setListings] = useState<Listing[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -584,9 +585,41 @@ function MarketplaceApp() {
           <span className="navigation-icon" aria-hidden="true">↗</span>
           <span className="navigation-label">Заказы</span>
         </button>
+          {session.status === "authenticated" && (
+          <button
+            className="navigation-tab"
+            type="button"
+            aria-pressed={section === "overview"}
+            onClick={() => {
+              setListingId(null);
+              setSection("overview");
+            }}
+          >
+            <span className="navigation-icon" aria-hidden="true">▧</span>
+            <span className="navigation-label">Обзор</span>
+          </button>
+        )}
       </nav>
 
-      {section === "orders" ? (
+      {section === "overview" && session.status === "authenticated" ? (
+        <SellerOverview
+          accessToken={session.accessToken}
+          onOpenOrders={(orderId) => {
+            setListingId(null);
+            setInitialOrderId(orderId ?? null);
+            setSection("orders");
+          }}
+          onOpenListing={(id) => {
+            setInitialOrderId(null);
+            setListingId(id);
+            setSection("catalog");
+          }}
+          onManageListings={() => {
+            setListingId(null);
+            setSection("my-listings");
+          }}
+        />
+      ) : section === "orders" ? (
         session.status === "authenticated" ? (
           <Orders accessToken={session.accessToken} userId={session.user.id} initialOrderId={initialOrderId} onCatalog={() => setSection("catalog")} />
         ) : (
