@@ -137,6 +137,7 @@ async def test_public_profile_isolated_privacy_safe_and_filters_hidden_listings(
     visible_asset, visible_listing = await _public_listing(db_session, seller)
     await _public_listing(db_session, seller, status=ListingStatus.DRAFT)
     await _public_listing(db_session, seller, status=ListingStatus.RESERVED)
+    await _public_listing(db_session, seller, status=ListingStatus.PENDING_REVIEW)
     await _public_listing(db_session, seller, status=ListingStatus.SUSPENDED)
     await _public_listing(
         db_session, seller, verification=AssetVerificationStatus.STALE
