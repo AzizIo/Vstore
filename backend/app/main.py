@@ -3,8 +3,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from logging import getLogger
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import JSONResponse
 
 from app.admin.moderation import router as admin_moderation_router
 from app.api.assets import router as assets_router
@@ -17,6 +20,11 @@ from app.api.users import router as users_router
 from app.api.wallets import router as wallets_router
 from app.assets.ton_nft.observer import run_delivery_observer_pass
 from app.core.config import get_settings
+from app.core.error_responses import (
+    http_exception_handler,
+    request_validation_exception_handler,
+    unhandled_exception_handler,
+)
 from app.db.session import async_session_factory, dispose_engine
 from app.listings.service import expire_active_listings
 from app.orders.service import expire_pending_orders
@@ -88,9 +96,27 @@ settings = get_settings()
 app = FastAPI(
     title="VILTARA SHOP API",
     version="0.1.0",
-    description="Backend API for the VILTARA SHOP Telegram marketplace.",
+    description="Backend API маркетплейса TON NFT для Telegram Mini App.",
     lifespan=lifespan,
 )
+
+
+async def _handle_unexpected_exception(
+    request: Request, exc: Exception
+) -> JSONResponse:
+    # Full exception details stay in server logs and are never returned to clients.
+    logger.error(
+        "Unhandled API exception for %s %s",
+        request.method,
+        request.url.path,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
+    return await unhandled_exception_handler(request, exc)
+
+
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
+app.add_exception_handler(Exception, _handle_unexpected_exception)
 
 app.add_middleware(
     CORSMiddleware,
