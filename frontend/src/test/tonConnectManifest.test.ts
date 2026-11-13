@@ -15,6 +15,15 @@ describe("TON Connect manifest", () => {
     expect(createTonConnectManifest("http://localhost:5173").url).toBe("http://localhost:5173");
   });
 
+  it("shows Russian configuration errors for invalid app URLs", () => {
+    expect(() => createTonConnectManifest("shop.example.com"))
+      .toThrow("Укажите корректный абсолютный адрес VITE_TONCONNECT_APP_URL.");
+    expect(() => createTonConnectManifest("http://shop.example.com"))
+      .toThrow("Для подключения TON Connect требуется HTTPS. Исключение — локальная разработка.");
+    expect(() => createTonConnectManifest("https://shop.example.com/path"))
+      .toThrow("VITE_TONCONNECT_APP_URL должен содержать только адрес сайта без пути и параметров.");
+  });
+
   it.each([
     "http://shop.example.com",
     "shop.example.com",
