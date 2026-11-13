@@ -40,6 +40,7 @@ from app.orders.payment_service import (
 from app.orders.service import OrderConflict, cancel_order, prepare_delivery
 
 pytestmark = pytest.mark.integration  # PostgreSQL-only payment safety suite.
+# All fixtures use synthetic accounts and the isolated test Stars configuration.
 ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
