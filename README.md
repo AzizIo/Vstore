@@ -11,7 +11,7 @@ Product boundaries and decisions approved for the current MVP are recorded in [d
 | Capability | Status on main |
 |---|---|
 | Public catalogue, filters, sorting and pagination | Implemented |
-| Listings with seller-set price/currency; create draft, publish, edit and unpublish | Implemented |
+| Listings with seller-set price/currency; draft → moderation → approved publication | Implemented |
 | Telegram Mini App initData verification and API bearer session | Implemented |
 | TON NFT (TEP-62) on-chain ownership verifier via TON Center v3 | Implemented |
 | NFT inventory GET /api/assets/me and full sync POST /api/assets/me/sync | Implemented; paginated reads, provider reconciliation, multi-wallet ownership checks and guarded stale-listing/order invalidation |
@@ -22,7 +22,8 @@ Product boundaries and decisions approved for the current MVP are recorded in [d
 | Full inventory reconciliation/sync and dedicated My NFT screen | Implemented in main via [PR #58](https://github.com/AzizIo/Vstore/pull/58); live testnet/provider acceptance remains open in [Issue #44](https://github.com/AzizIo/Vstore/issues/44) |
 | Server-side verification that a reserved NFT was delivered to the buyer | B1–B6 implemented on `main`: read-only evidence adapter, immutable attempt snapshots, leased observer, preparation/submission APIs, wallet-driven transfer UX, transactional delivery notifications. Live testnet acceptance remains outstanding; see [Issue #46](https://github.com/AzizIo/Vstore/issues/46). |
 | Order-verified seller reviews and reputation | Implemented; immutable reviews require backend-confirmed completed NFT delivery and expose safe aggregates |
-| Telegram Gifts adapter, deal chat, admin panel | Not implemented |
+| Admin moderation queue, approval/rejection, suspension/restoration and immutable audit | Implemented; admin allowlist and live Telegram/VPS acceptance must be configured |
+| Telegram Gifts adapter, deal chat | Not implemented |
 | Payments, checkout, escrow/guarantee, refunds, commissions and seller payouts | Not implemented |
 
 The B2 migration renames historical `pending_payment` order/event rows to `reserved` without changing their IDs, price/currency snapshots, idempotency keys, or event history. Delivery preparation snapshots the exact NFT item, network, seller source, buyer destination, query ID and deadline. The seller wallet signs the TEP-62 transfer; submitted references are untrusted hints. Only independently verified finalized evidence can complete the order.
@@ -31,7 +32,7 @@ The B2 migration renames historical `pending_payment` order/event rows to `reser
 
 1. The Telegram Mini App authenticates the user's raw Telegram.WebApp.initData with the backend. Do not trust initDataUnsafe or client-supplied user fields.
 2. NFT inventory is sourced from backend-verified TON wallets. The My NFT screen uses the server-side inventory sync and TEP-62 ownership rechecks; wallet connection alone is not proof of wallet control, and client-supplied NFT metadata is not proof of ownership.
-3. A seller creates a draft for an eligible, verified asset. Publishing rechecks on-chain ownership immediately before making the listing active.
+3. A seller creates a private draft for an eligible, verified asset. Submission rechecks on-chain ownership and moves it to pending review; only administrator approval with another fresh ownership check makes it active and visible in the catalogue.
 4. A buyer reserves an active listing. The backend checks seller/asset state, takes a snapshot of price and currency, and uses idempotency/concurrency protections. The order expires or can be cancelled; the reservation does not lock the NFT on-chain.
 5. The seller can prepare and sign a direct TEP-62 transfer through their own TON Connect wallet. The backend observer independently checks the exact item, network, seller, buyer, query ID and finalized provider evidence before marking the order completed. A reservation is not payment, and a wallet callback is not delivery proof.
 

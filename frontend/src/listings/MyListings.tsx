@@ -10,7 +10,7 @@ import {
 import { useSession } from "../auth/SessionProvider";
 import { CreateListing } from "./CreateListing";
 
-const listingStatuses = ["draft", "active", "reserved", "sold", "cancelled", "expired"] as const;
+const listingStatuses = ["draft", "pending_review", "active", "reserved", "sold", "cancelled", "expired"] as const;
 type KnownStatus = (typeof listingStatuses)[number];
 type StatusFilter = "all" | KnownStatus | "other";
 
@@ -23,6 +23,7 @@ const verificationStatusLabels: Record<string, string> = {
 };
 const statusLabels: Record<KnownStatus, string> = {
   draft: "Черновик",
+  pending_review: "На модерации",
   active: "Активно",
   reserved: "Зарезервировано",
   sold: "Продано",
@@ -131,7 +132,7 @@ function MyListingDetail({
   const [success, setSuccess] = useState("");
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmPublish, setConfirmPublish] = useState(false);
-  const isEditable = listing.status === "draft" || listing.status === "active";
+  const isEditable = listing.status === "draft" || listing.status === "pending_review" || listing.status === "active";
   const canPublish =
     listing.status === "draft" &&
     listing.asset.asset_type === "ton_nft" &&
@@ -158,7 +159,9 @@ function MyListingDetail({
       setExpiresAt(updatedExpiration);
       setInitialExpiresAt(updatedExpiration);
       onUpdated(updated);
-      setSuccess("Изменения сохранены.");
+      setSuccess(updated.status === "draft" && listing.status === "pending_review"
+        ? "Изменения сохранены. Заявка снята с модерации — отправьте объявление повторно."
+        : "Изменения сохранены.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось сохранить изменения.");
     } finally {
@@ -175,7 +178,7 @@ function MyListingDetail({
       const updated = await publishListing(listing.id, accessToken);
       onUpdated(updated);
       setConfirmPublish(false);
-      setSuccess("Объявление опубликовано и доступно в каталоге.");
+      setSuccess("Объявление отправлено на модерацию. Оно появится в каталоге после одобрения.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось опубликовать объявление.");
     } finally {
@@ -195,7 +198,9 @@ function MyListingDetail({
       setSuccess(
         listing.status === "active"
           ? "Объявление снято с публикации и больше не отображается в каталоге."
-          : "Черновик отменён.",
+          : listing.status === "pending_review"
+            ? "Заявка на публикацию отозвана."
+            : "Черновик отменён.",
       );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось отменить объявление.");
@@ -303,14 +308,14 @@ function MyListingDetail({
                   setConfirmCancel(true);
                 }}
               >
-                {listing.status === "active" ? "Снять с публикации" : "Отменить черновик"}
+                {listing.status === "active" ? "Снять с публикации" : listing.status === "pending_review" ? "Отозвать заявку" : "Отменить черновик"}
               </button>
             </div>
           </form>
           {confirmPublish && (
             <div className="listing-confirmation" role="group" aria-label="Подтвердите публикацию объявления">
               <p>
-                Опубликовать этот NFT? Перед публикацией сервер повторно проверит текущего владельца в блокчейне.
+                Отправить этот NFT на модерацию? Сервер повторно проверит владение. В каталоге объявление появится только после одобрения администратора.
               </p>
               <button
                 className="primary-button"
@@ -330,6 +335,11 @@ function MyListingDetail({
               </button>
             </div>
           )}
+          {listing.status === "pending_review" && (
+            <p className="listing-management-note" role="status">
+              Объявление ожидает проверки. Если изменить его, заявка автоматически вернётся в черновик и потребует повторной отправки.
+            </p>
+          )}
           {listing.status === "draft" && !canPublish && (
             <p className="listing-management-note" role="status">
               Этот черновик нельзя опубликовать: TON NFT сейчас не соответствует требованиям публикации.
@@ -340,7 +350,9 @@ function MyListingDetail({
               <p>
                 {listing.status === "active"
                   ? "Снять объявление с публикации? Покупатели больше не увидят его в каталоге."
-                  : "Отменить этот черновик? Действие нельзя будет отменить."}
+                  : listing.status === "pending_review"
+                    ? "Отозвать заявку на публикацию? Объявление вернётся в приватные черновики."
+                    : "Отменить этот черновик? Действие нельзя будет отменить."}
               </p>
               <button
                 className="primary-button"

@@ -35,6 +35,7 @@ def test_asset_verification_has_safe_pending_default() -> None:
 def test_listing_lifecycle_and_price_currencies_are_explicit() -> None:
     assert {item.value for item in ListingStatus} == {
         "draft",
+        "pending_review",
         "active",
         "reserved",
         "sold",
@@ -52,6 +53,7 @@ def test_only_one_open_listing_per_asset_is_enforced_on_postgres() -> None:
     assert index.unique is True
     assert "active" in str(index.dialect_options["postgresql"]["where"])
     assert "reserved" in str(index.dialect_options["postgresql"]["where"])
+    assert "pending_review" in str(index.dialect_options["postgresql"]["where"])
 
 
 def test_nft_asset_external_identity_is_scoped_by_network() -> None:

@@ -56,6 +56,7 @@ class AssetVerificationStatus(str, enum.Enum):
 
 class ListingStatus(str, enum.Enum):
     DRAFT = "draft"
+    PENDING_REVIEW = "pending_review"
     ACTIVE = "active"
     RESERVED = "reserved"
     SOLD = "sold"
@@ -232,7 +233,7 @@ class Listing(TimestampMixin, Base):
             "uq_listings_open_asset",
             "asset_id",
             unique=True,
-            postgresql_where=text("status IN ('active', 'reserved')"),
+            postgresql_where=text("status IN ('active', 'reserved', 'pending_review')"),
         ),
     )
 

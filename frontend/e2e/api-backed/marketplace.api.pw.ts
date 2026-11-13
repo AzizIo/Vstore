@@ -160,9 +160,40 @@ test(
     await draftCard.click();
     await sellerPage.getByRole("button", { name: "Опубликовать объявление", exact: true }).click();
     await sellerPage.getByRole("button", { name: "Подтвердить публикацию", exact: true }).click();
-    await expect(sellerPage.locator(".listing-status-active")).toHaveText("Активно");
+    await expect(sellerPage.locator(".listing-status-pending_review")).toHaveText("На модерации");
 
-    // Exercise the real catalog endpoint after publication: price ranges and
+    // The listing remains private until the administrator explicitly approves it.
+    const sellerListingsResponse = await sellerContext.request.get(
+      "http://127.0.0.1:5173/api/listings/me",
+      { headers: { Authorization: `Bearer ${bootstrapSession.access_token}` } },
+    );
+    const sellerListings = await sellerListingsResponse.json() as Array<{ id: string; title: string | null }>;
+    const submittedListing = sellerListings.find((item) => item.title === "E2E Published NFT");
+    expect(submittedListing).toBeTruthy();
+    const approvalResponse = await sellerContext.request.post(
+      "http://127.0.0.1:5173/api/admin/listings/" + submittedListing!.id + "/decision",
+      {
+        headers: {
+          Authorization: `Bearer ${bootstrapSession.access_token}`,
+          "Idempotency-Key": "marketplace-approve-e2e-0001",
+        },
+        data: {
+          action: "approve",
+          reason_code: "other",
+          reason: "E2E explicit publication approval",
+        },
+      },
+    );
+    expect(approvalResponse.status()).toBe(200);
+    expect((await approvalResponse.json()).action).toBe("approved");
+    const approvedListingsResponse = await sellerContext.request.get(
+      "http://127.0.0.1:5173/api/listings/me",
+      { headers: { Authorization: `Bearer ${bootstrapSession.access_token}` } },
+    );
+    const approvedListings = await approvedListingsResponse.json() as Array<{ id: string; status: string }>;
+    expect(approvedListings.find((item) => item.id === submittedListing!.id)?.status).toBe("active");
+
+    // Exercise the real catalog endpoint after explicit administrator approval: price ranges and
     // sorting must remain isolated to one currency, never TON vs XTR together.
     const catalogFilterResults = await sellerPage.evaluate(async () => {
       const [tonResponse, xtrResponse, unscopedSortResponse] = await Promise.all([

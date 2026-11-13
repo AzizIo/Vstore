@@ -67,7 +67,7 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
         asset_id: asset!.id,
         price_amount: "15.75",
         price_currency: "TON",
-        title: "E2E Admin Moderation Listing",
+        title: "E2E Admin Moderation Listing Resubmitted",
         description: "Disposable API-backed moderation test listing",
       },
     });
@@ -78,17 +78,41 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
       { headers },
     );
     expect(publishResponse.status()).toBe(200);
-    expect((await publishResponse.json()).status).toBe("active");
+    expect((await publishResponse.json()).status).toBe("pending_review");
+
+    const editPendingResponse = await context.request.patch(
+      "http://127.0.0.1:8000/api/listings/" + draft.id,
+      { headers, data: { title: "E2E Admin Moderation Listing Resubmitted" } },
+    );
+    expect(editPendingResponse.status()).toBe(200);
+    expect((await editPendingResponse.json()).status).toBe("draft");
+    const resubmitResponse = await context.request.post(
+      "http://127.0.0.1:8000/api/listings/" + draft.id + "/publish",
+      { headers },
+    );
+    expect(resubmitResponse.status()).toBe(200);
+    expect((await resubmitResponse.json()).status).toBe("pending_review");
+
+    const hiddenFromCatalogue = await context.request.get(
+      "http://127.0.0.1:8000/api/listings/" + draft.id,
+    );
+    expect(hiddenFromCatalogue.status()).toBe(404);
 
     const queueResponse = await context.request.get("http://127.0.0.1:8000/api/admin/moderation", { headers });
-    const queue = await queueResponse.json() as { items: Array<{ id: string; title: string | null }>; detail?: string };
+    const queue = await queueResponse.json() as { items: Array<{ id: string; title: string | null; status: string }>; detail?: string };
     expect(queueResponse.status(), JSON.stringify(queue)).toBe(200);
-    expect(queue.items.some((item) => item.id === draft.id), JSON.stringify(queue)).toBe(true);
+    expect(queue.items.some((item) => item.id === draft.id && item.status === "pending_review"), JSON.stringify(queue)).toBe(true);
 
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: "Модерация и аудит" })).toBeVisible();
     const card = page.locator(".admin-listing").filter({ hasText: "E2E Admin Moderation Listing" });
     await expect(card).toBeVisible();
+    await card.getByRole("button", { name: "Одобрить", exact: true }).click();
+    const approveDialog = page.getByRole("dialog", { name: "Одобрить объявление" });
+    await approveDialog.getByLabel("Пояснение (5–500 символов)").fill("Fresh ownership verified before publication");
+    await approveDialog.getByRole("button", { name: "Подтвердить одобрение" }).click();
+    await expect(card.getByText("Активно", { exact: true })).toBeVisible();
+
     await card.getByRole("button", { name: "Приостановить", exact: true }).click();
     const suspendDialog = page.getByRole("dialog", { name: "Приостановить объявление" });
     await suspendDialog.getByLabel("Пояснение (5–500 символов)").fill("API-backed moderation acceptance");
@@ -122,6 +146,62 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
     );
     expect(cancelResponse.status()).toBe(200);
     expect((await cancelResponse.json()).status).toBe("cancelled");
+
+    const rejectedDraftResponse = await context.request.post("http://127.0.0.1:8000/api/listings", {
+      headers,
+      data: {
+        asset_id: asset!.id,
+        price_amount: "16.25",
+        price_currency: "TON",
+        title: "E2E Rejected Moderation Listing",
+        description: "Disposable rejection-path test listing",
+      },
+    });
+    expect(rejectedDraftResponse.status()).toBe(201);
+    const rejectedDraft = await rejectedDraftResponse.json() as { id: string };
+    const rejectedSubmission = await context.request.post(
+      "http://127.0.0.1:8000/api/listings/" + rejectedDraft.id + "/publish",
+      { headers },
+    );
+    expect(rejectedSubmission.status()).toBe(200);
+    expect((await rejectedSubmission.json()).status).toBe("pending_review");
+
+    const pendingQueueResponse = await context.request.get(
+      "http://127.0.0.1:8000/api/admin/moderation",
+      { headers },
+    );
+    const pendingQueue = await pendingQueueResponse.json() as {
+      items: Array<{ id: string; status: string }>;
+    };
+    expect(pendingQueueResponse.status()).toBe(200);
+    expect(
+      pendingQueue.items.some((item) => item.id === rejectedDraft.id && item.status === "pending_review"),
+      JSON.stringify(pendingQueue),
+    ).toBe(true);
+
+    const rejectionResponse = await context.request.post(
+      "http://127.0.0.1:8000/api/admin/listings/" + rejectedDraft.id + "/decision",
+      {
+        headers: {
+          ...headers,
+          "Idempotency-Key": "reject-e2e-request-0001",
+          "X-Request-ID": "reject-e2e-request-0001",
+        },
+        data: {
+          action: "reject",
+          reason_code: "policy_violation",
+          reason: "Rejected by the moderation acceptance test",
+        },
+      },
+    );
+    expect(rejectionResponse.status()).toBe(200);
+    expect((await rejectionResponse.json()).action).toBe("rejected");
+    const sellerListingsResponse = await context.request.get(
+      "http://127.0.0.1:8000/api/listings/me",
+      { headers },
+    );
+    const sellerListings = await sellerListingsResponse.json() as Array<{ id: string; status: string }>;
+    expect(sellerListings.find((item) => item.id === rejectedDraft.id)?.status).toBe("cancelled");
   } finally {
     await context.close();
   }

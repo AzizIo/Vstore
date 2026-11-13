@@ -2,7 +2,7 @@ import { getApiErrorMessage } from "../api/errors";
 import { API_BASE_URL } from "../api/config";
 
 export type ModerationAction = "approve" | "reject" | "suspend" | "restore";
-export type ModerationStatus = "draft" | "active" | "reserved" | "sold" | "cancelled" | "expired" | "suspended";
+export type ModerationStatus = "pending_review" | "active" | "reserved" | "sold" | "cancelled" | "expired" | "suspended";
 export type ModerationReasonCode = "policy_violation" | "ownership_unverified" | "misleading_metadata" | "duplicate_listing" | "other";
 
 export interface ModerationItem {
@@ -65,4 +65,17 @@ export function submitModerationDecision(accessToken: string, listingId: string,
     headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey, "X-Request-ID": crypto.randomUUID() },
     body: JSON.stringify(input),
   });
+}
+
+export function fetchAdminAuditLog(
+  accessToken: string,
+  options: { limit: number; offset: number; action?: string } = { limit: 25, offset: 0 },
+  signal?: AbortSignal,
+): Promise<Page<AuditEntry>> {
+  const params = new URLSearchParams({
+    limit: String(options.limit),
+    offset: String(options.offset),
+  });
+  if (options.action) params.set("action", options.action);
+  return request("/audit?" + params.toString(), accessToken, { signal });
 }

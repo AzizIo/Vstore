@@ -1,6 +1,6 @@
 # Listing Creation Flow — Technical Design
 
-**Status:** implemented seller inventory, private drafts, live-verified publication, and seller listing management.
+**Status:** implemented seller inventory, private drafts, live-verified submission, administrator approval, and seller listing management.
 **Scope:** seller-owned TON NFT discovery, safe draft creation, verified publication, editing, and unpublishing.  
 **Non-goal:** checkout, escrow, payment collection, NFT transfers, or Telegram Gift custody.
 
@@ -12,7 +12,7 @@
 - `GET /api/listings/me` returns the authenticated user's listings.
 - `POST /api/listings` creates a draft only when the supplied asset exists, belongs to the current user, and has `verification_status=verified`.
 - The existing TON NFT verifier can validate an item address against an expected owner address.
-- POST /api/listings/{listing_id}/publish publishes only an owned TON NFT draft after a fresh TEP-62 owner check against a verified seller wallet.
+- POST /api/listings/{listing_id}/publish submits only an owned TON NFT draft for moderation after a fresh TEP-62 owner check against a verified seller wallet. The status becomes pending_review, not active; only an administrator can approve it into the public catalogue.
 - Seller-only PATCH /api/listings/{listing_id} and POST /api/listings/{listing_id}/cancel support permitted field edits and cancellation/unpublishing.
 - `GET /api/assets/me` discovers candidates from verified wallets owned by the authenticated user and returns only items freshly verified by the TEP-62 verifier.
 - TON Center provider pagination and network-specific configuration are implemented in `backend/app/assets/ton_nft/`.
@@ -111,8 +111,8 @@ Authentication: Bearer JWT required. The caller must own the listing.
 - The server takes an unlocked snapshot of the listing, asset, and the seller's verified wallets, then rolls back the read transaction before contacting TON Center through the TEP-62 verifier.
 - The live owner must match one of the seller's verified wallets on the asset network. Provider outage returns HTTP 503; stale, unsupported, or mismatched ownership returns HTTP 409.
 - After verification the server starts a new transaction, locks and re-reads the listing, selected wallet, and asset, and verifies that the seller, asset identity, draft status, owner, network, verification state, and wallet binding have not changed.
-- The wallet is locked before the asset (matching the existing draft-creation lock order), then the asset row is locked before checking for another ACTIVE/RESERVED listing. This serializes concurrent publication attempts; the PostgreSQL partial unique index uq_listings_open_asset remains the final database-level guard.
-- Only then does the server change DRAFT to ACTIVE. Public catalog, public detail, and order creation continue to query ACTIVE listings only.
+- The wallet is locked before the asset (matching the existing draft-creation lock order), then the asset row is locked before checking for another ACTIVE/RESERVED/PENDING_REVIEW listing. This serializes concurrent submissions; the PostgreSQL partial unique index uq_listings_open_asset remains the final database-level guard.
+- Only then does the server change DRAFT to PENDING_REVIEW. Public catalogue, public detail, and order creation continue to query ACTIVE listings only. Admin approval performs a second fresh ownership check before changing PENDING_REVIEW to ACTIVE. Editing a pending submission returns it to DRAFT, forcing a new review; the seller may also withdraw it.
 
 ### PATCH /api/listings/{listing_id} and POST /api/listings/{listing_id}/cancel
 

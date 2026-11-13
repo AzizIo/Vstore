@@ -130,8 +130,8 @@ class AuditPageDTO(BaseModel):
 
 def _queue_reasons(listing: Listing, now: datetime) -> list[str]:
     reasons: list[str] = []
-    if listing.status is ListingStatus.DRAFT:
-        reasons.append("draft_pending_review")
+    if listing.status is ListingStatus.PENDING_REVIEW:
+        reasons.append("pending_admin_review")
     if listing.status is ListingStatus.SUSPENDED:
         reasons.append("moderator_suspended")
     if listing.status is ListingStatus.ACTIVE:
@@ -279,7 +279,7 @@ async def get_moderation_queue(
         .options(selectinload(Listing.asset), selectinload(Listing.seller))
         .where(
             Listing.status.in_(
-                [ListingStatus.DRAFT, ListingStatus.ACTIVE, ListingStatus.SUSPENDED]
+                [ListingStatus.PENDING_REVIEW, ListingStatus.ACTIVE, ListingStatus.SUSPENDED]
             )
         )
     )
@@ -313,7 +313,9 @@ async def get_moderation_queue(
     ]
     # Count respects the same status filter and actionability scope.
     count_statement = select(func.count(Listing.id)).where(
-        Listing.status.in_([ListingStatus.DRAFT, ListingStatus.ACTIVE, ListingStatus.SUSPENDED]),
+        Listing.status.in_(
+            [ListingStatus.PENDING_REVIEW, ListingStatus.ACTIVE, ListingStatus.SUSPENDED]
+        ),
         *([Listing.status == status_filter] if status_filter is not None else []),
     )
     total = await session.scalar(count_statement) or 0
@@ -387,8 +389,8 @@ async def decide_listing(
     verifier: Annotated[TONNFTVerifier, Depends(get_ton_nft_verifier)],
 ) -> AuditDTO:
     action_map = {
-        "approve": ("approved", ListingStatus.DRAFT, ListingStatus.ACTIVE),
-        "reject": ("rejected", ListingStatus.DRAFT, ListingStatus.CANCELLED),
+        "approve": ("approved", ListingStatus.PENDING_REVIEW, ListingStatus.ACTIVE),
+        "reject": ("rejected", ListingStatus.PENDING_REVIEW, ListingStatus.CANCELLED),
         "suspend": ("suspended", ListingStatus.ACTIVE, ListingStatus.SUSPENDED),
         "restore": ("restored", ListingStatus.SUSPENDED, ListingStatus.ACTIVE),
     }
@@ -478,7 +480,13 @@ async def decide_listing(
                     select(Listing.id).where(
                         Listing.asset_id == listing.asset_id,
                         Listing.id != listing.id,
-                        Listing.status.in_([ListingStatus.ACTIVE, ListingStatus.RESERVED]),
+                        Listing.status.in_(
+                            [
+                                ListingStatus.ACTIVE,
+                                ListingStatus.RESERVED,
+                                ListingStatus.PENDING_REVIEW,
+                            ]
+                        ),
                     ).limit(1)
                 )
                 if conflicting is not None:

@@ -175,7 +175,15 @@ async def test_order_snapshots_xtr_price_across_draft_publish_and_reservation(
                 seller_id=ids[3],
                 verifier=verifier,
             )
-        assert published.status is ListingStatus.ACTIVE
+        assert published.status is ListingStatus.PENDING_REVIEW
+
+        # A pending-review listing is deliberately not orderable. Simulate the
+        # administrator's explicit approval before exercising price snapshots.
+        async with session_factory.begin() as session:
+            pending = await session.get(Listing, ids[0])
+            assert pending is not None
+            assert pending.status is ListingStatus.PENDING_REVIEW
+            pending.status = ListingStatus.ACTIVE
 
         async with session_factory() as session:
             order_id = await create_order(
