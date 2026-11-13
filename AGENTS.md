@@ -7,7 +7,7 @@
 
 VILTARA SHOP is a Telegram Mini App and optional bot for a peer-to-peer marketplace of **TEP-62 TON NFTs**. Telegram Gifts are a separate asset domain and are not supported as transferable marketplace assets.
 
-The current main baseline was reviewed on **2026-11-13**, commit **f22d9e2f1b37c9c358ce7a093d8cd0db562a64ca**. The implementation is more advanced than the earlier Stage A-only descriptions:
+The current main baseline was reviewed on **2026-11-13**, commit **9593f1a003a4f976cf3e6b3b20cb1d3830d83018**. The implementation is more advanced than the earlier Stage A-only descriptions:
 
 | Capability | Status on main |
 |---|---|
@@ -19,7 +19,10 @@ The current main baseline was reviewed on **2026-11-13**, commit **f22d9e2f1b37c
 | Order reservation, price/currency snapshot, cancellation and expiry | Implemented; **not a payment flow** |
 | Direct non-custodial NFT delivery B1–B6 | Implemented on main; backend observer independently verifies finalized transfer evidence and the seller signs from their own wallet |
 | Transactional Telegram notification outbox | Implemented; optional bot/worker profile delivers informational order and delivery notifications |
-| Admin moderation center and audit history | Implemented; PR #135 adds mandatory pending-review approval before listings become public; administrator access is disabled unless the server-side allowlist is configured |
+| Admin moderation center and audit history | Implemented; mandatory pending-review approval before listings become public; administrator access is disabled unless the server-side allowlist is configured |
+| Public seller profiles and verified reviews | Implemented; only safe public seller fields and reviews backed by completed, independently verified NFT delivery are exposed |
+| Private seller overview | Implemented; authenticated user-scoped counts, recent activity and currency-separated price snapshots, including `pending_review` |
+| Operations diagnostics | Implemented; read-only outbox health CLI and inventory discrepancy diagnostic; neither retries notifications nor mutates inventory |
 | Payments, checkout, Stars settlement, escrow, custody, refunds, commissions and seller payouts | Not implemented |
 | Telegram Gifts transfer integration and deal chat | Not implemented |
 
@@ -73,9 +76,10 @@ The moderation center is not a general-purpose dispute, payment, escrow or payou
     │   ├── app/auth/                # Telegram initData, JWT sessions and dependencies
     │   ├── app/assets/ton_nft/      # TON Center provider, TEP-62 verifier and evidence adapter
     │   ├── app/orders/              # reservation lifecycle, delivery observer, state/event rules
-    │   ├── app/notifications/       # durable outbox and Telegram delivery worker
+    │   ├── app/notifications/       # durable outbox, read-only health diagnostics and Telegram worker
     │   ├── app/db/models.py
-    │   └── migrations/versions/
+    │   ├── scripts/                 # read-only outbox/inventory diagnostics and Preview safety tools
+│   └── migrations/versions/
     └── frontend/
         ├── src/App.tsx
         ├── src/api/
@@ -83,6 +87,7 @@ The moderation center is not a general-purpose dispute, payment, escrow or payou
         ├── src/wallet/
         ├── src/listings/
         ├── src/orders/
+        ├── src/overview/            # private seller overview workspace
         ├── src/admin/               # moderation workspace
         └── src/test/
 
@@ -102,6 +107,8 @@ Important API routes on main (all paths are relative to the API origin):
 |---|---|---|
 | POST | /api/auth/telegram | Verify raw Telegram Mini App initData and issue API JWT |
 | GET | /api/users/me | Current authenticated user |
+| GET | /api/users/me/overview | Private seller overview for the verified current user |
+| GET | /api/sellers/{seller_id}/profile | Public seller profile, purchasable listings and delivery-verified reviews |
 | POST | /api/wallets/proof/challenge | Issue a short-lived user-bound TON Proof challenge |
 | POST | /api/wallets/proof/verify | Cryptographically verify TON Proof and link wallet |
 | GET | /api/wallets/me | Current user's verified wallet records |
@@ -188,14 +195,16 @@ For the isolated Preview stack, follow [docs/PREVIEW_DEPLOYMENT.md](docs/PREVIEW
 
 ## 7. Status snapshot and manual acceptance — 2026-11-13
 
-This status snapshot describes main at f22d9e2f1b37c9c358ce7a093d8cd0db562a64ca. Check live GitHub before acting because issues and PRs can change independently of this file.
+This status snapshot describes main at 9593f1a003a4f976cf3e6b3b20cb1d3830d83018. Check live GitHub before acting because issues and PRs can change independently of this file.
 
 - **Issue #43:** proof implementation and CI are merged; live Telegram/Tonkeeper proof signing, account/network switching, public manifest/icon and exact-host acceptance remain.
-- **Issue #44:** inventory implementation and CI are merged; manual multi-page/multi-wallet/provider-outage testnet checks and owner review evidence remain.
+- **Issue #44:** inventory implementation, per-item ownership regression coverage and a read-only discrepancy diagnostic are merged; manual multi-page/multi-wallet/provider-outage testnet checks and owner review evidence remain.
 - **Issue #46:** Stage B B1–B6 implementation is on main; live testnet transfer, provider-finality and Tonkeeper acceptance remain. Its implementation checklist may lag merged PRs; verify the manual acceptance section rather than treating unchecked historical implementation boxes as proof the code is absent.
 - **Issue #47:** automated backend/frontend/browser/API-backed coverage exists, but full real Telegram mobile journey acceptance remains open.
-- **Issue #104:** closed by PR #107, which introduced the admin moderation center and immutable audit history. PR #135 adds the mandatory pending-review publication gate and corresponding migration `0011_listing_pending_review`.
-- **Open PRs:** features in open PRs are not part of main until merged. In particular, do not assume Seller Overview, public seller profiles, extended currency/price-range filters, CI queue cleanup or outbox diagnostics are shipped solely because a PR exists. PR #136 is an open bot-help correction and is not shipped until merged.
+- **Issue #104:** closed by PR #107, which introduced the admin moderation center and immutable audit history. PR #135 added the mandatory pending-review publication gate and migration `0011_listing_pending_review`.
+- **Seller profiles and reviews:** public profile API exposes safe seller details and only delivery-verified reviews; private seller overview is scoped to the authenticated user and separates TON/XTR price snapshots.
+- **Operations:** PR #139 added read-only outbox health diagnostics; PR #142 restricted push CI to main, enabled manual CI dispatch and added a dry-run-by-default stale queue cleanup workflow. The cleanup workflow has not been executed.
+- **Open PRs:** no open PRs remained at the time of this snapshot. Check live GitHub before acting; features are shipped only after merge to main.
 
 The Preview runbooks and CI prove isolated test behavior, not a publicly deployed and manually accepted Telegram Mini App. Do not claim production deployment, live testnet transfer acceptance or live Tonkeeper success without recorded evidence.
 
