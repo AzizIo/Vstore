@@ -48,7 +48,11 @@ async def assert_journey() -> None:
                     select(Listing).where(
                         Listing.seller_id == seller.id,
                         Listing.title.in_(
-                            ["E2E Published NFT", "E2E Admin Moderation Listing Resubmitted"]
+                            [
+                                "E2E Published NFT",
+                                "E2E Admin Moderation Listing Resubmitted",
+                                "E2E Rejected Moderation Listing",
+                            ]
                         ),
                     )
                 )
@@ -72,6 +76,23 @@ async def assert_journey() -> None:
         )
         moderation_listing = moderation_listings[0]
         assert moderation_listing.status is ListingStatus.CANCELLED
+        rejected_listings = [
+            item for item in listings if item.title == "E2E Rejected Moderation Listing"
+        ]
+        assert len(rejected_listings) == 1, (
+            f"Expected one rejected moderation listing, got {len(rejected_listings)}."
+        )
+        assert rejected_listings[0].status is ListingStatus.CANCELLED
+        rejected_events = list(
+            (
+                await session.scalars(
+                    select(ModerationAuditLog).where(
+                        ModerationAuditLog.target_id == rejected_listings[0].id
+                    )
+                )
+            ).all()
+        )
+        assert [event.action for event in rejected_events] == ["rejected"]
         moderation_events = list(
             (
                 await session.scalars(
