@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 
 from aiogram import Bot, Dispatcher
 
 from app.core.config import get_settings
 from app.payments_bot_handlers import router as payments_test_router
-
-logger = logging.getLogger(__name__)
 
 
 def create_test_dispatcher() -> Dispatcher:
