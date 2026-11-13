@@ -8,6 +8,8 @@ from aiogram import Bot, Dispatcher
 from app.core.config import get_settings
 from app.payments_bot_handlers import router as payments_test_router
 
+# This entrypoint is intentionally isolated from the production bot runtime.
+
 
 def create_test_dispatcher() -> Dispatcher:
     dispatcher = Dispatcher()
