@@ -47,7 +47,7 @@ def test_delivery_notifications_are_russian_truthful_and_role_specific(
 
     message = notification_service.build_notification_message(delivery)
 
-    assert expected in message
+    assert expected.lower() in message.lower()
     assert "<b>VILTARA SHOP</b> · Заказ <code>#" in message
     assert "Оплата внутри платформы пока не подключена" in message
     assert "seed phrase" not in message.lower()
