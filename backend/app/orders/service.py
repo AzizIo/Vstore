@@ -16,6 +16,7 @@ from app.assets.ton_nft.errors import InvalidProviderData
 from app.assets.ton_nft.models import VerificationResult, VerificationStatus
 from app.assets.ton_nft.verifier import TONNFTVerifier
 from app.core.config import get_settings
+from app.db.payments import PaymentIntent
 from app.db.models import (
     AssetType,
     AssetVerificationStatus,
@@ -27,6 +28,7 @@ from app.db.models import (
     OrderDeliveryAttemptStatus,
     OrderEvent,
     OrderStatus,
+    PriceCurrency,
     TelegramNotificationOutbox,
     User,
     Wallet,
@@ -297,8 +299,7 @@ async def create_order(
 
     return await _reserve_listing(
         session,
-        buyer_id=buyer_id,
-        idempotency_key=idempotency_key,
+        buyer_id=buyer_id,        idempotency_key=idempotency_key,
         snapshot=snapshot,
         ownership=ownership,
         current_time=current_time,
@@ -598,7 +599,6 @@ def _release_listing(
     asset: NFTAsset | None,
 ) -> None:
     """Return a reserved listing to the catalog, unless it is no longer sellable.
-
     A stale or unverified asset must never be re-exposed by cancelling or
     expiring an order: the catalog filters on listing status alone, so promoting
     such a listing back to ACTIVE would offer an NFT the seller no longer owns.
@@ -728,6 +728,16 @@ async def _load_delivery_preparation_snapshot(
         raise OrderConflict("Delivery has already been prepared for this order")
     if order.status is not OrderStatus.RESERVED or order.expires_at <= now:
         raise OrderConflict("Order is not available for delivery preparation")
+
+    if order.price_currency is PriceCurrency.XTR:
+        paid_intent = await session.scalar(
+            select(PaymentIntent).where(
+                PaymentIntent.order_id == order.id,
+                PaymentIntent.status == "paid",
+            )
+        )
+        if paid_intent is None:
+            raise OrderConflict("Telegram Stars payment must be confirmed before delivery")
 
     listing = await session.scalar(select(Listing).where(Listing.id == order.listing_id))
     if (
@@ -894,11 +904,17 @@ async def prepare_delivery(
         if order is None or order.seller_id != seller_id:
             rejection = "Order not found"
         else:
+            payment_intent = None
+            if order.price_currency is PriceCurrency.XTR:
+                payment_intent = await session.scalar(
+                    select(PaymentIntent)
+                    .where(PaymentIntent.order_id == order.id)
+                    .with_for_update()
+                )
             same_key_attempt = await session.scalar(
                 select(OrderDeliveryAttempt)
                 .where(
-                    OrderDeliveryAttempt.order_id == order.id,
-                    OrderDeliveryAttempt.prepare_idempotency_key == idempotency_key,
+                    OrderDeliveryAttempt.order_id == order.id,                    OrderDeliveryAttempt.prepare_idempotency_key == idempotency_key,
                 )
                 .with_for_update()
             )
@@ -944,6 +960,11 @@ async def prepare_delivery(
                 )
                 if previous_attempt is not None:
                     rejection = "Delivery has already been prepared for this order"
+                elif (
+                    order.price_currency is PriceCurrency.XTR
+                    and (payment_intent is None or payment_intent.status != "paid")
+                ):
+                    rejection = "Telegram Stars payment must be confirmed before delivery"
                 elif ownership_lost and identity_matches:
                     await _invalidate_lost_ownership(
                         session,
