@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -191,8 +192,10 @@ async def _mark_failed_or_retry(
 
 
 def build_notification_message(delivery: NotificationDelivery) -> str:
+    """Build a concise Russian notification with escaped values and Telegram HTML."""
     order_reference = str(delivery.order_id).replace("-", "")[:8].upper()
-    amount = format(delivery.price_amount.normalize(), "f")
+    amount = html.escape(format(delivery.price_amount.normalize(), "f"))
+    currency = html.escape(delivery.price_currency)
 
     if delivery.event_type == "order_created":
         description = (
@@ -200,55 +203,62 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
             if delivery.recipient_role == "buyer"
             else "Покупатель зарезервировал ваше объявление."
         )
-        status = "Зарезервировано"
+        status, icon = "Заказ зарезервирован", "🛍️"
     elif delivery.event_type == "order_cancelled":
         description = (
             "Вы отменили заказ."
             if delivery.recipient_role == "buyer"
             else "Покупатель отменил заказ."
         )
-        status = "Отменён"
+        status, icon = "Заказ отменён", "↩️"
     elif delivery.event_type == "order_expired":
-        description = "Срок резерва заказа истёк автоматически."
-        status = "Истёк"
+        description = "Время резервирования заказа истекло автоматически."
+        status, icon = "Резервирование истекло", "⌛"
     elif delivery.event_type == "delivery_prepared":
         description = (
-            "Продавец подготовил прямую передачу NFT. Получение NFT ещё не подтверждено."
+            "Продавец подготовил передачу NFT. Получение ещё не подтверждено."
             if delivery.recipient_role == "buyer"
             else (
-                "Требуется действие: проверьте данные и подпишите перевод именно этого NFT "
-                "в своём TON-кошельке."
+                "Проверьте детали и подтвердите точную передачу NFT в своём "
+                "TON-кошельке."
             )
         )
-        status = "Ожидается перевод продавца"
+        status, icon = "Ожидается передача NFT", "📦"
     elif delivery.event_type == "delivery_submitted":
         description = (
-            "Данные о переводе получены. Сервис проверяет подтверждение в сети TON."
+            "Данные о транзакции получены. Сервис проверяет подтверждение "
+            "в блокчейне."
             if delivery.recipient_role == "buyer"
-            else "Мы получили данные о переводе. Дождитесь независимой проверки в сети TON."
+            else (
+                "Данные о транзакции получены. Дождитесь независимой проверки "
+                "в блокчейне."
+            )
         )
-        status = "Проверка перевода"
+        status, icon = "Проверяем транзакцию", "⏳"
     elif delivery.event_type == "delivery_confirmed":
         description = (
-            "Передача именно этого NFT на кошелёк покупателя подтверждена в блокчейне TON."
+            "Передача NFT на указанный кошелёк покупателя независимо подтверждена "
+            "в блокчейне."
         )
-        status = "Перевод подтверждён"
+        status, icon = "Передача NFT подтверждена", "✅"
     elif delivery.event_type == "delivery_manual_review":
         description = (
-            "Передача требует ручной проверки. Не считайте NFT полученным "
-            "и не отправляйте повторный перевод."
+            "Нужна ручная проверка. Не считайте NFT доставленным и не отправляйте "
+            "повторную транзакцию."
         )
-        status = "Требуется проверка"
+        status, icon = "Требуется проверка", "⚠️"
     else:
         raise UnsupportedNotificationEvent(
             f"Unsupported Telegram notification event_type: {delivery.event_type!r}"
         )
 
     lines = [
-        f"VILTARA SHOP · Заказ №{order_reference}",
+        f"<b>VILTARA SHOP</b> · Заказ <code>#{order_reference}</code>",
+        "",
+        f"{icon} <b>{status}</b>",
         description,
-        f"Статус: {status}",
-        f"Сумма: {amount} {delivery.price_currency}",
+        "",
+        f"<b>Сумма:</b> <code>{amount} {currency}</code>",
     ]
     settings = get_settings()
     app_url = validate_telegram_direct_link(settings.telegram_mini_app_direct_link)
@@ -258,10 +268,22 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
             startapp=f"order_{delivery.order_id.hex}",
         )
         if order_url is not None:
-            lines.append(f"Открыть заказ в Mini App: {order_url}")
+            safe_url = html.escape(order_url, quote=True)
+            lines.extend(
+                [
+                    "",
+                    f'<a href="{safe_url}">Открыть заказ в приложении</a>',
+                ]
+            )
 
-    lines.append("Оплата пока не подключена. Платёж не принимался.")
+    lines.extend(
+        [
+            "",
+            "<i>Оплата внутри платформы пока не подключена; средства не списаны.</i>",
+        ]
+    )
     return "\n".join(lines)
+
 
 async def process_due_notifications(
     session: AsyncSession,
