@@ -16,7 +16,9 @@ def upgrade() -> None:
         "payment_intents",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("order_id", sa.Uuid(), nullable=False),
-        sa.Column("provider", sa.String(length=32), server_default="telegram_stars", nullable=False),
+        sa.Column(
+            "provider", sa.String(length=32), server_default="telegram_stars", nullable=False
+        ),
         sa.Column("status", sa.String(length=24), server_default="pending", nullable=False),
         sa.Column("amount", sa.Numeric(precision=24, scale=9), nullable=False),
         sa.Column("currency", sa.String(length=8), server_default="XTR", nullable=False),
@@ -27,16 +29,28 @@ def upgrade() -> None:
         sa.Column("refund_requested_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("refunded_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_error_code", sa.String(length=64), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.CheckConstraint("amount > 0", name="ck_payment_intents_amount_positive"),
-        sa.CheckConstraint("currency = 'XTR'", name="ck_payment_intents_currency_stars"),
-        sa.CheckConstraint("provider = 'telegram_stars'", name="ck_payment_intents_provider"),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.CheckConstraint(
+            "amount > 0", name="ck_payment_intents_amount_positive"
+        ),
+        sa.CheckConstraint(
+            "currency = 'XTR'", name="ck_payment_intents_currency_stars"
+        ),
+        sa.CheckConstraint(
+            "provider = 'telegram_stars'", name="ck_payment_intents_provider"
+        ),
         sa.CheckConstraint(
             "status IN ('pending', 'paid', 'refund_pending', 'refunded', 'failed', 'expired')",
             name="ck_payment_intents_status",
         ),
-        sa.CheckConstraint("payer_telegram_id > 0", name="ck_payment_intents_payer_positive"),
+        sa.CheckConstraint(
+            "payer_telegram_id > 0", name="ck_payment_intents_payer_positive"
+        ),
         sa.ForeignKeyConstraint(["order_id"], ["orders.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("order_id", name="uq_payment_intents_order"),
@@ -63,12 +77,16 @@ def upgrade() -> None:
         sa.Column("last_error_code", sa.String(length=64), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.CheckConstraint("amount > 0", name="ck_payment_transactions_amount_positive"),
+        sa.CheckConstraint(
+            "amount > 0", name="ck_payment_transactions_amount_positive"
+        ),
         sa.CheckConstraint(
             "status IN ('captured', 'refund_pending', 'refunded')",
             name="ck_payment_transactions_status",
         ),
-        sa.CheckConstraint("payer_telegram_id > 0", name="ck_payment_transactions_payer_positive"),
+        sa.CheckConstraint(
+            "payer_telegram_id > 0", name="ck_payment_transactions_payer_positive"
+        ),
         sa.ForeignKeyConstraint(
             ["payment_intent_id"], ["payment_intents.id"], ondelete="RESTRICT"
         ),
