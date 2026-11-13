@@ -260,14 +260,14 @@ function OrderDetails({
             <dl>
               <div><dt>Ваша роль</dt><dd>{role === "buyer" ? "Покупатель · Покупка" : "Продавец · Продажа"}</dd></div>
               <div><dt>ID заказа</dt><dd className="order-id-value"><code>{order.id}</code><button className="copy-id-button" type="button" onClick={() => void copyOrderId()} aria-label="Скопировать ID заказа">{copied ? "Скопировано" : "Копировать ID"}</button></dd></div>
-              {copied && <div className="mini-toast mini-toast-success" role="status">ID заказа скопирован</div>}
-              {copyError && <p className="copy-id-error" role="status">{copyError}</p>}
               <div><dt>ID объявления</dt><dd><code>{order.listing_id}</code></dd></div>
               <div><dt>Тип актива</dt><dd>{order.asset_type === "ton_nft" ? "TON NFT" : "Подарок Telegram"}</dd></div>
               <div><dt>Создан</dt><dd>{getDate(order.created_at)}</dd></div>
               <div><dt>Последнее обновление</dt><dd>{getDate(order.updated_at)}</dd></div>
               <div><dt>Резерв истекает</dt><dd>{getDate(order.expires_at)}</dd></div>
             </dl>
+            {copied && <div className="mini-toast mini-toast-success" role="status">ID заказа скопирован</div>}
+            {copyError && <p className="copy-id-error" role="status">{copyError}</p>}
           </section>
           {role === "buyer" && order.status === "reserved" && (
             <section className="cancel-order-card">
