@@ -8,6 +8,7 @@ inputs and validator context that could contain secrets.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from fastapi import Request
@@ -571,12 +572,28 @@ def localize_http_detail(detail: Any, status_code: int) -> Any:
     if isinstance(detail, dict) and detail.get("status") == "not_ready":
         checks = detail.get("checks")
         if isinstance(checks, dict):
-            allowed = {"database", "redis", "authentication"}
-            safe_checks = {
-                key: value
-                for key, value in checks.items()
-                if key in allowed and isinstance(value, bool)
+            allowed = {
+                "database",
+                "redis",
+                "authentication",
+                "ton_connect_proof",
+                "ton_connect_proof_domains",
             }
+            safe_checks: dict[str, Any] = {}
+            for key, value in checks.items():
+                if key not in allowed:
+                    continue
+                if key == "ton_connect_proof_domains":
+                    if isinstance(value, list) and all(
+                        isinstance(domain, str)
+                        and re.fullmatch(r"[A-Za-z0-9.-]{1,253}", domain)
+                        for domain in value
+                    ):
+                        safe_checks[key] = value
+                elif isinstance(value, bool) or (
+                    isinstance(value, str) and value in {"ok", "error"}
+                ):
+                    safe_checks[key] = value
             return {"status": "not_ready", "checks": safe_checks}
 
     return _STATUS_MESSAGES.get(status_code, _STATUS_MESSAGES[500])
