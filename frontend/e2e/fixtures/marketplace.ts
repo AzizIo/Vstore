@@ -153,6 +153,12 @@ export interface MarketplaceMockOptions {
   startParam?: string;
   catalogFailures?: number;
   missingListingDetail?: boolean;
+  myListingsFailure?: boolean;
+  inventoryFailure?: boolean;
+  draftCreationFailure?: boolean;
+  ordersFailure?: boolean;
+  orderDetailFailure?: boolean;
+  sellerReviewsFailure?: boolean;
 }
 
 function jsonBody(body: unknown) {
@@ -266,10 +272,16 @@ export async function mockMarketplaceApi(
     }
 
     if (path === "/api/listings/me" && method === "GET" && options.authenticated) {
+      if (options.myListingsFailure) {
+        return fulfillJson({ detail: "Ваши объявления временно недоступны." }, 503);
+      }
       return fulfillJson([moonLantern]);
     }
 
     if (path === "/api/assets/me" && method === "GET" && options.authenticated) {
+      if (options.inventoryFailure) {
+        return fulfillJson({ detail: "Инвентарь временно недоступен." }, 503);
+      }
       const limit = Number(url.searchParams.get("limit") ?? 24);
       const offset = Number(url.searchParams.get("offset") ?? 0);
       return fulfillJson({
@@ -282,6 +294,9 @@ export async function mockMarketplaceApi(
     }
 
     if (path === "/api/listings" && method === "POST" && options.authenticated) {
+      if (options.draftCreationFailure) {
+        return fulfillJson({ detail: "Не удалось сохранить черновик. Попробуйте ещё раз." }, 503);
+      }
       return fulfillJson(draftListing, 201);
     }
 
@@ -298,6 +313,9 @@ export async function mockMarketplaceApi(
     }
 
     if (path === "/api/reviews/sellers/seller-1" && method === "GET") {
+      if (options.sellerReviewsFailure) {
+        return fulfillJson({ detail: "Отзывы временно недоступны." }, 503);
+      }
       return fulfillJson({
         seller_id: "seller-1",
         average_rating: 0,
@@ -332,10 +350,16 @@ export async function mockMarketplaceApi(
     }
 
     if (path === `/api/orders/${orderId}` && method === "GET" && options.authenticated) {
+      if (options.orderDetailFailure) {
+        return fulfillJson({ detail: "Данные заказа временно недоступны." }, 503);
+      }
       return fulfillJson(linkedOrder);
     }
 
     if (path === "/api/orders" && method === "GET" && options.authenticated) {
+      if (options.ordersFailure) {
+        return fulfillJson({ detail: "Список заказов временно недоступен." }, 503);
+      }
       return fulfillJson({ items: [linkedOrder] });
     }
 
