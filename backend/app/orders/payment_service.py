@@ -186,19 +186,31 @@ async def record_stars_success(
             )
             return intent.status if intent is not None else "unknown"
 
-        intent = await session.scalar(
-            select(PaymentIntent)
-            .where(PaymentIntent.invoice_payload == invoice_payload)
-            .with_for_update()
+        order_id = await session.scalar(
+            select(PaymentIntent.order_id).where(
+                PaymentIntent.invoice_payload == invoice_payload
+            )
         )
-        if intent is None:
+        if order_id is None:
             raise PaymentConflict("Successful payment references an unknown invoice")
 
+        # Keep the global lock order identical to delivery preparation:
+        # order first, then payment intent. This prevents callback/delivery deadlocks.
         order = await session.scalar(
-            select(Order).where(Order.id == intent.order_id).with_for_update()
+            select(Order).where(Order.id == order_id).with_for_update()
         )
         if order is None:
             raise PaymentConflict("Payment order no longer exists")
+        intent = await session.scalar(
+            select(PaymentIntent)
+            .where(
+                PaymentIntent.invoice_payload == invoice_payload,
+                PaymentIntent.order_id == order.id,
+            )
+            .with_for_update()
+        )
+        if intent is None:
+            raise PaymentConflict("Payment intent changed while processing the update")
 
         if intent.status == "paid":
             if intent.telegram_payment_charge_id == telegram_payment_charge_id:
