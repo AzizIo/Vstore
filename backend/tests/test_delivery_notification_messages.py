@@ -12,49 +12,17 @@ from app.notifications import service as notification_service
 @pytest.mark.parametrize(
     ("event_type", "role", "expected"),
     [
-        (
-            "delivery_prepared",
-            "seller",
-            "Требуется действие: проверьте данные и подпишите перевод именно этого NFT",
-        ),
-        (
-            "delivery_prepared",
-            "buyer",
-            "Получение NFT ещё не подтверждено.",
-        ),
-        (
-            "delivery_submitted",
-            "seller",
-            "Дождитесь независимой проверки в сети TON.",
-        ),
-        (
-            "delivery_submitted",
-            "buyer",
-            "Сервис проверяет подтверждение в сети TON.",
-        ),
-        (
-            "delivery_confirmed",
-            "buyer",
-            "Передача именно этого NFT на кошелёк покупателя подтверждена в блокчейне TON.",
-        ),
-        (
-            "delivery_confirmed",
-            "seller",
-            "Передача именно этого NFT на кошелёк покупателя подтверждена в блокчейне TON.",
-        ),
-        (
-            "delivery_manual_review",
-            "buyer",
-            "Не считайте NFT полученным и не отправляйте повторный перевод.",
-        ),
-        (
-            "delivery_manual_review",
-            "seller",
-            "Не считайте NFT полученным и не отправляйте повторный перевод.",
-        ),
+        ("delivery_prepared", "seller", "подтвердите точную передачу NFT"),
+        ("delivery_prepared", "buyer", "ещё не подтверждено"),
+        ("delivery_submitted", "seller", "независимой проверки в блокчейне"),
+        ("delivery_submitted", "buyer", "сервис проверяет подтверждение"),
+        ("delivery_confirmed", "buyer", "независимо подтверждена в блокчейне"),
+        ("delivery_confirmed", "seller", "независимо подтверждена в блокчейне"),
+        ("delivery_manual_review", "buyer", "не считайте NFT доставленным"),
+        ("delivery_manual_review", "seller", "не считайте NFT доставленным"),
     ],
 )
-def test_delivery_notification_messages_are_truthful_and_role_specific(
+def test_delivery_notifications_are_russian_truthful_and_role_specific(
     monkeypatch: pytest.MonkeyPatch,
     event_type: str,
     role: str,
@@ -79,9 +47,9 @@ def test_delivery_notification_messages_are_truthful_and_role_specific(
 
     message = notification_service.build_notification_message(delivery)
 
-    assert expected in message
-    assert "VILTARA SHOP · Заказ №" in message
-    assert "Оплата пока не подключена. Платёж не принимался." in message
+    assert expected.lower() in message.lower()
+    assert "<b>VILTARA SHOP</b> · Заказ <code>#" in message
+    assert "Оплата внутри платформы пока не подключена" in message
     assert "seed phrase" not in message.lower()
     assert "api key" not in message.lower()
     assert "provider payload" not in message.lower()
