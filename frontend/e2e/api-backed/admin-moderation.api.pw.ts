@@ -31,7 +31,7 @@ async function installTelegramBridge(page: Page, user: TelegramUser): Promise<vo
   await page.route("**/telegram-web-app.js*", (route) =>
     route.fulfill({ status: 200, contentType: "application/javascript", body: "" }),
   );
-  await page.addInitScript((signedData, telegramUser) => {
+  await page.addInitScript(({ signedData, telegramUser }) => {
     const webApp = {
       initData: signedData,
       initDataUnsafe: { user: telegramUser },
@@ -39,7 +39,7 @@ async function installTelegramBridge(page: Page, user: TelegramUser): Promise<vo
       expand: () => undefined,
     };
     (window as Window & { Telegram?: { WebApp?: typeof webApp } }).Telegram = { WebApp: webApp };
-  }, initData, user);
+  }, { signedData: initData, telegramUser: user });
 }
 
 const adminSeller: TelegramUser = {
