@@ -211,7 +211,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
           </div>
           <div className="detail-media-meta">
             <span>{assetTypeLabels[listing.asset.asset_type]}</span>
-            <span>{listing.asset.collection?.name ?? "Коллекционный актив"}</span>
+            <span>{listing.asset.collection ? (listing.asset.collection.network === "mainnet" ? "TON Mainnet" : `TON ${listing.asset.collection.network.toUpperCase()}`) : "Коллекционный актив"}</span>
           </div>
         </div>
         <div className="detail-copy">
