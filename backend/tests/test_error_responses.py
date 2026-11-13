@@ -26,6 +26,8 @@ def test_readiness_response_keeps_its_machine_contract() -> None:
             "database": False,
             "redis": True,
             "authentication": False,
+            "ton_connect_proof": "ok",
+            "ton_connect_proof_domains": ["shop.example.test"],
             "connection_string": "postgres://user:password@internal",
         },
         "secret": "must-not-leak",
@@ -36,6 +38,8 @@ def test_readiness_response_keeps_its_machine_contract() -> None:
             "database": False,
             "redis": True,
             "authentication": False,
+            "ton_connect_proof": "ok",
+            "ton_connect_proof_domains": ["shop.example.test"],
         },
     }
 
