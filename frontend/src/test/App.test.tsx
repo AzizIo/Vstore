@@ -48,7 +48,7 @@ const listing = {
     id: "asset-1", asset_type: "ton_nft" as const, external_id: "nft-001",
     item_address: "0:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     name: "Lantern", description: null,
-    image_url: "https://example.com/lantern.jpg", verification_status: "Подтверждён",
+    image_url: "https://example.com/lantern.jpg", verification_status: "verified",
     collection: {
       id: "collection-1", address: "0:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       network: "mainnet", name: "Lantern Guild", marketplace_name: "Getgems",
@@ -702,7 +702,7 @@ describe("Buyer orders", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Зарезервировать" }));
     fireEvent.click(await screen.findByRole("button", { name: "Подтвердить резерв" }));
-    expect(await screen.findByText(/Не удалось связаться с сервисом заказов//)).toBeInTheDocument();
+    expect(await screen.findByText(/Не удалось связаться с сервисом заказов/)).toBeInTheDocument();
     const firstRequest = vi.mocked(fetch).mock.calls.find(([input, init]) => String(input).endsWith("/api/orders") && init?.method === "POST");
     const firstKey = new Headers(firstRequest?.[1]?.headers).get("Idempotency-Key");
     fireEvent.click(screen.getByRole("button", { name: "Подтвердить резерв" }));
@@ -817,7 +817,7 @@ describe("TON Connect wallet UI", () => {
     fireEvent.click(screen.getByRole("button", { name: "Мои NFT" }));
 
     expect(await screen.findByText("Selected wallet NFT")).toBeInTheDocument();
-    expect(screen.getByText(/Показываем NFT кошелька 0:aaaaaa…aaaaa · основная сеть//)).toBeInTheDocument();
+    expect(screen.getByText(/Показываем NFT кошелька 0:aaaaaa…aaaaa · основная сеть/)).toBeInTheDocument();
     expect(inventoryRequests).toEqual([{ walletId: selectedWallet.id, offset: "0" }]);
 
     fireEvent.click(screen.getByRole("button", { name: "Загрузить ещё NFT" }));
