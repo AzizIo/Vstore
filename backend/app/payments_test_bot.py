@@ -16,6 +16,7 @@ def create_test_dispatcher() -> Dispatcher:
 
 
 async def main() -> None:
+    """Run only the isolated test bot; never the production bot."""
     settings = get_settings()
     if not settings.telegram_stars_test_enabled:
         raise RuntimeError("TELEGRAM_STARS_TEST_ENABLED must be true to start this bot")
