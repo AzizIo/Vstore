@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 from uuid import UUID
 
@@ -41,37 +42,37 @@ def delivery_factory():
         (
             "order_created",
             "buyer",
-            "Your order was created and the listing is reserved.",
-            "Reserved",
+            "Ваш заказ создан, объявление зарезервировано.",
+            "Заказ зарезервирован",
         ),
         (
             "order_created",
             "seller",
-            "A buyer reserved your listing.",
-            "Reserved",
+            "Покупатель зарезервировал ваше объявление.",
+            "Заказ зарезервирован",
         ),
-        ("order_cancelled", "buyer", "You cancelled the order.", "Cancelled"),
+        ("order_cancelled", "buyer", "Вы отменили заказ.", "Заказ отменён"),
         (
             "order_cancelled",
             "seller",
-            "The buyer cancelled the order.",
-            "Cancelled",
+            "Покупатель отменил заказ.",
+            "Заказ отменён",
         ),
         (
             "order_expired",
             "buyer",
-            "The order reservation expired automatically.",
-            "Expired",
+            "Время резервирования заказа истекло автоматически.",
+            "Резервирование истекло",
         ),
         (
             "order_expired",
             "seller",
-            "The order reservation expired automatically.",
-            "Expired",
+            "Время резервирования заказа истекло автоматически.",
+            "Резервирование истекло",
         ),
     ],
 )
-def test_builds_explicit_messages_for_supported_events_and_roles(
+def test_builds_explicit_russian_messages_for_supported_events_and_roles(
     monkeypatch: pytest.MonkeyPatch,
     delivery_factory,
     event_type: str,
@@ -83,20 +84,24 @@ def test_builds_explicit_messages_for_supported_events_and_roles(
 
     monkeypatch.setattr(
         "app.notifications.service.get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_direct_link="https://t.me/viltara_shop_bot/marketplace"),
+        lambda: SimpleNamespace(
+            telegram_mini_app_direct_link="https://t.me/viltara_shop_bot/marketplace"
+        ),
     )
 
     message = build_notification_message(delivery_factory(event_type, role))
 
     assert expected_description in message
-    assert f"Status: {expected_status}" in message
-    assert "Amount: 1.25 TON" in message
+    assert f"<b>{expected_status}</b>" in message
+    assert "<b>Сумма:</b> <code>1.25 TON</code>" in message
+    assert "Оплата внутри платформы пока не подключена" in message
     assert "Pending payment" not in message
     expected_link = (
         "https://t.me/viltara_shop_bot/marketplace?startapp=order_"
         + ORDER_ID.hex
     )
-    assert f"Open in Mini App: {expected_link}" in message
+    assert f'<a href="{expected_link}">Открыть заказ в приложении</a>' in message
+    assert "<b>VILTARA SHOP</b> · Заказ <code>#12345678</code>" in message
 
 
 def test_unknown_event_type_fails_explicitly_instead_of_expiring_order(
@@ -117,7 +122,7 @@ def test_unknown_event_type_fails_explicitly_instead_of_expiring_order(
         build_notification_message(delivery_factory("transfer_confirmed"))
 
 
-def test_missing_mini_app_url_omits_link_but_keeps_notification(
+def test_missing_mini_app_url_omits_link_but_keeps_russian_notification(
     monkeypatch: pytest.MonkeyPatch,
     delivery_factory,
 ) -> None:
@@ -130,10 +135,9 @@ def test_missing_mini_app_url_omits_link_but_keeps_notification(
 
     message = build_notification_message(delivery_factory("order_created"))
 
-    assert "Your order was created and the listing is reserved." in message
-    assert "Status: Reserved" in message
-    assert "Open in Mini App:" not in message
-
+    assert "Ваш заказ создан, объявление зарезервировано." in message
+    assert "<b>Заказ зарезервирован</b>" in message
+    assert "Открыть заказ в приложении" not in message
 
 
 def test_public_web_app_url_is_not_added_as_telegram_direct_link(
@@ -151,6 +155,27 @@ def test_public_web_app_url_is_not_added_as_telegram_direct_link(
 
     message = build_notification_message(delivery_factory("order_created"))
 
-    assert "Your order was created and the listing is reserved." in message
-    assert "Open in Mini App:" not in message
+    assert "Ваш заказ создан, объявление зарезервировано." in message
+    assert "Открыть заказ в приложении" not in message
     assert "shop.example.com" not in message
+
+
+def test_notification_escapes_database_values_before_rendering_html(
+    monkeypatch: pytest.MonkeyPatch,
+    delivery_factory,
+) -> None:
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "app.notifications.service.get_settings",
+        lambda: SimpleNamespace(telegram_mini_app_direct_link=None),
+    )
+    delivery = replace(
+        delivery_factory(),
+        price_currency="<b>TON</b>&",
+    )
+
+    message = build_notification_message(delivery)
+
+    assert "<b>Сумма:</b> <code>1.25 &lt;b&gt;TON&lt;/b&gt;&amp;</code>" in message
+    assert "<code>1.25 <b>TON</b>&</code>" not in message
