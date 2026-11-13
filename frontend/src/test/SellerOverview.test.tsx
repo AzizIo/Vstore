@@ -48,13 +48,13 @@ describe("Seller overview", () => {
       />,
     );
 
-    expect(screen.getByText("Loading seller overview…")).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Seller overview" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Обзор магазина" })).toBeInTheDocument();
     expect(overviewApi.fetchSellerOverview).toHaveBeenCalledWith("seller-token", expect.any(AbortSignal));
     expect(screen.getByText("12.500000000 TON · 40.00 XTR")).toBeInTheDocument();
     expect(screen.getByText("3.25 TON")).toBeInTheDocument();
     expect(screen.getByText(/Резервирование не является оплатой/)).toBeInTheDocument();
     expect(screen.getByText("Активные объявления")).toBeInTheDocument();
+    expect(screen.getByText("На модерации")).toBeInTheDocument();
     expect(screen.getByText(/Объявление · Приостановлено/)).toBeInTheDocument();
     expect(screen.getByText("Завершённые передачи")).toBeInTheDocument();
   });
@@ -76,7 +76,7 @@ describe("Seller overview", () => {
     expect(onOpenOrders).toHaveBeenCalledWith("order-1");
     fireEvent.click(screen.getByRole("button", { name: /Star Sail/ }));
     expect(onOpenListing).toHaveBeenCalledWith("listing-2");
-    fireEvent.click(screen.getByRole("button", { name: "Manage listings ↗" }));
+    fireEvent.click(screen.getByRole("button", { name: "Управлять объявлениями ↗" }));
     expect(onManageListings).toHaveBeenCalledOnce();
   });
 
@@ -95,8 +95,8 @@ describe("Seller overview", () => {
     );
 
     expect(await screen.findByText("Overview offline")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByText("No activity yet")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
+    expect(await screen.findByText("Пока нет активности")).toBeInTheDocument();
     await waitFor(() => expect(overviewApi.fetchSellerOverview).toHaveBeenCalledTimes(2));
   });
 });
