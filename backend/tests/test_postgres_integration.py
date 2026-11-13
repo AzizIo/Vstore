@@ -5,11 +5,13 @@ import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -71,6 +73,16 @@ def test_database_url() -> str:
         pytest.skip("TEST_DATABASE_URL is not configured")
     if not url.startswith("postgresql+asyncpg://"):
         pytest.fail("Integration tests require a dedicated PostgreSQL TEST_DATABASE_URL")
+
+    # These tests apply migrations and must never target a default app/developer DB.
+    database_name = urlsplit(url).path.lstrip("/").split("?", maxsplit=1)[0]
+    if not database_name or not (
+        database_name.startswith("test_") or database_name.endswith("_test")
+    ):
+        pytest.fail(
+            "TEST_DATABASE_URL must target a dedicated database whose name starts "
+            "with 'test_' or ends with '_test'"
+        )
     return url
 
 
@@ -80,43 +92,18 @@ def migrated_database(test_database_url: str):
     os.environ["DATABASE_URL"] = test_database_url
     get_settings.cache_clear()
     try:
-        alembic_config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        alembic_config = Config(ALEMBIC_CONFIG_PATH)
         command.upgrade(alembic_config, "head")
+        # Do not downgrade to base during teardown: this destroys the schema.
+        # CI provisions a fresh PostgreSQL service for each run, and per-test
+        # data is rolled back by db_session. Local runs must use a disposable DB.
         yield
-        # This is a disposable TEST_DATABASE_URL. Clear only the feature-owned
-        # review rows before downgrade; the migration itself still refuses to
-        # discard review provenance in any non-test database.
-        async def clear_test_reviews() -> None:
-            engine = create_async_engine(test_database_url, pool_pre_ping=True)
-            try:
-                async with engine.begin() as connection:
-                    has_listings_table = await connection.scalar(
-                        text("SELECT to_regclass('public.listings') IS NOT NULL")
-                    )
-                    if has_listings_table:
-                        await connection.execute(
-                            text(
-                                "UPDATE listings SET status = 'cancelled' "
-                                "WHERE status = 'pending_review'"
-                            )
-                        )
-                    has_reviews_table = await connection.scalar(
-                        text("SELECT to_regclass('public.seller_reviews') IS NOT NULL")
-                    )
-                    if has_reviews_table:
-                        await connection.execute(text("DELETE FROM seller_reviews"))
-            finally:
-                await engine.dispose()
-
-        asyncio.run(clear_test_reviews())
-        command.downgrade(alembic_config, "base")
     finally:
         if previous_url is None:
             os.environ.pop("DATABASE_URL", None)
         else:
             os.environ["DATABASE_URL"] = previous_url
         get_settings.cache_clear()
-
 
 @pytest.fixture
 async def db_session(test_database_url: str, migrated_database) -> AsyncSession:
@@ -180,7 +167,9 @@ ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 async def test_alembic_upgrade_applies_expected_revision(db_session: AsyncSession) -> None:
     revision = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
-    assert revision == "0011_listing_pending_review"
+    expected_head = ScriptDirectory.from_config(Config(ALEMBIC_CONFIG_PATH)).get_current_head()
+
+    assert revision == expected_head
 
 
 
