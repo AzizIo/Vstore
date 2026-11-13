@@ -168,7 +168,16 @@ async def get_my_overview(
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> SellerOverviewResponse:
-    listing_statuses = ("draft", "pending_review", "active", "reserved", "sold", "cancelled", "expired", "suspended")
+    listing_statuses = (
+        "draft",
+        "pending_review",
+        "active",
+        "reserved",
+        "sold",
+        "cancelled",
+        "expired",
+        "suspended",
+    )
     order_statuses = (
         "reserved",
         "awaiting_transfer",
