@@ -481,7 +481,11 @@ async def decide_listing(
                         Listing.asset_id == listing.asset_id,
                         Listing.id != listing.id,
                         Listing.status.in_(
-                            [ListingStatus.ACTIVE, ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW]
+                            [
+                                ListingStatus.ACTIVE,
+                                ListingStatus.RESERVED,
+                                ListingStatus.PENDING_REVIEW,
+                            ]
                         ),
                     ).limit(1)
                 )
