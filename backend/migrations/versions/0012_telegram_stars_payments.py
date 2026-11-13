@@ -154,11 +154,11 @@ def upgrade() -> None:
     op.execute(
         """
         CREATE OR REPLACE FUNCTION prevent_payment_event_mutation()
-        RETURNS trigger AS $
-        BEGIN
-            RAISE EXCEPTION 'payment_events is append-only';
-        END;
-        $ LANGUAGE plpgsql;
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS 'BEGIN
+            RAISE EXCEPTION ''payment_events is append-only'';
+        END;';
         """
     )
     op.execute(
