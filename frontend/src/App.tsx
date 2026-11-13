@@ -477,7 +477,8 @@ function MarketplaceApp() {
             setSection("catalog");
           }}
         >
-          Каталог
+          <span className="navigation-icon" aria-hidden="true">▦</span>
+          <span className="navigation-label">Каталог</span>
         </button>
         <button
           className="navigation-tab"
@@ -488,7 +489,8 @@ function MarketplaceApp() {
             setSection("my-nft");
           }}
         >
-          Мои NFT
+          <span className="navigation-icon" aria-hidden="true">◇</span>
+          <span className="navigation-label">Мои NFT</span>
         </button>
         <button
           className="navigation-tab"
@@ -499,7 +501,8 @@ function MarketplaceApp() {
             setSection("my-listings");
           }}
         >
-          Мои объявления
+          <span className="navigation-icon" aria-hidden="true">▤</span>
+          <span className="navigation-label">Объявления</span>
         </button>
         <button
           className="navigation-tab"
@@ -510,7 +513,8 @@ function MarketplaceApp() {
             setSection("orders");
           }}
         >
-          Заказы
+          <span className="navigation-icon" aria-hidden="true">↗</span>
+          <span className="navigation-label">Заказы</span>
         </button>
       </nav>
 
