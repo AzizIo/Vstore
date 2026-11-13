@@ -163,8 +163,15 @@ test(
     await expect(sellerPage.locator(".listing-status-pending_review")).toHaveText("На модерации");
 
     // The listing remains private until the administrator explicitly approves it.
+    const sellerListingsResponse = await sellerContext.request.get(
+      "http://127.0.0.1:5173/api/listings/me",
+      { headers: { Authorization: `Bearer ${bootstrapSession.access_token}` } },
+    );
+    const sellerListings = await sellerListingsResponse.json() as Array<{ id: string; title: string | null }>;
+    const submittedListing = sellerListings.find((item) => item.title === "E2E Published NFT");
+    expect(submittedListing).toBeTruthy();
     const approvalResponse = await sellerContext.request.post(
-      "http://127.0.0.1:5173/api/admin/listings/" + draft.id + "/decision",
+      "http://127.0.0.1:5173/api/admin/listings/" + submittedListing!.id + "/decision",
       {
         headers: {
           Authorization: `Bearer ${bootstrapSession.access_token}`,
