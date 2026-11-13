@@ -78,7 +78,7 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
       { headers },
     );
     expect(publishResponse.status()).toBe(200);
-    expect((await publishResponse.json()).status).toBe("active");
+    expect((await publishResponse.json()).status).toBe("Активно");
 
     const queueResponse = await context.request.get("http://127.0.0.1:8000/api/admin/moderation", { headers });
     const queue = await queueResponse.json() as { items: Array<{ id: string; title: string | null }>; detail?: string };
@@ -86,23 +86,23 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
     expect(queue.items.some((item) => item.id === draft.id), JSON.stringify(queue)).toBe(true);
 
     await page.goto("/admin");
-    await expect(page.getByRole("heading", { name: "Moderation & Audit" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Модерация и аудит" })).toBeVisible();
     const card = page.locator(".admin-listing").filter({ hasText: "E2E Admin Moderation Listing" });
     await expect(card).toBeVisible();
-    await card.getByRole("button", { name: "Suspend", exact: true }).click();
-    const suspendDialog = page.getByRole("dialog", { name: "Suspend listing" });
-    await suspendDialog.getByLabel("Explanation (5–500 characters)").fill("API-backed moderation acceptance");
-    await suspendDialog.getByRole("button", { name: "Confirm suspend" }).click();
-    await expect(card.getByText("suspended", { exact: true })).toBeVisible();
-    await card.getByRole("button", { name: "Audit history" }).click();
-    await expect(card.getByText(/suspended.*API-backed moderation acceptance/i)).toBeVisible();
+    await card.getByRole("button", { name: "Приостановить", exact: true }).click();
+    const suspendDialog = page.getByRole("dialog", { name: "Приостановить объявление" });
+    await suspendDialog.getByLabel("Пояснение (5–500 символов)").fill("API-backed moderation acceptance");
+    await suspendDialog.getByRole("button", { name: "Подтвердить приостановку" }).click();
+    await expect(card.getByText("Приостановлено", { exact: true })).toBeVisible();
+    await card.getByRole("button", { name: "История аудита" }).click();
+    await expect(card.getByText(/Приостановить.*API-backed moderation acceptance/i)).toBeVisible();
 
-    await card.getByRole("button", { name: "Restore", exact: true }).click();
-    const restoreDialog = page.getByRole("dialog", { name: "Restore listing" });
-    await restoreDialog.getByLabel("Explanation (5–500 characters)").fill("Fresh ownership verified for restoration");
-    await restoreDialog.getByRole("button", { name: "Confirm restore" }).click();
-    await expect(card.getByText("active", { exact: true })).toBeVisible();
-    await expect(card.getByText(/restored.*Fresh ownership verified for restoration/i)).toBeVisible();
+    await card.getByRole("button", { name: "Восстановить", exact: true }).click();
+    const restoreDialog = page.getByRole("dialog", { name: "Восстановить объявление" });
+    await restoreDialog.getByLabel("Пояснение (5–500 символов)").fill("Fresh ownership verified for restoration");
+    await restoreDialog.getByRole("button", { name: "Подтвердить восстановление" }).click();
+    await expect(card.getByText("Активно", { exact: true })).toBeVisible();
+    await expect(card.getByText(/Восстановить.*Fresh ownership verified for restoration/i)).toBeVisible();
 
     const buyerPage = await context.newPage();
     await installTelegramBridge(buyerPage, regularBuyer);

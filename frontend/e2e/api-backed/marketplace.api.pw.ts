@@ -120,6 +120,23 @@ test(
     );
     expect(redisChallenge.status()).toBe(200);
     expect(typeof (await redisChallenge.json()).payload).toBe("string");
+    const inventoryPreflight = await sellerContext.request.get(
+      "http://127.0.0.1:5173/api/assets/me?limit=24&offset=0",
+      { headers: { Authorization: `Bearer ${bootstrapSession.access_token}` } },
+    );
+    const inventoryPreflightBody = await inventoryPreflight.json() as {
+      items: Array<{ name: string | null; verification_status: string; eligible_for_listing: boolean }>;
+    };
+    expect(inventoryPreflight.status()).toBe(200);
+    expect(inventoryPreflightBody.items, JSON.stringify(inventoryPreflightBody)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "E2E Verified NFT",
+          verification_status: "verified",
+          eligible_for_listing: true,
+        }),
+      ]),
+    );
 
     await sellerPage.goto("/");
     await expect(sellerPage.getByText(/Вы вошли как E2E Seller/)).toBeVisible();
@@ -196,15 +213,15 @@ test(
 
     await reservationDialog.getByRole("button", { name: "Подтвердить резерв" }).click();
     const reservationSuccess = buyerPage.getByRole("dialog", { name: "Резерв подтверждён" });
-    await expect(reservationSuccess).toContainText("Payment is not enabled, no funds were collected");
+    await expect(reservationSuccess).toContainText("Резерв для «E2E Published NFT» создан. Оплата не проводилась, NFT пока остаётся у продавца.");
     await reservationSuccess.getByRole("button", { name: "Мои заказы" }).click();
 
     await expect(buyerPage.getByRole("heading", { name: "Заказы" })).toBeVisible();
     await expect(buyerPage.getByText("Ожидает передачи", { exact: true })).toBeVisible();
     await expect(buyerPage.getByText(/^15\.75(?:0+)? TON$/)).toBeVisible();
-    await buyerPage.getByRole("button", { name: /Open order E2E Published NFT/ }).click();
+    await buyerPage.getByRole("button", { name: /Открыть заказ E2E Published NFT/ }).click();
     await expect(buyerPage.getByRole("heading", { name: "Статус заказа" })).toBeVisible();
-    await expect(buyerPage.getByText(/Payments are not enabled/)).toBeVisible();
+    await expect(buyerPage.getByText(/Оплата в VILTARA SHOP пока не подключена/)).toBeVisible();
 
     // Continue through the real delivery APIs. Only the external TON Connect
     // wallet boundary and loopback TON Center provider are simulated.
