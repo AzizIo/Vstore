@@ -2,7 +2,7 @@ import { getApiErrorMessage } from "../api/errors";
 import { API_BASE_URL } from "../api/config";
 
 export type ModerationAction = "approve" | "reject" | "suspend" | "restore";
-export type ModerationStatus = "draft" | "active" | "reserved" | "sold" | "cancelled" | "expired" | "suspended";
+export type ModerationStatus = "pending_review" | "active" | "reserved" | "sold" | "cancelled" | "expired" | "suspended";
 export type ModerationReasonCode = "policy_violation" | "ownership_unverified" | "misleading_metadata" | "duplicate_listing" | "other";
 
 export interface ModerationItem {
