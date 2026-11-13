@@ -500,7 +500,7 @@ async def _request_stars_refund_for_order(
                 provider_event_id=f"internal-refund:{transaction.id}",
                 event_type="refund_requested",
                 payload_sha256=hashlib.sha256(
-                    f"{transaction.id}:{reason}".encode("utf-8")
+                    f"{transaction.id}:{reason}".encode()
                 ).hexdigest(),
             )
         )
