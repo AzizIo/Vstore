@@ -68,7 +68,7 @@ export function ReviewForm({ orderId, accessToken, onSubmitted }: { orderId: str
           </label>)}
         </div>
       </fieldset>
-      <label className="review-comment-label">Comment (optional)
+      <label className="review-comment-label">Комментарий (необязательно)
         <textarea value={comment} maxLength={MAX_COMMENT_LENGTH} disabled={pending} onChange={(event) => setComment(event.target.value)} rows={3} />
       </label>
       <div className="review-submit-row"><span>{comment.length}/{MAX_COMMENT_LENGTH}</span><button className="primary-button" type="submit" disabled={pending || rating < 1}>{pending ? "Отправляем…" : "Отправить отзыв"}</button></div>

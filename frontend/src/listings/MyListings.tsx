@@ -226,7 +226,7 @@ function MyListingDetail({
               />
             </label>
             <label>
-              <span>Title <small>необязательно</small></span>
+              <span>Название <small>необязательно</small></span>
               <input
                 aria-label="Название объявления"
                 maxLength={200}
@@ -235,7 +235,7 @@ function MyListingDetail({
               />
             </label>
             <label>
-              <span>Description <small>необязательно</small></span>
+              <span>Описание <small>необязательно</small></span>
               <textarea
                 aria-label="Описание объявления"
                 maxLength={4000}
@@ -245,7 +245,7 @@ function MyListingDetail({
               />
             </label>
             <label>
-              <span>Expiration <small>необязательно</small></span>
+              <span>Срок действия <small>необязательно</small></span>
               <input
                 aria-label="Срок действия объявления"
                 type="datetime-local"

@@ -15,14 +15,14 @@ export function WalletConnection({
   if (!accessToken) {
     return (
       <p id="wallet-connect" className="wallet-config-message" role="status">
-        Open this mini app in Telegram to link a wallet.
+        Откройте VILTARA в Telegram, чтобы подключить кошелёк.
       </p>
     );
   }
   if (!manifestUrl) {
     return (
       <p id="wallet-connect" className="wallet-config-message" role="status">
-        Wallet connection is not configured.
+        Подключение кошелька пока не настроено.
       </p>
     );
   }

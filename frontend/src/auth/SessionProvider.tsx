@@ -26,13 +26,13 @@ function getSessionError(error: unknown): SessionState {
   if (error instanceof AuthApiError && error.status === 403) {
     return {
       status: "error",
-      message: "This account is restricted. Contact support for assistance.",
+      message: "Для этого аккаунта ограничен доступ. Обратитесь в поддержку.",
       retryable: false,
     };
   }
   return {
     status: "error",
-    message: "Unable to verify your Telegram session. The public catalog is still available.",
+    message: "Не удалось подтвердить сессию Telegram. Каталог доступен в режиме просмотра.",
     retryable: true,
   };
 }
@@ -66,7 +66,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setSession(error instanceof TypeError
           ? {
               status: "error",
-              message: "Telegram Mini App could not be initialized.",
+              message: "Не удалось запустить мини-приложение Telegram.",
               retryable: true,
             }
           : getSessionError(error));

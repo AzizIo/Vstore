@@ -164,7 +164,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
   return (
     <section className="detail-view" aria-labelledby="detail-title">
       <button className="text-button back-button" type="button" onClick={onBack}>
-        <span aria-hidden="true">←</span> Back to catalog
+        <span aria-hidden="true">←</span> Назад в каталог
       </button>
       <div className="detail-layout">
         <AssetArtwork imageUrl={listing.asset.image_url} name={title} />
@@ -272,7 +272,7 @@ function SessionBanner() {
   if (session.status === "authenticated") {
     const name = [session.user.first_name, session.user.last_name].filter(Boolean).join(" ");
     const username = session.user.username ? ` · @${session.user.username}` : "";
-    return <p className="session-banner session-authenticated" role="status">Signed in as {name || session.user.username}{username}</p>;
+    return <p className="session-banner session-authenticated" role="status">Вы вошли как {name || session.user.username}{username}</p>;
   }
   if (session.status === "error") {
     return (
@@ -280,7 +280,7 @@ function SessionBanner() {
         <span>{session.message}</span>
         {session.retryable && (
           <button className="text-button" type="button" onClick={retrySession}>
-            Retry session
+            Повторить проверку
           </button>
         )}
       </div>
@@ -442,7 +442,7 @@ function MarketplaceApp() {
           <span className="brand-name">VILTARA</span>
         </a>
         <div className="header-actions">
-          <span className="network-label">TON MARKET</span>
+          <span className="network-label">МАРКЕТПЛЕЙС TON</span>
           <WalletConnection
             accessToken={sessionAccessToken}
             onSelectedWalletChange={onSelectedWalletChange}
@@ -460,7 +460,7 @@ function MarketplaceApp() {
             setSection("catalog");
           }}
         >
-          Catalog
+          Каталог
         </button>
         <button
           className="navigation-tab"
@@ -471,7 +471,7 @@ function MarketplaceApp() {
             setSection("my-nft");
           }}
         >
-          My NFT
+          Мои NFT
         </button>
         <button
           className="navigation-tab"
@@ -482,7 +482,7 @@ function MarketplaceApp() {
             setSection("my-listings");
           }}
         >
-          My Listings
+          Мои объявления
         </button>
         <button
           className="navigation-tab"
@@ -493,7 +493,7 @@ function MarketplaceApp() {
             setSection("orders");
           }}
         >
-          Orders
+          Заказы
         </button>
       </nav>
 
@@ -502,8 +502,8 @@ function MarketplaceApp() {
           <Orders accessToken={session.accessToken} userId={session.user.id} initialOrderId={initialOrderId} onCatalog={() => setSection("catalog")} />
         ) : (
           <div className="orders-message" role="status">
-            <h2>Sign in to view orders</h2>
-            <p>Order history is private and requires a verified Telegram session.</p>
+            <h2>Мои заказы</h2>
+            <p>Откройте VILTARA в Telegram, чтобы посмотреть покупки и продажи.</p>
           </div>
         )
       ) : section === "my-listings" ? (
@@ -517,7 +517,7 @@ function MarketplaceApp() {
           />
         ) : (
           <div className="inventory-message" role="status">
-            <h2>Sign in to view your inventory</h2>
+            <h2>Мои NFT</h2>
             <p>Your NFT inventory requires a verified Telegram session and a TON wallet confirmed by backend proof.</p>
           </div>
         )
@@ -601,7 +601,7 @@ function MarketplaceApp() {
                     setSort("newest");
                   }}
                 >
-                  Clear filters
+                  Сбросить фильтры
                 </button>
               )}
             </form>

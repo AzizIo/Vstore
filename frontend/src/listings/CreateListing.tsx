@@ -217,15 +217,15 @@ export function CreateListing({
             </span>
           </label>
           <label>
-            <span>Title <small>необязательно</small></span>
+            <span>Название <small>необязательно</small></span>
             <input maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} />
           </label>
           <label>
-            <span>Description <small>необязательно</small></span>
+            <span>Описание <small>необязательно</small></span>
             <textarea maxLength={4000} rows={4} value={description} onChange={(event) => setDescription(event.target.value)} />
           </label>
           <label>
-            <span>Expiration <small>необязательно</small></span>
+            <span>Срок действия <small>необязательно</small></span>
             <input
               aria-label="Срок действия объявления"
               type="datetime-local"

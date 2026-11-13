@@ -435,7 +435,7 @@ export function Orders({
       </div>
 
       <div className="workspace-filter-row" role="group" aria-label="Фильтр заказов по статусу">
-        {([{ value: "all", label: "All", count: counts.all }, { value: "active", label: "Активно", count: counts.active }, { value: "completed", label: "Завершён", count: counts.completed }, { value: "closed", label: "Cancelled / expired", count: counts.closed }] as const).map((item) => (
+        {([{ value: "all", label: "Все", count: counts.all }, { value: "active", label: "Активно", count: counts.active }, { value: "completed", label: "Завершён", count: counts.completed }, { value: "closed", label: "Cancelled / expired", count: counts.closed }] as const).map((item) => (
           <button key={item.value} type="button" className={filter === item.value ? "workspace-filter is-active" : "workspace-filter"} aria-pressed={filter === item.value} onClick={() => setFilter(item.value)}>{item.label}<span>{item.count}</span></button>
         ))}
       </div>

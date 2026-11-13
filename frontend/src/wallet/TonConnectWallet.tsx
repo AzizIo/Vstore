@@ -326,7 +326,7 @@ function WalletControls({
         type="button"
         onClick={() => void disconnectWallet()}
       >
-        Disconnect
+        Отключить
       </button>
       {error && <span className="wallet-error" role="alert">{error}</span>}
     </div>
