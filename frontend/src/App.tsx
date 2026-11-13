@@ -23,7 +23,13 @@ const assetTypeLabels: Record<AssetType, string> = {
 };
 const CATALOG_PAGE_SIZE = 24;
 
-function formatItemCount(count: number) {\n  const category = new Intl.PluralRules("ru-RU").select(count);\n  const noun = category === "one" ? "предмет" : category === "few" ? "предмета" : "предметов";\n  return `${count} ${noun}`;\n}\n\nfunction formatPrice(amount: string, currency: string) {
+function formatItemCount(count: number) {
+  const category = new Intl.PluralRules("ru-RU").select(count);
+  const noun = category === "one" ? "предмет" : category === "few" ? "предмета" : "предметов";
+  return `${count} ${noun}`;
+}
+
+function formatPrice(amount: string, currency: string) {
   const numericAmount = Number(amount);
   const formattedAmount = Number.isFinite(numericAmount)
     ? new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 4 }).format(numericAmount)
