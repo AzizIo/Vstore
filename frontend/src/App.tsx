@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchListing,
   fetchListings,
@@ -10,13 +10,15 @@ import {
 import { createOrder } from "./api/orders";
 import { SessionProvider, useRetrySession, useSession } from "./auth/SessionProvider";
 import { getTelegramStartParam } from "./auth/telegram";
-import { MyListings } from "./listings/MyListings";
-import { MyInventory } from "./inventory/MyInventory";
-import { Orders } from "./orders/Orders";
-import { SellerReviews } from "./reviews/SellerReviews";
-import { SellerOverview } from "./overview/SellerOverview";
+
 import { WalletConnection } from "./wallet/WalletConnection";
 import type { WalletRecord } from "./wallet/api";
+
+const MyListings = lazy(() => import("./listings/MyListings").then((m) => ({ default: m.MyListings })));
+const MyInventory = lazy(() => import("./inventory/MyInventory").then((m) => ({ default: m.MyInventory })));
+const Orders = lazy(() => import("./orders/Orders").then((m) => ({ default: m.Orders })));
+const SellerReviews = lazy(() => import("./reviews/SellerReviews").then((m) => ({ default: m.SellerReviews })));
+const SellerOverview = lazy(() => import("./overview/SellerOverview").then((m) => ({ default: m.SellerOverview })));
 
 const assetTypeLabels: Record<AssetType, string> = {
   ton_nft: "TON NFT",
@@ -312,10 +314,12 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
             <div><dt>ID актива</dt><dd>{listing.asset.external_id}</dd></div>
             <div><dt>Проверка</dt><dd>{formatVerificationStatus(listing.asset.verification_status)}</dd></div>
           </dl>
-          <SellerReviews
-            sellerId={listing.seller.id}
-            accessToken={session.status === "authenticated" ? session.accessToken : null}
-          />
+          <Suspense fallback={<p className="detail-description" role="status">Загружаем отзывы…</p>}>
+            <SellerReviews
+              sellerId={listing.seller.id}
+              accessToken={session.status === "authenticated" ? session.accessToken : null}
+            />
+          </Suspense>
         </div>
       </div>
     </section>
@@ -602,26 +606,30 @@ function MarketplaceApp() {
       </nav>
 
       {section === "overview" && session.status === "authenticated" ? (
-        <SellerOverview
-          accessToken={session.accessToken}
-          onOpenOrders={(orderId) => {
-            setListingId(null);
-            setInitialOrderId(orderId ?? null);
-            setSection("orders");
-          }}
-          onOpenListing={(id) => {
-            setInitialOrderId(null);
-            setListingId(id);
-            setSection("catalog");
-          }}
-          onManageListings={() => {
-            setListingId(null);
-            setSection("my-listings");
-          }}
-        />
+        <Suspense fallback={<div className="catalog-message" role="status">Загружаем обзор…</div>}>
+          <SellerOverview
+            accessToken={session.accessToken}
+            onOpenOrders={(orderId) => {
+              setListingId(null);
+              setInitialOrderId(orderId ?? null);
+              setSection("orders");
+            }}
+            onOpenListing={(id) => {
+              setInitialOrderId(null);
+              setListingId(id);
+              setSection("catalog");
+            }}
+            onManageListings={() => {
+              setListingId(null);
+              setSection("my-listings");
+            }}
+          />
+        </Suspense>
       ) : section === "orders" ? (
         session.status === "authenticated" ? (
-          <Orders accessToken={session.accessToken} userId={session.user.id} initialOrderId={initialOrderId} onCatalog={() => setSection("catalog")} />
+          <Suspense fallback={<div className="catalog-message" role="status">Загружаем заказы…</div>}>
+            <Orders accessToken={session.accessToken} userId={session.user.id} initialOrderId={initialOrderId} onCatalog={() => setSection("catalog")} />
+          </Suspense>
         ) : (
           <div className="orders-message" role="status">
             <h2>Мои заказы</h2>
@@ -629,14 +637,18 @@ function MarketplaceApp() {
           </div>
         )
       ) : section === "my-listings" ? (
-        <MyListings />
+        <Suspense fallback={<div className="catalog-message" role="status">Загружаем объявления…</div>}>
+          <MyListings />
+        </Suspense>
       ) : section === "my-nft" ? (
         session.status === "authenticated" ? (
-          <MyInventory
-            key={selectedWallet ? `${selectedWallet.id}:${selectedWallet.network}` : "no-selected-wallet"}
-            accessToken={session.accessToken}
-            selectedWallet={selectedWallet}
-          />
+          <Suspense fallback={<div className="catalog-message" role="status">Загружаем инвентарь…</div>}>
+            <MyInventory
+              key={selectedWallet ? `${selectedWallet.id}:${selectedWallet.network}` : "no-selected-wallet"}
+              accessToken={session.accessToken}
+              selectedWallet={selectedWallet}
+            />
+          </Suspense>
         ) : (
           <div className="inventory-message" role="status">
             <h2>Мои NFT</h2>
