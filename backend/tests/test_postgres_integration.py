@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from decimal import Decimal
 from pathlib import Path
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import pytest
@@ -34,6 +35,17 @@ def test_database_url() -> str:
         pytest.skip("TEST_DATABASE_URL is not configured")
     if not url.startswith("postgresql+asyncpg://"):
         pytest.fail("Integration tests require a dedicated PostgreSQL TEST_DATABASE_URL")
+
+    # Fail closed: these tests run Alembic migrations and must never point at a
+    # production or developer database by accident.
+    database_name = urlsplit(url).path.lstrip("/").split("?", maxsplit=1)[0]
+    if not database_name or not (
+        database_name.startswith("test_") or database_name.endswith("_test")
+    ):
+        pytest.fail(
+            "TEST_DATABASE_URL must target a dedicated database whose name starts "
+            "with 'test_' or ends with '_test'"
+        )
     return url
 
 
@@ -45,8 +57,9 @@ def migrated_database(test_database_url: str):
     try:
         alembic_config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
         command.upgrade(alembic_config, "head")
-        yield
-        command.downgrade(alembic_config, "base")
+        # Do not downgrade to base during teardown: that is destructive and can
+        # remove every table if the test database is misconfigured. Test rows are
+        # rolled back per test; the disposable database is managed by the caller.
     finally:
         if previous_url is None:
             os.environ.pop("DATABASE_URL", None)
