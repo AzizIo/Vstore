@@ -48,7 +48,7 @@ async def assert_journey() -> None:
                     select(Listing).where(
                         Listing.seller_id == seller.id,
                         Listing.title.in_(
-                            ["E2E Published NFT", "E2E Admin Moderation Listing"]
+                            ["E2E Published NFT", "E2E Admin Moderation Listing Resubmitted"]
                         ),
                     )
                 )
@@ -62,7 +62,7 @@ async def assert_journey() -> None:
         ]
         moderation_listings = [
             item for item in listings
-            if item.title == "E2E Admin Moderation Listing"
+            if item.title == "E2E Admin Moderation Listing Resubmitted"
         ]
         assert len(marketplace_listings) == 1, (
             f"Expected one non-cancelled marketplace listing, got {len(marketplace_listings)}."
@@ -83,7 +83,7 @@ async def assert_journey() -> None:
         )
         assert [event.action for event in sorted(
             moderation_events, key=lambda item: item.occurred_at
-        )] == ["suspended", "restored"]
+        )] == ["approved", "suspended", "restored"]
         listing = marketplace_listings[0]
         assert listing.status is ListingStatus.SOLD, (
             "Expected sold listing after independently verified delivery, "
