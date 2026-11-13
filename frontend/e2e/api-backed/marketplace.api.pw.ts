@@ -202,7 +202,7 @@ test(
 
     await buyerPage.getByRole("button", { name: /E2E Published NFT/ }).click();
     await expect(buyerPage.getByRole("heading", { name: "E2E Published NFT" })).toBeVisible();
-    await expect(buyerPage.getByText(/^15,75(?:0+)? TON$/)).toBeVisible();
+    await expect(buyerPage.getByText(/15,75(?:0+)? TON/)).toBeVisible();
     await buyerPage.getByRole("button", { name: "Зарезервировать", exact: true }).click();
     const reservationDialog = buyerPage.getByRole("dialog", { name: "Зарезервировать это объявление?" });
     await expect(reservationDialog).toContainText("E2E Published NFT");

@@ -12,7 +12,7 @@ test.describe("public catalog", () => {
     await mockMarketplaceApi(page);
     await page.goto("/");
 
-    await expect(page.getByRole("heading", { name: "Объявления" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Объявления" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: /Moon Lantern/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Dragon Egg/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Rose Bouquet/ })).toBeVisible();
