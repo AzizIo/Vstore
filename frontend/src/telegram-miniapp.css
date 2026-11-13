@@ -134,9 +134,8 @@ footer {
 
   .app-shell {
     width: 100%;
-    min-height: 100svh;
-    min-height: 100dvh;
-    padding: 0 16px calc(94px + var(--app-safe-bottom, 0px));
+    /* Inherit the base min-height after subtracting body safe-area padding. */
+    padding: 0 16px 94px;
     margin: 0;
     overflow-x: clip;
   }
@@ -310,20 +309,17 @@ footer {
     font-size: 9px;
     line-height: 1.1;
     text-align: center;
-    white-space: nowrap;
+    white-space: normal;
   }
 
-  .navigation-tab::before {
-    display: block;
-    font-size: 19px;
-    line-height: 1;
-    color: currentColor;
+  .navigation-label {
+    max-width: 100%;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1.15;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
-
-  .navigation-tab:nth-child(1)::before { content: "▦"; }
-  .navigation-tab:nth-child(2)::before { content: "◇"; }
-  .navigation-tab:nth-child(3)::before { content: "▤"; }
-  .navigation-tab:nth-child(4)::before { content: "↗"; }
 
   .navigation-tab[aria-pressed="true"] {
     border-color: rgb(208 220 112 / 18%);

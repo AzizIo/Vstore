@@ -299,8 +299,11 @@ textarea {
   }
 
   .navigation-tab .navigation-icon {
+    display: grid;
     width: 34px;
     height: 26px;
+    flex: 0 0 auto;
+    place-items: center;
     border-radius: 9px;
     font-size: 19px;
   }

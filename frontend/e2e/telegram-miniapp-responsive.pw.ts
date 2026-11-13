@@ -8,6 +8,14 @@ test.describe("Telegram Mini App responsive shell", () => {
 
     const navigation = page.getByRole("navigation", { name: "Разделы маркетплейса" });
     await expect(navigation).toBeVisible();
+    await page.addStyleTag({
+      content: `:root {
+        --tg-safe-area-inset-top: 20px;
+        --tg-safe-area-inset-right: 12px;
+        --tg-safe-area-inset-left: 14px;
+        --tg-content-safe-area-inset-bottom: 28px;
+      }`,
+    });
 
     for (const width of [320, 360, 390, 430]) {
       await page.setViewportSize({ width, height: 844 });
@@ -16,12 +24,20 @@ test.describe("Telegram Mini App responsive shell", () => {
         const rect = element.getBoundingClientRect();
         const buttons = Array.from(element.querySelectorAll("button")).map((button) => {
           const buttonRect = button.getBoundingClientRect();
+          const labelRect = button.querySelector(".navigation-label")?.getBoundingClientRect();
           return {
             height: buttonRect.height,
             left: buttonRect.left,
             right: buttonRect.right,
+            bottom: buttonRect.bottom,
+            labelLeft: labelRect?.left ?? -1,
+            labelRight: labelRect?.right ?? Infinity,
+            iconCount: button.querySelectorAll(".navigation-icon").length,
+            pseudoIcon: getComputedStyle(button, "::before").content,
           };
         });
+        const shell = document.querySelector(".app-shell");
+        const shellRect = shell?.getBoundingClientRect();
 
         return {
           position: getComputedStyle(element).position,
@@ -31,6 +47,12 @@ test.describe("Telegram Mini App responsive shell", () => {
           scrollWidth: element.scrollWidth,
           viewportWidth: window.innerWidth,
           documentWidth: document.documentElement.scrollWidth,
+          bodyPaddingTop: getComputedStyle(document.body).paddingTop,
+          bodyPaddingRight: getComputedStyle(document.body).paddingRight,
+          bodyPaddingBottom: getComputedStyle(document.body).paddingBottom,
+          bodyPaddingLeft: getComputedStyle(document.body).paddingLeft,
+          shellTop: shellRect?.top ?? -1,
+          shellMinHeight: shell ? Number.parseFloat(getComputedStyle(shell).minHeight) : -1,
           buttons,
         };
       });
@@ -41,11 +63,22 @@ test.describe("Telegram Mini App responsive shell", () => {
       expect(layout.scrollWidth, `navigation should not overflow at ${width}px`).toBeLessThanOrEqual(layout.clientWidth);
       expect(layout.documentWidth, `page should not overflow horizontally at ${width}px`).toBeLessThanOrEqual(layout.viewportWidth);
       expect(layout.buttons).toHaveLength(4);
+      expect(layout.bodyPaddingTop).toBe("20px");
+      expect(layout.bodyPaddingRight).toBe("12px");
+      expect(layout.bodyPaddingBottom).toBe("28px");
+      expect(layout.bodyPaddingLeft).toBe("14px");
+      expect(layout.shellTop).toBe(20);
+      expect(layout.shellMinHeight).toBe(796);
 
       for (const button of layout.buttons) {
         expect(button.height).toBeGreaterThanOrEqual(44);
-        expect(button.left).toBeGreaterThanOrEqual(0);
-        expect(button.right).toBeLessThanOrEqual(width);
+        expect(button.left).toBeGreaterThanOrEqual(14);
+        expect(button.right).toBeLessThanOrEqual(width - 12);
+        expect(button.bottom).toBeLessThanOrEqual(844 - 28);
+        expect(button.labelLeft).toBeGreaterThanOrEqual(button.left);
+        expect(button.labelRight).toBeLessThanOrEqual(button.right);
+        expect(button.iconCount).toBe(1);
+        expect(button.pseudoIcon).toBe("none");
       }
     }
 
