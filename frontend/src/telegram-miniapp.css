@@ -3521,3 +3521,99 @@ body,
     animation: none;
   }
 }
+
+
+/* Typography system — Onest across the Telegram Mini App. */
+:root {
+  --mini-font-family: "Onest", "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  font-family: var(--mini-font-family);
+}
+
+html,
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--mini-font-family);
+}
+
+body {
+  letter-spacing: -0.006em;
+  font-optical-sizing: auto;
+}
+
+.catalog-intro h1,
+.detail-copy h1,
+.my-listings-heading h1,
+.my-listings-gate > h1,
+.my-listing-detail-copy h1,
+.create-listing-view > h1,
+.orders-heading h1,
+.inventory-heading h1,
+.workspace-page-heading h1,
+.order-detail-heading h1,
+.reservation-dialog h2 {
+  font-family: var(--mini-font-family);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+}
+
+.catalog-message h3,
+.detail-copy h2,
+.my-listings-message h2,
+.orders-message h2,
+.inventory-message h2,
+.workspace-empty h2,
+.workspace-section-heading h2,
+.reviews-heading h2,
+.review-form h3 {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.listing-card-title,
+.my-listing-card-title,
+.inventory-card-copy h2,
+.workspace-card-title,
+.order-card-heading h2 {
+  font-family: var(--mini-font-family);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.brand-name {
+  font-weight: 750;
+  letter-spacing: .15em;
+}
+
+.primary-button,
+.secondary-button,
+.danger-button,
+.load-more-button,
+.wallet-button {
+  font-weight: 650;
+  letter-spacing: -0.012em;
+}
+
+.eyebrow,
+.listing-card-type,
+.listing-type-label,
+.workspace-asset-type {
+  font-weight: 650;
+}
+
+@media (max-width: 640px) {
+  .catalog-intro h1,
+  .detail-copy h1,
+  .my-listings-heading h1,
+  .my-listings-gate > h1,
+  .my-listing-detail-copy h1,
+  .create-listing-view > h1,
+  .orders-heading h1,
+  .inventory-heading h1,
+  .workspace-page-heading h1,
+  .order-detail-heading h1 {
+    letter-spacing: -0.04em;
+  }
+}
