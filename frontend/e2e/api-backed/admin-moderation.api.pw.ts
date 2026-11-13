@@ -67,7 +67,7 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
         asset_id: asset!.id,
         price_amount: "15.75",
         price_currency: "TON",
-        title: "E2E Admin Moderation Listing",
+        title: "E2E Admin Moderation Listing Resubmitted",
         description: "Disposable API-backed moderation test listing",
       },
     });
@@ -79,6 +79,20 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
     );
     expect(publishResponse.status()).toBe(200);
     expect((await publishResponse.json()).status).toBe("pending_review");
+
+    const editPendingResponse = await context.request.patch(
+      "http://127.0.0.1:8000/api/listings/" + draft.id,
+      { headers, data: { title: "E2E Admin Moderation Listing Resubmitted" } },
+    );
+    expect(editPendingResponse.status()).toBe(200);
+    expect((await editPendingResponse.json()).status).toBe("draft");
+    const resubmitResponse = await context.request.post(
+      "http://127.0.0.1:8000/api/listings/" + draft.id + "/publish",
+      { headers },
+    );
+    expect(resubmitResponse.status()).toBe(200);
+    expect((await resubmitResponse.json()).status).toBe("pending_review");
+
     const hiddenFromCatalogue = await context.request.get(
       "http://127.0.0.1:8000/api/listings/" + draft.id,
     );
@@ -132,6 +146,34 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
     );
     expect(cancelResponse.status()).toBe(200);
     expect((await cancelResponse.json()).status).toBe("cancelled");
+
+    const rejectedDraftResponse = await context.request.post("http://127.0.0.1:8000/api/listings", {
+      headers,
+      data: {
+        asset_id: asset!.id,
+        price_amount: "16.25",
+        price_currency: "TON",
+        title: "E2E Rejected Moderation Listing",
+        description: "Disposable rejection-path test listing",
+      },
+    });
+    expect(rejectedDraftResponse.status()).toBe(201);
+    const rejectedDraft = await rejectedDraftResponse.json() as { id: string };
+    const rejectedSubmission = await context.request.post(
+      "http://127.0.0.1:8000/api/listings/" + rejectedDraft.id + "/publish",
+      { headers },
+    );
+    expect(rejectedSubmission.status()).toBe(200);
+    expect((await rejectedSubmission.json()).status).toBe("pending_review");
+
+    await page.goto("/admin");
+    const rejectedCard = page.locator(".admin-listing").filter({ hasText: "E2E Rejected Moderation Listing" });
+    await expect(rejectedCard).toBeVisible();
+    await rejectedCard.getByRole("button", { name: "Отклонить", exact: true }).click();
+    const rejectDialog = page.getByRole("dialog", { name: "Отклонить объявление" });
+    await rejectDialog.getByLabel("Пояснение (5–500 символов)").fill("Rejected by the moderation acceptance test");
+    await rejectDialog.getByRole("button", { name: "Подтвердить отклонение" }).click();
+    await expect(rejectedCard.getByText("Отменено", { exact: true })).toBeVisible();
   } finally {
     await context.close();
   }
