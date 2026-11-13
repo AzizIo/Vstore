@@ -1045,7 +1045,7 @@ describe("My Listings dashboard", () => {
     renderMarketplace();
     await openMyListings();
 
-    expect(await screen.findByText("Session unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("Сессия недоступна")).toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/listings/me"))).toBe(false);
   });
 
@@ -1087,7 +1087,7 @@ describe("My Listings dashboard", () => {
     renderMarketplace();
     await openMyListings();
 
-    for (const label of ["Черновик", "Активно", "Зарезервировано", "Продано", "Отменено", "Срок резерва истёк", "Unknown status"]) {
+    for (const label of ["Черновик", "Активно", "Зарезервировано", "Продано", "Отменено", "Срок истёк", "Неизвестный статус"]) {
       expect(await screen.findByText(label)).toBeInTheDocument();
     }
   });
