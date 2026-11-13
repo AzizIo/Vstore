@@ -1,3 +1,4 @@
+import { getApiErrorMessage } from "./errors";
 import { API_BASE_URL } from "./config";
 
 export type AssetType = "ton_nft" | "telegram_gift";
@@ -114,9 +115,7 @@ async function requestJson<T>(url: string, signal?: AbortSignal, headers?: Heade
     let message = `Запрос завершился ошибкой (${response.status}).`;
     try {
       const body: unknown = await response.json();
-      if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
-        message = body.detail;
-      }
+      message = getApiErrorMessage(body, message);
     } catch {
       // Retain the HTTP status message if the server response is not JSON.
     }
@@ -203,9 +202,7 @@ async function requestSellerListing(
     let message = `Запрос завершился ошибкой (${response.status}).`;
     try {
       const body: unknown = await response.json();
-      if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
-        message = body.detail;
-      }
+      message = getApiErrorMessage(body, message);
     } catch {
       // Keep the HTTP status message when the server does not return JSON.
     }
