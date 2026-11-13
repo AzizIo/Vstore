@@ -5,14 +5,16 @@ The moderation API is mounted under `/api/admin`. It uses the existing verified 
 ## Endpoints
 
 - `GET /api/admin/access` — returns whether the authenticated session is allowlisted.
-- `GET /api/admin/moderation?limit=25&offset=0&status=draft` — bounded queue (limit 1–100, offset 0–10000); statuses are draft, active and suspended. Each item includes an explainable status/verification reason.
+- `GET /api/admin/moderation?limit=25&offset=0&status=pending_review` — bounded queue (limit 1–100, offset 0–10000); statuses are pending_review, active and suspended. Private drafts are not exposed to moderators. Each item includes an explainable status/verification reason.
 - `POST /api/admin/listings/{id}/decision` — approve, reject, suspend or restore. Requires `Idempotency-Key` (8–128 characters), a reason code and a 5–500 character explanation.
 - `GET /api/admin/audit` and `GET /api/admin/listings/{id}/audit` — bounded, stable audit history with optional target/action filters.
 
 ## State transitions and verification
 
-- Approve: draft → active. The API rechecks current TON NFT ownership against a verified seller wallet through the existing verifier, then locks and revalidates listing, wallet and asset before committing.
-- Reject: draft → cancelled. This is an explicit terminal moderation decision, not a listing deletion.
+A seller's publish request does not make a listing public. It performs a fresh ownership check and moves DRAFT → PENDING_REVIEW. Only the admin approval action can move PENDING_REVIEW → ACTIVE. Editing a pending submission returns it to DRAFT, so changed content must be resubmitted. The seller can withdraw a pending submission.
+
+- Approve: pending_review → active. The API rechecks current TON NFT ownership against a verified seller wallet through the existing verifier, then locks and revalidates listing, wallet and asset before committing.
+- Reject: pending_review → cancelled. This is an explicit terminal moderation decision, not a listing deletion.
 - Suspend: active → suspended. Reserved, sold, cancelled and expired listings cannot be suspended.
 - Restore: suspended → active only after the same fresh TON ownership verification and conflict checks used for safe publication.
 - Other transitions are rejected with HTTP 409. The existing order lifecycle is unchanged; the catalogue only offers active listings.
