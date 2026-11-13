@@ -28,10 +28,18 @@ function signedInitData(user: TelegramUser): string {
 
 async function installTelegramBridge(page: Page, user: TelegramUser): Promise<void> {
   const initData = signedInitData(user);
-  await page.addInitScript((signedData) => {
-    const webApp = { initData: signedData, initDataUnsafe: {}, ready: () => undefined, expand: () => undefined };
+  await page.route("**/telegram-web-app.js*", (route) =>
+    route.fulfill({ status: 200, contentType: "application/javascript", body: "" }),
+  );
+  await page.addInitScript((signedData, telegramUser) => {
+    const webApp = {
+      initData: signedData,
+      initDataUnsafe: { user: telegramUser },
+      ready: () => undefined,
+      expand: () => undefined,
+    };
     (window as Window & { Telegram?: { WebApp?: typeof webApp } }).Telegram = { WebApp: webApp };
-  }, initData);
+  }, initData, user);
 }
 
 const adminSeller: TelegramUser = {
