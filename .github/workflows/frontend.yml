@@ -58,7 +58,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: frontend
-          file: frontend/Dockerfile.preview
+          file: Dockerfile.preview
           push: false
           load: true
           tags: viltara-miniapp-preview-ci
