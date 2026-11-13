@@ -83,7 +83,7 @@ export function SellerOverview({ accessToken, onOpenOrders, onOpenListing, onMan
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : "Unable to load your seller overview.");
+          setError(reason instanceof Error ? reason.message : "Не удалось загрузить обзор магазина.");
         }
       })
       .finally(() => {
@@ -107,6 +107,7 @@ export function SellerOverview({ accessToken, onOpenOrders, onOpenListing, onMan
 
   const listingCards = [
     { label: "Активные объявления", value: overview.listings.active },
+    { label: "На модерации", value: overview.listings.pending_review },
     { label: "Зарезервированные", value: overview.listings.reserved },
     { label: "Черновики", value: overview.listings.draft },
     { label: "Всего объявлений", value: overview.listings.total },
