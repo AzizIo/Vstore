@@ -200,11 +200,33 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
         <span aria-hidden="true">←</span> Назад в каталог
       </button>
       <div className="detail-layout">
-        <AssetArtwork imageUrl={listing.asset.image_url} name={title} />
+        <div className="detail-media-column">
+          <div className="detail-media-frame">
+            <AssetArtwork imageUrl={listing.asset.image_url} name={title} />
+            {listing.asset.verification_status === "verified" && (
+              <span className="detail-verified-badge">
+                <span aria-hidden="true">✓</span> Проверен
+              </span>
+            )}
+          </div>
+          <div className="detail-media-meta">
+            <span>{assetTypeLabels[listing.asset.asset_type]}</span>
+            <span>{listing.asset.collection?.name ?? "Коллекционный актив"}</span>
+          </div>
+        </div>
         <div className="detail-copy">
-          <p className="eyebrow">{assetTypeLabels[listing.asset.asset_type]}</p>
+          <div className="detail-kicker-row">
+            <p className="eyebrow">{assetTypeLabels[listing.asset.asset_type]}</p>
+            {listing.asset.verification_status === "verified" && (
+              <span className="detail-verification-label"><span aria-hidden="true">✓</span> Владение подтверждено</span>
+            )}
+          </div>
           <h1 id="detail-title">{title}</h1>
-          <p className="detail-price">{formatPrice(listing.price_amount, listing.price_currency)}</p>
+          <div className="detail-price-card">
+            <span className="detail-price-label">Цена объявления</span>
+            <p className="detail-price">{formatPrice(listing.price_amount, listing.price_currency)}</p>
+            <span className="detail-price-note">Цена указана продавцом</span>
+          </div>
           <section className="seller-profile" aria-label="Профиль продавца">
             <div className="seller-profile-avatar" aria-hidden="true">
               {(seller.trim().charAt(0) || "S").toUpperCase()}
@@ -262,8 +284,13 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
               </section>
             </div>
           )}
-          {listing.description && <p className="detail-description">{listing.description}</p>}
-          {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
+          {(listing.description || listing.asset.description) && (
+            <section className="detail-description-panel" aria-label="Описание актива">
+              <p className="detail-section-label">ОБ АКТИВЕ</p>
+              {listing.description && <p className="detail-description">{listing.description}</p>}
+              {listing.asset.description && <p className="detail-description">{listing.asset.description}</p>}
+            </section>
+          )}
           <dl className="detail-facts">
             <div>
               <dt>Коллекция</dt>
