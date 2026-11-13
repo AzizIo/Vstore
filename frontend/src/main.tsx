@@ -1,13 +1,15 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
-import { AdminPage } from "./admin/AdminPage";
+
 import "./index.css";
 import "./telegram-miniapp.css";
 import "./catalog-ui.css";
 import "./workspace-ui.css";
 import "./shell-ui.css";
+
+const AdminPage = lazy(() => import("./admin/AdminPage").then((module) => ({ default: module.AdminPage })));
 
 const queryClient = new QueryClient();
 const Root = window.location.pathname === "/admin" || window.location.pathname === "/admin/"
@@ -17,7 +19,9 @@ const Root = window.location.pathname === "/admin" || window.location.pathname =
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <Root />
+      <Suspense fallback={<main className="admin-route-message" role="status">Загружаем VILTARA…</main>}>
+        <Root />
+      </Suspense>
     </QueryClientProvider>
   </React.StrictMode>,
 );
