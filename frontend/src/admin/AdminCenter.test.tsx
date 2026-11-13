@@ -14,6 +14,17 @@ describe("AdminCenter", () => {
     fireEvent.click(screen.getByRole("button", { name: "История аудита" }));
     expect(await screen.findByText("Решения модерации пока не зафиксированы.")).toBeInTheDocument();
   });
+  it("keeps unknown API statuses and queue reasons in Russian", async () => {
+    const futureListing = {
+      ...listing,
+      status: "future_status",
+      queue_reasons: ["future_reason"],
+    };
+    vi.mocked(fetch).mockResolvedValue(response({ ...page, items: [futureListing] }));
+    render(<AdminCenter accessToken="verified-session" active />);
+    expect(await screen.findByText("Неизвестный статус")).toBeInTheDocument();
+    expect(screen.getByText("Дополнительная причина")).toBeInTheDocument();
+  });
   it("requires a reason before confirming a moderation decision", async () => {
     render(<AdminCenter accessToken="verified-session" active />);
     await screen.findByText("Moon Lantern");
