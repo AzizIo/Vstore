@@ -118,7 +118,11 @@ async def test_help_callback_is_acknowledged_and_updates_the_message(
 
     callback.answer.assert_awaited_once()
     edit_text.assert_awaited_once()
-    assert "Создание заказа резервирует объявление" in edit_text.await_args.args[0]
+    help_text = edit_text.await_args.args[0]
+    assert "Создание заказа резервирует объявление" in help_text
+    assert "Продавец подтверждает перевод NFT в своём TON-кошельке" in help_text
+    assert "backend отдельно проверяет передачу по данным сети" in help_text
+    assert "Платёж, escrow и гарантия сделки не реализованы" in help_text
     assert edit_text.await_args.kwargs["parse_mode"] == "HTML"
     keyboard = edit_text.await_args.kwargs["reply_markup"]
     assert keyboard.inline_keyboard[0][0].callback_data == "bot:menu"
@@ -144,6 +148,9 @@ async def test_help_command_explains_supported_features_and_limits(
     assert "Объявления" in text
     assert "Заказы" in text
     assert "Создание заказа резервирует объявление" in text
+    assert "Продавец подтверждает перевод NFT в своём TON-кошельке" in text
+    assert "backend отдельно проверяет передачу по данным сети" in text
+    assert "Платёж, escrow и гарантия сделки не реализованы" in text
     keyboard = message.answer.await_args.kwargs["reply_markup"]
     assert keyboard.inline_keyboard[0][0].url is None
     assert keyboard.inline_keyboard[0][0].web_app is not None
