@@ -7,7 +7,7 @@
 
 VILTARA SHOP is a Telegram Mini App and optional bot for a peer-to-peer marketplace of **TEP-62 TON NFTs**. Telegram Gifts are a separate asset domain and are not supported as transferable marketplace assets.
 
-The current main baseline was reviewed on **2026-11-13**, commit **9593f1a003a4f976cf3e6b3b20cb1d3830d83018**. The implementation is more advanced than the earlier Stage A-only descriptions:
+The current application-code baseline was reviewed on **2026-11-13**, commit **9593f1a003a4f976cf3e6b3b20cb1d3830d83018**; the later PR #145 commit updates documentation only. The implementation is more advanced than the earlier Stage A-only descriptions:
 
 | Capability | Status on main |
 |---|---|
@@ -79,7 +79,7 @@ The moderation center is not a general-purpose dispute, payment, escrow or payou
     │   ├── app/notifications/       # durable outbox, read-only health diagnostics and Telegram worker
     │   ├── app/db/models.py
     │   ├── scripts/                 # read-only outbox/inventory diagnostics and Preview safety tools
-│   └── migrations/versions/
+    │   └── migrations/versions/
     └── frontend/
         ├── src/App.tsx
         ├── src/api/
