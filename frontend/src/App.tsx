@@ -189,7 +189,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
               {orderError && !confirmationOpen && <p role="alert">{orderError}</p>}
               {orderCreated && (
                 <div className="reservation-success" role="status">
-                  <p>Reservation created for {title}. Payment is not enabled and no funds were collected. No NFT transfer has happened.</p>
+                  <p>Резерв для «{title}» создан. Оплата не проводилась, NFT пока остаётся у продавца.</p>
                   <button className="primary-button" type="button" onClick={onOrders}>Мои заказы</button>
                 </div>
               )}
@@ -206,7 +206,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
                   <>
                     <p className="eyebrow">РЕЗЕРВ СОЗДАН</p>
                     <h2 id="reservation-dialog-title">Резерв подтверждён</h2>
-                    <p id="reservation-dialog-description">The order reservation was created for {title}. Payment is not enabled, no funds were collected, and no NFT transfer has happened.</p>
+                    <p id="reservation-dialog-description">Резерв для «{title}» создан. Оплата не проводилась, NFT пока остаётся у продавца.</p>
                     <button className="primary-button" type="button" onClick={onOrders}>Мои заказы</button>
                   </>
                 ) : (
@@ -648,7 +648,7 @@ function MarketplaceApp() {
           </section>
         </>
       )}
-      <footer>VILTARA SHOP <span>·</span> Built on TON</footer>
+      <footer>VILTARA SHOP <span>·</span> Работает на TON</footer>
     </main>
   );
 }

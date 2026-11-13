@@ -231,7 +231,7 @@ export function MyInventory({
           <p className="inventory-intro">
             {selectedWallet ? (
               <>
-                Showing verified NFTs for {selectedWallet.address.slice(0, 8)}…
+                Showing подтверждено: NFTs for {selectedWallet.address.slice(0, 8)}…
                 {selectedWallet.address.slice(-5)} · {selectedWallet.network}
               </>
             ) : (
@@ -251,16 +251,16 @@ export function MyInventory({
 
       {syncResult && !loading && !error && (
         <p className="inventory-sync-summary" role="status">
-          Last synced {new Date(syncResult.synced_at).toLocaleString()} · {syncResult.verified_count} verified
-          {syncResult.stale_count > 0 ? ` · ${syncResult.stale_count} marked stale` : ""}
-          {syncResult.invalid_count > 0 ? ` · ${syncResult.invalid_count} could not be verified` : ""}
-          {syncResult.unsupported_count > 0 ? ` · ${syncResult.unsupported_count} unsupported` : ""}
+          Последняя синхронизация: {new Date(syncResult.synced_at).toLocaleString()} · {syncResult.verified_count} verified
+          {syncResult.stale_count > 0 ? ` · ${syncResult.stale_count} помечено как устаревшие` : ""}
+          {syncResult.invalid_count > 0 ? ` · ${syncResult.invalid_count} не удалось подтвердить` : ""}
+          {syncResult.unsupported_count > 0 ? ` · ${syncResult.unsupported_count} не поддерживается` : ""}
         </p>
       )}
 
       {loading ? (
         <div className="inventory-message" role="status" aria-busy="true">
-          Checking the selected verified wallet and its NFT ownership...
+          Checking the selected подтверждено: wallet and its NFT ownership...
         </div>
       ) : !selectedWallet ? (
         <div className="inventory-message" role="status">
@@ -285,7 +285,7 @@ export function MyInventory({
               <h2>На этой странице нет подтверждённых NFT</h2>
               <p>
                 None of the items on this page could be confirmed as currently owned by you.
-                More inventory pages are available and may contain verified NFTs.
+                More inventory pages are available and may contain подтверждено: NFTs.
               </p>
               {loadMoreError && <p role="alert">{loadMoreError}</p>}
               <button

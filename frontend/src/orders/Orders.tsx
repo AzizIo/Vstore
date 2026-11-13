@@ -238,7 +238,7 @@ function OrderDetails({
             <section className="expiry-card" aria-live="polite">
               <p className="eyebrow">СРОК РЕЗЕРВА</p>
               <strong className="expiry-countdown">{formatRemaining(order.expires_at, now)}</strong>
-              <p>Expires {getDate(order.expires_at)}</p>
+              <p>Истекает {getDate(order.expires_at)}</p>
             </section>
           )}
           <section className="workspace-section order-facts">
@@ -262,7 +262,7 @@ function OrderDetails({
                 <div className="cancel-confirmation" role="group" aria-label="Подтвердите отмену заказа">
                   <strong>Отменить этот резерв?</strong>
                   <p>Это действие нельзя отменить. Оплата и возврат средств не проводятся.</p>
-                  <div><button className="danger-button" type="button" disabled={busy} onClick={() => onCancel(order.id)}>{busy ? "Cancelling…" : "Подтвердить отмену"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmCancel(false)}>Оставить заказ</button></div>
+                  <div><button className="danger-button" type="button" disabled={busy} onClick={() => onCancel(order.id)}>{busy ? "Отменяем…" : "Подтвердить отмену"}</button><button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmCancel(false)}>Оставить заказ</button></div>
                 </div>
               )}
             </section>

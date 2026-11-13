@@ -187,7 +187,7 @@ function MyListingDetail({
   return (
     <section className="my-listing-detail" aria-labelledby="my-listing-detail-title">
       <button className="text-button back-button" type="button" onClick={onBack}>
-        <span aria-hidden="true">←</span> Back to my listings
+        <span aria-hidden="true">←</span> Назад к моим объявлениям
       </button>
       <div className="my-listing-detail-layout">
         <ListingImage listing={listing} />
@@ -214,7 +214,7 @@ function MyListingDetail({
           <h2>Управление объявлением</h2>
           <form className="listing-edit-form" onSubmit={saveChanges}>
             <label>
-              <span>Price ({listing.price_currency})</span>
+              <span>Цена ({listing.price_currency})</span>
               <input
                 aria-label="Цена объявления"
                 type="number"
@@ -290,7 +290,7 @@ function MyListingDetail({
           {confirmPublish && (
             <div className="listing-confirmation" role="group" aria-label="Подтвердите публикацию объявления">
               <p>
-                Publish this NFT? The server will re-check its current on-chain owner before making it public.
+                Опубликовать этот NFT? Перед публикацией сервер повторно проверит текущего владельца в блокчейне.
               </p>
               <button
                 className="primary-button"
@@ -306,13 +306,13 @@ function MyListingDetail({
                 disabled={Boolean(working)}
                 onClick={() => setConfirmPublish(false)}
               >
-                Not now
+                Не сейчас
               </button>
             </div>
           )}
           {listing.status === "draft" && !canPublish && (
             <p className="listing-management-note" role="status">
-              This draft cannot be published because its TON NFT record is not currently eligible for publication.
+              Этот черновик нельзя опубликовать: TON NFT сейчас не соответствует требованиям публикации.
             </p>
           )}
           {confirmCancel && (
@@ -336,7 +336,7 @@ function MyListingDetail({
                 disabled={Boolean(working)}
                 onClick={() => setConfirmCancel(false)}
               >
-                Keep listing
+                Оставить объявление
               </button>
             </div>
           )}
@@ -427,7 +427,7 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
         </div>
         {!loading && !error && <span className="my-listings-count">{listings.length} total</span>}
         <button className="load-more-button create-listing-action" type="button" onClick={() => setCreating(true)}>
-          Create listing
+          Создать объявление
         </button>
       </div>
 
@@ -436,7 +436,7 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
           <label className="select-control">
             <span className="sr-only">Фильтр моих объявлений по статусу</span>
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
-              <option value="all">All statuses ({listings.length})</option>
+              <option value="all">Все статусы ({listings.length})</option>
               {availableStatuses.map((status) => (
                 <option key={status} value={status}>
                   {statusLabels[status]} ({listings.filter((listing) => listing.status === status).length})
@@ -449,7 +449,7 @@ function AuthenticatedMyListings({ accessToken }: { accessToken: string }) {
               )}
             </select>
           </label>
-          <span className="my-listings-filter-count">Showing {filteredListings.length}</span>
+          <span className="my-listings-filter-count">Показано: {filteredListings.length}</span>
         </div>
       )}
 

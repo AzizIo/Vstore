@@ -338,7 +338,7 @@ function DeliveryPanel({
       )}
       {canPrepare && (
         <button className="primary-button" type="button" disabled={busy || loading} onClick={() => void prepare()}>
-          {busy ? "Preparing…" : "Подготовить передачу"}
+          {busy ? "Подготавливаем…" : "Подготовить передачу"}
         </button>
       )}
       {canRequestTransfer && (
@@ -353,7 +353,7 @@ function DeliveryPanel({
       )}
       {attempt?.status === "manual_review" && (
         <p className="lifecycle-terminal lifecycle-terminal-expired" role="status">
-          Delivery needs reconciliation. Do not send another NFT transfer; completion has not been confirmed.
+          Требуется дополнительная проверка передачи. Не отправляйте NFT повторно: завершение ещё не подтверждено.
         </p>
       )}
       {(attempt || role === "buyer") && (
