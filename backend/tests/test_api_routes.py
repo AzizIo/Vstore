@@ -133,3 +133,19 @@ def test_unknown_route_returns_localized_not_found() -> None:
         response = client.get("/_route_that_does_not_exist")
     assert response.status_code == 404
     assert response.json()["detail"] == "Запрашиваемый ресурс не найден."
+
+
+def test_validation_errors_never_echo_submitted_secrets() -> None:
+    secret = "DO_NOT_ECHO_THIS_AUTH_SECRET"
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/auth/telegram",
+            json={"init_data": {"private_token": secret}},
+        )
+
+    assert response.status_code == 422
+    assert secret not in response.text
+    error = response.json()["detail"][0]
+    assert error["msg"] == "Введите текстовое значение."
+    assert error["loc"] == ["body", "init_data"]
+    assert set(error) == {"loc", "msg", "type"}
