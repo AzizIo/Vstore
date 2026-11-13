@@ -1191,3 +1191,76 @@ body,
     font-size: 14px;
   }
 }
+
+
+.listing-card-verified {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  color: #a9ce9d;
+  font-size: 9px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.listing-card-verified > span {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  border: 1px solid rgb(169 206 157 / 35%);
+  border-radius: 50%;
+  font-size: 9px;
+}
+
+.catalog-intro .eyebrow {
+  max-width: 100%;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .catalog-controls {
+    padding: 9px;
+    border: 1px solid var(--mini-border);
+    border-radius: 14px;
+    background:
+      linear-gradient(145deg, rgb(208 220 112 / 4%), transparent 60%),
+      var(--mini-panel);
+  }
+
+  .listing-card-content {
+    min-height: 108px;
+  }
+
+  .listing-card-topline {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .listing-card-verified {
+    gap: 3px;
+    font-size: 8px;
+  }
+
+  .listing-card-verified > span {
+    width: 12px;
+    height: 12px;
+    font-size: 8px;
+  }
+
+  .listing-card-collection {
+    padding-left: 1px;
+    line-height: 1.15;
+  }
+}
+
+@media (max-width: 370px) {
+  .catalog-controls {
+    padding: 8px;
+  }
+
+  .listing-card-content {
+    min-height: 106px;
+  }
+}
