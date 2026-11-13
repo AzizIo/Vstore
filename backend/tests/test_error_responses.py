@@ -115,7 +115,6 @@ async def test_validation_handler_localizes_custom_rule_and_redacts_input_and_co
     assert "Укажите часовой пояс в дате окончания объявления." in payload
 
 
-
 async def test_http_exception_handler_preserves_status_and_auth_challenge_header() -> None:
     request = Request(
         {
