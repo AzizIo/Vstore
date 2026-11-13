@@ -66,3 +66,16 @@ export function submitModerationDecision(accessToken: string, listingId: string,
     body: JSON.stringify(input),
   });
 }
+
+export function fetchAdminAuditLog(
+  accessToken: string,
+  options: { limit: number; offset: number; action?: string } = { limit: 25, offset: 0 },
+  signal?: AbortSignal,
+): Promise<Page<AuditEntry>> {
+  const params = new URLSearchParams({
+    limit: String(options.limit),
+    offset: String(options.offset),
+  });
+  if (options.action) params.set("action", options.action);
+  return request("/audit?" + params.toString(), accessToken, { signal });
+}
