@@ -1,4 +1,4 @@
-"""Add Telegram Stars payment intent, charge ledger and event journal."""
+"""Add Telegram Stars intents, per-charge ledger and immutable event journal."""
 
 from collections.abc import Sequence
 
