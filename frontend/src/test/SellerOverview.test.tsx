@@ -53,9 +53,9 @@ describe("Seller overview", () => {
     expect(overviewApi.fetchSellerOverview).toHaveBeenCalledWith("seller-token", expect.any(AbortSignal));
     expect(screen.getByText("12.500000000 TON · 40.00 XTR")).toBeInTheDocument();
     expect(screen.getByText("3.25 TON")).toBeInTheDocument();
-    expect(screen.getByText(/Reservations are not payments/)).toBeInTheDocument();
+    expect(screen.getByText(/Резервирование не является оплатой/)).toBeInTheDocument();
     expect(screen.getByText("Активные объявления")).toBeInTheDocument();
-    expect(screen.getByText(/Listing · Suspended/)).toBeInTheDocument();
+    expect(screen.getByText(/Объявление · Приостановлено/)).toBeInTheDocument();
     expect(screen.getByText("Завершённые передачи")).toBeInTheDocument();
   });
 
