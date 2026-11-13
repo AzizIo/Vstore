@@ -16,6 +16,7 @@ from app.api.health import router as health_router
 from app.api.listings import router as listings_router
 from app.api.orders import router as orders_router
 from app.api.reviews import router as reviews_router
+from app.api.sellers import router as sellers_router
 from app.api.users import router as users_router
 from app.api.wallets import router as wallets_router
 from app.assets.ton_nft.observer import run_delivery_observer_pass
@@ -135,6 +136,7 @@ app.include_router(listings_router, prefix="/api")
 app.include_router(wallets_router, prefix="/api")
 app.include_router(orders_router, prefix="/api")
 app.include_router(reviews_router, prefix="/api")
+app.include_router(sellers_router, prefix="/api")
 
 
 @app.get("/", tags=["meta"])
