@@ -246,6 +246,27 @@ async def test_stars_intent_validation_and_success_are_idempotent(
                 total_amount=25,
                 currency="XTR",
             )
+            assert not await validate_stars_pre_checkout(
+                session,
+                invoice_payload=intent.invoice_payload,
+                payer_telegram_id=ids["telegram_id"] + 1,
+                total_amount=25,
+                currency="XTR",
+            )
+            assert not await validate_stars_pre_checkout(
+                session,
+                invoice_payload=intent.invoice_payload,
+                payer_telegram_id=ids["telegram_id"],
+                total_amount=26,
+                currency="XTR",
+            )
+            assert not await validate_stars_pre_checkout(
+                session,
+                invoice_payload=intent.invoice_payload,
+                payer_telegram_id=ids["telegram_id"],
+                total_amount=25,
+                currency="USD",
+            )
         evidence = _payment_evidence(
             intent, ids, update_id=f"update-{uuid4()}", charge_id=f"charge-{uuid4()}"
         )
@@ -481,6 +502,42 @@ async def test_payment_event_journal_is_append_only(
             )
             assert persisted is not None
             assert persisted.event_type == "intent_created"
+    finally:
+        await _cleanup(session_factory, ids)
+        await engine.dispose()
+
+
+
+async def test_mismatched_successful_payment_is_queued_for_refund(
+    payment_database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_test_stars(monkeypatch)
+    engine = create_async_engine(payment_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    ids = await _seed_order(session_factory)
+    try:
+        intent = await _create_intent(session_factory, ids)
+        evidence = _payment_evidence(
+            intent, ids, update_id=f"mismatch-update-{uuid4()}", charge_id=f"mismatch-charge-{uuid4()}"
+        )
+        evidence["total_amount"] = 26
+        async with session_factory() as session:
+            assert await record_stars_success(session, **evidence) == "refund_pending"
+        async with session_factory() as session:
+            transaction = await session.scalar(
+                select(PaymentTransaction).where(
+                    PaymentTransaction.telegram_payment_charge_id
+                    == evidence["telegram_payment_charge_id"]
+                )
+            )
+            persisted_intent = await session.scalar(
+                select(PaymentIntent).where(PaymentIntent.order_id == ids["order_id"])
+            )
+            assert transaction is not None
+            assert transaction.status == "refund_pending"
+            assert transaction.last_error_code == "amount_mismatch"
+            assert persisted_intent is not None
+            assert persisted_intent.status == "refund_pending"
     finally:
         await _cleanup(session_factory, ids)
         await engine.dispose()
