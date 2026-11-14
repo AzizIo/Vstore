@@ -448,6 +448,35 @@ export function Orders({
         <button className="secondary-button refresh-button" type="button" disabled={loading} onClick={() => { setRefreshing(true); setRetry((value) => value + 1); }}><span aria-hidden="true">↻</span> {refreshing ? "Обновляем…" : "Обновить"}</button>
       </div>
 
+      <details className="order-safety-guide">
+        <summary>Как работает сделка в VILTARA</summary>
+        <div className="order-safety-guide-content">
+          <ol>
+            <li>
+              <strong>Сначала создаётся резерв.</strong>
+              Цена объявления фиксируется в заказе, но деньги не списываются и не переводятся.
+            </li>
+            <li>
+              <strong>Продавец передаёт NFT напрямую.</strong>
+              После резерва продавец подтверждает подготовку перевода в своём кошельке. NFT отправляется на подтверждённый кошелёк покупателя, а не хранится у VILTARA.
+            </li>
+            <li>
+              <strong>Сервер проверяет передачу.</strong>
+              Заказ становится завершённым только после независимой проверки перевода по данным блокчейна.
+            </li>
+          </ol>
+          <p className="order-safety-guide-warning">
+            Сейчас VILTARA не принимает и не удерживает оплату, не предоставляет эскроу,
+            автоматические возвраты или арбитраж споров. Цена в заказе — снимок цены продавца,
+            а не подтверждение оплаты или гарантия сделки.
+          </p>
+          <p className="order-safety-guide-security">
+            Никогда не сообщайте seed-фразу или приватный ключ. Подтверждайте операции только
+            в своём кошельке и проверяйте адрес получателя перед отправкой.
+          </p>
+        </div>
+      </details>
+
       <div className="workspace-role-tabs" role="tablist" aria-label="Тип заказа">
         <button role="tab" id="purchases-tab" aria-selected={role === "buyer"} type="button" onClick={() => { setRole("buyer"); setFilter("all"); }}><span>Покупки</span><span className="workspace-tab-count">{role === "buyer" ? counts.all : "—"}</span></button>
         <button role="tab" id="sales-tab" aria-selected={role === "seller"} type="button" onClick={() => { setRole("seller"); setFilter("all"); }}><span>Продажи</span><span className="workspace-tab-count">{role === "seller" ? counts.all : "—"}</span></button>
