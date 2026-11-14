@@ -26,11 +26,3 @@ class TelegramStarsTestAdapter:
             prices=[LabeledPrice(label="Тестовый заказ", amount=amount)],
         )
 
-    async def refund_payment(
-        self, *, user_id: int, telegram_payment_charge_id: str
-    ) -> bool:
-        """Request a full Stars refund; callers must persist/reconcile the result."""
-        return await self._bot.refund_star_payment(
-            user_id=user_id,
-            telegram_payment_charge_id=telegram_payment_charge_id,
-        )
