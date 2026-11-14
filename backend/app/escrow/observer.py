@@ -160,7 +160,7 @@ async def _persist_event(
     # event identity; different trace/phase/attempt IDs remain separate events.
     if (
         existing.contract_state_reconciled and not event.contract_state_reconciled
-    ) or (existing.attestation_accepted and not event.attestation_accepted):
+    ) or (old.get("attestation_accepted") and not event.attestation_accepted):
         existing.status = "manual_review"
         existing.reason_code = "event_correlation_conflict"
         return existing
@@ -168,7 +168,6 @@ async def _persist_event(
     existing.contract_state_reconciled = (
         existing.contract_state_reconciled or event.contract_state_reconciled
     )
-    existing.attestation_accepted = existing.attestation_accepted or event.attestation_accepted
     existing.masterchain_seqno = max(existing.masterchain_seqno, event.masterchain_seqno)
     existing.evidence_sha256 = _stored_evidence_hash(event)
     existing.payload_json = payload
