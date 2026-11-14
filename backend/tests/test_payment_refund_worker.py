@@ -294,10 +294,12 @@ class FakeRefundProvider:
         outcome: RefundCallOutcome = RefundCallOutcome.SUCCEEDED,
         side_effect_before_ambiguous: bool = False,
         retry_after_seconds: int | None = None,
+        lookup_result: RefundLookupResult | None = None,
     ) -> None:
         self.outcome = outcome
         self.side_effect_before_ambiguous = side_effect_before_ambiguous
         self.retry_after_seconds = retry_after_seconds
+        self.lookup_result = lookup_result
         self.refund_calls = 0
         self.lookup_calls = 0
         self.refunded_charges: set[str] = set()
@@ -328,6 +330,8 @@ class FakeRefundProvider:
         self, *, telegram_payment_charge_id: str
     ) -> RefundLookupResult:
         self.lookup_calls += 1
+        if self.lookup_result is not None:
+            return self.lookup_result
         if telegram_payment_charge_id in self.refunded_charges:
             return RefundLookupResult.REFUNDED
         return RefundLookupResult.NOT_REFUNDED
@@ -795,6 +799,101 @@ async def test_database_failure_after_refund_call_recovers_by_reconciliation(
             assert provider.lookup_calls == 1
             assert transaction is not None and transaction.status == "refunded"
             assert job is not None and job.status == "succeeded"
+    finally:
+        await _cleanup(session_factory, ids)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_unknown_reconciliation_never_retries_refund_without_proof(
+    refund_database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_test_stars(monkeypatch, refund_database)
+    engine = create_async_engine(refund_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    ids = await _seed_order(session_factory)
+    try:
+        _, charge_id = await _make_refund_pending(session_factory, ids)
+        provider = FakeRefundProvider(
+            outcome=RefundCallOutcome.AMBIGUOUS,
+            lookup_result=RefundLookupResult.UNKNOWN,
+        )
+        now = datetime.now(UTC)
+        async with session_factory() as session:
+            first = await process_due_refunds(session, provider, now=now)
+        async with session_factory() as session:
+            second = await process_due_refunds(
+                session, provider, now=now + timedelta(seconds=5)
+            )
+        async with session_factory() as session:
+            transaction = await session.scalar(
+                select(PaymentTransaction).where(
+                    PaymentTransaction.telegram_payment_charge_id == charge_id
+                )
+            )
+            job = await session.scalar(
+                select(PaymentRefund).where(
+                    PaymentRefund.payment_transaction_id == transaction.id
+                )
+            )
+            assert first.reconciliations == 1
+            assert second.reconciliations == 1
+            assert provider.refund_calls == 1
+            assert provider.lookup_calls == 1
+            assert transaction is not None and transaction.status == "refund_pending"
+            assert job is not None and job.status == "reconciliation_required"
+    finally:
+        await _cleanup(session_factory, ids)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_stale_refund_job_never_calls_provider_for_captured_transaction(
+    refund_database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_test_stars(monkeypatch, refund_database)
+    engine = create_async_engine(refund_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    ids = await _seed_order(session_factory)
+    try:
+        intent = await _create_intent(session_factory, ids)
+        evidence = _evidence(
+            intent, ids, event=f"update-{uuid4()}", charge=f"charge-{uuid4()}"
+        )
+        assert await _record(session_factory, evidence) == "captured"
+        async with session_factory.begin() as session:
+            transaction = await session.scalar(
+                select(PaymentTransaction).where(
+                    PaymentTransaction.telegram_payment_charge_id
+                    == evidence["telegram_payment_charge_id"]
+                )
+            )
+            assert transaction is not None and transaction.status == "captured"
+            session.add(
+                PaymentRefund(
+                    payment_transaction_id=transaction.id,
+                    status="queued",
+                    reason_code="stale_test_fixture",
+                    next_attempt_at=datetime.now(UTC) - timedelta(seconds=1),
+                )
+            )
+
+        provider = FakeRefundProvider()
+        async with session_factory() as session:
+            result = await process_due_refunds(session, provider)
+        async with session_factory() as session:
+            job = await session.scalar(select(PaymentRefund))
+            transaction = await session.scalar(
+                select(PaymentTransaction).where(
+                    PaymentTransaction.telegram_payment_charge_id
+                    == evidence["telegram_payment_charge_id"]
+                )
+            )
+            assert result.claimed == 0
+            assert provider.refund_calls == 0
+            assert transaction is not None and transaction.status == "captured"
+            assert job is not None and job.status == "manual_review"
+            assert job.last_error_code == "transaction_not_refund_pending"
     finally:
         await _cleanup(session_factory, ids)
         await engine.dispose()
