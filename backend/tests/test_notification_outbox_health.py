@@ -34,6 +34,8 @@ from app.notifications.diagnostics import (
     inspect_notification_outbox,
 )
 
+from tests.database_safety import require_test_database_url
+
 
 def _summary(**overrides: object) -> NotificationOutboxHealth:
     values: dict[str, object] = {
@@ -290,11 +292,7 @@ def test_cli_rejects_negative_threshold_with_usage_error() -> None:
 
 @pytest.fixture(scope="session")
 def migrated_outbox_health_database() -> str:
-    url = os.getenv("TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("TEST_DATABASE_URL is not configured")
-    if not url.startswith("postgresql+asyncpg://"):
-        pytest.fail("Outbox diagnostic integration test requires PostgreSQL")
+    url = require_test_database_url("Outbox diagnostic integration test")
 
     previous_url = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = url
