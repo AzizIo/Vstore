@@ -573,7 +573,17 @@ async def create_deal_intent(
             last_chain_seqno=None,
             idempotency_key=idempotency_key,
         )
-        intent.status = "reserved"
+        # Ordinary Orders locks and checks this same Listing row. Reserve both
+        # projections in this transaction to exclude a parallel marketplace order.
+        from app.escrow.reservation import (
+            EscrowListingReservationConflict,
+            reserve_listing_for_escrow,
+        )
+
+        try:
+            reserve_listing_for_escrow(listing, intent)
+        except EscrowListingReservationConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         session.add(deal)
         _add_idempotency_record(session, actor_id=user.id, operation="create_deal_intent",
             key=idempotency_key,
