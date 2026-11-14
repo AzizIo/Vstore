@@ -50,8 +50,20 @@ def upgrade() -> None:
             name="ck_escrow_action_idempotency_length"),
         sa.CheckConstraint("length(request_sha256) = 64", name="ck_escrow_action_request_hash"),
         sa.CheckConstraint(
+            "unsigned_boc_sha256 IS NULL OR length(unsigned_boc_sha256) = 64",
+            name="ck_escrow_action_boc_hash"),
+        sa.CheckConstraint(
+            "(unsigned_boc_sha256 IS NULL AND unsigned_boc_ref IS NULL) OR "
+            "(unsigned_boc_sha256 IS NOT NULL AND unsigned_boc_ref IS NOT NULL)",
+            name="ck_escrow_action_boc_pair"),
+        sa.CheckConstraint(
             "submission_reference_sha256 IS NULL OR length(submission_reference_sha256) = 64",
             name="ck_escrow_action_submission_hash"),
+        sa.CheckConstraint(
+            "(submission_reference IS NULL AND submission_reference_sha256 IS NULL) OR "
+            "(submission_reference IS NOT NULL AND submission_reference_sha256 IS NOT NULL "
+            "AND length(submission_reference) BETWEEN 1 AND 512)",
+            name="ck_escrow_action_submission_pair"),
         sa.CheckConstraint("attempt_count >= 0", name="ck_escrow_action_attempt_count"),
         sa.ForeignKeyConstraint(["deal_id"], ["escrow_deals.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["actor_id"], ["users.id"], ondelete="RESTRICT"),
@@ -83,7 +95,10 @@ def upgrade() -> None:
                 RAISE EXCEPTION 'Escrow action request identity is immutable';
             END IF;
             IF OLD.submission_reference_sha256 IS NOT NULL
-                AND NEW.submission_reference_sha256 IS DISTINCT FROM OLD.submission_reference_sha256
+                AND (
+                    NEW.submission_reference_sha256 IS DISTINCT FROM OLD.submission_reference_sha256
+                    OR NEW.submission_reference IS DISTINCT FROM OLD.submission_reference
+                )
             THEN
                 RAISE EXCEPTION 'Escrow action submission reference cannot be replaced';
             END IF;
