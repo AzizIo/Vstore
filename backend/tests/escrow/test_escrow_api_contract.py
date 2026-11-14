@@ -1,0 +1,103 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from uuid import uuid4
+
+import pytest
+from pydantic import ValidationError
+
+from app.api.escrow import router
+from app.escrow.schemas import (
+    EscrowDealCreate,
+    EscrowDealResponse,
+    EscrowListingIntentCreate,
+    EscrowListingIntentResponse,
+    EscrowNftProjection,
+    EscrowPageResponse,
+)
+
+
+def test_frontend_listing_and_deal_create_inputs_match_backend_contract() -> None:
+    listing = EscrowListingIntentCreate(
+        asset_id=uuid4(), seller_wallet_id=uuid4(), price_nano="2500000000",
+    )
+    assert listing.model_dump(mode="json")["price_nano"] == "2500000000"
+
+    deal = EscrowDealCreate(listing_id=uuid4(), buyer_wallet_id=uuid4())
+    assert "listing_id" in deal.model_dump(mode="json")
+    assert "listing_intent_id" not in deal.model_dump(mode="json")
+
+    with pytest.raises(ValidationError):
+        EscrowListingIntentCreate(
+            asset_id=uuid4(), seller_wallet_id=uuid4(), price_nano="2.5",
+        )
+    with pytest.raises(ValidationError):
+        EscrowDealCreate(listing_intent_id=uuid4(), buyer_wallet_id=uuid4())
+
+
+def test_listing_response_serializes_frontend_projection_fields() -> None:
+    now = datetime.now(UTC)
+    response = EscrowListingIntentResponse(
+        id=uuid4(), listing_key="a" * 64, seller_id=uuid4(),
+        state="intent_only", network="testnet",
+        nft=EscrowNftProjection(
+            asset_id=uuid4(), title="Test NFT", image_url=None,
+            item_address="0:" + "a" * 64, collection_address="0:" + "b" * 64,
+        ),
+        seller_wallet_address="0:" + "c" * 64, price_nano="2500000000",
+        fee_bps=0, available_actions=["create_deal_intent"],
+        created_at=now, updated_at=now,
+    )
+    payload = response.model_dump(mode="json")
+    assert {
+        "id", "listing_key", "seller_id", "state", "network", "nft",
+        "seller_wallet_address", "price_nano", "fee_bps", "available_actions",
+        "created_at", "updated_at",
+    } == set(payload)
+    assert payload["available_actions"] == ["create_deal_intent"]
+    assert payload["nft"]["collection_address"] == "0:" + "b" * 64
+
+
+def test_deal_response_serializes_frontend_projection_fields() -> None:
+    now = datetime.now(UTC)
+    response = EscrowDealResponse(
+        id=uuid4(), listing_id=uuid4(), listing_key="d" * 64,
+        buyer_id=uuid4(), seller_id=uuid4(), state="funded_review", network="testnet",
+        nft=EscrowNftProjection(
+            asset_id=uuid4(), title="Test NFT", image_url=None,
+            item_address="0:" + "a" * 64, collection_address="0:" + "b" * 64,
+        ),
+        escrow_address=None, seller_wallet_address="0:" + "c" * 64,
+        buyer_wallet_address="0:" + "e" * 64, price_nano="2500000000", fee_bps=0,
+        buyer_review_deadline=None, dispute_deadline=None,
+        available_actions=["accept_deal", "open_dispute"], created_at=now,
+        updated_at=now, dispute=None,
+    )
+    payload = response.model_dump(mode="json")
+    assert {
+        "id", "listing_id", "listing_key", "buyer_id", "seller_id", "state", "network",
+        "nft", "escrow_address", "seller_wallet_address", "buyer_wallet_address",
+        "price_nano", "fee_bps", "buyer_review_deadline", "dispute_deadline",
+        "available_actions", "created_at", "updated_at", "dispute",
+    } == set(payload)
+    assert payload["available_actions"] == ["accept_deal", "open_dispute"]
+
+
+def test_page_response_uses_frontend_pagination_envelope() -> None:
+    page = EscrowPageResponse(items=[], total=0, next_cursor=None)
+    assert page.model_dump(mode="json") == {"items": [], "total": 0, "next_cursor": None}
+
+
+def test_backend_exposes_expected_deal_scoped_preparation_routes() -> None:
+    paths = {route.path for route in router.routes}
+    assert "/escrow/marketplace/listing-intents" in paths
+    assert "/escrow/buyer/deals" in paths
+    assert "/escrow/seller/deals" in paths
+    assert "/escrow/deals/{deal_id}/prepare/create-deal-escrow" in paths
+    assert "/escrow/deals/{deal_id}/prepare/deposit-nft" in paths
+    assert "/escrow/deals/{deal_id}/prepare/funding" in paths
+    assert "/escrow/deals/{deal_id}/prepare/accept" in paths
+    assert "/escrow/deals/{deal_id}/prepare/dispute" in paths
+    assert "/escrow/deals/{deal_id}/prepare/nft-return" in paths
+    assert "/escrow/deals/{deal_id}/prepare/withdraw-unsold-nft" in paths
+    assert "/escrow/deals/{deal_id}/receipt" not in paths
