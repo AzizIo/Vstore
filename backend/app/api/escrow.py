@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -15,7 +14,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.ton_nft.dependencies import get_ton_nft_verifier
-from app.assets.ton_nft.errors import ProviderUnavailable
 from app.assets.ton_nft.verifier import TONNFTVerifier
 from app.auth.dependencies import get_current_user
 from app.core.config import get_settings
@@ -23,6 +21,7 @@ from app.db.models import (
     AssetType,
     AssetVerificationStatus,
     Listing,
+    NFTAsset,
     ListingStatus,
     PriceCurrency,
     User,
@@ -57,7 +56,6 @@ from app.escrow.schemas import (
 from app.assets.ton_nft.address import AddressError, normalize_address
 from app.assets.ton_nft.models import VerificationStatus
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/escrow", tags=["ton-escrow"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
@@ -251,11 +249,8 @@ async def create_listing_intent(
             return replay  # type: ignore[return-value]
 
         rows = await session.execute(
-            select(Listing, __import__("app.db.models", fromlist=["NFTAsset"]).NFTAsset)
-            .join(
-                __import__("app.db.models", fromlist=["NFTAsset"]).NFTAsset,
-                Listing.asset_id == __import__("app.db.models", fromlist=["NFTAsset"]).NFTAsset.id,
-            )
+            select(Listing, NFTAsset)
+            .join(NFTAsset, Listing.asset_id == NFTAsset.id)
             .where(Listing.id == payload.listing_id)
             .with_for_update(of=Listing)
         )
@@ -334,7 +329,7 @@ async def create_listing_intent(
         await session.commit()
         await session.refresh(intent)
         return intent
-    except IntegrityError as exc:
+    except IntegrityError:
         replay = await _idempotency_race_replay(
             session,
             actor_id=user.id,
