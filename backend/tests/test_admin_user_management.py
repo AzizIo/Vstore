@@ -5,9 +5,11 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.admin.user_management import AdminUserAccessDecisionRequest
-from app.auth.dependencies import get_current_user
+from app.assets.ton_nft.dependencies import get_ton_nft_verifier
+from app.auth.dependencies import get_current_user, get_current_user_allow_blocked
 from app.core.config import get_settings
 from app.db.models import User
+from app.db.session import get_db_session
 from app.main import app
 
 
@@ -96,3 +98,40 @@ def test_admin_orders_has_no_write_or_payment_status_routes() -> None:
         if route.path.startswith("/api/admin/orders")
     }
     assert routes == {("GET", "/api/admin/orders")}
+
+
+
+def test_blocked_user_cannot_create_a_new_order_but_can_read_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    blocked_user = User(
+        id=uuid4(),
+        telegram_id=987650002,
+        first_name="Restricted",
+        username="restricted_user",
+        is_blocked=True,
+    )
+    monkeypatch.setattr(get_settings(), "admin_telegram_ids", [])
+    app.dependency_overrides[get_current_user_allow_blocked] = lambda: blocked_user
+    app.dependency_overrides[get_current_user] = lambda: blocked_user
+
+    async def unused_session():
+        yield None
+
+    app.dependency_overrides[get_db_session] = unused_session
+    app.dependency_overrides[get_ton_nft_verifier] = lambda: object()
+    try:
+        with TestClient(app) as client:
+            profile = client.get("/api/users/me")
+            assert profile.status_code == 200
+            assert profile.json()["is_blocked"] is True
+
+            response = client.post(
+                "/api/orders",
+                headers={"Idempotency-Key": "blocked-create-order-001"},
+                json={"listing_id": str(uuid4())},
+            )
+            assert response.status_code == 403
+            assert "creating new orders is disabled" in response.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
