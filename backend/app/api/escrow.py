@@ -648,6 +648,15 @@ async def _prepare_action(
     ))
     if deal is None:
         raise HTTPException(status_code=404, detail="Escrow deal not found")
+    validated_status = deal.status
+    immutable_snapshot_fields = (
+        "id", "buyer_id", "seller_id", "listing_key_snapshot", "item_address",
+        "collection_address_snapshot", "seller_address_snapshot", "buyer_address_snapshot",
+        "principal_nanotons", "deal_salt", "network",
+    )
+    validated_snapshot = {
+        field: getattr(deal, field) for field in immutable_snapshot_fields
+    }
 
     seller_states = {
         EscrowWalletAction.CREATE_DEAL_ESCROW: "intent_created",
@@ -716,21 +725,28 @@ async def _prepare_action(
     if intent is None:
         raise HTTPException(status_code=404, detail="Escrow listing intent not found")
     # Reacquire the deal lock only after external ownership checks have finished.
-    locked_deal = await session.scalar(select(EscrowDeal).where(
-        EscrowDeal.id == deal.id,
-        (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id),
-    ).with_for_update())
-    if locked_deal is None or locked_deal.status != deal.status:
-        await session.rollback()
-        raise HTTPException(status_code=409, detail={"code": "escrow_deal_changed_during_validation"})
-    immutable_snapshot_fields = (
-        "id", "buyer_id", "seller_id", "listing_key_snapshot", "item_address",
-        "collection_address_snapshot", "seller_address_snapshot", "buyer_address_snapshot",
-        "principal_nanotons", "deal_salt", "network",
+    locked_deal = await session.scalar(
+        select(EscrowDeal)
+        .where(
+            EscrowDeal.id == deal.id,
+            (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id),
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
-    if any(getattr(locked_deal, field) != getattr(deal, field) for field in immutable_snapshot_fields):
+    if locked_deal is None or locked_deal.status != validated_status:
         await session.rollback()
-        raise HTTPException(status_code=409, detail={"code": "escrow_deal_snapshot_changed"})
+        raise HTTPException(
+            status_code=409, detail={"code": "escrow_deal_changed_during_validation"}
+        )
+    if any(
+        getattr(locked_deal, field) != value
+        for field, value in validated_snapshot.items()
+    ):
+        await session.rollback()
+        raise HTTPException(
+            status_code=409, detail={"code": "escrow_deal_snapshot_changed"}
+        )
     deal = locked_deal
     deal_snapshot = DealEscrowDeploymentSnapshot(
         network=deal.network, listing_key=deal.listing_key_snapshot,
