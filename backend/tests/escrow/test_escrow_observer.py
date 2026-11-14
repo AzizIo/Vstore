@@ -58,10 +58,12 @@ def stored_row(event: NormalizedChainEvent, *, status: str = "applied") -> Escro
         message_hash=event.message_hash, trace_id=event.trace_id, logical_time=event.logical_time,
         phase=event.phase, attempt_id=event.attempt_id, query_id=event.query_id,
         operation_id=event.operation_id, deal_salt=event.deal_salt,
-        account_address=event.account_address, observed_contract_state=event.observed_contract_state,
+        account_address=event.account_address,
+            observed_contract_state=event.observed_contract_state,
         contract_state_reconciled=event.contract_state_reconciled,
         event_type=event.event_type.value, contract_address=event.contract_address,
-        deal_id=uuid4(), source_address=event.source_address, destination_address=event.destination_address,
+        deal_id=uuid4(), source_address=event.source_address,
+            destination_address=event.destination_address,
         item_address=event.item_address, amount_nanotons=event.amount_nanotons,
         masterchain_seqno=event.masterchain_seqno, finalized=event.finalized,
         evidence_sha256=event.evidence_sha256, payload_json=_payload(event),
@@ -262,7 +264,8 @@ async def test_provider_outage_preserves_cursor_and_releases_lease() -> None:
     def factory() -> FakeEscrowSession:
         return sessions.pop(0)
 
-    result = await run_observer_pass(factory, OutageProvider(), now=now, limit=5)  # type: ignore[arg-type]
+    result = await run_observer_pass(factory, OutageProvider(), now=now, limit=5)
+    # type: ignore[arg-type]
     assert result.provider_unavailable
     assert checkpoint.cursor == "durable-cursor-before-outage"
     assert checkpoint.lease_token is None
