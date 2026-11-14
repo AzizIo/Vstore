@@ -62,129 +62,120 @@ def _payload(event: NormalizedChainEvent) -> dict[str, Any]:
 
 
 def _sha256_json(value: object) -> str:
-    return hashlib.sha256(
-        json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
 
 
 def _stored_evidence_hash(event: NormalizedChainEvent) -> str:
-    """Return a valid digest even when the provider supplies malformed metadata."""
-    supplied = event.evidence_sha256
-    if len(supplied) == 64 and all(char in "0123456789abcdef" for char in supplied.lower()):
-        return supplied.lower()
+    digest = event.evidence_sha256
+    if len(digest) == 64 and all(char in "0123456789abcdef" for char in digest.lower()):
+        return digest.lower()
     return _sha256_json(_payload(event))
 
 
 def _event_snapshot(event: NormalizedChainEvent) -> NormalizedEventEvidence:
     return NormalizedEventEvidence(
-        network=event.network,
-        contract_address=event.contract_address,
-        event_type=event.event_type,
-        source_address=event.source_address,
-        destination_address=event.destination_address,
+        network=event.network, contract_address=event.contract_address, event_type=event.event_type,
+        source_address=event.source_address, destination_address=event.destination_address,
         item_address=event.item_address,
-        amount_nanotons=(
-            int(event.amount_nanotons) if event.amount_nanotons is not None else None
-        ),
-        masterchain_seqno=event.masterchain_seqno,
-        finalized=event.finalized,
+        amount_nanotons=int(event.amount_nanotons) if event.amount_nanotons is not None else None,
+        masterchain_seqno=event.masterchain_seqno, finalized=event.finalized,
+        logical_time=event.logical_time, message_hash=event.message_hash, trace_id=event.trace_id,
+        phase=event.phase, attempt_id=event.attempt_id, query_id=event.query_id,
+        deal_salt=event.deal_salt, observed_contract_state=event.observed_contract_state,
+        attestation_accepted=event.attestation_accepted,
     )
 
 
 def _deal_snapshot(deal: EscrowDeal) -> DealEvidenceSnapshot:
     return DealEvidenceSnapshot(
-        network=deal.network,
-        contract_address=deal.contract_address,
-        item_address=deal.item_address,
-        seller_address=deal.seller_address_snapshot,
-        buyer_address=deal.buyer_address_snapshot,
+        network=deal.network, contract_address=deal.contract_address, item_address=deal.item_address,
+        seller_address=deal.seller_address_snapshot, buyer_address=deal.buyer_address_snapshot,
         principal_nanotons=int(deal.principal_nanotons),
     )
 
 
-async def _persist_unapplied_event(
-    session: AsyncSession,
-    event: NormalizedChainEvent,
-    *,
-    status: str,
-    reason_code: str | None,
-    deal_id: uuid.UUID | None = None,
-) -> None:
-    existing = await session.scalar(
-        select(EscrowChainEvent).where(
-            EscrowChainEvent.network == event.network,
-            EscrowChainEvent.transaction_hash == event.transaction_hash,
-            EscrowChainEvent.event_index == event.event_index,
+async def _persist_event(
+    session: AsyncSession, event: NormalizedChainEvent, *, status: str,
+    reason_code: str | None, deal_id: uuid.UUID | None,
+    existing: EscrowChainEvent | None = None,
+) -> EscrowChainEvent:
+    payload = _payload(event)
+    if existing is None:
+        row = EscrowChainEvent(
+            id=uuid.uuid4(), network=event.network, event_key=event.event_key,
+            transaction_hash=event.transaction_hash, event_index=event.event_index,
+            message_hash=event.message_hash, trace_id=event.trace_id, logical_time=event.logical_time,
+            phase=event.phase, attempt_id=event.attempt_id, query_id=event.query_id,
+            operation_id=event.operation_id, deal_salt=event.deal_salt,
+            account_address=event.account_address, observed_contract_state=event.observed_contract_state,
+            event_type=event.event_type.value, contract_address=event.contract_address, deal_id=deal_id,
+            source_address=event.source_address, destination_address=event.destination_address,
+            item_address=event.item_address, amount_nanotons=event.amount_nanotons,
+            masterchain_seqno=event.masterchain_seqno, finalized=event.finalized,
+            evidence_sha256=_stored_evidence_hash(event), payload_json=payload,
+            status=status, reason_code=reason_code,
         )
+        session.add(row)
+        return row
+
+    old = existing.payload_json or {}
+    immutable_fields = (
+        "event_type", "contract_address", "deal_id", "source_address", "destination_address",
+        "item_address", "amount_nanotons", "message_hash", "trace_id", "logical_time", "phase",
+        "attempt_id", "query_id", "operation_id", "deal_salt",
     )
-    if existing is not None:
-        if existing.evidence_sha256 != _stored_evidence_hash(event):
-            existing.status = "manual_review"
-            existing.reason_code = "event_evidence_conflict"
-        return
-    session.add(
-        EscrowChainEvent(
-            network=event.network,
-            transaction_hash=event.transaction_hash,
-            event_index=event.event_index,
-            event_type=event.event_type.value,
-            contract_address=event.contract_address,
-            deal_id=deal_id,
-            source_address=event.source_address,
-            destination_address=event.destination_address,
-            item_address=event.item_address,
-            amount_nanotons=event.amount_nanotons,
-            masterchain_seqno=event.masterchain_seqno,
-            finalized=event.finalized,
-            evidence_sha256=_stored_evidence_hash(event),
-            payload_json=_payload(event),
-            status=status,
-            reason_code=reason_code,
-        )
-    )
+    if any(old.get(field) not in (None, payload.get(field)) for field in immutable_fields):
+        existing.status = "manual_review"
+        existing.reason_code = "event_correlation_conflict"
+        return existing
+    # Promotion from pending -> final is monotonic. Keep one durable row per stable
+    # event identity; different trace/phase/attempt IDs remain separate events.
+    existing.finalized = existing.finalized or event.finalized
+    existing.masterchain_seqno = max(existing.masterchain_seqno, event.masterchain_seqno)
+    existing.evidence_sha256 = _stored_evidence_hash(event)
+    existing.payload_json = payload
+    existing.observed_contract_state = event.observed_contract_state or existing.observed_contract_state
+    existing.account_address = event.account_address or existing.account_address
+    existing.deal_id = deal_id or existing.deal_id
+    existing.status = status
+    existing.reason_code = reason_code
+    return existing
 
 
 async def _apply_one_event(
-    session: AsyncSession,
-    event: NormalizedChainEvent,
-    *,
-    provider_verified: bool,
+    session: AsyncSession, event: NormalizedChainEvent, *, provider_verified: bool,
 ) -> str:
-    existing = await session.scalar(
-        select(EscrowChainEvent).where(
-            EscrowChainEvent.network == event.network,
-            EscrowChainEvent.transaction_hash == event.transaction_hash,
-            EscrowChainEvent.event_index == event.event_index,
-        )
-    )
-    if existing is not None:
-        if existing.evidence_sha256 != _stored_evidence_hash(event):
-            existing.status = "manual_review"
-            existing.reason_code = "event_evidence_conflict"
-            if existing.deal_id is not None:
-                deal = await session.get(EscrowDeal, existing.deal_id, with_for_update=True)
-                if deal is not None and deal.status not in {s.value for s in TERMINAL_DEAL_STATES}:
-                    deal.status = EscrowDealStatus.MANUAL_REVIEW.value
-            return "rejected"
-        return "duplicates"
+    existing = await session.scalar(select(EscrowChainEvent).where(
+        EscrowChainEvent.network == event.network, EscrowChainEvent.event_key == event.event_key,
+    ))
+    if existing is not None and existing.status in {"applied", "manual_review", "unmatched"}:
+        if existing.status == "applied":
+            old = existing.payload_json or {}
+            new = _payload(event)
+            stable = ("event_type", "contract_address", "deal_id", "source_address", "destination_address",
+                      "item_address", "amount_nanotons", "message_hash", "trace_id", "logical_time",
+                      "phase", "attempt_id", "query_id", "operation_id", "deal_salt")
+            if any(old.get(k) != new.get(k) for k in stable):
+                existing.status = "manual_review"
+                existing.reason_code = "event_correlation_conflict"
+                return "rejected"
+            return "duplicates"
+        return "rejected"
 
-    if (
-        event.network != "testnet"
-        or event.event_index < 0
-        or not event.transaction_hash
-        or len(event.transaction_hash) > 128
-        or len(event.evidence_sha256) != 64
-        or any(char not in "0123456789abcdef" for char in event.evidence_sha256.lower())
-        or event.masterchain_seqno <= 0
-        or not event.finalized
-        or not provider_verified
-    ):
-        await _persist_unapplied_event(
-            session,
-            event,
-            status="rejected",
-            reason_code="unverified_or_non_final_event",
-        )
+    valid_shape = (
+        event.network == "testnet" and bool(event.transaction_hash)
+        and len(event.transaction_hash) <= 128 and event.event_index >= 0
+        and len(event.evidence_sha256) == 64
+        and all(ch in "0123456789abcdef" for ch in event.evidence_sha256.lower())
+        and bool(event.event_key)
+    )
+    if not valid_shape or not provider_verified:
+        await _persist_event(session, event, status="pending",
+            reason_code="awaiting_provider_verification", deal_id=None, existing=existing)
+        return "rejected"
+    if not event.finalized or event.masterchain_seqno <= 0:
+        await _persist_event(session, event, status="pending",
+            reason_code="awaiting_finality", deal_id=None, existing=existing)
         return "rejected"
 
     try:
@@ -192,58 +183,50 @@ async def _apply_one_event(
     except ValueError:
         deal_uuid = None
     if deal_uuid is None:
-        await _persist_unapplied_event(
-            session, event, status="unmatched", reason_code="deal_reference_missing"
-        )
+        await _persist_event(session, event, status="pending",
+            reason_code="deal_reference_missing", deal_id=None, existing=existing)
         return "unmatched"
-
-    deal = await session.scalar(
-        select(EscrowDeal).where(EscrowDeal.id == deal_uuid).with_for_update()
-    )
+    deal = await session.scalar(select(EscrowDeal).where(EscrowDeal.id == deal_uuid).with_for_update())
     if deal is None:
-        await _persist_unapplied_event(
-            session, event, status="unmatched", reason_code="deal_not_found", deal_id=deal_uuid
-        )
+        await _persist_event(session, event, status="pending",
+            reason_code="deal_not_found", deal_id=deal_uuid, existing=existing)
         return "unmatched"
 
-    # Without an ABI-approved deploy/factory reference, there is no trusted
-    # contract address to bind to this intent. Never learn the address from an
-    # arbitrary event or from a client-provided transaction hash.
-    if not deal.contract_address or event.contract_address != deal.contract_address:
-        await _persist_unapplied_event(
-            session,
-            event,
-            status="rejected",
-            reason_code="contract_address_mismatch_or_unbound",
-            deal_id=deal.id,
-        )
+    if event.deal_salt != deal.deal_salt:
+        await _persist_event(session, event, status="manual_review",
+            reason_code="deal_salt_mismatch", deal_id=deal.id, existing=existing)
         return "rejected"
-
+    if not deal.contract_address or event.contract_address != deal.contract_address:
+        await _persist_event(session, event, status="pending",
+            reason_code="contract_address_not_reconciled", deal_id=deal.id, existing=existing)
+        return "rejected"
     if deal.last_chain_seqno is not None and event.masterchain_seqno < deal.last_chain_seqno:
-        await _persist_unapplied_event(
-            session, event, status="rejected", reason_code="stale_chain_event", deal_id=deal.id
-        )
+        await _persist_event(session, event, status="pending",
+            reason_code="stale_chain_event", deal_id=deal.id, existing=existing)
         return "rejected"
 
     try:
         validate_event_against_deal(_event_snapshot(event), _deal_snapshot(deal))
-        target = transition_for_verified_event(deal.status, event.event_type)
+        next_state = transition_for_verified_event(deal.status, event.event_type)
     except (EscrowDomainError, ValueError):
-        await _persist_unapplied_event(
-            session,
-            event,
-            status="manual_review",
-            reason_code="event_invariant_or_transition_failure",
-            deal_id=deal.id,
-        )
-        if deal.status not in {state.value for state in TERMINAL_DEAL_STATES}:
+        await _persist_event(session, event, status="manual_review",
+            reason_code="event_invariant_or_transition_failure", deal_id=deal.id, existing=existing)
+        if deal.status not in {s.value for s in TERMINAL_DEAL_STATES}:
             deal.status = EscrowDealStatus.MANUAL_REVIEW.value
         return "rejected"
 
-    await _persist_unapplied_event(
-        session, event, status="applied", reason_code=None, deal_id=deal.id
-    )
-    deal.status = target.value
+    if event.event_type is EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED:
+        # Provider adapter must confirm accepted oracle evidence and reconciled
+        # contract state; raw NFT transfer evidence cannot reach this branch.
+        if event.observed_contract_state != next_state.value or not event.attestation_accepted:
+            await _persist_event(session, event, status="manual_review",
+                reason_code="oracle_state_not_reconciled", deal_id=deal.id, existing=existing)
+            deal.status = EscrowDealStatus.MANUAL_REVIEW.value
+            return "rejected"
+
+    await _persist_event(session, event, status="applied",
+        reason_code=None, deal_id=deal.id, existing=existing)
+    deal.status = next_state.value
     deal.last_chain_seqno = max(deal.last_chain_seqno or 0, event.masterchain_seqno)
     return "applied"
 
