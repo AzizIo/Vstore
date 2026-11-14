@@ -204,3 +204,9 @@ def test_deployed_contract_address_cannot_be_replaced() -> None:
 
     with pytest.raises(ValueError, match="Immutable DealEscrow terms"):
         assert_deal_terms_immutable(deal)
+
+
+def test_escrow_metadata_foreign_key_targets_are_resolvable() -> None:
+    for table in EscrowBase.metadata.tables.values():
+        for foreign_key in table.foreign_keys:
+            assert foreign_key.column is not None
