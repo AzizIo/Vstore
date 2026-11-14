@@ -23,8 +23,8 @@ from app.escrow.domain import (
     EscrowChainEventType,
     EscrowDealStatus,
     EscrowDomainError,
-    is_raw_evidence_event,
     NormalizedEventEvidence,
+    is_raw_evidence_event,
     transition_for_verified_event,
     validate_event_against_deal,
 )
