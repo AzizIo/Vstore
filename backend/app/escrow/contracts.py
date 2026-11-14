@@ -7,7 +7,6 @@ implemented here; the default adapter refuses to fabricate a wallet transaction.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
