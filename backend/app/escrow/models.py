@@ -72,6 +72,7 @@ class EscrowListingIntent(TimestampMixin, EscrowBase):
     )
     network: Mapped[str] = mapped_column(String(16), server_default="testnet", nullable=False)
     item_address: Mapped[str] = mapped_column(String(128), nullable=False)
+    listing_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     seller_address_snapshot: Mapped[str] = mapped_column(String(128), nullable=False)
     price_amount: Mapped[Decimal] = mapped_column(Numeric(24, 9), nullable=False)
     price_currency: Mapped[str] = mapped_column(String(8), server_default="TON", nullable=False)
