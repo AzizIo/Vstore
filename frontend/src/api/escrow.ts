@@ -359,8 +359,7 @@ export function isPreparedEscrowTransaction(value: unknown): value is PreparedEs
     && value.messages.length > 0
     && value.messages.every((message) => isRecord(message)
       && typeof message.address === "string"
-      && typeof message.amount_nano === "string"
-      && /^\d+$/.test(message.amount_nano)
+      && isPositiveNano(message.amount_nano)
       && isNullableString(message.payload_boc ?? null)
       && isNullableString(message.state_init_boc ?? null));
 }
