@@ -40,10 +40,8 @@ jobs:
           echo "$HOME/.acton/bin" >> "$GITHUB_PATH"
           "$HOME/.acton/bin/acton" --version
 
-      - name: Pin toolchain and refresh standard library
-        run: |
-          acton up
-          acton init
+      - name: Initialize pinned Acton project
+        run: acton init
 
       - name: Compile contract BoCs
         run: acton build
