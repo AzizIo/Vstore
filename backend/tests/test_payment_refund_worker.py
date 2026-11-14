@@ -5,6 +5,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -40,6 +41,7 @@ from app.orders.refund_worker import (
     RefundCallOutcome,
     RefundCallResult,
     RefundLookupResult,
+    TelegramStarsRefundProvider,
     process_due_refunds,
 )
 from app.orders.service import _invalidate_lost_ownership, cancel_order
@@ -330,6 +332,143 @@ class FakeRefundProvider:
         if telegram_payment_charge_id in self.refunded_charges:
             return RefundLookupResult.REFUNDED
         return RefundLookupResult.NOT_REFUNDED
+
+
+class FakeTelegramStarsBot:
+    token = "123456:isolated-test-token"
+
+    def __init__(self, pages: list[list[object]]) -> None:
+        self.pages = pages
+        self.offsets: list[int] = []
+
+    async def get_star_transactions(self, *, offset: int, limit: int):
+        self.offsets.append(offset)
+        page_index = offset // limit
+        transactions = self.pages[page_index] if page_index < len(self.pages) else []
+        return SimpleNamespace(transactions=transactions)
+
+
+def _star_transaction(
+    charge_id: str, *, source: object | None = None, receiver: object | None = None
+):
+    return SimpleNamespace(id=charge_id, source=source, receiver=receiver)
+
+
+@pytest.mark.asyncio
+async def test_telegram_refund_history_recognizes_refund_by_original_charge_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        refund_worker, "_validate_worker_runtime", lambda: "123456:isolated-test-token"
+    )
+    charge_id = "telegram-charge-123"
+    bot = FakeTelegramStarsBot(
+        [[
+            _star_transaction(charge_id, source=SimpleNamespace(type="user")),
+            _star_transaction(charge_id, receiver=SimpleNamespace(type="user")),
+        ]]
+    )
+    provider = TelegramStarsRefundProvider(bot)  # type: ignore[arg-type]
+
+    result = await provider.lookup_refund(telegram_payment_charge_id=charge_id)
+
+    assert result is RefundLookupResult.REFUNDED
+    assert bot.offsets == [0]
+
+
+@pytest.mark.asyncio
+async def test_telegram_refund_history_returns_not_refunded_only_when_original_is_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        refund_worker, "_validate_worker_runtime", lambda: "123456:isolated-test-token"
+    )
+    charge_id = "telegram-charge-456"
+    bot = FakeTelegramStarsBot(
+        [[_star_transaction(charge_id, source=SimpleNamespace(type="user"))]]
+    )
+    provider = TelegramStarsRefundProvider(bot)  # type: ignore[arg-type]
+
+    result = await provider.lookup_refund(telegram_payment_charge_id=charge_id)
+
+    assert result is RefundLookupResult.NOT_REFUNDED
+
+
+@pytest.mark.asyncio
+async def test_telegram_refund_history_returns_unknown_when_charge_is_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        refund_worker, "_validate_worker_runtime", lambda: "123456:isolated-test-token"
+    )
+    bot = FakeTelegramStarsBot(
+        [[_star_transaction("a-different-charge", source=SimpleNamespace(type="user"))]]
+    )
+    provider = TelegramStarsRefundProvider(bot)  # type: ignore[arg-type]
+
+    result = await provider.lookup_refund(telegram_payment_charge_id="missing-charge")
+
+    assert result is RefundLookupResult.UNKNOWN
+
+
+@pytest.mark.asyncio
+async def test_telegram_refund_history_paginates_before_deciding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        refund_worker, "_validate_worker_runtime", lambda: "123456:isolated-test-token"
+    )
+    fillers = [
+        _star_transaction(f"filler-{index}", source=SimpleNamespace(type="user"))
+        for index in range(100)
+    ]
+    charge_id = "telegram-charge-page-two"
+    bot = FakeTelegramStarsBot(
+        [
+            fillers,
+            [
+                _star_transaction(charge_id, source=SimpleNamespace(type="user")),
+                _star_transaction(charge_id, receiver=SimpleNamespace(type="user")),
+            ],
+        ]
+    )
+    provider = TelegramStarsRefundProvider(bot)  # type: ignore[arg-type]
+
+    result = await provider.lookup_refund(telegram_payment_charge_id=charge_id)
+
+    assert result is RefundLookupResult.REFUNDED
+    assert bot.offsets == [0, 100]
+
+
+@pytest.mark.asyncio
+async def test_telegram_refund_history_treats_provider_errors_as_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        refund_worker, "_validate_worker_runtime", lambda: "123456:isolated-test-token"
+    )
+
+    class BrokenBot(FakeTelegramStarsBot):
+        async def get_star_transactions(self, *, offset: int, limit: int):
+            raise TimeoutError("synthetic timeout")
+
+    provider = TelegramStarsRefundProvider(BrokenBot([]))  # type: ignore[arg-type]
+
+    result = await provider.lookup_refund(telegram_payment_charge_id="charge")
+
+    assert result is RefundLookupResult.UNKNOWN
+
+
+def test_telegram_refund_adapter_rejects_a_non_test_bot_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        refund_worker, "_validate_worker_runtime", lambda: "123456:isolated-test-token"
+    )
+    bot = SimpleNamespace(token="654321:production-token")
+
+    with pytest.raises(RuntimeError, match="dedicated test bot token"):
+        TelegramStarsRefundProvider(bot)  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
