@@ -908,6 +908,19 @@ async def _change_user_access(
             target = await session.scalar(
                 select(User).where(User.id == user_id).with_for_update()
             )
+            raced = await session.scalar(
+                select(AdminUserAuditLog).where(
+                    AdminUserAuditLog.actor_id == admin.id,
+                    AdminUserAuditLog.idempotency_key == idempotency_key,
+                )
+            )
+            if raced is not None:
+                return _check_user_idempotency(
+                    raced,
+                    target_user_id=user_id,
+                    action=action,
+                    reason=payload.reason,
+                )
             if target is None:
                 raise HTTPException(status_code=404, detail="User not found")
             if target.id == admin.id:
