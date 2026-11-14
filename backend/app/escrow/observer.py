@@ -196,9 +196,14 @@ async def _apply_one_event(
             raw_deal_id = uuid.UUID(event.deal_id) if event.deal_id else None
         except ValueError:
             raw_deal_id = None
+        linked_deal_id = None
+        if raw_deal_id is not None:
+            linked_deal_id = await session.scalar(
+                select(EscrowDeal.id).where(EscrowDeal.id == raw_deal_id)
+            )
         await _persist_event(session, event, status="rejected",
             reason_code="raw_evidence_not_contract_attestation",
-            deal_id=raw_deal_id, existing=existing)
+            deal_id=linked_deal_id, existing=existing)
         return "rejected"
 
     try:
