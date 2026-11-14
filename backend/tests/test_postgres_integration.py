@@ -12,6 +12,7 @@ from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -89,6 +90,61 @@ def migrated_database(test_database_url: str):
         else:
             os.environ["DATABASE_URL"] = previous_url
         get_settings.cache_clear()
+
+@pytest.fixture
+async def isolated_migration_database(test_database_url: str):
+    """Create a fresh disposable database for migration downgrade/upgrade tests.
+
+    Migration history tests must not depend on payment evidence retained by other
+    integration tests in the shared CI database. This fixture creates and drops
+    only a uniquely named test database on the local PostgreSQL service.
+    """
+    base_url = make_url(test_database_url)
+    db_name = f"viltara_migration_{uuid4().hex[:12]}"
+    maintenance_url = base_url.set(database="postgres")
+    admin_engine = create_async_engine(
+        maintenance_url,
+        isolation_level="AUTOCOMMIT",
+        pool_pre_ping=True,
+    )
+    try:
+        async with admin_engine.connect() as connection:
+            await connection.exec_driver_sql(f'CREATE DATABASE "{db_name}"')
+    except Exception as error:
+        await admin_engine.dispose()
+        if "permission denied" in str(error).lower() or "createdb" in str(error).lower():
+            pytest.skip(
+                "isolated migration tests require CREATEDB on the local test PostgreSQL role"
+            )
+        raise
+    await admin_engine.dispose()
+
+    isolated_url = base_url.set(database=db_name).render_as_string(hide_password=False)
+    previous_url = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = isolated_url
+    get_settings.cache_clear()
+    try:
+        await asyncio.to_thread(command.upgrade, Config(ALEMBIC_CONFIG_PATH), "head")
+        yield isolated_url
+    finally:
+        if previous_url is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = previous_url
+        get_settings.cache_clear()
+        drop_engine = create_async_engine(
+            maintenance_url,
+            isolation_level="AUTOCOMMIT",
+            pool_pre_ping=True,
+        )
+        try:
+            async with drop_engine.connect() as connection:
+                await connection.exec_driver_sql(
+                    f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)'
+                )
+        finally:
+            await drop_engine.dispose()
+
 
 @pytest.fixture
 async def db_session(test_database_url: str, migrated_database) -> AsyncSession:
@@ -200,10 +256,9 @@ async def test_moderation_audit_log_rejects_update_and_delete(db_session: AsyncS
 
 
 async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
-    test_database_url: str,
-    migrated_database,
+    isolated_migration_database: str,
 ) -> None:
-    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    engine = create_async_engine(isolated_migration_database, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     seller_id = buyer_id = asset_id = listing_id = order_id = None
     try:
@@ -249,7 +304,7 @@ async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
                 "0004_tg_notif_outbox",
             )
 
-        engine = create_async_engine(test_database_url, pool_pre_ping=True)
+        engine = create_async_engine(isolated_migration_database, pool_pre_ping=True)
         # Clean the committed fixture before any version assertion so a failing
         # migration-version check cannot leak reserved orders into later tests.
         async with engine.begin() as connection:
@@ -574,12 +629,11 @@ async def test_verified_delivery_attempt_requires_provider_evidence(
 
 
 async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
-    test_database_url: str,
-    migrated_database,
+    isolated_migration_database: str,
 ) -> None:
     config = Config(ALEMBIC_CONFIG_PATH)
     await asyncio.to_thread(command.downgrade, config, "0004_tg_notif_outbox")
-    engine = create_async_engine(test_database_url, pool_pre_ping=True)
+    engine = create_async_engine(isolated_migration_database, pool_pre_ping=True)
     user_seller, user_buyer, asset_id, listing_id, order_id, event_id = (
         uuid4(), uuid4(), uuid4(), uuid4(), uuid4(), uuid4()
     )
@@ -643,7 +697,7 @@ async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
 
         await engine.dispose()
         await asyncio.to_thread(command.upgrade, config, "head")
-        engine = create_async_engine(test_database_url, pool_pre_ping=True)
+        engine = create_async_engine(isolated_migration_database, pool_pre_ping=True)
         async with engine.connect() as connection:
             order = (
                 await connection.execute(
