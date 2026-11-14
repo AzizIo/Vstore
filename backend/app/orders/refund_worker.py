@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import uuid
 from dataclasses import dataclass
@@ -11,7 +12,7 @@ from urllib.parse import urlsplit
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramRetryAfter
-from sqlalchemy import and_, or_, select, func
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -216,6 +217,7 @@ async def claim_due_refunds(
                         PaymentTransaction.payer_telegram_id,
                         PaymentTransaction.telegram_payment_charge_id,
                         PaymentIntent.order_id,
+                        PaymentTransaction.status,
                     )
                     .join(
                         PaymentIntent,
@@ -231,7 +233,19 @@ async def claim_due_refunds(
                 job.locked_until = None
                 continue
 
-            transaction_id, intent_id, payer_id, charge_id, order_id = transaction_data
+            transaction_id, intent_id, payer_id, charge_id, order_id, transaction_status = transaction_data
+            if transaction_status != "refund_pending":
+                if transaction_status == "refunded":
+                    job.status = "succeeded"
+                    job.completed_at = job.completed_at or current_time
+                else:
+                    # A refund row must never authorize a charge that is still captured.
+                    job.status = "manual_review"
+                    job.last_error_code = "transaction_not_refund_pending"
+                job.lease_token = None
+                job.locked_until = None
+                continue
+
             token = uuid.uuid4()
             job.status = "processing"
             job.lease_token = token
@@ -335,7 +349,7 @@ async def _persist_claim_result(
             job.last_error_code = None
             job.lease_token = None
             job.locked_until = None
-            digest = __import__("hashlib").sha256(
+            digest = hashlib.sha256(
                 f"{transaction.id}:{transaction.telegram_payment_charge_id}:refunded".encode()
             ).hexdigest()
             event_id = f"refund-worker-succeeded:{transaction.id}"
@@ -396,7 +410,7 @@ async def _persist_claim_result(
             job.completed_at = None
 
         if record_failure_event:
-            digest = __import__("hashlib").sha256(
+            digest = hashlib.sha256(
                 f"{transaction.id}:{claim.attempt_count}:{error_code or 'refund_failed'}".encode()
             ).hexdigest()
             event_id = f"refund-worker-failed:{transaction.id}:{claim.attempt_count}"
