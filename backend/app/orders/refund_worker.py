@@ -660,8 +660,8 @@ def _validate_worker_runtime() -> str:
     settings = get_settings()
     if not settings.telegram_stars_test_enabled:
         raise RuntimeError("Refund worker is disabled unless Telegram Stars test mode is enabled")
-    if settings.environment.lower() not in {"local", "development", "test"}:
-        raise RuntimeError("Refund worker is test-only and cannot run in production")
+    if settings.environment.lower() != "test":
+        raise RuntimeError("Refund worker may run only with environment=test")
     if settings.telegram_stars_test_bot_token is None:
         raise RuntimeError("A dedicated Telegram Stars test bot token is required")
     token = settings.telegram_stars_test_bot_token.get_secret_value()
