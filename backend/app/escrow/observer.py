@@ -21,8 +21,10 @@ from app.escrow.domain import (
     TERMINAL_DEAL_STATES,
     RAW_EVIDENCE_EVENTS,
     DealEvidenceSnapshot,
+    EscrowChainEventType,
     EscrowDealStatus,
     EscrowDomainError,
+    is_raw_evidence_event,
     NormalizedEventEvidence,
     transition_for_verified_event,
     validate_event_against_deal,
@@ -48,6 +50,7 @@ class EscrowObserverPassResult:
     rejected: int = 0
     duplicates: int = 0
     unmatched: int = 0
+    pending: int = 0
     lease_lost: bool = False
     provider_unavailable: bool = False
     persistence_failed: bool = False
@@ -84,6 +87,7 @@ def _event_snapshot(event: NormalizedChainEvent) -> NormalizedEventEvidence:
         phase=event.phase, attempt_id=event.attempt_id, query_id=event.query_id,
         deal_salt=event.deal_salt, observed_contract_state=event.observed_contract_state,
         attestation_accepted=event.attestation_accepted,
+        contract_state_reconciled=event.contract_state_reconciled,
     )
 
 
@@ -109,6 +113,7 @@ async def _persist_event(
             phase=event.phase, attempt_id=event.attempt_id, query_id=event.query_id,
             operation_id=event.operation_id, deal_salt=event.deal_salt,
             account_address=event.account_address, observed_contract_state=event.observed_contract_state,
+            contract_state_reconciled=event.contract_state_reconciled,
             event_type=event.event_type.value, contract_address=event.contract_address, deal_id=deal_id,
             source_address=event.source_address, destination_address=event.destination_address,
             item_address=event.item_address, amount_nanotons=event.amount_nanotons,
@@ -136,6 +141,7 @@ async def _persist_event(
     existing.evidence_sha256 = _stored_evidence_hash(event)
     existing.payload_json = payload
     existing.observed_contract_state = event.observed_contract_state or existing.observed_contract_state
+    existing.contract_state_reconciled = existing.contract_state_reconciled or event.contract_state_reconciled
     existing.account_address = event.account_address or existing.account_address
     existing.deal_id = deal_id or existing.deal_id
     existing.status = status
@@ -149,7 +155,7 @@ async def _apply_one_event(
     existing = await session.scalar(select(EscrowChainEvent).where(
         EscrowChainEvent.network == event.network, EscrowChainEvent.event_key == event.event_key,
     ))
-    if existing is not None and existing.status in {"applied", "manual_review", "unmatched"}:
+    if existing is not None and existing.status in {"applied", "manual_review", "unmatched", "rejected"}:
         if existing.status == "applied":
             old = existing.payload_json or {}
             new = _payload(event)
@@ -170,13 +176,23 @@ async def _apply_one_event(
         and all(ch in "0123456789abcdef" for ch in event.evidence_sha256.lower())
         and bool(event.event_key)
     )
-    if not valid_shape or not provider_verified:
+    if not valid_shape:
+        await _persist_event(session, event, status="rejected",
+            reason_code="invalid_event_shape", deal_id=None, existing=existing)
+        return "rejected"
+    if not provider_verified:
         await _persist_event(session, event, status="pending",
             reason_code="awaiting_provider_verification", deal_id=None, existing=existing)
-        return "rejected"
+        return "pending"
     if not event.finalized or event.masterchain_seqno <= 0:
         await _persist_event(session, event, status="pending",
             reason_code="awaiting_finality", deal_id=None, existing=existing)
+        return "pending"
+    if is_raw_evidence_event(event.event_type):
+        # Persist forensic evidence, but it is not a canonical transition and
+        # does not place the deal in MANUAL_REVIEW by itself.
+        await _persist_event(session, event, status="rejected",
+            reason_code="raw_evidence_not_contract_attestation", deal_id=None, existing=existing)
         return "rejected"
 
     try:
@@ -228,7 +244,8 @@ async def _apply_one_event(
     if event.event_type is EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED:
         # Provider adapter must confirm accepted oracle evidence and reconciled
         # contract state; raw NFT transfer evidence cannot reach this branch.
-        if event.observed_contract_state != next_state.value or not event.attestation_accepted:
+        if (event.observed_contract_state != next_state.value or not event.attestation_accepted
+                or not event.contract_state_reconciled):
             await _persist_event(session, event, status="manual_review",
                 reason_code="oracle_state_not_reconciled", deal_id=deal.id, existing=existing)
             deal.status = EscrowDealStatus.MANUAL_REVIEW.value
@@ -324,7 +341,7 @@ async def run_observer_pass(
         )
         return EscrowObserverPassResult(provider_unavailable=True)
 
-    result_counts = {"applied": 0, "rejected": 0, "duplicates": 0, "unmatched": 0}
+    result_counts = {"applied": 0, "rejected": 0, "duplicates": 0, "unmatched": 0, "pending": 0}
     try:
         async with session_factory() as session:
             async with session.begin():
@@ -335,14 +352,15 @@ async def run_observer_pass(
                 )
                 if checkpoint is None or checkpoint.lease_token != lease_token:
                     return EscrowObserverPassResult(scanned=len(batch.events), lease_lost=True)
+                cursor_safe = True
                 for event, verified in verified_events:
-                    applied_result = await _apply_one_event(
-                        session, event, provider_verified=verified
-                    )
+                    applied_result = await _apply_one_event(session, event, provider_verified=verified)
                     result_counts[applied_result] += 1
-                # A no-event provider response may omit its cursor. Never erase a
-                # previously durable cursor as a side effect of an empty scan.
-                if batch.next_cursor is not None:
+                    if applied_result in {"pending", "unmatched"}:
+                        cursor_safe = False
+                # A pending/non-final/unmatched event pins the cursor at the batch
+                # start. The same page is rescanned until it can be promoted safely.
+                if batch.next_cursor is not None and cursor_safe:
                     checkpoint.cursor = batch.next_cursor
                 if verified_events:
                     latest_seqno = max(
@@ -359,7 +377,7 @@ async def run_observer_pass(
                         )
                 checkpoint.lease_token = None
                 checkpoint.lease_until = None
-                checkpoint.next_scan_at = current_time
+                checkpoint.next_scan_at = current_time + (timedelta(seconds=10) if not cursor_safe else timedelta(0))
                 checkpoint.last_error_code = None
     except Exception:
         # The event writes and cursor are one transaction; on any DB failure the
@@ -381,4 +399,5 @@ async def run_observer_pass(
         rejected=result_counts["rejected"],
         duplicates=result_counts["duplicates"],
         unmatched=result_counts["unmatched"],
+        pending=result_counts["pending"],
     )
