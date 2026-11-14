@@ -25,13 +25,13 @@
 |---|---|---|
 | listing_id | Backend/database UUID for the marketplace listing | Stable, immutable and never reused |
 | listing_key | On-chain 256-bit opaque identifier derived/assigned for exactly one listing | Contract owner specifies exact encoding and derivation; store the exact value returned by the trusted deployment intent |
-| escrow_address | Address of the single-sale ListingEscrow instance | Persist canonical raw form as well as display-friendly form |
+| escrow_address | Address of the immutable single-deal DealEscrow instance | Persist canonical raw form as well as display-friendly form |
 | nft_item_address | Expected TEP-62 NFT item contract | Must match the item that deposits and the item escrow transfers |
 | seller_wallet, buyer_wallet | TON addresses bound to transaction actors | Normalize before comparison; do not trust client-supplied actor identities |
 | operation_id | Backend UUID identifying one requested user operation | Unique in the database; mapped to an on-chain query identifier |
 | query_id | Contract-message correlation/replay identifier | Unique in the relevant escrow scope; never use it as the only chain-event identity |
 | price_nano | Exact listing price in nanotons | Integer/string representation only; never float |
-| fee_bps | Immutable fee snapshot in basis points | Range 0..10,000; fee calculation and rounding must be explicit |
+| fee_bps | Future fee snapshot field; fixed to zero for the initial PoC | Reject nonzero fee configuration until commission logic is separately reviewed and tested |
 | deadline_unix | UTC Unix timestamp for a contract-enforced deadline | Exact start event must be specified; never infer from UI time |
 
 Amounts crossing API boundaries are decimal strings containing integer nanotons. Frontend conversion to TON is presentation-only. Attached TON needed for storage/compute/forwarding is separate from the agreed listing price and must be displayed before wallet signing. The contract must reject or safely quarantine underpayment, overpayment and unexpected-value cases; it must never silently reinterpret attached value as a changed listing price.
@@ -223,16 +223,16 @@ The exact TypeScript/Pydantic transport schema may be adapted to the current TON
 
 Both contract and backend suites, plus frontend integration tests where applicable, must cover the same cases:
 
-1. **Happy path:** create escrow -> seller deposits exact allowlisted NFT -> backend observes finalized deposit -> listing becomes available -> buyer sends exact TON price -> funds are locked -> escrow requests NFT transfer -> buyer explicitly confirms receipt -> confirmation window expires without dispute -> seller and treasury independently claim the exact split.
+1. **Happy path:** create a single-deal escrow -> seller deposits exact allowlisted NFT -> contract validates and records the NFT lock -> buyer sends exact TON principal plus execution reserve -> funds are locked in FUNDED_REVIEW -> buyer accepts -> escrow requests NFT transfer -> observer records finalized delivery evidence -> evidence oracle/quorum attests it to the contract -> contract state reconciles to DELIVERED_DISPUTE_WINDOW -> dispute window expires without dispute -> seller payout is initiated and independently reconciled at finality -> SETTLED.
 2. **Two buyers race:** only one buyer can acquire the single-sale listing; the losing payment is rejected or enters an explicit refundable path, never silently retained.
 3. **Wrong NFT / spoofed deposit:** wrong item, wrong previous owner, wrong collection/item, duplicate or mismatched listing key never activates the listing.
 4. **Payment mismatch:** underpayment, overpayment, wrong sender, duplicate payment and stale query ID never produce a second sale or an untracked balance.
 5. **Buyer never confirms:** timer does not start from the emitted NFT transfer; seller proceeds remain locked. The UI explains the pending state and escalation path.
 6. **Outbound transfer bounce / ambiguous trace:** enter recoverable exception; do not assume the prior transaction rolled back; do not auto-release seller funds or auto-refund without proof.
-7. **Buyer disputes before receipt confirmation:** freeze settlement; no seller claim.
+7. **Buyer disputes during FUNDED_REVIEW or DELIVERED_DISPUTE_WINDOW:** freeze settlement and follow the phase-specific resolver / NFT-return path; no seller payout while disputed.
 8. **Buyer-favourable resolution after NFT left escrow:** no refund until exact NFT is returned to escrow and return is verified.
-9. **Seller-favourable resolution:** funds become claimable only after authorized on-chain resolution.
-10. **Payout bounce / duplicate claim:** claimable balances are neither lost nor paid twice.
+9. **Seller-favourable resolution:** seller payout is initiated only after authorized on-chain resolution and finalized NFT delivery evidence, then remains pending until payout finality.
+10. **Payout/refund bounce or duplicate trigger:** the pending settlement stays owed to the same fixed recipient; retries are blocked until the original outcome is reconciled, and no duplicate transfer occurs.
 11. **Observer restart / replay:** duplicated and out-of-order traces, provider outage, cursor restart and database rebuild preserve the same final projection.
 12. **Security / authorization:** IDOR, wrong participant, unverified wallet, client-forged state, wrong network and stale payload are rejected.
 
@@ -245,7 +245,7 @@ Before the contract ABI is treated as shared/frozen, all workstreams must review
 - [ ] action opcodes, cell layouts, query ID widths and forwarded payload format;
 - [ ] all state transitions, including delivery exception and payout-bounce recovery;
 - [ ] exact payment/forwarding/gas accounting and under/overpayment behavior;
-- [ ] fee arithmetic, rounding and claim split;
+- [ ] zero-fee PoC invariant; fee arithmetic/rounding only in a later explicitly reviewed commission change;
 - [ ] resolver identity/powers and dispute evidence policy;
 - [ ] buyer review timeout, oracle-attested delivery timer start, dispute timeout and no-confirmation recovery;
 - [ ] getters / state serialization needed by backend reconciliation;
