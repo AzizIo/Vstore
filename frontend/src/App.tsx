@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchListing,
   fetchListings,
@@ -8,9 +8,12 @@ import {
   type PriceCurrency,
 } from "./api/listings";
 import { createOrder } from "./api/orders";
+import { createEscrowApiClient } from "./api/escrow";
+import { API_BASE_URL } from "./api/config";
 import { SessionProvider, useRetrySession, useSession } from "./auth/SessionProvider";
 import { getTelegramStartParam } from "./auth/telegram";
 import { ListingShareButton } from "./components/ListingShareButton";
+import { createEscrowHttpContract } from "./escrow/httpContract";
 
 import { WalletConnection } from "./wallet/WalletConnection";
 import type { WalletRecord } from "./wallet/api";
@@ -20,6 +23,7 @@ const MyInventory = lazy(() => import("./inventory/MyInventory").then((m) => ({ 
 const Orders = lazy(() => import("./orders/Orders").then((m) => ({ default: m.Orders })));
 const SellerReviews = lazy(() => import("./reviews/SellerReviews").then((m) => ({ default: m.SellerReviews })));
 const SellerOverview = lazy(() => import("./overview/SellerOverview").then((m) => ({ default: m.SellerOverview })));
+const EscrowWorkspace = lazy(() => import("./escrow/EscrowWorkspace").then((m) => ({ default: m.EscrowWorkspace })));
 
 const assetTypeLabels: Record<AssetType, string> = {
   ton_nft: "TON NFT",
@@ -27,7 +31,7 @@ const assetTypeLabels: Record<AssetType, string> = {
 };
 const CATALOG_PAGE_SIZE = 24;
 
-type NavigationIconName = "catalog" | "nft" | "listings" | "orders" | "overview";
+type NavigationIconName = "catalog" | "nft" | "listings" | "orders" | "overview" | "escrow";
 
 function NavigationGlyph({ name }: { name: NavigationIconName }) {
   return (
@@ -60,6 +64,10 @@ function NavigationGlyph({ name }: { name: NavigationIconName }) {
       </>}
       {name === "overview" && <>
         <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+      </>}
+      {name === "escrow" && <>
+        <path d="M12 3 20 6v5c0 5-3.4 8.3-8 10-4.6-1.7-8-5-8-10V6l8-3Z" />
+        <path d="m8.5 12 2.2 2.2 4.8-4.8" />
       </>}
     </svg>
   );
@@ -437,6 +445,12 @@ function MarketplaceApp() {
   const sessionAccessToken = session.status === "authenticated"
     ? session.accessToken
     : null;
+  const escrowTestnetEnabled = import.meta.env.VITE_ESCROW_TESTNET_ENABLED === "true";
+  const escrowApi = useMemo(() => (
+    sessionAccessToken && escrowTestnetEnabled
+      ? createEscrowApiClient(sessionAccessToken, createEscrowHttpContract(API_BASE_URL))
+      : null
+  ), [sessionAccessToken, escrowTestnetEnabled]);
   const [selectedWalletState, setSelectedWalletState] = useState<{
     accessToken: string;
     wallet: WalletRecord | null;
@@ -451,7 +465,7 @@ function MarketplaceApp() {
     : null;
   const startParam = useRef(getTelegramStartParam()).current;
   const [initialOrderId, setInitialOrderId] = useState<string | null>(null);
-  const [section, setSection] = useState<"catalog" | "my-listings" | "my-nft" | "orders" | "overview">("catalog");
+  const [section, setSection] = useState<"catalog" | "my-listings" | "my-nft" | "orders" | "overview" | "escrow">("catalog");
   const [listings, setListings] = useState<Listing[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -655,7 +669,21 @@ function MarketplaceApp() {
           <span className="navigation-icon"><NavigationGlyph name="orders" /></span>
           <span className="navigation-label">Заказы</span>
         </button>
-          {session.status === "authenticated" && (
+          {session.status === "authenticated" && escrowTestnetEnabled && (
+          <button
+            className="navigation-tab"
+            type="button"
+            aria-pressed={section === "escrow"}
+            onClick={() => {
+              setListingId(null);
+              setSection("escrow");
+            }}
+          >
+            <span className="navigation-icon"><NavigationGlyph name="escrow" /></span>
+            <span className="navigation-label">Escrow · testnet</span>
+          </button>
+        )}
+        {session.status === "authenticated" && (
           <button
             className="navigation-tab"
             type="button"
@@ -671,7 +699,20 @@ function MarketplaceApp() {
         )}
       </nav>
 
-      {section === "overview" && session.status === "authenticated" ? (
+      {section === "escrow" && session.status === "authenticated" && escrowTestnetEnabled ? (
+        <Suspense fallback={<div className="catalog-message" role="status">Загружаем TON Escrow…</div>}>
+          <EscrowWorkspace
+            accessToken={session.accessToken}
+            currentUserId={session.user.id}
+            api={escrowApi ?? undefined}
+            allowTestnetSigning={false}
+            onManageListings={() => {
+              setListingId(null);
+              setSection("my-listings");
+            }}
+          />
+        </Suspense>
+      ) : section === "overview" && session.status === "authenticated" ? (
         <Suspense fallback={<div className="catalog-message" role="status">Загружаем обзор…</div>}>
           <SellerOverview
             accessToken={session.accessToken}

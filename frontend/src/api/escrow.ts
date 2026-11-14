@@ -175,6 +175,7 @@ export interface EscrowWalletReferenceInput {
 export interface EscrowHttpOperation {
   url: string;
   method?: "POST";
+  headers?: Record<string, string>;
   body?: unknown;
 }
 
@@ -447,7 +448,7 @@ async function writeJson<T>(
     validate,
     {
       method: operation.method ?? "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(operation.headers ?? {}) },
       ...(operation.body === undefined ? {} : { body: JSON.stringify(operation.body) }),
     },
   );

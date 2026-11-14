@@ -49,6 +49,7 @@ PREVIEW_TON_CONNECT_ALLOWED_DOMAINS=["<stable-public-mini-app-host>"]
 PREVIEW_CORS_ALLOWED_ORIGINS=["https://<stable-public-mini-app-host>"]
 PREVIEW_TON_CONNECT_NETWORK=testnet
 PREVIEW_TON_CENTER_API_KEY=<optional-preview-provider-api-key>
+PREVIEW_VITE_ESCROW_TESTNET_ENABLED=true
 ```
 
 `PREVIEW_ADMIN_TELEGRAM_IDS` is an optional JSON array of numeric Telegram user IDs allowed to open `/admin` in this isolated Preview. Leave it as `[]` to disable Preview admin access. Do not use usernames or bot IDs.
@@ -59,7 +60,9 @@ Use a stable hostname that will remain the same across rebuilds. Configure that 
 
 `PREVIEW_VITE_TONCONNECT_APP_URL` and `PREVIEW_TELEGRAM_MINI_APP_URL` must use the same public HTTPS Mini App origin. The first is baked into the frontend manifest; the second is used by `/start` and `/app` as the inline Web App button URL. `PREVIEW_TELEGRAM_MINI_APP_DIRECT_LINK` is a separate optional Telegram `t.me/<bot>/<app>` direct link used in order notification messages with an `order_<id>` start parameter.
 
-The preview Compose file maps these `PREVIEW_*` values into the API's normal `AUTH_SECRET_KEY`, `BOT_TOKEN`, `TELEGRAM_MINI_APP_URL` and `VITE_TONCONNECT_*` settings **inside preview containers only**. The existing development stack's `.env` values are not changed. Use a fresh `PREVIEW_AUTH_SECRET_KEY` (at least 32 characters) so tokens from the existing stack are not accepted in preview. The preview API requires `PREVIEW_BOT_TOKEN` to verify Telegram `initData`, even when the separate preview bot container is not started. It also requires a fresh `PREVIEW_AUTH_SECRET_KEY` so preview JWTs are isolated from the existing development stack.
+The preview Compose file maps these `PREVIEW_*` values into the API's normal `AUTH_SECRET_KEY`, `BOT_TOKEN`, `TELEGRAM_MINI_APP_URL` and `VITE_TONCONNECT_*` settings **inside preview containers only**.
+
+The isolated TON escrow workspace is opt-in in the static Preview build. Set `PREVIEW_VITE_ESCROW_TESTNET_ENABLED=true` and keep `PREVIEW_TON_CONNECT_NETWORK=testnet`; this mounts the `/api/escrow` routes only in the testnet-configured API and shows the authenticated `Escrow · testnet` tab. Apply `alembic upgrade head` to the isolated Preview database before opening the workspace. This integration currently supports escrow listing/deal intent reads and writes only: contract transaction preparation and wallet signing remain fail-closed until the reviewed ABI adapter, live testnet observer/provider and external security gates are complete. Do not use valuable NFTs or real funds. The existing development stack's `.env` values are not changed. Use a fresh `PREVIEW_AUTH_SECRET_KEY` (at least 32 characters) so tokens from the existing stack are not accepted in preview. The preview API requires `PREVIEW_BOT_TOKEN` to verify Telegram `initData`, even when the separate preview bot container is not started. It also requires a fresh `PREVIEW_AUTH_SECRET_KEY` so preview JWTs are isolated from the existing development stack.
 
 Use a dedicated BotFather preview bot and configure its Mini App domain/menu URL to the stable preview host. Use a dedicated preview bot token. If you deliberately reuse a token already used by another bot container or local process, stop the other polling process first: two polling processes with the same token conflict. The preview outbox is stored in preview PostgreSQL, so preview notifications are delivered only when a worker connected to that same preview database is running.
 

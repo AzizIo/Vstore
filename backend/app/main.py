@@ -13,6 +13,7 @@ from app.admin.moderation import router as admin_moderation_router
 from app.admin.user_management import router as admin_users_router
 from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
+from app.api.escrow import router as escrow_router
 from app.api.health import router as health_router
 from app.api.listings import router as listings_router
 from app.api.orders import router as orders_router
@@ -139,6 +140,12 @@ app.include_router(wallets_router, prefix="/api")
 app.include_router(orders_router, prefix="/api")
 app.include_router(reviews_router, prefix="/api")
 app.include_router(sellers_router, prefix="/api")
+
+# Escrow HTTP surface is available only in an explicitly testnet-configured
+# deployment. The transaction adapter and chain provider remain fail-closed;
+# mounting this router does not enable signing, custody, or mainnet operations.
+if settings.ton_connect_network == "testnet":
+    app.include_router(escrow_router, prefix="/api")
 
 
 @app.get("/", tags=["meta"])

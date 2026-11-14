@@ -43,6 +43,7 @@ interface Props {
   api?: EscrowApiClient;
   manifestUrl?: string;
   allowTestnetSigning?: boolean;
+  onManageListings?: () => void;
 }
 
 interface PendingWalletAction {
@@ -285,6 +286,7 @@ function WorkspaceBody({
   currentUserId,
   api,
   allowTestnetSigning,
+  onManageListings,
   walletAdapter,
   walletConnected,
   onConnectWallet,
@@ -649,7 +651,8 @@ function WorkspaceBody({
               <div><p className="eyebrow">ПРЕДЛОЖЕНИЕ ПРОДАВЦА</p><h2 id="escrow-seller-intent-title">Создать listing intent</h2></div>
               <span>{sellerInventory.length} NFT</span>
             </div>
-            <p className="escrow-muted">Создание listing intent не депонирует NFT и не создаёт сделку. После привязки buyer wallet Backend подготовит отдельный DealEscrow для конкретной пары участников.</p>
+            <p className="escrow-muted">Создание listing intent не депонирует NFT и не создаёт сделку. Если обычное объявление создано как черновик, опубликуйте его в разделе «Мои объявления»: покупателям доступны только активные объявления. После привязки buyer wallet Backend подготовит отдельный DealEscrow для конкретной пары участников.</p>
+            {onManageListings && <button className="escrow-button escrow-button-secondary" type="button" onClick={onManageListings}>Открыть мои объявления</button>}
             {inventoryLoading ? (
               <p className="escrow-empty-inline" role="status" aria-busy="true">Проверяем testnet-инвентарь…</p>
             ) : sellerInventory.length ? (
