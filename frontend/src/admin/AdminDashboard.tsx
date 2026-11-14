@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { AdminCenter } from "./AdminCenter";
 import {
   fetchAdminOverview,
@@ -386,6 +386,7 @@ function UserDetailPanel({ accessToken, userId, onClose, onAccessChanged }: {
   const [decisionError, setDecisionError] = useState("");
   const [success, setSuccess] = useState("");
   const [reload, setReload] = useState(0);
+  const accessDecisionKey = useRef<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -431,11 +432,16 @@ function UserDetailPanel({ accessToken, userId, onClose, onAccessChanged }: {
     setDecisionError("");
     setSuccess("");
     try {
-      const result = await submitUserAccessDecision(accessToken, detail.id, decisionAction, reason.trim());
+      const idempotencyKey = accessDecisionKey.current ?? crypto.randomUUID();
+      accessDecisionKey.current = idempotencyKey;
+      const result = await submitUserAccessDecision(
+        accessToken, detail.id, decisionAction, reason.trim(), idempotencyKey
+      );
       setDetail((previous) => previous ? { ...previous, is_blocked: result.is_blocked } : previous);
       setSuccess(decisionAction === "block" ? "Аккаунт заблокирован, решение записано в журнал." : "Ограничение снято, решение записано в журнал.");
       setDecisionOpen(false);
       setReason("");
+      accessDecisionKey.current = null;
       setReload((value) => value + 1);
       onAccessChanged();
     } catch (caught) {
@@ -462,6 +468,7 @@ function UserDetailPanel({ accessToken, userId, onClose, onAccessChanged }: {
               <div className="ad-detail-stats"><span>Объявления <strong>{detail.listing_count}</strong></span><span>Сделки <strong>{detail.deal_count}</strong></span><span>Кошельки <strong>{detail.confirmed_wallet_count}</strong></span></div>
               <button className={detail.is_blocked ? "ad-button ad-button-primary" : "ad-button ad-button-danger"} type="button" onClick={() => {
                 setDecisionAction(detail.is_blocked ? "unblock" : "block");
+                accessDecisionKey.current = null;
                 setReason("");
                 setDecisionError("");
                 setDecisionOpen(true);
@@ -497,7 +504,18 @@ function UserDetailPanel({ accessToken, userId, onClose, onAccessChanged }: {
               <p>{displayName(detail)} · Telegram ID {detail.telegram_id}</p>
               <p>{decisionAction === "block" ? "Пользователь не сможет создавать объявления и новые сделки. Существующие сделки и доступ к необходимой истории сохраняются." : "Пользователь снова сможет создавать объявления и новые сделки."}</p>
               <form onSubmit={(event) => void submitAccessDecision(event)}>
-                <label>Причина решения (5–500 символов)<textarea value={reason} minLength={5} maxLength={500} required rows={4} onChange={(event) => setReason(event.target.value)} placeholder="Укажите причину для административного журнала…" /></label>
+                <label>Причина решения (5–500 символов)<textarea
+                  value={reason}
+                  minLength={5}
+                  maxLength={500}
+                  required
+                  rows={4}
+                  onChange={(event) => {
+                    setReason(event.target.value);
+                    accessDecisionKey.current = null;
+                  }}
+                  placeholder="Укажите причину для административного журнала…"
+                /></label>
                 {decisionError && <p className="ad-error-message" role="alert">{decisionError}</p>}
                 <div className="ad-dialog-actions">
                   <button className="ad-button ad-button-secondary" type="button" disabled={submitting} onClick={() => setDecisionOpen(false)}>Отмена</button>
