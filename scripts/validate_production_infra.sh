@@ -15,20 +15,22 @@ require_file "$COMPOSE_FILE"
 require_file "$NGINX_FILE"
 require_file "$RUNBOOK"
 
-# Fail closed if database, Redis or API acquire published host ports.
-if grep -Eq '^[[:space:]]+(ports:|-[[:space:]]*["]?(5432|6379|8000)(:|["]))' "$COMPOSE_FILE"; then
-  # The second expression catches explicit service-level port mappings; use
-  # Compose's resolved JSON validation in CI for authoritative structure.
-  fail "Potential host port exposure found; review production Compose manually"
+# This stack intentionally has exactly one host-published port: the Mini App
+# bound to loopback. The Compose JSON validation in the dedicated workflow
+# performs the structural check as well.
+port_blocks="$(grep -Ec '^[[:space:]]+ports:' "$COMPOSE_FILE" || true)"
+[[ "$port_blocks" == "1" ]] || fail "Only the Mini App may publish a host port"
+grep -Fq '"127.0.0.1:${PROD_HTTP_PORT:-8081}:80"' "$COMPOSE_FILE" \
+  || fail "Mini App must be bound to host loopback"
+if grep -Eq '^[[:space:]]*-[[:space:]]*["]?([0-9.]+:)?(5432|6379|8000):' "$COMPOSE_FILE"; then
+  fail "Potential database, Redis or API host port exposure found"
 fi
 
-grep -Eq '127\.0\.0\.1:\$\{PROD_HTTP_PORT:-8081\}:80' "$COMPOSE_FILE" \
-  || fail "Mini App must be bound to host loopback"
 grep -Eq 'production_postgres_data:' "$COMPOSE_FILE" \
   || fail "Named production PostgreSQL volume declaration is missing"
 grep -Eq 'external:[[:space:]]*true' "$COMPOSE_FILE" \
   || fail "Production PostgreSQL volume must be external"
-grep -Eq 'PROD_POSTGRES_VOLUME_NAME:\?Set PROD_POSTGRES_VOLUME_NAME' "$COMPOSE_FILE" \
+grep -Fq 'PROD_POSTGRES_VOLUME_NAME:?Set PROD_POSTGRES_VOLUME_NAME' "$COMPOSE_FILE" \
   || fail "Exact production volume name must be required"
 grep -Eq 'TON_CONNECT_NETWORK:.*PROD_TON_CONNECT_NETWORK' "$COMPOSE_FILE" \
   || fail "Production TON network must be explicit"
