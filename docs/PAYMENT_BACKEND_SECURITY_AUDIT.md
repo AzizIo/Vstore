@@ -29,6 +29,16 @@
    - legitimate status, lease, retry and reconciliation fields remain mutable through the state machine.
 4. Migration `0015_payment_ledger_guards` is followed by `0016_refund_evidence_delete_guard`, which installs `trg_payment_refunds_no_delete` and a dedicated rejecting trigger function. Its downgrade drops only the trigger/function and never deletes or rewrites existing refund records; as with any downgrade, removal of the guard weakens future protection and requires an explicit maintenance decision.
 
+
+## Refund evidence retention and database role assumptions
+
+- **Default retention:** keep each `payment_refunds` row and its linked payment transaction, intent, provider event and FK parent records indefinitely. There is no automated row-level purge or TTL. This is the conservative default until the owner obtains jurisdiction-specific accounting/legal advice and records an approved retention period and deletion procedure.
+- **Operational state is mutable:** retry counters, lease fields, reconciliation timestamps, status and error codes may change through the refund worker. These updates do not authorize deleting the evidence row.
+- **Application role:** the runtime database role must not own payment tables or have schema/DDL privileges such as `ALTER`, `DROP`, trigger management or ownership transfer. It may perform only the INSERT/SELECT/UPDATE operations required by the payment/refund state machine. Confirm actual grants for each deployment before enabling live payments.
+- **Break-glass administrators:** PostgreSQL superusers/table owners can disable or remove triggers; triggers are not protection against a privileged administrator. Any emergency maintenance that changes evidence or guards must use a separately controlled role, require approval, and leave an external audit trail.
+- **Cascade and partitions:** the current `payment_refunds` table is not partitioned. Its FK to `payment_transactions` uses restrictive deletion semantics; a parent-row delete cannot be used to bypass the refund DELETE trigger. The `BEFORE DELETE` trigger rejects direct row deletes and deletes caused by a future cascading relationship, while the existing `BEFORE TRUNCATE` guard rejects table truncation. Reassess these guarantees if partitioning or new FK relationships are introduced.
+- **Downgrade:** migration `0016_refund_evidence_delete_guard` removes only the guard function and trigger. It does not delete refund records, but downgrading weakens the guarantee for future writes and requires an explicit maintenance decision.
+
 ## Webhook / replay boundary
 
 The current Stars test runner uses Telegram long polling through the dedicated test Bot API namespace; there is no public payment webhook route in this application. Therefore webhook signature verification is not an active request path today. Do not invent a webhook endpoint merely to claim signature coverage.
