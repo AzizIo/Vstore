@@ -145,20 +145,13 @@ jobs:
             fi
             sleep 2
           done
-          docker compose -f docker-compose.production.yml exec -T db sh -ec '
-            psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --set=ON_ERROR_STOP=1 <<SQL
-            CREATE TABLE alembic_version (version_num varchar(32) NOT NULL);
-            CREATE TABLE users (id integer PRIMARY KEY);
-            CREATE TABLE listings (id integer PRIMARY KEY);
-            CREATE TABLE orders (id integer PRIMARY KEY);
-            INSERT INTO users VALUES (1);
-            INSERT INTO listings VALUES (1);
-            INSERT INTO orders VALUES (1);
-            SQL
-          '
+          docker compose -f docker-compose.production.yml exec -T db psql \
+            --username "$PROD_DB_USER" --dbname "$PROD_DB_NAME" --set=ON_ERROR_STOP=1 \
+            --command "CREATE TABLE alembic_version (version_num varchar(32) NOT NULL); CREATE TABLE users (id integer PRIMARY KEY); CREATE TABLE listings (id integer PRIMARY KEY); CREATE TABLE orders (id integer PRIMARY KEY); INSERT INTO users VALUES (1); INSERT INTO listings VALUES (1); INSERT INTO orders VALUES (1);"
           PROD_BACKUP_DIR=/tmp/viltara-production-ci-backups bash scripts/production_backup.sh
           backup_file="$(find /tmp/viltara-production-ci-backups -maxdepth 1 -type f -name '*.dump' -print -quit)"
           test -n "$backup_file"
+          sha256sum -c "$backup_file.sha256"
           bash scripts/production_restore_drill.sh "$backup_file"
       - name: Stop disposable production database fixture
         if: always()
