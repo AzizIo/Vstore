@@ -185,10 +185,22 @@ export interface AdminOverview {
   recent_registrations: AdminUser[];
   recent_platform_events: AdminPlatformEvent[];
 }
+export interface AdminUserAccessAuditRecord {
+  id: string;
+  actor_id: string;
+  target_user_id: string;
+  action: "blocked" | "unblocked";
+  reason: string;
+  before_snapshot: Record<string, unknown>;
+  after_snapshot: Record<string, unknown>;
+  request_id: string | null;
+  idempotency_key: string;
+  occurred_at: string;
+}
 export interface AdminUserAccessDecision {
   user_id: string;
   is_blocked: boolean;
-  audit: AuditEntry & { target_user_id: string; action: "blocked" | "unblocked" };
+  audit: AdminUserAccessAuditRecord;
 }
 export type AdminAuditLogEntry = {
   id: string;
