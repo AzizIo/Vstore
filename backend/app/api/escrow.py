@@ -527,7 +527,8 @@ async def create_deal_intent(payload: EscrowDealCreate, user: CurrentUser, sessi
             raise HTTPException(status_code=409, detail="TON principal precision is invalid")
         deal = EscrowDeal(
             id=uuid4(), listing_intent_id=intent.id,
-                marketplace_listing_id=intent.marketplace_listing_id,
+            marketplace_listing_id=intent.marketplace_listing_id,
+            listing_key_snapshot=intent.listing_key,
             seller_id=intent.seller_id, buyer_id=user.id, buyer_wallet_id=buyer_wallet.id,
             network="testnet", deal_salt=secrets.token_hex(32),
             collection_address_snapshot=intent.collection_address_snapshot, contract_address=None,
@@ -665,7 +666,7 @@ async def _prepare_action(
     if intent is None:
         raise HTTPException(status_code=404, detail="Escrow listing intent not found")
     deal_snapshot = DealEscrowDeploymentSnapshot(
-        network=deal.network, listing_key=intent.listing_key,
+        network=deal.network, listing_key=deal.listing_key_snapshot,
         seller_address=deal.seller_address_snapshot, buyer_address=deal.buyer_address_snapshot,
         collection_address=deal.collection_address_snapshot, item_address=deal.item_address,
         principal_nanotons=int(deal.principal_nanotons), deal_salt=deal.deal_salt,
