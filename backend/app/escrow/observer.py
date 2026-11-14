@@ -131,6 +131,8 @@ async def _persist_event(
 
     old = existing.payload_json or {}
     immutable_fields = (
+        "transaction_hash",
+        "event_index",
         "event_type", "contract_address", "deal_id", "source_address", "destination_address",
         "item_address", "amount_nanotons", "message_hash", "trace_id", "logical_time", "phase",
         "attempt_id", "query_id", "operation_id", "deal_salt",
@@ -168,6 +170,8 @@ async def _apply_one_event(
         old = existing.payload_json or {}
         new = _payload(event)
         stable = (
+            "transaction_hash",
+            "event_index",
             "event_type",
             "contract_address",
             "deal_id",
