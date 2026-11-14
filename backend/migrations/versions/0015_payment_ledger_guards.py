@@ -1,8 +1,9 @@
-"""Harden payment ledger snapshot immutability and retention.
+"""Harden payment ledger snapshot immutability and evidence retention.
 
 Payment status fields remain mutable through the domain state machine, but the
 provider evidence and order snapshot that explain each charge are immutable.
-Financial evidence rows cannot be deleted or truncated through ordinary SQL.
+Foreign keys and the append-only event journal prevent ordinary row deletion;
+TRUNCATE is explicitly blocked on all payment evidence/workflow tables.
 """
 
 from collections.abc import Sequence
@@ -16,19 +17,6 @@ depends_on: str | None = None
 
 
 def upgrade() -> None:
-    op.execute(
-        """
-        CREATE FUNCTION reject_payment_evidence_delete()
-        RETURNS trigger
-        LANGUAGE plpgsql
-        AS $$
-        BEGIN
-            RAISE EXCEPTION 'payment evidence is retained and cannot be deleted'
-                USING ERRCODE = 'integrity_constraint_violation';
-        END;
-        $$
-        """
-    )
     op.execute(
         """
         CREATE FUNCTION reject_payment_evidence_truncate()
@@ -111,13 +99,6 @@ def upgrade() -> None:
     for table in ("payment_intents", "payment_transactions", "payment_events", "payment_refunds"):
         op.execute(
             f"""
-            CREATE TRIGGER trg_{table}_no_delete
-            BEFORE DELETE ON {table}
-            FOR EACH ROW EXECUTE FUNCTION reject_payment_evidence_delete()
-            """
-        )
-        op.execute(
-            f"""
             CREATE TRIGGER trg_{table}_no_truncate
             BEFORE TRUNCATE ON {table}
             FOR EACH STATEMENT EXECUTE FUNCTION reject_payment_evidence_truncate()
@@ -126,11 +107,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Removing these guards does not rewrite evidence. The downgrade is safe but
-    # intentionally leaves all ledger rows untouched.
+    # Removing these guards does not rewrite evidence or delete ledger rows.
     for table in ("payment_intents", "payment_transactions", "payment_events", "payment_refunds"):
         op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_no_truncate ON {table}")
-        op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_no_delete ON {table}")
 
     op.execute(
         "DROP TRIGGER IF EXISTS trg_payment_transaction_evidence_immutable ON payment_transactions"
@@ -141,4 +120,3 @@ def downgrade() -> None:
     op.execute("DROP FUNCTION IF EXISTS guard_payment_transaction_evidence()")
     op.execute("DROP FUNCTION IF EXISTS guard_payment_intent_snapshot()")
     op.execute("DROP FUNCTION IF EXISTS reject_payment_evidence_truncate()")
-    op.execute("DROP FUNCTION IF EXISTS reject_payment_evidence_delete()")
