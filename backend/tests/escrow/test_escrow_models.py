@@ -15,8 +15,8 @@ from app.escrow.models import (
     EscrowIdempotencyRecord,
     EscrowListingIntent,
     EscrowObserverCheckpoint,
-    EscrowWithdrawal,
     EscrowWalletActionRecord,
+    EscrowWithdrawal,
     assert_deal_terms_immutable,
 )
 
