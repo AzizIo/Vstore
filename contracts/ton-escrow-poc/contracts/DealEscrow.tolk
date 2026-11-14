@@ -221,7 +221,7 @@ fun sendRemainingBalanceTo(
 // allowance, keep a small amount for terminal getters/storage, and send every
 // other remaining nanotons (including unused buyer execution reserve) to buyer.
 fun settleRemainingBalanceForBuyer(
-    progress: DealProgress,
+    mutate progress: DealProgress,
     roles: DealRoles,
     asset: DealAsset,
     money: DealMoney,
@@ -237,7 +237,7 @@ fun settleRemainingBalanceForBuyer(
 // If the buyer never funded the deal, the NFT and the remaining TON are returned
 // to the seller. Keep only the fixed terminal storage reserve.
 fun settleExpiredBalanceForSeller(
-    progress: DealProgress,
+    mutate progress: DealProgress,
     roles: DealRoles,
     asset: DealAsset,
 ) {
