@@ -50,6 +50,7 @@ def test_delivery_notifications_are_russian_truthful_and_role_specific(
     assert expected.lower() in message.lower()
     assert "<b>VILTARA SHOP</b> · Заказ <code>#" in message
     assert "Оплата внутри платформы пока не подключена" in message
+    assert "➡️ <b>Следующий шаг</b>" in message
     assert "seed phrase" not in message.lower()
     assert "api key" not in message.lower()
     assert "provider payload" not in message.lower()
@@ -77,3 +78,4 @@ def test_unknown_notification_event_remains_unsupported(
 
     with pytest.raises(notification_service.UnsupportedNotificationEvent):
         notification_service.build_notification_message(delivery)
+

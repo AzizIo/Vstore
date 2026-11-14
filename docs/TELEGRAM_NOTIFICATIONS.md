@@ -32,7 +32,7 @@ Each outbox row snapshots the recipient Telegram ID and role. The unique dedupli
 based on order, lifecycle event, and recipient. The order transition, order event, and outbox
 rows are committed atomically.
 
-Messages contain an order reference, truthful lifecycle status, amount/currency, and an optional deep link with
+Messages contain an order reference, truthful lifecycle status, amount/currency, a role-aware next-step instruction, and an optional deep link with
 `startapp=order_<id>`. Delivery notifications never claim success before the backend observer has confirmed finalized evidence. Messages do not include wallet addresses, initData, JWTs, signatures, raw provider payloads or private data. Delivery notices are inserted in the same database transaction as the accepted delivery state transition.
 
 ## Retry and operations
@@ -79,3 +79,28 @@ duplicate risk limited to that unavoidable acknowledgement window.
 
 No payment processing, escrow, refunds, payout, or NFT transfer is performed by these
 notifications. A notification is informational only. A failed notification send cannot roll back or fabricate a chain verification result.
+
+
+## Guided Telegram bot experience
+
+The user-facing bot exposes a compact Russian command menu:
+
+| Command | Purpose |
+| --- | --- |
+| `/start` | Premium welcome screen and main navigation |
+| `/app` | Open the configured Mini App |
+| `/buy` | Buyer guide: catalogue, reservation and NFT delivery |
+| `/sell` | Seller guide: wallet proof, inventory, moderation and transfer |
+| `/orders` | Explain reservation and delivery states |
+| `/safety` | Wallet and anti-scam guidance |
+| `/help` | Help center and guided navigation |
+
+The inline menu offers the same guided screens without requiring users to remember
+commands. All help screens provide a return-to-menu action and an optional Mini App
+launch button. If the Mini App URL is missing or invalid, the instructional screens
+remain available.
+
+Bot copy must remain aligned with the product model: a reservation is not payment,
+the seller signs the NFT transfer in their own wallet, and only the backend observer
+can independently confirm delivery. The bot does not offer wallet signing, payment,
+escrow, refunds, support impersonation, or Telegram Gifts transfer functionality.

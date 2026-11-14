@@ -192,17 +192,20 @@ async def _mark_failed_or_retry(
 
 
 def build_notification_message(delivery: NotificationDelivery) -> str:
-    """Build a concise Russian notification with escaped values and Telegram HTML."""
+    """Build a polished Russian notification with a truthful next action."""
     order_reference = str(delivery.order_id).replace("-", "")[:8].upper()
     amount = html.escape(format(delivery.price_amount.normalize(), "f"))
     currency = html.escape(delivery.price_currency)
 
     if delivery.event_type == "order_created":
-        description = (
-            "Ваш заказ создан, объявление зарезервировано."
-            if delivery.recipient_role == "buyer"
-            else "Покупатель зарезервировал ваше объявление."
-        )
+        if delivery.recipient_role == "buyer":
+            description = "Ваш заказ создан, объявление зарезервировано."
+            next_step = (
+                "Откройте заказ и проверьте детали. Резервирование не списывает средства."
+            )
+        else:
+            description = "Покупатель зарезервировал ваше объявление."
+            next_step = "Откройте заказ, чтобы посмотреть детали и дальнейшие действия."
         status, icon = "Заказ зарезервирован", "🛍️"
     elif delivery.event_type == "order_cancelled":
         description = (
@@ -210,19 +213,25 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
             if delivery.recipient_role == "buyer"
             else "Покупатель отменил заказ."
         )
+        next_step = "Проверьте актуальный статус объявления и доступные действия в приложении."
         status, icon = "Заказ отменён", "↩️"
     elif delivery.event_type == "order_expired":
         description = "Время резервирования заказа истекло автоматически."
+        next_step = "Откройте приложение и проверьте актуальный статус объявления."
         status, icon = "Резервирование истекло", "⌛"
     elif delivery.event_type == "delivery_prepared":
-        description = (
-            "Продавец подготовил передачу NFT. Получение ещё не подтверждено."
-            if delivery.recipient_role == "buyer"
-            else (
+        if delivery.recipient_role == "buyer":
+            description = "Продавец подготовил передачу NFT. Получение ещё не подтверждено."
+            next_step = "Дождитесь действий продавца и следите за статусом заказа."
+        else:
+            description = (
                 "Проверьте детали и подтвердите точную передачу NFT в своём "
                 "TON-кошельке."
             )
-        )
+            next_step = (
+                "Откройте заказ и внимательно проверьте адрес получателя и NFT "
+                "перед подтверждением в кошельке."
+            )
         status, icon = "Ожидается передача NFT", "📦"
     elif delivery.event_type == "delivery_submitted":
         description = (
@@ -234,17 +243,26 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
                 "в блокчейне."
             )
         )
+        next_step = (
+            "Дождитесь результата проверки. Не отправляйте NFT повторно и "
+            "не считайте передачу завершённой раньше подтверждения."
+        )
         status, icon = "Проверяем транзакцию", "⏳"
     elif delivery.event_type == "delivery_confirmed":
         description = (
             "Передача NFT на указанный кошелёк покупателя независимо подтверждена "
             "в блокчейне."
         )
+        next_step = "Откройте заказ, чтобы посмотреть итоговый статус передачи."
         status, icon = "Передача NFT подтверждена", "✅"
     elif delivery.event_type == "delivery_manual_review":
         description = (
             "Нужна ручная проверка. Не считайте NFT доставленным и не отправляйте "
             "повторную транзакцию."
+        )
+        next_step = (
+            "Не повторяйте перевод. Дождитесь результата проверки и следуйте "
+            "обновлению статуса в заказе."
         )
         status, icon = "Требуется проверка", "⚠️"
     else:
@@ -257,6 +275,8 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
         "",
         f"{icon} <b>{status}</b>",
         description,
+        "",
+        f"➡️ <b>Следующий шаг</b>\n{next_step}",
         "",
         f"<b>Сумма:</b> <code>{amount} {currency}</code>",
     ]
@@ -283,7 +303,6 @@ def build_notification_message(delivery: NotificationDelivery) -> str:
         ]
     )
     return "\n".join(lines)
-
 
 async def process_due_notifications(
     session: AsyncSession,

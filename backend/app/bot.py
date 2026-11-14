@@ -17,7 +17,11 @@ logger = logging.getLogger(__name__)
 BOT_COMMANDS = [
     BotCommand(command="start", description="Открыть главное меню"),
     BotCommand(command="app", description="Открыть VILTARA SHOP"),
-    BotCommand(command="help", description="Справка и инструкции"),
+    BotCommand(command="buy", description="Как купить NFT"),
+    BotCommand(command="sell", description="Как продать NFT"),
+    BotCommand(command="orders", description="Заказы и доставка"),
+    BotCommand(command="safety", description="Правила безопасности"),
+    BotCommand(command="help", description="Центр помощи"),
 ]
 
 
@@ -29,7 +33,7 @@ def create_dispatcher() -> Dispatcher:
 
 
 async def register_bot_commands(bot: Bot) -> None:
-    """Publish a Russian command menu in Telegram's chat command picker."""
+    """Publish the Russian command menu in Telegram's chat command picker."""
     await bot.set_my_commands(BOT_COMMANDS)
 
 
@@ -69,7 +73,6 @@ async def main() -> None:
     try:
         await register_bot_commands(bot)
     except TelegramAPIError:
-        # Command-menu registration is helpful but must not prevent the bot from starting.
         logger.exception("Не удалось обновить список команд Telegram-бота")
 
     dispatcher = create_dispatcher()
