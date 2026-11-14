@@ -32,7 +32,6 @@ from app.db.models import (
     Wallet,
 )
 from app.orders.service import OrderConflict, OrderVerificationUnavailable, create_order
-
 from tests.database_safety import require_test_database_url
 
 pytestmark = pytest.mark.integration
