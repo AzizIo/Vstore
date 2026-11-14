@@ -28,7 +28,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--confirm-test-refund",
         action="store_true",
-        help="Required acknowledgement that one captured Telegram Test Server charge will be refunded",
+        help=(
+            "Required acknowledgement that one captured Telegram Test Server charge "
+            "will be refunded"
+        ),
     )
     return parser
 
@@ -115,7 +118,10 @@ async def _queue_refund(order_id: uuid.UUID) -> dict[str, str]:
             now=now,
         )
         digest = hashlib.sha256(
-            f"{intent.id}:{transaction.id}:{transaction.telegram_payment_charge_id}:manual_test_refund".encode()
+            (
+                f"{intent.id}:{transaction.id}:"
+                f"{transaction.telegram_payment_charge_id}:manual_test_refund"
+            ).encode()
         ).hexdigest()
         session.add(
             PaymentEvent(
