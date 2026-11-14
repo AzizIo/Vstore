@@ -5,7 +5,6 @@ import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from urllib.parse import urlsplit
 from uuid import uuid4
 
 import pytest
@@ -62,28 +61,14 @@ from app.orders.service import (
     prepare_delivery,
     submit_delivery_candidate,
 )
+from tests.database_safety import require_test_database_url
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(scope="session")
 def test_database_url() -> str:
-    url = os.getenv("TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("TEST_DATABASE_URL is not configured")
-    if not url.startswith("postgresql+asyncpg://"):
-        pytest.fail("Integration tests require a dedicated PostgreSQL TEST_DATABASE_URL")
-
-    # These tests apply migrations and must never target a default app/developer DB.
-    database_name = urlsplit(url).path.lstrip("/").split("?", maxsplit=1)[0]
-    if not database_name or not (
-        database_name.startswith("test_") or database_name.endswith("_test")
-    ):
-        pytest.fail(
-            "TEST_DATABASE_URL must target a dedicated database whose name starts "
-            "with 'test_' or ends with '_test'"
-        )
-    return url
+    return require_test_database_url("Integration tests")
 
 
 @pytest.fixture(scope="session")
@@ -265,10 +250,8 @@ async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
             )
 
         engine = create_async_engine(test_database_url, pool_pre_ping=True)
-        async with engine.connect() as connection:
-            revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0012_telegram_stars_payments"
-
+        # Clean the committed fixture before any version assertion so a failing
+        # migration-version check cannot leak reserved orders into later tests.
         async with engine.begin() as connection:
             await connection.execute(
                 text("DELETE FROM order_events WHERE order_id = :order_id"),
@@ -290,6 +273,11 @@ async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
                 text("DELETE FROM users WHERE id IN (:seller_id, :buyer_id)"),
                 {"seller_id": seller_id, "buyer_id": buyer_id},
             )
+
+        async with engine.connect() as connection:
+            revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+        expected_head = ScriptDirectory.from_config(Config(ALEMBIC_CONFIG_PATH)).get_current_head()
+        assert revision == expected_head
     finally:
         await engine.dispose()
 
@@ -676,7 +664,10 @@ async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
                 )
             ).one()
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0012_telegram_stars_payments"
+            expected_head = ScriptDirectory.from_config(
+                Config(ALEMBIC_CONFIG_PATH)
+            ).get_current_head()
+            assert revision == expected_head
             assert order.status == "reserved"
             assert order.price_amount == Decimal("12.500000000")
             assert order.price_currency == "TON"

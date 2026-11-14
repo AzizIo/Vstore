@@ -452,7 +452,7 @@ async def test_migration_refuses_to_drop_payment_evidence(
             revision = await connection.scalar(
                 text("SELECT version_num FROM alembic_version")
             )
-            assert revision == "0012_telegram_stars_payments"
+            assert revision == "0013_payment_refund_workflow"
     finally:
         await _cleanup(session_factory, ids)
         await engine.dispose()
