@@ -8,7 +8,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app.api.escrow import _prepare_action, router
+from app.api.escrow import _listing_actions, _prepare_action, router
 from app.escrow.contracts import EscrowWalletAction
 from app.escrow.schemas import (
     EscrowDealCreate,
@@ -137,3 +137,11 @@ async def test_accept_deal_is_buyer_only_and_funded_review_only(
             deal_id, EscrowWalletAction.ACCEPT_DEAL, buyer, DealSession(deal), None
         )
     assert buyer_error.value.status_code == 409
+
+
+def test_listing_available_actions_are_actor_scoped() -> None:
+    seller_id, buyer_id = uuid4(), uuid4()
+    intent = SimpleNamespace(status="active", seller_id=seller_id)
+
+    assert _listing_actions(intent, seller_id) == []
+    assert _listing_actions(intent, buyer_id) == ["create_deal_intent"]
