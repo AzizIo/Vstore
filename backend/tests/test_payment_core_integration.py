@@ -632,6 +632,7 @@ async def test_escrow_deal_terms_are_immutable_in_postgres(
                     id=deal_id,
                     listing_intent_id=intent_id,
                     marketplace_listing_id=ids["listing_id"],
+                    listing_key_snapshot=uuid4().hex * 2,
                     seller_id=ids["seller_id"],
                     buyer_id=ids["buyer_id"],
                     buyer_wallet_id=ids["buyer_wallet_id"],
