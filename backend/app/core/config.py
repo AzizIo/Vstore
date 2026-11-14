@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     notification_max_attempts: int = Field(default=8, gt=0)
     notification_retry_base_seconds: int = Field(default=5, gt=0)
     notification_retry_max_seconds: int = Field(default=3600, gt=0)
+    payment_refund_poll_seconds: int = Field(default=5, gt=0)
+    payment_refund_batch_size: int = Field(default=10, gt=0, le=100)
+    payment_refund_lease_seconds: int = Field(default=300, gt=0)
+    payment_refund_max_attempts: int = Field(default=8, gt=0)
+    payment_refund_retry_base_seconds: int = Field(default=10, gt=0)
+    payment_refund_retry_max_seconds: int = Field(default=1800, gt=0)
+    payment_refund_reconcile_delay_seconds: int = Field(default=30, gt=0)
+    payment_refund_max_reconcile_attempts: int = Field(default=20, gt=0)
     telegram_mini_app_url: str | None = None
     telegram_mini_app_direct_link: str | None = None
     ton_connect_allowed_domains: list[str] = Field(default_factory=list)
