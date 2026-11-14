@@ -58,7 +58,7 @@ def test_user_profile_returns_only_current_user(client: TestClient) -> None:
     assert response.json()["telegram_id"] == 123456789
     assert response.json()["username"] == "seller"
     assert response.json()["first_name"] == "Seller"
-    assert "is_blocked" not in response.json()
+    assert response.json()["is_blocked"] is False
 
 
 @pytest.mark.parametrize("limit", ["0", "101", "-1"])
