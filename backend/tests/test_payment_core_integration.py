@@ -31,6 +31,7 @@ from app.db.models import (
     Wallet,
 )
 from app.db.payments import PaymentEvent, PaymentIntent, PaymentTransaction
+from app.escrow.models import EscrowDeal, EscrowListingIntent
 from app.orders import payment_service
 from app.orders.payment_service import (
     PaymentConflict,
@@ -169,6 +170,19 @@ async def _seed_order(session_factory, *, expires_in: timedelta = timedelta(minu
 async def _cleanup(session_factory, ids: dict[str, object]) -> None:
     async with session_factory.begin() as session:
         order_id = ids["order_id"]
+        listing_id = ids["listing_id"]
+        if await session.scalar(text("SELECT to_regclass('public.escrow_deals') IS NOT NULL")):
+            await session.execute(
+                text("DELETE FROM escrow_deals WHERE marketplace_listing_id = :listing_id"),
+                {"listing_id": listing_id},
+            )
+        if await session.scalar(
+            text("SELECT to_regclass('public.escrow_listing_intents') IS NOT NULL")
+        ):
+            await session.execute(
+                text("DELETE FROM escrow_listing_intents WHERE marketplace_listing_id = :listing_id"),
+                {"listing_id": listing_id},
+            )
         await session.execute(
             text("ALTER TABLE payment_events DISABLE TRIGGER trg_payment_events_append_only")
         )
@@ -577,4 +591,116 @@ async def test_mismatched_successful_payment_is_queued_for_refund(
             assert persisted_intent.status == "refund_pending"
     finally:
         await _cleanup(session_factory, ids)
+        await engine.dispose()
+
+
+async def test_escrow_deal_terms_are_immutable_in_postgres(
+    payment_database: str,
+) -> None:
+    engine = create_async_engine(payment_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    ids = await _seed_order(session_factory)
+    intent_id = uuid4()
+    deal_id = uuid4()
+    seller_address = "0:" + "a" * 64
+    buyer_address = "0:" + "b" * 64
+    try:
+        async with session_factory.begin() as session:
+            session.add(
+                EscrowListingIntent(
+                    id=intent_id,
+                    marketplace_listing_id=ids["listing_id"],
+                    asset_id=ids["asset_id"],
+                    seller_id=ids["seller_id"],
+                    seller_wallet_id=ids["seller_wallet_id"],
+                    network="testnet",
+                    item_address="0:" + "c" * 64,
+                    listing_key=uuid4().hex * 2,
+                    collection_address_snapshot="0:" + "d" * 64,
+                    seller_address_snapshot=seller_address,
+                    price_amount=Decimal("2.5"),
+                    price_currency="TON",
+                    status="reserved",
+                    idempotency_key=f"escrow-listing-{uuid4()}",
+                )
+            )
+            session.add(
+                EscrowDeal(
+                    id=deal_id,
+                    listing_intent_id=intent_id,
+                    marketplace_listing_id=ids["listing_id"],
+                    seller_id=ids["seller_id"],
+                    buyer_id=ids["buyer_id"],
+                    buyer_wallet_id=ids["buyer_wallet_id"],
+                    network="testnet",
+                    deal_salt=uuid4().hex * 2,
+                    collection_address_snapshot="0:" + "d" * 64,
+                    contract_address=None,
+                    contract_abi_version=None,
+                    item_address="0:" + "c" * 64,
+                    seller_address_snapshot=seller_address,
+                    buyer_address_snapshot=buyer_address,
+                    price_amount=Decimal("2.5"),
+                    price_currency="TON",
+                    principal_nanotons=Decimal("2500000000"),
+                    status="intent_created",
+                    last_chain_seqno=None,
+                    last_chain_logical_time=None,
+                    idempotency_key=f"escrow-deal-{uuid4()}",
+                )
+            )
+
+        with pytest.raises(DBAPIError):
+            async with session_factory.begin() as session:
+                await session.execute(
+                    text(
+                        "UPDATE escrow_deals SET buyer_address_snapshot = :address "
+                        "WHERE id = :deal_id"
+                    ),
+                    {"address": "0:" + "e" * 64, "deal_id": deal_id},
+                )
+    finally:
+        await _cleanup(session_factory, ids)
+        await engine.dispose()
+
+
+async def test_escrow_migration_upgrade_and_downgrade_preserve_payments(
+    payment_database: str,
+) -> None:
+    engine = create_async_engine(payment_database, pool_pre_ping=True)
+    config = Config(ALEMBIC_CONFIG_PATH)
+    try:
+        await asyncio.to_thread(command.downgrade, config, "0014_admin_user_management")
+        async with engine.connect() as connection:
+            escrow_table = await connection.scalar(
+                text("SELECT to_regclass('public.escrow_deals')")
+            )
+            payment_table = await connection.scalar(
+                text("SELECT to_regclass('public.payment_intents')")
+            )
+            orders_table = await connection.scalar(
+                text("SELECT to_regclass('public.orders')")
+            )
+            assert escrow_table is None
+            assert payment_table == "payment_intents"
+            assert orders_table == "orders"
+
+        await asyncio.to_thread(command.upgrade, config, "head")
+        async with engine.connect() as connection:
+            escrow_table = await connection.scalar(
+                text("SELECT to_regclass('public.escrow_deals')")
+            )
+            trigger_exists = await connection.scalar(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM pg_trigger "
+                    "WHERE tgname = 'escrow_deal_terms_immutable' AND NOT tgisinternal)"
+                )
+            )
+            payment_table = await connection.scalar(
+                text("SELECT to_regclass('public.payment_intents')")
+            )
+            assert escrow_table == "escrow_deals"
+            assert trigger_exists is True
+            assert payment_table == "payment_intents"
+    finally:
         await engine.dispose()
