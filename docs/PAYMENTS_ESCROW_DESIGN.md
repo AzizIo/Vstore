@@ -65,8 +65,6 @@ proposal verbatim.
 > separate state machine and reconciled with the current order/delivery model
 > through an approved ADR and migration.
 
-## 2. Historical proposal — not the current order state machine
-
 ### 2.1 Proposed `OrderStatus` additions
 
 `pending_payment (existing) -> paid -> delivery_pending -> completed`,
