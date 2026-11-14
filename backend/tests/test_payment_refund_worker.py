@@ -897,3 +897,100 @@ async def test_stale_refund_job_never_calls_provider_for_captured_transaction(
     finally:
         await _cleanup(session_factory, ids)
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_refund_retry_requires_two_complete_negative_reconciliations(
+    refund_database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_test_stars(monkeypatch, refund_database)
+    engine = create_async_engine(refund_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    ids = await _seed_order(session_factory)
+    try:
+        _, charge_id = await _make_refund_pending(session_factory, ids)
+        provider = FakeRefundProvider(
+            outcome=RefundCallOutcome.AMBIGUOUS,
+            lookup_result=RefundLookupResult.NOT_REFUNDED,
+        )
+        now = datetime.now(UTC)
+        async with session_factory() as session:
+            first = await process_due_refunds(session, provider, now=now)
+        async with session_factory() as session:
+            second = await process_due_refunds(
+                session, provider, now=now + timedelta(seconds=5)
+            )
+        async with session_factory() as session:
+            job = await session.scalar(
+                select(PaymentRefund).where(
+                    PaymentRefund.payment_transaction_id
+                    == select(PaymentTransaction.id)
+                    .where(PaymentTransaction.telegram_payment_charge_id == charge_id)
+                    .scalar_subquery()
+                )
+            )
+            assert first.reconciliations == 1
+            assert second.reconciliations == 1
+            assert provider.refund_calls == 1
+            assert job is not None and job.status == "reconciliation_required"
+
+        async with session_factory() as session:
+            third = await process_due_refunds(
+                session, provider, now=now + timedelta(seconds=10)
+            )
+        async with session_factory() as session:
+            job = await session.scalar(
+                select(PaymentRefund).where(
+                    PaymentRefund.payment_transaction_id
+                    == select(PaymentTransaction.id)
+                    .where(PaymentTransaction.telegram_payment_charge_id == charge_id)
+                    .scalar_subquery()
+                )
+            )
+            assert third.retried == 1
+            assert provider.refund_calls == 1
+            assert job is not None and job.status == "retry_wait"
+    finally:
+        await _cleanup(session_factory, ids)
+        await engine.dispose()
+
+
+def test_refund_worker_runtime_rejects_production_before_any_provider_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        environment="production",
+        database_url="postgresql+asyncpg://test:test@localhost:5432/viltara_test",
+        bot_token="654321:primary-token",
+        telegram_stars_test_enabled=True,
+        telegram_stars_test_bot_token=SecretStr("123456:dedicated-test-token"),
+    )
+    monkeypatch.setattr(refund_worker, "get_settings", lambda: settings)
+    with pytest.raises(RuntimeError, match="cannot run in production"):
+        refund_worker._validate_worker_runtime()
+
+
+def test_refund_worker_runtime_rejects_non_test_database_and_shared_bot_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    shared_token_settings = Settings(
+        environment="test",
+        database_url="postgresql+asyncpg://test:test@localhost:5432/viltara_test",
+        bot_token="123456:dedicated-test-token",
+        telegram_stars_test_enabled=True,
+        telegram_stars_test_bot_token=SecretStr("123456:dedicated-test-token"),
+    )
+    monkeypatch.setattr(refund_worker, "get_settings", lambda: shared_token_settings)
+    with pytest.raises(RuntimeError, match="must not use the production bot token"):
+        refund_worker._validate_worker_runtime()
+
+    unsafe_database_settings = Settings(
+        environment="test",
+        database_url="postgresql+asyncpg://test:test@payments-prod.example:5432/viltara",
+        bot_token="654321:primary-token",
+        telegram_stars_test_enabled=True,
+        telegram_stars_test_bot_token=SecretStr("123456:dedicated-test-token"),
+    )
+    monkeypatch.setattr(refund_worker, "get_settings", lambda: unsafe_database_settings)
+    with pytest.raises(RuntimeError, match="dedicated test database"):
+        refund_worker._validate_worker_runtime()
