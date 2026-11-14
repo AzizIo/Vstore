@@ -1,6 +1,6 @@
 # TON Escrow frontend boundary
 
-This is an isolated frontend preparation layer for the VILTARA/MRKT-style TON Escrow testnet PoC. It follows the coordinator-owned [TON Escrow Shared Interface Contract](../../../../docs/TON_ESCROW_SHARED_INTERFACE.md) and the [MRKT-style architecture](../../../../docs/MRKT_STYLE_TON_ESCROW_ARCHITECTURE.md). It is not mounted into current App navigation, current `orders` API, Telegram Stars, or the seller-direct `DeliveryWorkspace`.
+This is an isolated frontend preparation layer for the VILTARA/MRKT-style TON Escrow testnet PoC. It follows the coordinator-owned [TON Escrow Shared Interface Contract](../../../docs/TON_ESCROW_SHARED_INTERFACE.md) and the [MRKT-style architecture](../../../docs/MRKT_STYLE_TON_ESCROW_ARCHITECTURE.md). It is not mounted into current App navigation, current `orders` API, Telegram Stars, or the seller-direct `DeliveryWorkspace`.
 
 ## Canonical resource model
 
