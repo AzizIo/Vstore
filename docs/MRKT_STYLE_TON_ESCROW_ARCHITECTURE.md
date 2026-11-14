@@ -14,14 +14,14 @@
 
 VILTARA is to move from direct seller-to-buyer delivery to a custodial-on-chain marketplace model:
 
-1. Seller deposits the NFT into an escrow contract.
-2. The listing becomes purchasable only after the deposit is confirmed.
-3. Buyer pays the exact TON amount to the listing escrow.
-4. The escrow initiates NFT transfer to the buyer's verified wallet.
-5. The TON remains locked during the buyer confirmation / dispute window.
-6. The buyer explicitly confirms receipt after checking the NFT. That action starts the confirmation/dispute window. If the window expires without a dispute, seller proceeds and the platform fee become claimable under the contract's rules.
-7. If delivery fails before the NFT leaves escrow, the buyer can receive a refund under the contract's explicit failure path.
-8. If the NFT has already reached the buyer, a buyer-favourable dispute refund requires the NFT to be returned to escrow first. A contract cannot unilaterally seize an NFT from a buyer-controlled wallet.
+1. Seller and buyer wallets, the exact TEP-62 NFT, TON principal and deal salt are snapshotted for one deal.
+2. A single-deal immutable escrow contract is deployed; seller deposits the NFT first.
+3. The contract validates the exact NFT item, previous owner, query ID and deal hash before accepting buyer funds.
+4. Buyer pays the exact TON principal plus a separately specified execution reserve; both NFT and TON are then held by escrow during the buyer review window.
+5. Buyer accepts or disputes. On acceptance, the escrow initiates the NFT transfer to the buyer's verified wallet.
+6. A separate evidence observer correlates the exact NFT transaction/trace. A configured evidence oracle/quorum attests finalized delivery to the contract; only then does the post-delivery dispute window begin.
+7. If that window closes without a dispute, seller payout is initiated and remains pending until finalized payout evidence is reconciled.
+8. A buyer-favourable post-delivery dispute requires the same NFT to be returned to escrow first. A contract cannot unilaterally seize an NFT from a buyer-controlled wallet.
 
 The product must not describe the system as risk-free or guarantee a refund in cases where the NFT has irreversibly left escrow.
 
@@ -40,59 +40,67 @@ The product must not describe the system as risk-free or guarantee a refund in c
 
 A small factory / registry contract:
 
-- deploys one isolated ListingEscrow instance per listing;
-- binds immutable listing parameters to the instance: seller address, NFT item address, price, currency (TON), fee basis points, treasury address, confirmation window, dispute authority and protocol version;
-- emits / exposes deterministic listing-to-escrow mapping;
-- prevents duplicate escrow instances for the same listing identifier;
-- does not hold buyer funds or NFTs itself.
+- deploys one immutable DealEscrow instance per buyer/seller deal, not one reusable escrow for an entire public listing;
+- binds a unique deal salt and immutable terms: seller wallet, buyer wallet, exact NFT item, TON principal, network/protocol version, evidence oracle/quorum, dispute resolver and deadlines;
+- emits / exposes deterministic deal-to-escrow mapping;
+- prevents duplicate instances for the same deal salt;
+- does not itself hold buyer funds or NFTs.
 
-### 3.2 ListingEscrow
+A new purchase attempt uses a new deal instance. The backend's listing intent is an off-chain proposal, not a funded order or chain-state assertion. A contract deployment and validated NFT deposit are required before the contract accepts the buyer's principal.
 
-One contract instance per NFT listing. It is the on-chain source of truth for that listing and its active sale:
+### 3.2 DealEscrow
 
-- receives and holds the seller's NFT;
-- accepts exactly the configured purchase price plus explicitly specified network-fee allowance;
-- stores the buyer, payment amount, timestamps and state;
-- initiates standard TEP-62 NFT transfer;
-- holds TON until settlement;
-- supports buyer confirmation, dispute opening, seller claim, buyer refund and seller withdrawal only in explicitly allowed states;
-- applies the fee snapshot and sends the fee to the treasury only on successful settlement;
-- rejects duplicate or out-of-order operations.
+One contract instance per deal. It is the on-chain source of truth for that deal:
 
-The NFT and TON may be held by the same ListingEscrow address. A separate deal contract per purchase is an alternative if the PoC demonstrates that a reusable listing instance creates unsafe state complexity. The first PoC should compare both designs before freezing the ABI.
+- receives and holds the exact seller NFT;
+- accepts the exact buyer TON principal only after the NFT lock is validated;
+- stores the immutable buyer, seller, NFT, principal, deal salt and phase deadlines;
+- supports buyer review/accept/dispute, NFT delivery, constrained arbitration, NFT return, payout and refund only in explicitly allowed states;
+- has no arbitrary withdrawal or upgrade method;
+- rejects duplicate, stale, replayed or out-of-order operations;
+- keeps every asset/money movement pending until exact finalized evidence is reconciled.
 
-### 3.3 Treasury
+For the first PoC, use a zero platform fee. Validate the lock/release/refund state machine before adding commission splits.
 
-The platform fee destination should be a separately controlled treasury wallet, preferably multisig for operational use. It must not have arbitrary access to buyer funds or NFT custody. Fee percentage and treasury address are snapshotted when the listing is created; changes apply only to future listings.
+### 3.3 Evidence oracle and dispute resolver
 
-### 3.4 Dispute authority
+These are distinct trust roles:
 
-A narrowly scoped dispute resolver may submit a resolution for a disputed deal. It must not be able to withdraw arbitrary funds, change seller/buyer addresses, rewrite completed deals or upgrade contract code.
+- The evidence oracle/quorum attests only exact finalized on-chain facts (NFT deposit, NFT delivery, NFT return, payout/refund finality). Its signed payload must be domain-separated by network, deal address/salt, action, attempt ID, evidence hash and masterchain checkpoint. It cannot choose a dispute winner or redirect assets.
+- The dispute resolver is a constrained 2-of-3 testnet multisig proposal. It can select only enumerated buyer-favourable or seller-favourable outcomes for a valid disputed deal. It cannot upgrade code, change parties/price/NFT or withdraw arbitrary assets.
 
-For PoC, use a testnet multisig or a clearly isolated test authority. Production governance requires a separate threat model, signer policy, key-rotation and incident-recovery runbook.
+The backend observer indexes/reconciles evidence and submits evidence references to the configured oracle flow; it is not a dispute authority. Oracle and resolver may not be silently implemented as the same key/role.
+
+### 3.4 Testnet fee policy
+
+The initial PoC fee is fixed at zero. Do not configure a nonzero fee while the backend and contract tests assume the seller payout equals the entire principal. Treasury/commission logic is future work requiring a separate reviewed change.
+
+
 
 ## 4. State machine
 
-The canonical cross-workstream state machine, normalized event vocabulary, action preconditions and payout semantics are defined in [TON_ESCROW_SHARED_INTERFACE.md](TON_ESCROW_SHARED_INTERFACE.md). That document is authoritative for the contract/backend/frontend integration.
+The canonical state machine, normalized event vocabulary, action preconditions and backend/frontend projection contract are defined in [TON_ESCROW_SHARED_INTERFACE.md](TON_ESCROW_SHARED_INTERFACE.md). That document is authoritative for cross-workstream integration.
 
-Important rules:
+The lifecycle follows the existing testnet threat model:
 
-- Escrow state is separate from the existing backend OrderStatus.
-- The PoC includes an explicit delivery_exception state for ambiguous or bounced message flows.
-- settled and refunded represent fixed claimable entitlements, not proof that a payout message has completed.
-- NFT withdrawal from an unsold cancelled listing is an operation, not a sale state named seller_withdrawn.
-- A buyer-confirmation window starts only after the buyer explicitly confirms receipt, or after a separately reviewed attestor design is accepted. An outbound NFT message alone must never start the timer or authorize seller settlement.
+- The buyer's principal is locked while the NFT remains in escrow during FUNDED_REVIEW.
+- Buyer acceptance triggers NFT release; the outbound message alone does not prove delivery.
+- The post-delivery dispute timer begins only after the evidence oracle/quorum attests the exact NFT transfer at finalized masterchain checkpoint.
+- Seller payout and buyer refund each remain pending until their own finalized transfer evidence is reconciled.
+- A timeout only makes a state-specific operation eligible. It does not prove transfer failure, NFT ownership or payout success.
+- MANUAL_REVIEW is a hold state, never a success/refund state.
 
-### 4.1 Settlement policy proposed for PoC
+### 4.1 Testnet timing proposal
 
-- Buyer can confirm receipt after independently checking NFT ownership in their wallet.
-- That signed confirmation starts the dispute window; buyer can open a dispute before its deadline.
-- If the buyer never confirms, the deal remains locked/recoverable. Do not release seller proceeds based only on a timeout measured from an emitted NFT transfer message.
-- A seller-favourable dispute resolution makes seller proceeds claimable.
-- A buyer-favourable resolution refunds the buyer only when the NFT remains in escrow or has been returned to escrow and the return is verified.
-- A failed or ambiguous NFT transfer enters a recoverable exception state. It is neither automatic success nor an unconditional buyer refund.
+The existing testnet threat-model proposal defines deterministic defaults: seller deposit 30 minutes, buyer funding 60 minutes, buyer review 24 hours, NFT outbound confirmation grace 30 minutes, post-delivery dispute window 48 hours, arbitration resolution 7 days, and post-delivery NFT return 24 hours. These are testnet fixtures, not production SLAs. The owner must explicitly approve the timing before ABI freeze.
 
-The exact confirmation-window duration, dispute authority, arbitration policy, attestor policy (if any), and timeout semantics remain decisions for review before ABI freeze.
+### 4.2 Conditional post-delivery recourse
+
+Once the NFT reaches the buyer, the contract cannot force it back. A buyer-favourable dispute refund therefore requires the exact NFT to be returned to escrow within the agreed return window, then returned to seller before the buyer refund is finalized. If the buyer has moved the NFT elsewhere and cannot return it, the refund path is unavailable. This is conditional recourse, not an unconditional chargeback or guaranteed buyer refund.
+
+The alternative of retaining the NFT in escrow for the full dispute window provides stronger asset-backed protection but delays buyer access and requires a different protocol. It is a separate product decision, not an implicit behavior.
+
+
 
 ## 5. NFT deposit and authenticity
 
@@ -175,16 +183,14 @@ Use unique constraints for chain event identity and operation IDs. Keep an appen
 
 The Mini App should expose explicit wallet actions:
 
-- Deposit NFT into escrow
-- Wait for deposit confirmation
-- View locked listing
-- Buy with TON
-- View payment / NFT transfer progress
-- Confirm receipt
-- Open dispute
-- Return NFT to escrow when required by dispute resolution
-- Claim seller proceeds
-- Withdraw unsold NFT
+- Create a deal and deposit NFT into escrow
+- Wait for finalized NFT-deposit evidence
+- Fund the deal with exact TON
+- Review the locked deal and accept or open a dispute
+- View NFT transfer / oracle confirmation / dispute-window progress
+- Return NFT to escrow when required by post-delivery dispute resolution
+- View payout/refund pending and finalized states
+- Withdraw the NFT only on a valid pre-funding cancellation/expiry path
 
 Before every wallet signature, show the exact network, contract address, NFT item, amount, fee, recipient and action. No seed phrase or private key collection. Wallet connection alone is not proof of ownership; continue to use the existing TON Proof verification for account binding.
 
@@ -256,12 +262,12 @@ No agent may deploy to mainnet, access production wallets, request secrets, or m
 
 ## 11. Open decisions before implementation freeze
 
-1. One ListingEscrow per single-sale listing is the PoC default; the contract workstream may challenge it before ABI freeze with a concrete security or TON-runtime analysis.
-2. Exact NFT collection allowlist and on-chain item authenticity strategy.
-3. Confirmation window duration and timeout semantics. The default is that the timer starts only after explicit buyer receipt confirmation; no silent auto-settlement when the buyer never confirms.
-4. Who arbitrates disputes and what evidence is accepted.
-5. Buyer-favourable dispute path after NFT delivery (NFT return requirement).
-6. Whether the platform fee is paid immediately on seller settlement or separately claimable.
+1. Exact NFT collection allowlist and on-chain item authenticity strategy.
+2. Exact evidence-oracle trust model and testnet signer arrangement.
+3. Confirm the deterministic testnet timers and permissionless timeout guards.
+4. Final 2-of-3 resolver identities and enumerated outcome rules.
+5. Conditional post-delivery recourse vs retaining the NFT in escrow for the full dispute window.
+6. Treasury/commission model after a zero-fee PoC.
 7. Contract immutability vs controlled upgrades; default PoC recommendation is immutable code and redeploy/migrate rather than privileged arbitrary upgrades.
 8. Telegram in-app policy ruling for TON-priced NFT resale.
 9. Jurisdictional legal/compliance review for custody and seller payouts.
