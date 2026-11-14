@@ -189,8 +189,7 @@ async def _cleanup(
                 SET status = 'manual_review',
                     lease_token = NULL,
                     locked_until = NULL,
-                    last_error_code = 'test_fixture_retained',
-                    completed_at = COALESCE(completed_at, now())
+                    last_error_code = 'test_fixture_retained'
                 WHERE payment_transaction_id IN (
                     SELECT pt.id
                     FROM payment_transactions AS pt
