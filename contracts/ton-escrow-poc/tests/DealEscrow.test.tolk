@@ -638,3 +638,175 @@ get fun `test bounced internal action forces manual review`() {
     });
     expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
 }
+
+
+get fun `test expired oracle attestation is still accepted before timeout transaction`() {
+    testing.setNow(1_700_000_000);
+    val deadline = testing.getNow() - 1;
+    val (escrow, nftItem, seller, buyer) = createFixture(
+        0xA11DA,
+        STATE_NFT_RELEASE_PENDING,
+        1,
+        deadline,
+        false,
+        true,
+    );
+    val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
+    expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
+    expect(testing.getNow()).toBeGreater(deadline);
+
+    val data: OracleAttestationData = {
+        context: OracleContext {
+            domain: ESCROW_DOMAIN,
+            protocolVersion: PROTOCOL_VERSION,
+            networkId: TESTNET_NETWORK_ID,
+            escrowAddress: escrow.address,
+            dealSalt: 0xA11DA,
+            action: ORACLE_ACTION_NFT_DELIVERED,
+            attemptId: 1,
+        }.toCell(),
+        route: OracleRoute {
+            itemAddress: nftItem.address,
+            sourceAddress: escrow.address,
+            destinationAddress: buyer.address,
+            amountNanotons: 0,
+            queryId: 1,
+        }.toCell(),
+        position: OraclePosition {
+            masterchainSeqno: 1,
+            logicalTime: 1,
+        }.toCell(),
+        hashes: OracleEvidenceHashes {
+            messageHash: 1,
+            traceHash: 1,
+            evidenceHash: 0xA11DA,
+        }.toCell(),
+    };
+    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
+    val attestation = OracleAttestation {
+        data: data.toCell(),
+        signatures: OracleSignatureSet {
+            signatureA: dummySignature,
+            signatureB: dummySignature,
+            signatureC: dummySignature,
+        }.toCell(),
+    };
+
+    // Isolate the missing on-chain deadline guard from signature validation.
+    testing.setChecksigIgnore(true);
+    val result = escrow.sendAny(
+        testing.treasury("late-oracle-keeper").address,
+        attestation.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    testing.setChecksigIgnore(false);
+
+    expect(result).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
+    // This documents the current behavior: late evidence wins unless a timeout
+    // transaction reaches the contract first.
+    expect(escrow.getState()).toEqual(STATE_DELIVERED_DISPUTE_WINDOW);
+}
+
+get fun `test expired resolver decision is still accepted before timeout transaction`() {
+    testing.setNow(1_700_000_000);
+    val salt = 0xA11DB;
+    val (escrow, nftItem, seller, buyer) = createFixture(salt);
+    val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
+    expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
+    val nftDeploy = nftItem.deploy(seller.address, { value: grams("0.05"), bounce: false });
+    expect(nftDeploy).toHaveSuccessfulDeploy({ to: nftItem.address });
+
+    activateDeal(escrow, seller, salt);
+    depositExpectedNft(escrow, nftItem, seller, salt);
+    val funding = escrow.sendFundDeal(
+        buyer.address,
+        1001,
+        salt,
+        { value: grams("1.5"), bounce: true },
+    );
+    expect(funding).toHaveSuccessfulTx<FundDeal>({ to: escrow.address });
+
+    val reasonHash = 0xA11DBA;
+    val dispute = escrow.sendAny(
+        buyer.address,
+        OpenDispute {
+            queryId: 9001,
+            dealSalt: salt,
+            reasonHash,
+        }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(dispute).toHaveSuccessfulTx<OpenDispute>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_DISPUTED);
+
+    val arbitrationDeadline = escrow.getProgress().deadlineUnix;
+    testing.setNow(arbitrationDeadline + 1);
+    expect(testing.getNow()).toBeGreater(arbitrationDeadline);
+
+    val decision: ResolverDecisionData = {
+        context: ResolverDecisionContext {
+            domain: ESCROW_DOMAIN,
+            protocolVersion: PROTOCOL_VERSION,
+            networkId: TESTNET_NETWORK_ID,
+            escrowAddress: escrow.address,
+            dealSalt: salt,
+            disputePhase: DISPUTE_PHASE_PRE_DELIVERY,
+            outcome: RESOLUTION_SELLER_WINS,
+            attemptId: 1,
+            evidenceHash: reasonHash,
+        }.toCell(),
+    };
+    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
+    val resolution = ResolveDispute {
+        data: decision.toCell(),
+        signatures: ResolverSignatureSet {
+            signatureA: dummySignature,
+            signatureB: dummySignature,
+            signatureC: dummySignature,
+        }.toCell(),
+    };
+
+    // Isolate the missing deadline guard from resolver signature validation.
+    testing.setChecksigIgnore(true);
+    val result = escrow.sendAny(
+        testing.treasury("late-resolver-keeper").address,
+        resolution.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    testing.setChecksigIgnore(false);
+
+    expect(result).toHaveSuccessfulTx<ResolveDispute>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
+    expect(nftItem.getOwner()).toEqual(buyer.address);
+}
+
+get fun `test bounced message can overwrite an already terminal state`() {
+    val (escrow, _, seller, _) = createFixture(
+        0xA11DC,
+        STATE_SETTLED,
+        0,
+        0,
+        false,
+        false,
+    );
+    val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
+    expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_SETTLED);
+
+    val bounceOrigin = testing.treasury("terminal-bounce-origin");
+    val bouncedMessage = createMessage({
+        bounce: false,
+        value: grams("0.03"),
+        dest: escrow.address,
+        body: SettlementMessage {
+            queryId: 1,
+            dealSalt: 0xA11DC,
+            action: SETTLEMENT_ACTION_SELLER_DEPLOYMENT_REFUND,
+        },
+    }).bounced();
+    val result = net.send(bounceOrigin.address, bouncedMessage);
+    expect(result).toHaveSuccessfulTx({ to: escrow.address });
+
+    // The current callback unconditionally rewrites the terminal state.
+    expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
+}
