@@ -206,8 +206,10 @@ fun handleNftOwnershipNotification(
     // Never revert a malformed callback from the snapshotted item: doing so would
     // leave the NFT owned by this escrow with no recovery information.
     progress.nftInEscrow = true;
-    progress.unexpectedItemAddress = in.senderAddress;
-    progress.unexpectedPreviousOwner = msg.oldOwnerAddress;
+    var recovery = progress.recovery.load();
+    recovery.unexpectedItemAddress = in.senderAddress;
+    recovery.unexpectedPreviousOwner = msg.oldOwnerAddress;
+    progress.recovery = recovery.toCell();
     progress = asManualReview(progress);
     storage.progress = progress.toCell();
     storage.save();
@@ -290,7 +292,9 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
     val signatureCount = countValidOracleSignatures(digest, oracleKeys, msg.signatures.load());
     assert (signatureCount >= 2) throw Errors.InvalidSignatures;
 
-    progress.lastEvidenceHash = hashes.evidenceHash;
+    var evidence = progress.evidence.load();
+    evidence.lastEvidenceHash = hashes.evidenceHash;
+    progress.evidence = evidence.toCell();
 
     if (context.action == ORACLE_ACTION_NFT_DELIVERED) {
         assert (progress.state == STATE_NFT_RELEASE_PENDING) throw Errors.InvalidState;
@@ -360,16 +364,19 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         assert (progress.state == STATE_NFT_RETURN_PENDING) throw Errors.InvalidState;
         assert (progress.pendingAction == PENDING_UNEXPECTED_RECOVERY) throw Errors.InvalidState;
         assert (route.sourceAddress == contract.getAddress()) throw Errors.InvalidAttestation;
-        assert (progress.unexpectedPreviousOwner != null) throw Errors.InvalidState;
-        assert (route.destinationAddress == progress.unexpectedPreviousOwner!) throw Errors.InvalidAttestation;
+        val recovery = progress.recovery.load();
+        assert (recovery.unexpectedPreviousOwner != null) throw Errors.InvalidState;
+        assert (route.destinationAddress == recovery.unexpectedPreviousOwner!) throw Errors.InvalidAttestation;
         assert (route.amountNanotons == 0) throw Errors.InvalidAttestation;
         assert (route.queryId == money.nftReturnToSellerQueryId) throw Errors.InvalidAttestation;
         progress.nftInEscrow = false;
         progress.state = STATE_MANUAL_REVIEW;
         progress.pendingAction = PENDING_NONE;
         progress.deadlineUnix = 0;
-        progress.unexpectedPreviousOwner = null;
-        progress.unexpectedItemAddress = null;
+        var recovery = progress.recovery.load();
+        recovery.unexpectedPreviousOwner = null;
+        recovery.unexpectedItemAddress = null;
+        progress.recovery = recovery.toCell();
     } else {
         throw Errors.InvalidAttestation;
     }
@@ -397,7 +404,8 @@ fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
     assert (context.escrowAddress == contract.getAddress()) throw Errors.InvalidAttestation;
     assert (context.dealSalt == asset.dealSalt) throw Errors.InvalidAttestation;
     assert (context.disputePhase == progress.disputePhase) throw Errors.InvalidAttestation;
-    assert (context.evidenceHash == progress.disputeReasonHash) throw Errors.InvalidAttestation;
+    assert (context.evidenceHash == progress.evidence.load().disputeReasonHash)
+        throw Errors.InvalidAttestation;
     assert (context.attemptId > 0) throw Errors.InvalidAttestation;
 
     val digest = msg.data.hash();
@@ -541,7 +549,9 @@ fun onInternalMessage(in: InMessage) {
             }
 
             progress.state = STATE_DISPUTED;
-            progress.disputeReasonHash = msg.reasonHash;
+            var evidence = progress.evidence.load();
+            evidence.disputeReasonHash = msg.reasonHash;
+            progress.evidence = evidence.toCell();
             progress.deadlineUnix = (
                 blockchain.now()
                 + (progress.disputePhase == DISPUTE_PHASE_POST_DELIVERY
@@ -622,12 +632,13 @@ fun onInternalMessage(in: InMessage) {
             val money = terms.money.load();
             assert (progress.state == STATE_MANUAL_REVIEW) throw Errors.InvalidState;
             assert (msg.dealSalt == asset.dealSalt) throw Errors.InvalidDeal;
-            assert (progress.unexpectedItemAddress != null) throw Errors.NothingToRecover;
-            assert (progress.unexpectedPreviousOwner != null) throw Errors.NothingToRecover;
+            val recovery = progress.recovery.load();
+            assert (recovery.unexpectedItemAddress != null) throw Errors.NothingToRecover;
+            assert (recovery.unexpectedPreviousOwner != null) throw Errors.NothingToRecover;
             assert (progress.nftInEscrow) throw Errors.NothingToRecover;
-            val previousOwner = progress.unexpectedPreviousOwner!;
+            val previousOwner = recovery.unexpectedPreviousOwner!;
             assert (in.senderAddress == previousOwner) throw Errors.NotAuthorized;
-            val unexpectedItem = progress.unexpectedItemAddress!;
+            val unexpectedItem = recovery.unexpectedItemAddress!;
             sendNftTo(
                 unexpectedItem,
                 previousOwner,
