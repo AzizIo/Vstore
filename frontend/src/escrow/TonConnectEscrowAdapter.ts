@@ -80,7 +80,7 @@ export function createTonConnectEscrowAdapter(options: {
   return {
     connectedWallet: options.connectedWallet,
     signingEnabled: enabled,
-    async sendPreparedTransaction(transaction, expectedVerifiedWalletAddress) {
+    async sendPreparedTransaction(transaction, expectedVerifiedWalletAddress, onWalletRequest) {
       if (!enabled || !options.sendTransaction) {
         throw new Error("Подписание escrow-транзакций отключено до согласования ABI и Backend API.");
       }
