@@ -15,6 +15,7 @@ The action record reserves fields for attempt/query IDs, unsigned BOC digest/ref
 - A second distinct reference for one action moves it to `manual_review`; database uniqueness prevents the same reference digest being assigned to multiple actions on testnet.
 - `submitted`/`ambiguous` do not advance the deal state. Only the observer can apply a canonical event after independent transaction/message/trace binding, masterchain finality proof and contract getter reconciliation.
 - An indexer result, transaction hash, wallet callback, or a positive current-owner lookup alone is not finality evidence. The production adapter is intentionally unconfigured until it can verify inclusion/finality independently.
+- Terminal deal transitions also require the observed getter state to match the terminal state. A settled listing becomes `sold` only after an independently verified current-owner proof matches the buyer snapshot; an expired/refunded listing is reactivated only after the proof matches the seller snapshot. Missing/mismatched owner evidence leaves the listing reserved and the intent in `manual_review`.
 - Unknown outcomes remain pending/ambiguous or manual review; never retry a potentially executed action as if the first attempt definitively failed.
 
 ## Reservation concurrency
