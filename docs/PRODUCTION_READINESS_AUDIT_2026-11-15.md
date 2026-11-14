@@ -6,7 +6,7 @@
 - Audited branch: main
 - Baseline SHA: 2138d2b69c86507f05cec7ee768b4cc11ad00e47
 - Default branch: main
-- Open PR inventory: PR #197 only; it is a draft TON Escrow WIP and must not be merged as a production release change.
+- Open PR inventory (updated 2026-11-15): PR #197 (TON testnet WIP), PR #198 (this readiness sprint), PR #203 (payment ledger guards), PR #204 (infrastructure runbook/static checks), and PR #205 (release checklist). All are unmerged; CI evidence and remaining gates are tracked separately in Issue #202.
 - Audit branch: chore/viltara-production-readiness-sprint
 
 This is a source/configuration audit, not a live production penetration test or VPS inspection. No production credentials, servers, databases, bot tokens, DNS, TLS, or payment accounts were accessed or modified.
