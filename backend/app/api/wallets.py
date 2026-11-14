@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_current_user_allow_blocked
 from app.core.config import get_settings
 from app.db.models import User, Wallet
 from app.db.session import get_db_session
@@ -198,7 +198,7 @@ async def verify_proof_and_link_wallet(
 
 @router.get("/me", response_model=list[WalletResponse])
 async def get_my_wallets(
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_current_user_allow_blocked)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> list[Wallet]:
     result = await session.scalars(
