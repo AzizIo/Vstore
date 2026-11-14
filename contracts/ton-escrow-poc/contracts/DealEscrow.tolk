@@ -337,6 +337,7 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         assert (route.sourceAddress == contract.getAddress()) throw Errors.InvalidAttestation;
         assert (route.destinationAddress == roles.seller) throw Errors.InvalidAttestation;
         assert (route.amountNanotons == 0) throw Errors.InvalidAttestation;
+        assert (route.queryId == context.attemptId) throw Errors.InvalidAttestation;
         progress.nftInEscrow = false;
         if (progress.pendingAction == PENDING_EXPIRE_AFTER_NFT_RETURN) {
             progress.state = STATE_EXPIRED;
