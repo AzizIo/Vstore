@@ -7,6 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import pytest
@@ -57,6 +58,14 @@ def refund_test_database() -> str:
         pytest.skip("TEST_DATABASE_URL is not configured")
     if not url.startswith("postgresql+asyncpg://"):
         pytest.fail("Refund worker integration tests require PostgreSQL TEST_DATABASE_URL")
+    database_name = urlsplit(url).path.lstrip("/").split("?", maxsplit=1)[0]
+    if not database_name or not (
+        database_name.startswith("test_") or database_name.endswith("_test")
+    ):
+        pytest.fail(
+            "TEST_DATABASE_URL must target a disposable database whose name starts "
+            "with 'test_' or ends with '_test'"
+        )
 
     previous_url = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = url
@@ -199,9 +208,10 @@ async def _seed_payment(
         session.add(order)
         await session.flush()
         session.add(intent)
+        await session.flush()
         if transaction is not None:
             session.add(transaction)
-        await session.flush()
+            await session.flush()
         if transaction_status == "refund_pending":
             session.add(
                 PaymentRefundJob(
