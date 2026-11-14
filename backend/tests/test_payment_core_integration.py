@@ -168,80 +168,43 @@ async def _seed_order(session_factory, *, expires_in: timedelta = timedelta(minu
 
 
 async def _cleanup(session_factory, ids: dict[str, object]) -> None:
+    """Keep payment evidence and its FK parents; isolate later tests by state and IDs.
+
+    The CI PostgreSQL service is disposable and is dropped after the job. Ledger
+    records must not be deleted or have append-only guards disabled during fixture
+    cleanup. Park outstanding refund jobs in manual review and release the test
+    reservation so global workers/expiry passes cannot claim this fixture again.
+    """
     async with session_factory.begin() as session:
-        order_id = ids["order_id"]
-        listing_id = ids["listing_id"]
-        if await session.scalar(text("SELECT to_regclass('public.escrow_deals') IS NOT NULL")):
-            await session.execute(
-                text("DELETE FROM escrow_deals WHERE marketplace_listing_id = :listing_id"),
-                {"listing_id": listing_id},
-            )
-        if await session.scalar(
-            text("SELECT to_regclass('public.escrow_listing_intents') IS NOT NULL")
-        ):
-            await session.execute(
-                text(
-                    "DELETE FROM escrow_listing_intents "
-                    "WHERE marketplace_listing_id = :listing_id"
-                ),
-                {"listing_id": listing_id},
-            )
-        await session.execute(
-            text("ALTER TABLE payment_events DISABLE TRIGGER trg_payment_events_append_only")
-        )
-        try:
-            await session.execute(
-                text(
-                    "DELETE FROM payment_events WHERE payment_intent_id IN "
-                    "(SELECT id FROM payment_intents WHERE order_id = :order_id)"
-                ),
-                {"order_id": order_id},
-            )
-        finally:
-            await session.execute(
-                text("ALTER TABLE payment_events ENABLE TRIGGER trg_payment_events_append_only")
-            )
-        has_refund_table = await session.scalar(
-            text("SELECT to_regclass('public.payment_refunds') IS NOT NULL")
-        )
-        if has_refund_table:
-            await session.execute(
-                text(
-                    "DELETE FROM payment_refunds WHERE payment_transaction_id IN "
-                    "(SELECT pt.id FROM payment_transactions pt "
-                    "JOIN payment_intents pi ON pi.id = pt.payment_intent_id "
-                    "WHERE pi.order_id = :order_id)"
-                ),
-                {"order_id": order_id},
-            )
         await session.execute(
             text(
-                "DELETE FROM payment_transactions WHERE payment_intent_id IN "
-                "(SELECT id FROM payment_intents WHERE order_id = :order_id)"
+                """
+                UPDATE payment_refunds
+                SET status = 'manual_review',
+                    lease_token = NULL,
+                    locked_until = NULL,
+                    completed_at = NULL,
+                    last_error_code = 'test_fixture_retained'
+                WHERE payment_transaction_id IN (
+                    SELECT pt.id
+                    FROM payment_transactions AS pt
+                    JOIN payment_intents AS pi ON pi.id = pt.payment_intent_id
+                    WHERE pi.order_id = :order_id
+                )
+                """
             ),
-            {"order_id": order_id},
+            {"order_id": ids["order_id"]},
         )
         await session.execute(
-            PaymentIntent.__table__.delete().where(PaymentIntent.order_id == order_id)
+            text("UPDATE orders SET status = 'cancelled' WHERE id = :order_id"),
+            {"order_id": ids["order_id"]},
         )
         await session.execute(
-            text("DELETE FROM order_events WHERE order_id = :order_id"),
-            {"order_id": order_id},
-        )
-        await session.execute(
-            text("DELETE FROM telegram_notification_outbox WHERE order_id = :order_id"),
-            {"order_id": order_id},
-        )
-        await session.execute(Order.__table__.delete().where(Order.id == order_id))
-        await session.execute(Listing.__table__.delete().where(Listing.id == ids["listing_id"]))
-        await session.execute(NFTAsset.__table__.delete().where(NFTAsset.id == ids["asset_id"]))
-        await session.execute(
-            Wallet.__table__.delete().where(
-                Wallet.id.in_([ids["seller_wallet_id"], ids["buyer_wallet_id"]])
-            )
-        )
-        await session.execute(
-            User.__table__.delete().where(User.id.in_([ids["buyer_id"], ids["seller_id"]]))
+            text(
+                "UPDATE listings SET status = 'active' "
+                "WHERE id = :listing_id AND status = 'reserved'"
+            ),
+            {"listing_id": ids["listing_id"]},
         )
 
 
@@ -464,7 +427,7 @@ async def test_migration_refuses_to_drop_payment_evidence(
         # refund revision. The downgrade guard must preserve the repository's
         # current single head rather than a hard-coded historical revision.
         expected_head = ScriptDirectory.from_config(config).get_current_head()
-        with pytest.raises(RuntimeError, match="payment ledger"):
+        with pytest.raises(RuntimeError, match="payment ledger|payment refund workflow"):
             await asyncio.to_thread(
                 command.downgrade,
                 config,
