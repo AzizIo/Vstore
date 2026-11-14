@@ -12,9 +12,9 @@ from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.engine import make_url
 
 from app.api.assets import _upsert_verified_asset
 from app.assets.ton_nft.address import AddressError, normalize_address
@@ -113,7 +113,9 @@ async def isolated_migration_database(test_database_url: str):
     except Exception as error:
         await admin_engine.dispose()
         if "permission denied" in str(error).lower() or "createdb" in str(error).lower():
-            pytest.skip("isolated migration tests require CREATEDB on the local test PostgreSQL role")
+            pytest.skip(
+                "isolated migration tests require CREATEDB on the local test PostgreSQL role"
+            )
         raise
     await admin_engine.dispose()
 
