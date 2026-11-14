@@ -74,6 +74,7 @@ def _enable_test_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         telegram_stars_refund_max_attempts=5,
         telegram_stars_refund_retry_base_seconds=1,
         telegram_stars_refund_retry_max_seconds=10,
+        ton_connect_network="testnet",
     )
     monkeypatch.setattr(payment_service, "get_settings", lambda: settings)
     monkeypatch.setattr(refund_worker, "get_settings", lambda: settings)
@@ -131,7 +132,7 @@ async def _seed_payment(
             id=buyer_wallet_id,
             user_id=buyer_id,
             address=f"0:{uuid4().hex}{uuid4().hex}",
-            network="mainnet",
+            network="testnet",
             is_verified=True,
             is_primary=True,
         )
@@ -736,3 +737,26 @@ async def test_cancelling_paid_order_queues_captured_charge_for_refund(
     finally:
         await _cleanup(factory, ids)
         await engine.dispose()
+
+
+
+async def test_refund_worker_refuses_production_environment_before_provider_io(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        environment="production",
+        telegram_stars_test_enabled=True,
+        telegram_stars_test_bot_token=SecretStr("must-not-be-used"),
+        telegram_stars_refund_worker_enabled=True,
+    )
+    monkeypatch.setattr(refund_worker, "get_settings", lambda: settings)
+
+    class ProviderMustNotRun:
+        async def get_star_transactions(self, *, offset: int, limit: int) -> SimpleNamespace:
+            raise AssertionError("provider must not be called in production")
+
+        async def refund_star_payment(self, *, user_id: int, telegram_payment_charge_id: str):
+            raise AssertionError("provider must not be called in production")
+
+    with pytest.raises(Exception, match="outside test environments"):
+        await run_refund_worker_pass(None, ProviderMustNotRun())  # type: ignore[arg-type]
