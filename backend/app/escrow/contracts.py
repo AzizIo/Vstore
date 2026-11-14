@@ -18,6 +18,7 @@ class EscrowWalletAction(StrEnum):
     FUND_DEAL = "fund_deal"
     ACCEPT_DEAL = "accept_deal"
     OPEN_DISPUTE = "open_dispute"
+    RETURN_NFT_TO_ESCROW = "return_nft_to_escrow"
     REFUND = "refund"
     PAYOUT = "payout"
     WITHDRAW_UNSOLD_NFT = "withdraw_unsold_nft"
