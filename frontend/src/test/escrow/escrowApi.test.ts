@@ -33,6 +33,7 @@ function listing(): EscrowListingIntent {
     seller_wallet_address: "0:" + "4".repeat(64),
     price_nano: "2500000000",
     fee_bps: 0,
+    available_actions: ["create_deal_intent"],
     created_at: "2026-11-14T10:00:00Z",
     updated_at: "2026-11-14T10:00:00Z",
   };
@@ -209,6 +210,7 @@ describe("escrow API boundary", () => {
     expect(isEscrowListingIntent({ ...listing(), price_nano: "2.5" })).toBe(false);
     expect(isEscrowListingIntent({ ...listing(), price_nano: "0" })).toBe(false);
     expect(isEscrowListingIntent({ ...listing(), fee_bps: 50 })).toBe(false);
+    expect(isEscrowListingIntent({ ...listing(), available_actions: ["buy_now"] })).toBe(false);
     expect(isEscrowDeal({ ...deal(), state: "completed" })).toBe(false);
     expect(isEscrowDeal({ ...deal(), available_actions: ["claim_payout"] })).toBe(false);
     expect(isEscrowWithdrawal({ ...withdrawal(), kind: "seller_proceeds" })).toBe(false);
