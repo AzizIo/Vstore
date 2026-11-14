@@ -33,7 +33,7 @@ from app.db.payments import PaymentIntent, PaymentRefundJob, PaymentTransaction
 from app.orders import payment_service, refund_worker
 from app.orders.payment_service import record_stars_success
 from app.orders.refund_worker import run_refund_worker_pass
-from app.orders.service import _invalidate_lost_ownership, expire_pending_orders
+from app.orders.service import _invalidate_lost_ownership, cancel_order, expire_pending_orders
 
 pytestmark = pytest.mark.integration
 ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
@@ -112,7 +112,7 @@ async def _seed_payment(
         asset = NFTAsset(
             id=asset_id,
             asset_type=AssetType.TON_NFT,
-            network="mainnet",
+            network="testnet",
             external_id=f"refund-test-{uuid4()}",
             item_address=f"0:{uuid4().hex}{uuid4().hex}",
             owner_id=seller_id,
@@ -123,7 +123,7 @@ async def _seed_payment(
             id=seller_wallet_id,
             user_id=seller_id,
             address=f"0:{uuid4().hex}{uuid4().hex}",
-            network="mainnet",
+            network="testnet",
             is_verified=True,
             is_primary=True,
         )
@@ -700,6 +700,39 @@ async def test_successful_payment_after_expiry_is_queued_for_refund(
             assert transaction is not None and transaction.status == "refund_pending"
             assert job is not None and job.status == "pending"
             assert order is not None and order.status is OrderStatus.RESERVED
+    finally:
+        await _cleanup(factory, ids)
+        await engine.dispose()
+
+
+async def test_cancelling_paid_order_queues_captured_charge_for_refund(
+    refund_test_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_test_settings(monkeypatch)
+    engine, factory = await _make_store(refund_test_database)
+    ids = await _seed_payment(factory, intent_status="paid", transaction_status="captured")
+    try:
+        async with factory() as session:
+            result = await cancel_order(
+                session,
+                order_id=ids["order_id"],
+                buyer_id=ids["buyer_id"],
+                now=datetime.now(UTC),
+            )
+            assert result == ids["order_id"]
+
+        async with factory() as session:
+            transaction = await session.get(PaymentTransaction, ids["transaction_id"])
+            job = await session.scalar(
+                select(PaymentRefundJob).where(
+                    PaymentRefundJob.payment_transaction_id == ids["transaction_id"]
+                )
+            )
+            order = await session.get(Order, ids["order_id"])
+            assert transaction is not None and transaction.status == "refund_pending"
+            assert job is not None and job.status == "pending"
+            assert order is not None and order.status is OrderStatus.CANCELLED
     finally:
         await _cleanup(factory, ids)
         await engine.dispose()
