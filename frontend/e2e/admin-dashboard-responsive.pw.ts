@@ -163,7 +163,9 @@ test("admin dashboard stays within mobile viewport and user details are usable",
   }
 
   await page.getByRole("button", { name: "Users", exact: true }).click();
-  await expect(page.getByText("123456789")).toBeVisible();
+  await expect(
+    page.locator(".ad-user-cards").getByText("123456789")
+  ).toBeVisible();
   const userCard = page.locator(".ad-user-card").first();
   await userCard.click();
   await expect(page.getByRole("heading", { name: "Карточка пользователя" })).toBeVisible();
