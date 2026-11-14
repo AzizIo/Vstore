@@ -29,6 +29,7 @@ PREVIEW_DB_PASSWORD=<different-fresh-64-character-hex-password>
 PREVIEW_HTTP_PORT=8080
 
 PREVIEW_BOT_TOKEN=<dedicated-preview-bot-token>
+PREVIEW_ADMIN_TELEGRAM_IDS=[123456789]
 PREVIEW_TELEGRAM_MINI_APP_URL=https://<stable-public-mini-app-host>
 PREVIEW_TELEGRAM_MINI_APP_DIRECT_LINK=https://t.me/<preview_bot_username>/<app_short_name>
 
@@ -49,6 +50,8 @@ PREVIEW_TELEGRAM_MINI_APP_DIRECT_LINK is a separate optional Telegram t.me/<bot>
 The TON proof allowlist is a JSON array containing the hostname only: no scheme, port, path, or trailing slash. PREVIEW_CORS_ALLOWED_ORIGINS is a JSON array containing the exact HTTPS origin (including scheme, without a path); it must match the Preview hostname. Keep PREVIEW_TON_CONNECT_NETWORK=testnet and use a disposable testnet wallet and TEP-62 test NFT. Do not switch to mainnet for a Preview walkthrough.
 
 Use a dedicated BotFather bot. PREVIEW_BOT_TOKEN is required by the API to verify Telegram initData, even when the separate bot container is not running. Start the optional polling bot only once for that token; two polling processes using the same Telegram bot token conflict. Users must open the bot at least once before Telegram will allow it to send them messages.
+
+`PREVIEW_ADMIN_TELEGRAM_IDS` controls access to the isolated Preview admin dashboard. Use numeric Telegram user IDs in a JSON array; leave it as `[]` to disable admin access.
 
 The PREVIEW_* values are deliberately separate from the development stack's normal BOT_TOKEN, AUTH_SECRET_KEY, DATABASE_URL, REDIS_URL, and TON settings. Do not copy production secrets into Preview. Preview migrations fail closed unless PREVIEW_MODE=1 and the configured target is exactly the isolated viltara_preview database on the Compose db service, with the dedicated Preview Redis target. The polling bot is optional, but PREVIEW_BOT_TOKEN is required by API-side Telegram initData verification.
 
