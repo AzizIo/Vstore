@@ -46,14 +46,14 @@ from app.escrow.models import (
     EscrowListingIntent,
     EscrowWalletActionRecord,
 )
+from app.escrow.reservation import (
+    EscrowListingReservationConflict,
+    reserve_listing_for_escrow,
+)
 from app.escrow.service import (
     EscrowActionConflict,
     canonical_request_sha256,
     create_or_replay_action,
-)
-from app.escrow.reservation import (
-    EscrowListingReservationConflict,
-    reserve_listing_for_escrow,
 )
 from app.escrow.schemas import (
     EscrowDealCreate,
@@ -599,14 +599,21 @@ async def create_deal_intent(
             or intent is None
             or intent.status not in {"intent_only", "active"}
         ):
-            raise HTTPException(status_code=409, detail="Listing was reserved or changed during verification")
+            raise HTTPException(
+                status_code=409,
+                detail="Listing was reserved or changed during verification",
+            )
         if any(getattr(listing, field) != value for field, value in listing_snapshot.items()):
-            raise HTTPException(status_code=409, detail="Marketplace listing changed during verification")
+            raise HTTPException(
+                status_code=409, detail="Marketplace listing changed during verification"
+            )
         if any(
             getattr(intent, field) != value
             for field, value in intent_snapshot.items()
         ):
-            raise HTTPException(status_code=409, detail="Escrow listing snapshot changed during verification")
+            raise HTTPException(
+                status_code=409, detail="Escrow listing snapshot changed during verification"
+            )
         buyer_wallet, buyer_address = await _verified_wallet(
             session, user_id=user.id, wallet_id=payload.buyer_wallet_id
         )
