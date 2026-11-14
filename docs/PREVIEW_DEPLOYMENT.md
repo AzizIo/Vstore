@@ -36,6 +36,7 @@ Set these values in the root `.env`:
 ```dotenv
 PREVIEW_AUTH_SECRET_KEY=<fresh-64-hex-character-secret>
 PREVIEW_BOT_TOKEN=<BotFather-token-for-preview-bot>
+PREVIEW_ADMIN_TELEGRAM_IDS=[123456789]
 PREVIEW_DB_PASSWORD=<different-64-hex-character-secret>
 PREVIEW_HTTP_PORT=8080
 
@@ -49,6 +50,8 @@ PREVIEW_CORS_ALLOWED_ORIGINS=["https://<stable-public-mini-app-host>"]
 PREVIEW_TON_CONNECT_NETWORK=testnet
 PREVIEW_TON_CENTER_API_KEY=<optional-preview-provider-api-key>
 ```
+
+`PREVIEW_ADMIN_TELEGRAM_IDS` is an optional JSON array of numeric Telegram user IDs allowed to open `/admin` in this isolated Preview. Leave it as `[]` to disable Preview admin access. Do not use usernames or bot IDs.
 
 The configured `PREVIEW_TELEGRAM_MINI_APP_DIRECT_LINK` is also passed into the static frontend build. It powers the listing-share button as well as order notification links; rebuild `miniapp` after changing it.
 
