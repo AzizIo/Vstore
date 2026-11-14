@@ -164,24 +164,34 @@ async def _apply_one_event(
     existing = await session.scalar(select(EscrowChainEvent).where(
         EscrowChainEvent.network == event.network, EscrowChainEvent.event_key == event.event_key,
     ))
-    if (
-        existing is not None
-        and existing.status in {"applied",
-        "manual_review", "unmatched", "rejected"}
-    ):
-        if existing.status == "applied":
-            old = existing.payload_json or {}
-            new = _payload(event)
-            stable = ("event_type", "contract_address", "deal_id", "source_address",
-                "destination_address",
-                      "item_address", "amount_nanotons", "message_hash", "trace_id", "logical_time",
-                      "phase", "attempt_id", "query_id", "operation_id", "deal_salt")
-            if any(old.get(k) != new.get(k) for k in stable):
-                existing.status = "manual_review"
-                existing.reason_code = "event_correlation_conflict"
-                return "rejected"
-            return "duplicates"
-        return "rejected"
+    if existing is not None:
+        old = existing.payload_json or {}
+        new = _payload(event)
+        stable = (
+            "event_type",
+            "contract_address",
+            "deal_id",
+            "source_address",
+            "destination_address",
+            "item_address",
+            "amount_nanotons",
+            "message_hash",
+            "trace_id",
+            "logical_time",
+            "phase",
+            "attempt_id",
+            "query_id",
+            "operation_id",
+            "deal_salt",
+        )
+        if any(old.get(key) not in (None, new.get(key)) for key in stable):
+            existing.status = "manual_review"
+            existing.reason_code = "event_correlation_conflict"
+            return "rejected"
+        if existing.status in {"applied", "manual_review", "unmatched", "rejected"}:
+            if existing.status == "applied":
+                return "duplicates"
+            return "rejected"
 
     valid_shape = (
         event.network == "testnet" and bool(event.transaction_hash)
