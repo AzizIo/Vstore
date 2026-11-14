@@ -94,10 +94,10 @@ export function createTonConnectEscrowAdapter(options: {
       const messages = transaction.messages.map((message) => {
         normalizedAddress(message.address);
         return {
-        address: message.address,
-        amount: message.amount_nanotons,
-        ...(message.payload_boc ? { payload: message.payload_boc } : {}),
-        ...(message.state_init_boc ? { stateInit: message.state_init_boc } : {}),
+          address: message.address,
+          amount: message.amount_nanotons,
+          ...(message.payload_boc ? { payload: message.payload_boc } : {}),
+          ...(message.state_init_boc ? { stateInit: message.state_init_boc } : {}),
         };
       });
 
