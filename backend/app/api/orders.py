@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.ton_nft.dependencies import get_ton_nft_verifier
 from app.assets.ton_nft.verifier import TONNFTVerifier
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user_allow_blocked
 from app.db.models import Order, OrderDeliveryAttempt, User
 from app.db.session import get_db_session
 from app.orders.schemas import (
@@ -33,7 +33,7 @@ from app.orders.service import (
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
-CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentUser = Annotated[User, Depends(get_current_user_allow_blocked)]
 Verifier = Annotated[TONNFTVerifier, Depends(get_ton_nft_verifier)]
 
 
@@ -93,6 +93,11 @@ async def create_order_route(
     verifier: Verifier,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
 ) -> OrderResponse:
+    if user.is_blocked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account restricted: creating new orders is disabled.",
+        )
     try:
         order_id = await create_order(
             session,

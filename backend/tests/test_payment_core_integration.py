@@ -11,6 +11,7 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from pydantic import SecretStr
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
@@ -452,7 +453,7 @@ async def test_migration_refuses_to_drop_payment_evidence(
             revision = await connection.scalar(
                 text("SELECT version_num FROM alembic_version")
             )
-            assert revision == "0013_payment_refund_workflow"
+            assert revision == ScriptDirectory.from_config(config).get_current_head()
     finally:
         await _cleanup(session_factory, ids)
         await engine.dispose()

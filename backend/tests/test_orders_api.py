@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.api import orders as orders_api
 from app.assets.ton_nft.dependencies import get_ton_nft_verifier
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_current_user_allow_blocked
 from app.db.models import (
     Order,
     OrderDeliveryAttempt,
@@ -29,6 +29,7 @@ def buyer() -> User:
 @pytest.fixture
 def api_client(buyer: User):
     app.dependency_overrides[get_current_user] = lambda: buyer
+    app.dependency_overrides[get_current_user_allow_blocked] = lambda: buyer
     app.dependency_overrides[get_db_session] = lambda: None
     app.dependency_overrides[get_ton_nft_verifier] = lambda: AsyncMock()
     try:

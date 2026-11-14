@@ -66,11 +66,6 @@ async def authenticate_telegram(
     async with async_session_factory() as session:
         async with session.begin():
             user = (await session.execute(statement)).scalar_one()
-            if user.is_blocked:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="This account is restricted",
-                )
 
     token = create_access_token(
         user_id=user.id,

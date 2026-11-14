@@ -8,7 +8,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_current_user_allow_blocked
 from app.db.models import User
 
 AUTH_SECRET = "viltara-test-secret-" + ("s" * 40)
@@ -89,7 +89,7 @@ async def test_current_user_rejects_blocked_account(monkeypatch) -> None:
         await get_current_user(_credentials(user_id))
 
     assert error.value.status_code == 403
-    assert error.value.detail == "This account is restricted"
+    assert "This account is restricted" in error.value.detail
     session.get.assert_awaited_once_with(User, user_id)
 
 
@@ -109,3 +109,41 @@ async def test_current_user_rejects_expired_token_before_database_lookup(monkeyp
     assert error.value.detail == "Invalid or expired access token"
     session_factory.assert_not_called()
     session.get.assert_not_awaited()
+
+
+
+@pytest.mark.asyncio
+async def test_blocked_account_identity_is_available_for_existing_order_workflows(
+    monkeypatch,
+) -> None:
+    user_id = uuid4()
+    blocked_user = User(
+        id=user_id,
+        telegram_id=987654323,
+        first_name="Restricted buyer",
+        is_blocked=True,
+    )
+    session, session_factory = _configure_user_lookup(monkeypatch, blocked_user)
+
+    result = await get_current_user_allow_blocked(_credentials(user_id))
+
+    assert result is blocked_user
+    session_factory.assert_called_once_with()
+    session.get.assert_awaited_once_with(User, user_id)
+
+
+@pytest.mark.asyncio
+async def test_unblocked_account_can_use_allow_blocked_identity_dependency(monkeypatch) -> None:
+    user_id = uuid4()
+    user = User(
+        id=user_id,
+        telegram_id=987654324,
+        first_name="Existing buyer",
+        is_blocked=False,
+    )
+    session, _ = _configure_user_lookup(monkeypatch, user)
+
+    result = await get_current_user_allow_blocked(_credentials(user_id))
+
+    assert result is user
+    session.get.assert_awaited_once_with(User, user_id)

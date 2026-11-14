@@ -21,6 +21,7 @@ def test_marketplace_tables_are_registered() -> None:
         "order_delivery_attempts",
         "telegram_notification_outbox",
         "moderation_audit_log",
+        "admin_user_audit_log",
         "seller_reviews",
         "payment_intents",
         "payment_transactions",
@@ -104,3 +105,19 @@ def test_delivery_attempt_model_has_immutable_wallet_snapshots_and_retry_states(
         index.name == "uq_order_delivery_attempt_verified_transfer"
         for index in table.indexes
     )
+
+
+
+def test_admin_user_audit_model_is_append_only_audit_contract() -> None:
+    from app.db.models import AdminUserAuditLog
+
+    assert AdminUserAuditLog.__tablename__ == "admin_user_audit_log"
+    table = AdminUserAuditLog.__table__
+    unique = next(
+        constraint for constraint in table.constraints
+        if constraint.name == "uq_admin_user_audit_actor_idempotency"
+    )
+    assert [column.name for column in unique.columns] == ["actor_id", "idempotency_key"]
+    assert "reason" in table.c
+    assert "before_snapshot" in table.c
+    assert "after_snapshot" in table.c

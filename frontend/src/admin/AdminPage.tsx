@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { SessionProvider, useSession } from "../auth/SessionProvider";
 import { fetchAdminAccess } from "./api";
-import { AdminCenter } from "./AdminCenter";
+import { AdminDashboard } from "./AdminDashboard";
 
 function AdminPageContent() {
   const session = useSession();
@@ -52,7 +52,7 @@ function AdminPageContent() {
   if (!isAdmin) {
     return <main className="admin-route-message" role="alert">Требуются права администратора.</main>;
   }
-  return <AdminCenter accessToken={session.accessToken} active />;
+  return <AdminDashboard accessToken={session.accessToken} />;
 }
 
 export function AdminPage() {

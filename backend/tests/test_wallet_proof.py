@@ -17,7 +17,7 @@ from redis.asyncio import Redis
 from sqlalchemy.exc import IntegrityError
 
 from app.api import wallets as wallets_api
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_current_user_allow_blocked
 from app.core.config import Settings
 from app.db.models import User, Wallet
 from app.db.session import get_db_session
@@ -84,6 +84,7 @@ def wallet_client(monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr(wallets_api, "get_settings", lambda: settings)
     app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_user_allow_blocked] = lambda: user
 
     async def override_session() -> AsyncIterator[AsyncMock]:
         yield session

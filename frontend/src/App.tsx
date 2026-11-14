@@ -27,6 +27,44 @@ const assetTypeLabels: Record<AssetType, string> = {
 };
 const CATALOG_PAGE_SIZE = 24;
 
+type NavigationIconName = "catalog" | "nft" | "listings" | "orders" | "overview";
+
+function NavigationGlyph({ name }: { name: NavigationIconName }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      focusable="false"
+      aria-hidden="true"
+    >
+      {name === "catalog" && <>
+        <rect x="3.5" y="3.5" width="7" height="7" rx="1.4" />
+        <rect x="13.5" y="3.5" width="7" height="7" rx="1.4" />
+        <rect x="3.5" y="13.5" width="7" height="7" rx="1.4" />
+        <rect x="13.5" y="13.5" width="7" height="7" rx="1.4" />
+      </>}
+      {name === "nft" && <path d="M12 2.8 20.5 12 12 21.2 3.5 12 12 2.8Z" />}
+      {name === "listings" && <>
+        <rect x="5.5" y="3.5" width="13" height="17" rx="2" />
+        <path d="M9 8h6M9 12h6M9 16h6M7.5 8h.01M7.5 12h.01M7.5 16h.01" />
+      </>}
+      {name === "orders" && <>
+        <path d="M4 7h15m0 0-3-3m3 3-3 3" />
+        <path d="M20 17H5m0 0 3 3m-3-3 3-3" />
+      </>}
+      {name === "overview" && <>
+        <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+      </>}
+    </svg>
+  );
+}
+
 function formatItemCount(count: number) {
   const category = new Intl.PluralRules("ru-RU").select(count);
   const noun = category === "one" ? "предмет" : category === "few" ? "предмета" : "предметов";
@@ -360,6 +398,14 @@ function SessionBanner() {
   if (session.status === "loading") {
     return <p className="session-banner" role="status">Проверяем сессию Telegram…</p>;
   }
+  if (session.status === "authenticated" && session.user.is_blocked) {
+    return (
+      <div className="session-banner session-restricted" role="alert">
+        <strong>Аккаунт ограничен администратором.</strong>
+        <span>Создание объявлений и новых сделок отключено. Доступ к уже существующим сделкам и их безопасному завершению сохранён.</span>
+      </div>
+    );
+  }
   if (session.status === "authenticated") {
     const name = [session.user.first_name, session.user.last_name].filter(Boolean).join(" ");
     const username = session.user.username ? ` · @${session.user.username}` : "";
@@ -570,7 +616,7 @@ function MarketplaceApp() {
             setSection("catalog");
           }}
         >
-          <span className="navigation-icon" aria-hidden="true">▦</span>
+          <span className="navigation-icon"><NavigationGlyph name="catalog" /></span>
           <span className="navigation-label">Каталог</span>
         </button>
         <button
@@ -582,7 +628,7 @@ function MarketplaceApp() {
             setSection("my-nft");
           }}
         >
-          <span className="navigation-icon" aria-hidden="true">◇</span>
+          <span className="navigation-icon"><NavigationGlyph name="nft" /></span>
           <span className="navigation-label">Мои NFT</span>
         </button>
         <button
@@ -594,7 +640,7 @@ function MarketplaceApp() {
             setSection("my-listings");
           }}
         >
-          <span className="navigation-icon" aria-hidden="true">▤</span>
+          <span className="navigation-icon"><NavigationGlyph name="listings" /></span>
           <span className="navigation-label">Мои объявления</span>
         </button>
         <button
@@ -606,7 +652,7 @@ function MarketplaceApp() {
             setSection("orders");
           }}
         >
-          <span className="navigation-icon" aria-hidden="true">↗</span>
+          <span className="navigation-icon"><NavigationGlyph name="orders" /></span>
           <span className="navigation-label">Заказы</span>
         </button>
           {session.status === "authenticated" && (
@@ -619,7 +665,7 @@ function MarketplaceApp() {
               setSection("overview");
             }}
           >
-            <span className="navigation-icon" aria-hidden="true">▧</span>
+            <span className="navigation-icon"><NavigationGlyph name="overview" /></span>
             <span className="navigation-label">Обзор</span>
           </button>
         )}

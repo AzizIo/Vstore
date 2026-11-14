@@ -20,7 +20,7 @@ from app.assets.ton_nft.dependencies import get_ton_nft_verifier
 from app.assets.ton_nft.errors import InvalidProviderData, ProviderUnavailable
 from app.assets.ton_nft.models import NFTItemSnapshot, NFTMetadata, VerificationStatus
 from app.assets.ton_nft.verifier import TONNFTVerifier
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_current_user_allow_blocked
 from app.core.config import get_settings
 from app.db.models import (
     AssetType,
@@ -626,7 +626,7 @@ async def sync_my_verified_inventory(
 
 @router.get("/me", response_model=InventoryPageResponse)
 async def get_my_verified_inventory(
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_current_user_allow_blocked)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     verifier: Annotated[TONNFTVerifier, Depends(get_ton_nft_verifier)],
     wallet_id: UUID | None = None,

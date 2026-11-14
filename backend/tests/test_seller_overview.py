@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_current_user_allow_blocked
 from app.db.models import ListingStatus, OrderStatus, PriceCurrency, User
 from app.db.session import get_db_session
 from app.main import app
@@ -56,6 +56,7 @@ def test_seller_overview_returns_private_counts_and_currency_safe_snapshots() ->
         yield session
 
     app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_user_allow_blocked] = lambda: user
     app.dependency_overrides[get_db_session] = override_session
     try:
         with TestClient(app) as client:
@@ -143,6 +144,7 @@ def test_seller_overview_merges_activity_streams_by_recency_and_caps_results() -
         yield session
 
     app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_user_allow_blocked] = lambda: user
     app.dependency_overrides[get_db_session] = override_session
     try:
         with TestClient(app) as client:
