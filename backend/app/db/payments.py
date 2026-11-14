@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -165,3 +166,60 @@ class PaymentEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class PaymentRefund(TimestampMixin, Base):
+    """Durable, single-refund workflow for one captured Telegram Stars charge."""
+
+    __tablename__ = "payment_refunds"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'processing', 'retry_wait', "
+            "'reconciliation_required', 'succeeded', 'manual_review')",
+            name="ck_payment_refunds_status",
+        ),
+        CheckConstraint("attempt_count >= 0", name="ck_payment_refunds_attempts_nonnegative"),
+        CheckConstraint(
+            "reconciliation_count >= 0",
+            name="ck_payment_refunds_reconciliations_nonnegative",
+        ),
+        CheckConstraint(
+            "((status = 'processing' AND lease_token IS NOT NULL "
+            "AND locked_until IS NOT NULL) OR "
+            "(status <> 'processing' AND lease_token IS NULL AND locked_until IS NULL))",
+            name="ck_payment_refunds_processing_lease",
+        ),
+        UniqueConstraint(
+            "payment_transaction_id",
+            name="uq_payment_refunds_transaction",
+        ),
+        Index("ix_payment_refunds_due", "status", "next_attempt_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    payment_transaction_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("payment_transactions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="queued", server_default="queued"
+    )
+    reason_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    reconciliation_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    lease_token: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    request_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(64))

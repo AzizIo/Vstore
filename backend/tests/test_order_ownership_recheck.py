@@ -32,17 +32,14 @@ from app.db.models import (
     Wallet,
 )
 from app.orders.service import OrderConflict, OrderVerificationUnavailable, create_order
+from tests.database_safety import require_test_database_url
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(scope="session")
 def reservation_database() -> str:
-    url = os.getenv("TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("TEST_DATABASE_URL is not configured")
-    if not url.startswith("postgresql+asyncpg://"):
-        pytest.fail("Reservation ownership tests require PostgreSQL")
+    url = require_test_database_url("Reservation ownership tests")
     previous_url = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = url
     get_settings.cache_clear()

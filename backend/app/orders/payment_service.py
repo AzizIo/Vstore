@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.models import Order, OrderStatus, PriceCurrency, User
-from app.db.payments import PaymentEvent, PaymentIntent, PaymentTransaction
+from app.db.payments import PaymentEvent, PaymentIntent, PaymentRefund, PaymentTransaction
 
 
 class PaymentConflict(Exception):
@@ -32,6 +32,41 @@ def _assert_test_stars_enabled() -> None:
         )
     if settings.telegram_stars_test_bot_token is None:
         raise PaymentConflict("A dedicated Telegram Stars test bot token is required")
+
+
+async def queue_stars_refund(
+    session: AsyncSession,
+    transaction: PaymentTransaction,
+    *,
+    reason_code: str,
+    now: datetime | None = None,
+) -> PaymentRefund:
+    """Idempotently enqueue one refund workflow per refund_pending charge.
+
+    Callers must have already persisted/locked the transaction in their surrounding
+    transaction. The unique transaction key is the final concurrency guard.
+    """
+
+    if transaction.status != "refund_pending":
+        raise PaymentConflict("Only refund_pending charges can be queued for refund")
+    current_time = now or datetime.now(UTC)
+    job = await session.scalar(
+        select(PaymentRefund)
+        .where(PaymentRefund.payment_transaction_id == transaction.id)
+        .with_for_update()
+    )
+    if job is None:
+        job = PaymentRefund(
+            payment_transaction_id=transaction.id,
+            status="queued",
+            reason_code=(reason_code or "refund_requested")[:64],
+            next_attempt_at=current_time,
+        )
+        session.add(job)
+        await session.flush()
+    elif job.status in {"queued", "retry_wait"} and job.next_attempt_at > current_time:
+        job.next_attempt_at = current_time
+    return job
 
 
 async def create_stars_payment_intent(
@@ -331,6 +366,24 @@ async def record_stars_success(
         session.add(transaction)
         await session.flush()
 
+        if not is_first_payment:
+            await queue_stars_refund(
+                session,
+                transaction,
+                reason_code=error_code,
+                now=current_time,
+            )
+            session.add(
+                PaymentEvent(
+                    payment_intent_id=intent.id,
+                    payment_transaction_id=transaction.id,
+                    provider="telegram_stars",
+                    provider_event_id=f"refund-request:{transaction.id}",
+                    event_type="refund_requested",
+                    payload_sha256=_digest(f"{transaction.id}:{error_code}"),
+                )
+            )
+
         if is_first_payment:
             intent.status = "paid"
             intent.paid_at = current_time
@@ -364,7 +417,11 @@ async def record_stars_refund_result(
     error_code: str | None = None,
     now: datetime | None = None,
 ) -> str:
-    """Persist the result of a Stars refund API call without assuming timeout means failure."""
+    """Persist a definitive refund result while keeping the durable job in sync.
+
+    Ambiguous transport outcomes must not be passed here as succeeded=False:
+    the worker reconciles those against Telegram's transaction history first.
+    """
 
     _assert_test_stars_enabled()
     current_time = now or datetime.now(UTC)
@@ -382,6 +439,7 @@ async def record_stars_refund_result(
             raise PaymentConflict("Payment transaction not found")
         intent_id, order_id = header
 
+        # Keep a consistent lock order: order -> intent -> transaction -> refund workflow.
         order = await session.scalar(
             select(Order).where(Order.id == order_id).with_for_update()
         )
@@ -395,6 +453,23 @@ async def record_stars_refund_result(
         )
         if order is None or intent is None or transaction is None:
             raise PaymentConflict("Payment refund target no longer exists")
+
+        job = await session.scalar(
+            select(PaymentRefund)
+            .where(PaymentRefund.payment_transaction_id == transaction.id)
+            .with_for_update()
+        )
+        if job is None:
+            if transaction.status not in {"refund_pending", "refunded"}:
+                raise PaymentConflict("Payment transaction is not awaiting a refund")
+            job = PaymentRefund(
+                payment_transaction_id=transaction.id,
+                status="queued",
+                reason_code=(transaction.last_error_code or "refund_result_received")[:64],
+                next_attempt_at=current_time,
+            )
+            session.add(job)
+            await session.flush()
 
         digest = _digest(
             f"{transaction.id}:{transaction.telegram_payment_charge_id}:"
@@ -412,6 +487,10 @@ async def record_stars_refund_result(
             return transaction.status
 
         if transaction.status == "refunded":
+            job.status = "succeeded"
+            job.completed_at = job.completed_at or current_time
+            job.lease_token = None
+            job.locked_until = None
             return "refunded"
         if transaction.status != "refund_pending":
             raise PaymentConflict("Payment transaction is not awaiting a refund")
@@ -419,10 +498,27 @@ async def record_stars_refund_result(
         if succeeded:
             transaction.status = "refunded"
             transaction.refunded_at = current_time
+            transaction.last_error_code = None
+            job.status = "succeeded"
+            job.completed_at = current_time
+            job.last_error_code = None
             event_type = "refund_succeeded"
         else:
-            transaction.last_error_code = error_code or "refund_failed"
+            settings = get_settings()
+            job.attempt_count += 1
+            delay = min(
+                settings.payment_refund_retry_base_seconds
+                * (2 ** min(max(job.attempt_count - 1, 0), 30)),
+                settings.payment_refund_retry_max_seconds,
+            )
+            transaction.last_error_code = (error_code or "refund_failed")[:64]
+            job.status = "retry_wait"
+            job.next_attempt_at = current_time + timedelta(seconds=delay)
+            job.last_error_code = transaction.last_error_code
             event_type = "refund_failed"
+
+        job.lease_token = None
+        job.locked_until = None
 
         captured_count = await session.scalar(
             select(func.count())
