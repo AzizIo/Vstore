@@ -11,10 +11,16 @@ import pytest
 from app.escrow.domain import EscrowChainEventType, EscrowDealStatus
 from app.escrow.models import EscrowChainEvent, EscrowObserverCheckpoint
 from app.escrow.observer import (
-    CHECKPOINT_ID, _apply_one_event, _payload, _stored_evidence_hash, run_observer_pass,
+    CHECKPOINT_ID,
+    _apply_one_event,
+    _payload,
+    _stored_evidence_hash,
+    run_observer_pass,
 )
 from app.escrow.provider import (
-    ChainEventBatch, EscrowProviderUnavailable, NormalizedChainEvent,
+    ChainEventBatch,
+    EscrowProviderUnavailable,
+    NormalizedChainEvent,
     UnconfiguredTONTestnetEscrowProvider,
 )
 
