@@ -63,7 +63,7 @@ const ownListings = [
 ];
 const profile = {
   id: "user-1", telegram_id: 12345, username: "alex", first_name: "Alex",
-  last_name: "Example", language_code: "en",
+  last_name: "Example", language_code: "en", is_blocked: false,
 };
 const authResponse = {
   access_token: "test-access-token", token_type: "bearer", expires_in: 3600,
