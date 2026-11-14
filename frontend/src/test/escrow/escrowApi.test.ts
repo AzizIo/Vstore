@@ -188,6 +188,10 @@ describe("escrow API boundary", () => {
   it("rejects unrecognized states, mainnet data and malformed pages", async () => {
     expect(isEscrowListing({ ...listing(), state: "complete" })).toBe(false);
     expect(isEscrowListing({ ...listing(), network: "mainnet" })).toBe(false);
+    expect(isEscrowListing({ ...listing(), price_ton: "NaN" })).toBe(false);
+    expect(isEscrowListing({ ...listing(), price_ton: "0" })).toBe(false);
+    expect(isEscrowListing({ ...listing(), platform_fee_ton: "-0.1" })).toBe(false);
+    expect(isEscrowDeal({ ...deal(), seller_claimable_ton: "1e6" })).toBe(false);
     expect(isEscrowDeal({ ...deal(), state: "completed" })).toBe(false);
     expect(isEscrowWithdrawal({ ...withdrawal(), status: "paid" })).toBe(false);
 
