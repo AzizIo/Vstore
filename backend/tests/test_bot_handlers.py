@@ -2,10 +2,11 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Chat, Message, Update
-import pytest
 
 from app import bot_handlers
 from app.bot import BOT_COMMANDS, create_dispatcher, register_bot_commands
