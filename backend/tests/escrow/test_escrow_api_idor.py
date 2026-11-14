@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from fastapi import FastAPI
+import pytest
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from app.api.escrow import router
+from app.api.escrow import _verified_wallet, router
 from app.auth.dependencies import get_current_user
 from app.db.models import User
 from app.db.session import get_db_session
