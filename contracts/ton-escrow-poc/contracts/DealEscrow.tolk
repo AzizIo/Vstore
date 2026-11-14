@@ -373,10 +373,10 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         progress.state = STATE_MANUAL_REVIEW;
         progress.pendingAction = PENDING_NONE;
         progress.deadlineUnix = 0;
-        var recovery = progress.recovery.load();
-        recovery.unexpectedPreviousOwner = null;
-        recovery.unexpectedItemAddress = null;
-        progress.recovery = recovery.toCell();
+        var clearedRecovery = progress.recovery.load();
+        clearedRecovery.unexpectedPreviousOwner = null;
+        clearedRecovery.unexpectedItemAddress = null;
+        progress.recovery = clearedRecovery.toCell();
     } else {
         throw Errors.InvalidAttestation;
     }
