@@ -253,6 +253,7 @@ def validate_snapshot(snapshot: Any) -> tuple[Address, Address, Address, Address
         raise TONABIError("NFT return value must cover the 0.01 TON forward amount")
     _uint(snapshot.contract_state, 8, "contract_state")
     _uint(snapshot.deadline_unix, 64, "deadline_unix")
+    _uint(snapshot.observed_chain_time_unix, 64, "observed_chain_time_unix")
     _uint(snapshot.dispute_phase, 8, "dispute_phase")
     if not isinstance(snapshot.nft_in_escrow, bool) or not isinstance(snapshot.principal_locked, bool):
         raise TONABIError("contract flags must be booleans")
