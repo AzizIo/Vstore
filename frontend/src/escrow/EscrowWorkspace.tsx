@@ -87,6 +87,10 @@ function formatAddress(value: string | null | undefined): string {
   return `${value.slice(0, 10)}…${value.slice(-8)}`;
 }
 
+function displayTon(value: string | null | undefined): string {
+  return value ? `${formatTonAmount(value)} TON` : "Не сообщено";
+}
+
 export function EscrowStateBadge({ state }: { state: EscrowState }) {
   const meta = ESCROW_STATE_META[state];
   return (
@@ -144,9 +148,9 @@ function TransactionReview({
         <div><dt>Сеть</dt><dd>TON testnet</dd></div>
         <div><dt>Адрес escrow</dt><dd><code>{transaction.contract_address}</code></dd></div>
         <div><dt>NFT item</dt><dd><code>{transaction.nft_item_address ?? "Не относится к этой операции"}</code></dd></div>
-        <div><dt>Сумма TON</dt><dd>{formatTonAmount(transaction.amount_ton)} TON</dd></div>
-        <div><dt>Комиссия платформы</dt><dd>{formatTonAmount(transaction.fee_ton)} TON</dd></div>
-        <div><dt>Сетевой резерв</dt><dd>{formatTonAmount(transaction.network_fee_ton)} TON</dd></div>
+        <div><dt>Сумма TON</dt><dd>{displayTon(transaction.amount_ton)}</dd></div>
+        <div><dt>Комиссия платформы</dt><dd>{displayTon(transaction.fee_ton)}</dd></div>
+        <div><dt>Сетевой резерв</dt><dd>{displayTon(transaction.network_fee_ton)}</dd></div>
         <div><dt>Подписывающий кошелёк</dt><dd><code>{pending.expectedWalletAddress}</code></dd></div>
         <div><dt>Срок запроса</dt><dd>{formatEscrowDate(transaction.valid_until)}</dd></div>
       </dl>
@@ -405,6 +409,10 @@ function WorkspaceBody({
     expectedWallet: WalletRecord | null,
   ) {
     if (actionLock.current || busy) return;
+    if (walletResultUncertain) {
+      setActionError("Предыдущая операция имеет неопределённый результат. Сначала дождитесь сверки Backend observer; новую транзакцию создавать нельзя.");
+      return;
+    }
     if (!api) {
       setActionError("Escrow API не согласован и не подключён.");
       return;
@@ -655,7 +663,7 @@ function WorkspaceBody({
                   return (
                     <article className="escrow-row-card" key={deal.id}>
                       <div className="escrow-row-main"><NftArtwork src={deal.nft.image_url} title={titleForNft(deal.nft)} /><div><strong>{titleForNft(deal.nft)}</strong><EscrowStateBadge state={deal.state} /><StateGuidance state={deal.state} /></div></div>
-                      <div className="escrow-payout-line"><span>Доступно по данным Backend</span><strong>{formatTonAmount(deal.seller_claimable_ton)} TON</strong></div>
+                      <div className="escrow-payout-line"><span>Доступно по данным Backend</span><strong>{displayTon(deal.seller_claimable_ton)}</strong></div>
                       {claimable && (
                         <button
                           className="escrow-button escrow-button-primary"
