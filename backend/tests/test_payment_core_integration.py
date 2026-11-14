@@ -171,6 +171,19 @@ async def _cleanup(session_factory, ids: dict[str, object]) -> None:
             await session.execute(
                 text("ALTER TABLE payment_events ENABLE TRIGGER trg_payment_events_append_only")
             )
+        has_refund_table = await session.scalar(
+            text("SELECT to_regclass('public.payment_refunds') IS NOT NULL")
+        )
+        if has_refund_table:
+            await session.execute(
+                text(
+                    "DELETE FROM payment_refunds WHERE payment_transaction_id IN "
+                    "(SELECT pt.id FROM payment_transactions pt "
+                    "JOIN payment_intents pi ON pi.id = pt.payment_intent_id "
+                    "WHERE pi.order_id = :order_id)"
+                ),
+                {"order_id": order_id},
+            )
         await session.execute(
             text(
                 "DELETE FROM payment_transactions WHERE payment_intent_id IN "
