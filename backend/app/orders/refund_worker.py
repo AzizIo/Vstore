@@ -367,6 +367,8 @@ async def _process_claim(
         claim.transaction_status != "refund_pending"
         or claim.currency != "XTR"
         or claim.provider != "telegram_stars"
+        or not claim.telegram_payment_charge_id
+        or claim.payer_telegram_id <= 0
         or claim.amount <= 0
         or claim.amount != claim.amount.to_integral_value()
     ):
