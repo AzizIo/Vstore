@@ -66,6 +66,10 @@ jobs:
           ):
               raise SystemExit("Mini App must publish only 127.0.0.1:8081 -> 80")
 
+          miniapp_build_args = services["miniapp"].get("build", {}).get("args", {})
+          if miniapp_build_args.get("VITE_TELEGRAM_MINI_APP_DIRECT_LINK") != os.environ["PROD_TELEGRAM_MINI_APP_DIRECT_LINK"]:
+              raise SystemExit("Mini App share direct link is not passed into the production build")
+
           for name in ("api", "bot"):
               env = services[name].get("environment", {})
               if env.get("ENVIRONMENT") != "production" or "PREVIEW_MODE" in env:
