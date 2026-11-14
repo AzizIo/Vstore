@@ -286,6 +286,26 @@ describe("TON Escrow workspace", () => {
     expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
   });
 
+  it("does not prepare an NFT deposit for an empty, zero or malformed price", async () => {
+    const api = makeApi();
+    renderWorkspace(api, "seller-1");
+    fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
+
+    expect(await screen.findByLabelText("Цена лота · TON testnet")).toBeInTheDocument();
+    const priceInput = screen.getByLabelText("Цена лота · TON testnet");
+    const prepareButton = screen.getByRole("button", { name: "Проверить условия депозита" });
+
+    expect(prepareButton).toBeDisabled();
+    fireEvent.change(priceInput, { target: { value: "0" } });
+    expect(prepareButton).toBeDisabled();
+    fireEvent.change(priceInput, { target: { value: "2,5" } });
+    expect(prepareButton).toBeDisabled();
+    fireEvent.change(priceInput, { target: { value: "2.5" } });
+    expect(prepareButton).toBeEnabled();
+
+    expect(api.prepareNftDeposit).not.toHaveBeenCalled();
+  });
+
   it("shows seller claimable proceeds only from the seller-scoped Backend deal feed", async () => {
     const api = makeApi({
       sellerDeals: [deal({
