@@ -129,7 +129,12 @@ def test_snapshot_rejects_duplicate_authority_keys_and_invalid_reserve() -> None
     with pytest.raises(TONABIError, match="reserve formula"):
         derive_deployment(
             load_pinned_code_boc(),
-            replace(deal, execution_reserve_nanotons=400_000_000),
+            replace(
+                deal,
+                execution_reserve_nanotons=500_000_000,
+                nft_transfer_value_nanotons=150_000_000,
+                seller_deployment_refund_nanotons=100_000_000,
+            ),
         )
     with pytest.raises(TONABIError, match="deployment value cannot fund activation"):
         derive_deployment(
