@@ -8,12 +8,14 @@ from uuid import uuid4
 
 import pytest
 
+from app.db.models import ListingStatus
 from app.escrow.domain import EscrowChainEventType, EscrowDealStatus
 from app.escrow.models import EscrowChainEvent, EscrowObserverCheckpoint
 from app.escrow.observer import (
     CHECKPOINT_ID,
     _apply_one_event,
     _payload,
+    _reconcile_terminal_listing,
     _stored_evidence_hash,
     run_observer_pass,
 )
@@ -22,6 +24,7 @@ from app.escrow.provider import (
     EscrowProviderUnavailable,
     FinalityVerification,
     NormalizedChainEvent,
+    TerminalOwnerVerification,
     UnconfiguredTONTestnetEscrowProvider,
 )
 
@@ -246,6 +249,20 @@ class BatchProvider(UnconfiguredTONTestnetEscrowProvider):
             finalized=event.finalized,
             masterchain_inclusion_verified=event.finalized,
             trace_binding_verified=event.finalized,
+        )
+
+    async def verify_terminal_owner(
+        self, *, item_address: str, expected_owner_address: str,
+        minimum_masterchain_seqno: int,
+    ) -> TerminalOwnerVerification:
+        return TerminalOwnerVerification(
+            network="testnet",
+            item_address=item_address,
+            owner_address=expected_owner_address,
+            masterchain_seqno=minimum_masterchain_seqno + 1,
+            proof_sha256="c" * 64,
+            provider_id="fixture-owner-verifier",
+            verified=True,
         )
 
 
@@ -599,3 +616,63 @@ async def test_finalized_event_without_finality_proof_remains_pending() -> None:
     assert isinstance(stored, EscrowChainEvent)
     assert stored.status == "pending"
     assert stored.reason_code == "finality_proof_missing"
+
+
+@pytest.mark.asyncio
+async def test_terminal_listing_is_sold_only_after_buyer_owner_proof() -> None:
+    buyer_id, seller_id, asset_id, listing_id = uuid4(), uuid4(), uuid4(), uuid4()
+    intent = SimpleNamespace(
+        id=uuid4(), marketplace_listing_id=listing_id, asset_id=asset_id,
+        item_address="nft-item", status="reserved",
+    )
+    listing = SimpleNamespace(id=listing_id, status=ListingStatus.RESERVED)
+    asset = SimpleNamespace(id=asset_id, item_address="nft-item", owner_id=seller_id)
+    deal = SimpleNamespace(
+        listing_intent_id=intent.id, buyer_address_snapshot="buyer-wallet",
+        seller_address_snapshot="seller-wallet", item_address="nft-item",
+        buyer_id=buyer_id, seller_id=seller_id,
+    )
+    event = make_event(
+        item_address="nft-item",
+        terminal_owner_address="buyer-wallet",
+        terminal_owner_proof_sha256="c" * 64,
+        terminal_owner_masterchain_seqno=101,
+        terminal_owner_provider="fixture-owner-verifier",
+    )
+    session = FakeEscrowSession(intent, listing, intent, asset)
+
+    reconciled = await _reconcile_terminal_listing(
+        session, deal, EscrowDealStatus.SETTLED, event
+    )
+
+    assert reconciled is True
+    assert listing.status is ListingStatus.SOLD
+    assert intent.status == "cancelled"
+    assert asset.owner_id == buyer_id
+
+
+@pytest.mark.asyncio
+async def test_terminal_listing_stays_reserved_without_current_owner_proof() -> None:
+    buyer_id, seller_id, asset_id, listing_id = uuid4(), uuid4(), uuid4(), uuid4()
+    intent = SimpleNamespace(
+        id=uuid4(), marketplace_listing_id=listing_id, asset_id=asset_id,
+        item_address="nft-item", status="reserved",
+    )
+    listing = SimpleNamespace(id=listing_id, status=ListingStatus.RESERVED)
+    asset = SimpleNamespace(id=asset_id, item_address="nft-item", owner_id=seller_id)
+    deal = SimpleNamespace(
+        listing_intent_id=intent.id, buyer_address_snapshot="buyer-wallet",
+        seller_address_snapshot="seller-wallet", item_address="nft-item",
+        buyer_id=buyer_id, seller_id=seller_id,
+    )
+    event = make_event(item_address="nft-item")
+    session = FakeEscrowSession(intent, listing, intent, asset)
+
+    reconciled = await _reconcile_terminal_listing(
+        session, deal, EscrowDealStatus.SETTLED, event
+    )
+
+    assert reconciled is False
+    assert listing.status is ListingStatus.RESERVED
+    assert intent.status == "manual_review"
+    assert asset.owner_id == seller_id
