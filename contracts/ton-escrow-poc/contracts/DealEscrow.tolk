@@ -210,6 +210,11 @@ fun sendRemainingBalanceTo(
             action: SETTLEMENT_ACTION_EXECUTION_RESERVE_REFUND,
         },
     });
+    // SAFETY: recipient is a snapshotted seller/buyer address selected only
+    // by terminal settlement paths; principal and seller allowance are handled
+    // separately, and TERMINAL_STORAGE_RESERVE is reserved before this call.
+    // This intentionally refunds only the remaining balance and cannot choose
+    // an arbitrary destination or withdraw the protected terminal reserve.
     refund.send(
         SEND_MODE_CARRY_ALL_BALANCE
         + SEND_MODE_PAY_FEES_SEPARATELY
