@@ -555,8 +555,8 @@ async def list_admin_users(
         query = q.strip()
         username_query = query[1:] if query.startswith("@") else query
         criterion = or_(
-            User.username.ilike(f"%{username_query}%", autoescape=True),
-            cast(User.telegram_id, String).like(f"%{username_query}%", autoescape=True),
+            User.username.ilike(f"%{username_query}%"),
+            cast(User.telegram_id, String).like(f"%{username_query}%"),
         )
         statement = statement.where(criterion)
         count_statement = count_statement.where(criterion)
