@@ -199,6 +199,10 @@ class FakeContext:
 class FakeEscrowSession:
     def __init__(self, *results: object) -> None:
         self.results = list(results)
+        self.added: list[object] = []
+
+    def add(self, value: object) -> None:
+        self.added.append(value)
 
     async def __aenter__(self) -> FakeEscrowSession:
         return self
@@ -285,3 +289,46 @@ def test_observer_checkpoint_table_is_durable_and_testnet_scoped() -> None:
     assert EscrowObserverCheckpoint.__table__.c.cursor is not None
     assert EscrowObserverCheckpoint.__table__.c.lease_token is not None
     assert EscrowObserverCheckpoint.__table__.c.lease_until is not None
+
+
+@pytest.mark.asyncio
+async def test_expired_observer_lease_requeries_the_durable_cursor() -> None:
+    now = datetime(2026, 11, 14, tzinfo=UTC)
+    checkpoint = EscrowObserverCheckpoint(
+        checkpoint_id=CHECKPOINT_ID,
+        network="testnet",
+        cursor="cursor-before-expired-lease",
+        last_masterchain_seqno=99,
+        lease_token=uuid4(),
+        lease_until=now - timedelta(seconds=1),
+        next_scan_at=None,
+        last_error_code=None,
+    )
+
+    class RecordingOutageProvider(OutageProvider):
+        def __init__(self) -> None:
+            self.received_cursor: str | None = None
+
+        async def scan_events(self, *, cursor: str | None, limit: int) -> ChainEventBatch:
+            self.received_cursor = cursor
+            return await super().scan_events(cursor=cursor, limit=limit)
+
+    sessions = [
+        FakeEscrowSession(checkpoint),
+        FakeEscrowSession(checkpoint),
+        FakeEscrowSession(checkpoint),
+    ]
+
+    def factory() -> FakeEscrowSession:
+        return sessions.pop(0)
+
+    provider = RecordingOutageProvider()
+    result = await run_observer_pass(
+        factory, provider, now=now, limit=5
+    )  # type: ignore[arg-type]
+
+    assert result.provider_unavailable
+    assert provider.received_cursor == "cursor-before-expired-lease"
+    assert checkpoint.cursor == "cursor-before-expired-lease"
+    assert checkpoint.lease_token is None
+    assert checkpoint.lease_until is None
