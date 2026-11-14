@@ -147,6 +147,7 @@ def upgrade() -> None:
         sa.Column("deal_salt", sa.String(128), nullable=True),
         sa.Column("account_address", sa.String(128), nullable=True),
         sa.Column("observed_contract_state", sa.String(64), nullable=True),
+        sa.Column("contract_state_reconciled", sa.Boolean(), server_default=sa.false(), nullable=False),
         sa.Column("event_type", sa.String(64), nullable=False),
         sa.Column("contract_address", sa.String(128), nullable=False),
         sa.Column("deal_id", sa.Uuid(), nullable=True),
