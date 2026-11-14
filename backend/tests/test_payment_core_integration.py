@@ -180,7 +180,10 @@ async def _cleanup(session_factory, ids: dict[str, object]) -> None:
             text("SELECT to_regclass('public.escrow_listing_intents') IS NOT NULL")
         ):
             await session.execute(
-                text("DELETE FROM escrow_listing_intents WHERE marketplace_listing_id = :listing_id"),
+                text(
+                    "DELETE FROM escrow_listing_intents "
+                    "WHERE marketplace_listing_id = :listing_id"
+                ),
                 {"listing_id": listing_id},
             )
         await session.execute(
