@@ -62,13 +62,12 @@ class FakeSession:
         self.added.append(value)
 
 
-def test_bad_provider_digest_is_stored_as_safe_hash_and_rejected() -> None:
+@pytest.mark.asyncio
+async def test_bad_provider_digest_is_stored_as_safe_hash_and_rejected() -> None:
     event = make_event(evidence_sha256="not-a-sha256")
     session = FakeSession()
 
-    import asyncio
-
-    result = asyncio.run(_apply_one_event(session, event, provider_verified=False))
+    result = await _apply_one_event(session, event, provider_verified=False)
 
     assert result == "rejected"
     assert len(session.added) == 1
@@ -79,7 +78,8 @@ def test_bad_provider_digest_is_stored_as_safe_hash_and_rejected() -> None:
     assert len(stored.evidence_sha256) == 64
 
 
-def test_same_chain_event_is_an_idempotent_noop() -> None:
+@pytest.mark.asyncio
+async def test_same_chain_event_is_an_idempotent_noop() -> None:
     event = make_event()
     existing = EscrowChainEvent(
         id=uuid4(),
@@ -94,17 +94,16 @@ def test_same_chain_event_is_an_idempotent_noop() -> None:
         payload_json={},
         status="applied",
     )
-    import asyncio
-
     session = FakeSession(existing)
-    result = asyncio.run(_apply_one_event(session, event, provider_verified=True))
+    result = await _apply_one_event(session, event, provider_verified=True)
 
     assert result == "duplicates"
     assert session.added == []
     assert existing.status == "applied"
 
 
-def test_conflicting_digest_for_same_event_goes_to_manual_review() -> None:
+@pytest.mark.asyncio
+async def test_conflicting_digest_for_same_event_goes_to_manual_review() -> None:
     event = make_event(evidence_sha256="2" * 64)
     existing = EscrowChainEvent(
         id=uuid4(),
@@ -119,10 +118,8 @@ def test_conflicting_digest_for_same_event_goes_to_manual_review() -> None:
         payload_json={},
         status="applied",
     )
-    import asyncio
-
     session = FakeSession(existing)
-    result = asyncio.run(_apply_one_event(session, event, provider_verified=True))
+    result = await _apply_one_event(session, event, provider_verified=True)
 
     assert result == "rejected"
     assert existing.status == "manual_review"
@@ -180,7 +177,9 @@ async def test_provider_outage_preserves_cursor_and_releases_lease() -> None:
     def factory() -> FakeEscrowSession:
         return FakeEscrowSession(checkpoint)
 
-    result = await run_observer_pass(factory, OutageProvider(), now=now, limit=5)  # type: ignore[arg-type]
+    result = await run_observer_pass(
+        factory, OutageProvider(), now=now, limit=5  # type: ignore[arg-type]
+    )
 
     assert result.provider_unavailable
     assert checkpoint.cursor == "durable-cursor-before-outage"
