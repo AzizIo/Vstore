@@ -68,7 +68,9 @@ def test_state_machine_requires_buyer_acceptance_before_delivery() -> None:
     assert state is EscrowDealStatus.DELIVERED_DISPUTE_WINDOW
 
 
-def test_raw_nft_transfer_observation_cannot_advance_deal_state() -> None:
+def test_raw_nft_transfer_observation_cannot_advance_deal_state(
+    deal: DealEvidenceSnapshot,
+) -> None:
     for event_type in (
         EscrowChainEventType.NFT_TRANSFER_CONFIRMED,
         EscrowChainEventType.NFT_DELIVERY_EVIDENCE_OBSERVED,
@@ -76,7 +78,7 @@ def test_raw_nft_transfer_observation_cannot_advance_deal_state() -> None:
         with pytest.raises(EscrowDomainError):
             transition_for_verified_event(EscrowDealStatus.NFT_RELEASE_PENDING, event_type)
         with pytest.raises(EscrowDomainError):
-            validate_event_against_deal(evidence(event_type=event_type), deal())
+            validate_event_against_deal(evidence(event_type=event_type), deal)
 
 
 def test_replay_or_out_of_order_event_cannot_advance_state() -> None:
