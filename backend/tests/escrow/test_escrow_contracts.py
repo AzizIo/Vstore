@@ -124,6 +124,16 @@ def test_snapshot_rejects_duplicate_authority_keys_and_invalid_reserve() -> None
             load_pinned_code_boc(),
             replace(deal, execution_reserve_nanotons=400_000_000),
         )
+    with pytest.raises(TONABIError, match="deployment value cannot fund activation"):
+        derive_deployment(
+            load_pinned_code_boc(),
+            replace(deal, deployment_value_nanotons=60_000_000),
+        )
+    with pytest.raises(TONABIError, match="state is not defined"):
+        derive_deployment(
+            load_pinned_code_boc(),
+            replace(deal, contract_state=14),
+        )
 
 
 @pytest.mark.asyncio
