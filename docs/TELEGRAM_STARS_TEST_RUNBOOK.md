@@ -101,7 +101,7 @@ Expected result: the bot replies that the **test** payment is confirmed. This mu
 
 ## 5. Verify the ledger, then test a real Test Server refund
 
-In a second terminal, set the same two environment variables (the test token and generated database password) and set the order ID:
+After the successful payment message arrives, stop the bot with Ctrl+C. Keep using the same terminal so the two exported test-only environment variables remain set, and set the order ID:
 
 ```bash
 export ORDER_ID='PASTE_ORDER_UUID'
@@ -121,13 +121,14 @@ docker compose -p viltara-stars-test -f docker-compose.stars-test.yml --profile 
 
 This test-only command accepts exactly one captured Telegram Stars charge for the specified order, marks it `refund_pending`, and creates one durable refund job. It refuses orders with zero or multiple captured charges and refuses to queue the same charge twice.
 
-Run the opt-in worker in the foreground:
+Start the opt-in worker in the background:
 
 ```bash
-docker compose -p viltara-stars-test -f docker-compose.stars-test.yml --profile refund-worker up refund-worker
+docker compose -p viltara-stars-test -f docker-compose.stars-test.yml --profile refund-worker up -d refund-worker
+sleep 8
 ```
 
-The worker uses `refundStarPayment` with the original Telegram charge ID and the dedicated test bot token. Wait for the worker to process the queued job, then stop it with Ctrl+C. If Telegram returns an ambiguous result, the worker reconciles using `getStarTransactions`; it does not blindly issue a second refund.
+The worker uses `refundStarPayment` with the original Telegram charge ID and the dedicated test bot token. It is deliberately separate from the payment bot and is never auto-started. If Telegram returns an ambiguous result, the worker reconciles using `getStarTransactions`; it does not blindly issue a second refund.
 
 Verify the final state:
 
@@ -135,7 +136,11 @@ Verify the final state:
 docker compose -p viltara-stars-test -f docker-compose.stars-test.yml exec -T db psql -U viltara_stars_test -d viltara_test -c "SELECT i.status AS intent_status, t.status AS transaction_status, r.status AS refund_status, array_agg(e.event_type ORDER BY e.created_at) AS events FROM payment_intents i JOIN payment_transactions t ON t.payment_intent_id = i.id JOIN payment_refunds r ON r.payment_transaction_id = t.id JOIN payment_events e ON e.payment_intent_id = i.id WHERE i.order_id = '${ORDER_ID}'::uuid GROUP BY i.id, t.id, r.id;"
 ```
 
-Expected final states: transaction `refunded`, refund job `succeeded`, and events include `payment_succeeded`, `refund_requested` and `refund_succeeded`. The order and synthetic NFT remain undelivered.
+Expected final states: transaction `refunded`, refund job `succeeded`, and events include `payment_succeeded`, `refund_requested` and `refund_succeeded`. The order and synthetic NFT remain undelivered. After verification, stop the worker:
+
+```bash
+docker compose -p viltara-stars-test -f docker-compose.stars-test.yml stop refund-worker
+```
 
 ## 6. Stop and remove the disposable stack
 
