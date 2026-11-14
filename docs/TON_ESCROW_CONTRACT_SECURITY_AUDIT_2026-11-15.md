@@ -1,0 +1,165 @@
+# TON Escrow — contract security audit & lifecycle coverage (Issue #214)
+
+**Review class:** internal, source-level, static/emulator-gap assessment.  
+**Not an independent audit. Not a release approval.**  
+**Review baseline:** `dd7e5045450f4c95e564fae72c4200f3d921d196`  
+**Contract source:** `contracts/ton-escrow-poc/contracts/DealEscrow.tolk`  
+**Frozen manifest:** `contracts/ton-escrow-poc/artifacts/frozen/manifest.json`  
+**Protocol:** v1, TON testnet scope, Acton 1.2.1 / Tolk 1.5.0.
+
+## Executive result
+
+The inspected source contains meaningful fail-closed controls: fixed per-deal roles/item/amounts, signed ConfigParam 19 testnet check, 2-of-3 signatures over typed cell hashes, distinct oracle/resolver key sets, attempt/query binding, exact NFT sender/payload checks, and manual-review transitions for bounced internal actions.
+
+This pass does **not** establish that the contract is safe to deploy. The emulator suite is materially narrower than the requested lifecycle matrix; bounce recovery loses action identity; frozen-source provenance is not bound to the current reviewed source SHA; and the reserve-accounting test bypasses signature checking for the terminal payout path. No live testnet transactions or independent specialist review were performed.
+
+## Findings
+
+### F-01 — HIGH (candidate; reproduce before final severity): bounced message handler has no sender/action/attempt binding
+
+**Location:** `DealEscrow.tolk:738-745`.
+
+`onBouncedMessage(_in)` ignores the entire bounced message, unconditionally loads storage and changes the current deal state to `STATE_MANUAL_REVIEW`. It does not inspect the original bounced body, destination/sender identity, operation opcode, query ID, deal salt or the current pending action/attempt.
+
+**Preconditions / potential impact**
+- Contract receives a valid TVM bounced internal message addressed to this escrow.
+- Contract is not already in a terminal state.
+- The bounced message may be unrelated to the current outbound NFT/principal/reserve action, or may be an intentionally induced failure by an actor who can cause an internal message to bounce to this address.
+- Any such bounce can force manual review and set `deadlineUnix=0`, stopping the ordinary state machine even when the current escrow action is otherwise healthy. The handler itself does not settle or transfer funds, so the direct impact is a griefing/availability freeze, not demonstrated principal theft.
+
+**Evidence**
+- The only existing bounce emulator test constructs one synthetic bounced `TimeoutDeal` addressed to escrow and asserts the state becomes manual review (`DealEscrow.test.tolk:615-640`). It does not vary sender/action/attempt or test irrelevant bounced messages.
+- Current implementation: `onBouncedMessage(_in: InMessageBounced)` (`DealEscrow.tolk:738-745`).
+
+**Required reproducer**
+- In emulator, prepare a deal in an active non-terminal state.
+- Deliver a bounced message whose original body is unrelated to any currently pending escrow action (also test stale attempt ID, wrong salt and wrong original sender if available in the Acton bounce fixture).
+- Observe whether state changes to MANUAL_REVIEW.
+- Compare with a legitimate bounce from the snapshotted NFT item or fixed seller/buyer for the expected pending action.
+
+**Recommendation**
+Decode the bounced body and bind recovery to the expected outbound operation/pending state/attempt/query/salt and trusted destination. Define a safe policy for unrecognized bounces (ignore vs manual review with recorded evidence). This is protocol/behavior-sensitive and must be coordinated with the #206 adapter owner before editing. Do not patch ABI/storage here.
+
+**Severity caveat:** HIGH is provisional until the arbitrary-bounce source/feasibility is demonstrated with an Acton emulator reproducer and TON VM semantics reviewed by an independent specialist.
+
+### F-02 — HIGH coverage blocker: terminal/refund/dispute/expiry lifecycle is not proven by emulator tests
+
+**Locations:** contract transitions `DealEscrow.tolk:313-509`, `592-727`; emulator test file `DealEscrow.test.tolk`.
+
+The visible test file has a focused happy-path deposit/funding/acceptance, rejection for mainnet global ID, stale oracle-attempt rejection, one reserve/payout simulation, signature helper tests, and one synthetic bounce-to-manual-review test. The single terminal reserve test starts from a pre-seeded `STATE_DELIVERED_DISPUTE_WINDOW`, funds via a plain transfer, and uses `testing.setChecksigIgnore(true)` for the payout attestation. It therefore does not demonstrate a complete real-signature end-to-end delivery→payout flow or a complete refund flow.
+
+The current emulator tests do not prove the full requested outcomes for:
+- pre-delivery dispute → resolver buyer outcome → NFT returned → buyer principal refund;
+- pre-delivery dispute → seller outcome → NFT release/return and terminal balance;
+- post-delivery dispute → voluntary buyer NFT return → resolver buyer outcome/refund;
+- post-delivery dispute → seller outcome;
+- each deadline boundary (-1, exact deadline, +1);
+- expiry before funding, failed NFT return, payout/refund reconciliation timeout;
+- bounced payout, principal refund, deployment allowance refund and carry-all-balance reserve return;
+- duplicate/replayed/out-of-order resolver messages and terminal-state re-entry;
+- terminal NFT owner + exact principal/reserve delta invariants for every branch.
+
+**Impact**
+No exploit is asserted solely from missing tests. The project Definition of Done requires these invariants, but they are not evidenced by current emulator tests. This blocks a claim of complete lifecycle coverage and blocks Gate B.
+
+**Recommendation**
+Add deterministic Acton emulator tests for each state/actor/timing/failure branch, assert getters, NFT owner and before/after TON balances, and exercise real Ed25519 signatures on contract entrypoint paths. Do not use the checksig-ignore bypass except isolated accounting unit tests, which must be labeled as such.
+
+### F-03 — HIGH review-provenance blocker: frozen manifest does not bind exact current source to frozen ABI/BoC
+
+**Location:** `artifacts/frozen/manifest.json`; `contracts/DealEscrow.tolk`.
+
+The manifest pins the artifact produced from `source_commit=2913ea7d53ea7344f57d6503142c08e0b328bc7d` and CI run/artifact IDs, while the review baseline in this issue is `dd7e5045450f4c95e564fae72c4200f3d921d196`. The manifest itself explicitly warns that the frozen artifact does not prove reproducibility, StateInit correctness or audit safety.
+
+This is not proof that source and bytecode differ; a byte-for-byte reproducible build could establish equivalence. At this point, however, the reviewer cannot infer the frozen code hash from the current source SHA alone.
+
+**Impact**
+A reviewer could accidentally approve a different artifact from the source currently being integrated. Any source, ABI, storage or build-tool change after the frozen source commit must be bound to an exact artifact before independent audit/testnet acceptance.
+
+**Required evidence**
+- Rebuild exact reviewed source SHA with pinned Acton/Tolk toolchain.
+- Compare generated ABI, compiled BoC SHA-256 and code hash against manifest.
+- If source intentionally differs, create a new frozen manifest with exact source SHA, CI run/artifact link, toolchain, ABI digest, BoC digest/code hash, and complete immutable StateInit inputs.
+- Independently reproduce StateInit/address for golden test vectors.
+
+**Coordination**
+Do not change frozen ABI/storage/opcodes here. Coordinate any changed digest/ABI with Issue #206 adapter owner and #197 parent.
+
+### F-04 — MEDIUM: reserve/payout integration test bypasses signature verification
+
+**Location:** `DealEscrow.test.tolk:504-516`.
+
+The terminal accounting test explicitly sets `testing.setChecksigIgnore(true)` before invoking the contract with all-zero dummy signatures and turns it off immediately afterward. This is clearly scoped to the test, not deployable code, and the signature helper has separate cryptographic tests. Still, the payout test does not verify the composition of valid signatures + route/context/state validation + terminal accounting in one contract execution. It should be complemented by real signed oracle/resolver integration fixtures.
+
+**Impact**
+Test suite may pass the financial settlement branch if the signature gate is accidentally bypassed in test configuration, because the existing test does bypass it. This is a validation blind spot, not proof of production bypass.
+
+### F-05 — MEDIUM: oracle attestation evidence hashes are only checked for non-zero and persisted
+
+**Location:** `DealEscrow.tolk:334-339` and route checks in `313-443`.
+
+The contract checks that message/trace/evidence hashes are non-zero and persists the supplied evidence hash. On-chain code cannot itself prove external indexer finality or trace membership unless that evidence is independently interpreted by the oracle quorum. Therefore security rests on the actual 2-of-3 oracle governance and evidence validation procedure. This must be independently reviewed; signature quorum alone does not make the underlying observation true.
+
+**Impact**
+Compromise, collusion or correlated failure of two oracle operators can attest a false transfer/settlement observation. This is an explicit trust assumption but must not be described as trustless/finality proven.
+
+**Recommendation**
+Independent reviewer to inspect signed payload format, source evidence verification rules, operator independence and key custody. Add hostile oracle fixtures (valid signatures over wrong but internally consistent traces, conflicting observations, wrong masterchain checkpoint, false destination/amount/query). The contract only constrains fields; oracle policy validates evidence semantics.
+
+## Positive controls observed
+
+- State-changing entrypoints check testnet network ID and signed ConfigParam 19 global ID `-3`; mainnet fixture `-239` rejection exists in test.
+- Immutable per-deal roles, item address, deal salt, principal, reserve and keys are stored in initial terms.
+- Exact TEP-62 item sender, previous owner, query ID, deadline, inline payload selector, magic and deal salt are required for valid deposit/return.
+- Oracle context binds domain, protocol, testnet ID, escrow address, salt, action, attempt; route binds item/source/destination/amount/query ID; 2-of-3 slot-specific signatures are validated.
+- Oracle/resolver key sets are required to be unique/disjoint by `assertTestnet`.
+- Buyer funding requires exactly principal + execution reserve and buyer acceptance precedes NFT release.
+- Resolver signature context is separately domain-separated and bound to dispute attempt/evidence.
+- No direct owner withdraw/upgrade method was observed in the inspected contract source.
+
+## Test coverage assessment
+
+| Requirement | Current evidence | Result |
+|---|---|---|
+| Build, format, ABI generation | Contract CI workflow; needs latest-head run record | Not audited here |
+| Exact testnet ConfigParam 19 gate | mainnet global ID fixture | Partial |
+| Exact NFT item deposit | happy path + wrong-item behavior in existing plan | Partial |
+| Buyer funding and acceptance | happy path | Partial |
+| Signature helper quorum | 3/3, 2/3, 1/3, duplicate slot helper | Partial; not end-to-end |
+| Full pre/post delivery dispute | no complete emulator traces | Missing |
+| Buyer principal refund | no full real-signature path | Missing |
+| Seller expiry/return | not fully exercised | Missing |
+| Every outbound bounce branch | one generic bounce test | Missing |
+| Deadline boundaries | not demonstrated | Missing |
+| Terminal principal/NFT/reserve invariants across branches | one seeded seller payout/reserve case | Missing |
+| Replay and stale attempt | stale oracle check only | Partial |
+| Live valueless testnet lifecycle | none attached | Blocked |
+| Independent TON/Tolk audit | none attached | Blocked |
+
+## Frozen artifact provenance recorded for this review
+
+- Current source review SHA: `dd7e5045450f4c95e564fae72c4200f3d921d196`
+- Manifest source commit: `2913ea7d53ea7344f57d6503142c08e0b328bc7d`
+- Workflow run ID: `43634396094`
+- Artifact ID: `14129775225`
+- Original archive SHA-256: `80db85f1dfc91450e6e7e47990bd89bf2ff80e0ecb99d17d8f40a07f33feba58`
+- Original ABI SHA-256: `05d3bc9b7aafc7fc71889cffc6d4fea2f607ea14aa48f3854c8e432747623597`
+- Build descriptor SHA-256: `f38b6c867af8ed13d95bc7fed75136961eb97c21290360197ccf9520907ffc3b`
+- Compiled code hash: `E9358DAA6FFCC8FCEC979FBD631C7FC0BE336347D1DD44F3F06113E7B2A37548`
+- Compiled BoC SHA-256: `aaaa3822a52e28410589cbd11e7e81252ea8d52b07ece73a9b5dda1c07d8a167`
+- Compact ABI SHA-256: `25fc5f338f45db7d7198961a75c1d5cfe04f996ae36013cca0d70f03870c3923`
+- Acton 1.2.1 / Tolk 1.5.0
+
+These are copied from the frozen manifest; this pass did not independently download/rebuild the original artifact to verify its SHA values.
+
+## Independent reviewer status
+
+**NOT PERFORMED.** No reviewer identity/qualifications, signed report, engagement record or independent finding disposition is available. This internal review cannot be represented as external audit.
+
+## Live testnet status
+
+**BLOCKED — owner approval required.** No transactions, deployment, wallet connection, real funds or testnet NFT transfers were performed for this pass.
+
+## Decision
+
+**BLOCKED for testnet acceptance / any production use.** The contract may only proceed as an isolated disabled testnet PoC under the existing Gate A controls. Do not enable signing, mount public routes, claim buyer protection, or merge as proof of live acceptance. Resolve or explicitly disposition the above findings, complete missing emulator matrix, rebuild/bind the frozen artifact to an exact source SHA, and obtain independent TON/Tolk review before Gate B.
