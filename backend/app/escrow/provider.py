@@ -6,6 +6,8 @@ provider is enabled before ABI approval.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -56,13 +58,13 @@ class NormalizedChainEvent:
         identity = (
             self.network, self.transaction_hash,
             self.message_hash or f"idx-{self.event_index}",
-            self.trace_id or "trace-unknown", self.phase or "phase-unknown",
-            self.attempt_id or "attempt-unknown", self.query_id or "query-unknown",
-            self.operation_id or "operation-unknown",
+            self.trace_id or "trace-unknown",
+            self.phase or "phase-unknown",
+            self.attempt_id or "attempt-unknown",
         )
-        import hashlib
-        import json
-        return hashlib.sha256(json.dumps(identity, separators=(",", ":")).encode()).hexdigest()
+        return hashlib.sha256(
+            json.dumps(identity, separators=(",", ":")).encode()
+        ).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
