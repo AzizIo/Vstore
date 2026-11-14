@@ -176,7 +176,7 @@ async def _verified_wallet(
     *,
     user_id: UUID,
     wallet_id: UUID,
-) -> Wallet:
+) -> tuple[Wallet, str]:
     wallet = await session.scalar(
         select(Wallet).where(
             Wallet.id == wallet_id,
@@ -191,13 +191,13 @@ async def _verified_wallet(
             detail="Verified testnet wallet not found for this account",
         )
     try:
-        wallet.address = normalize_address(wallet.address)
+        canonical_address = normalize_address(wallet.address)
     except AddressError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Stored wallet address is invalid; re-verify wallet ownership",
         ) from exc
-    return wallet
+    return wallet, canonical_address
 
 
 async def _verify_current_nft_owner(
@@ -278,7 +278,7 @@ async def create_listing_intent(
                 status_code=409,
                 detail="Listing asset is not a verified, seller-owned TON testnet NFT",
             )
-        seller_wallet = await _verified_wallet(
+        seller_wallet, seller_address = await _verified_wallet(
             session, user_id=user.id, wallet_id=payload.seller_wallet_id
         )
         try:
@@ -286,7 +286,7 @@ async def create_listing_intent(
         except AddressError as exc:
             raise HTTPException(status_code=409, detail="Stored NFT address is invalid") from exc
         await _verify_current_nft_owner(
-            verifier, item_address=item_address, seller_address=seller_wallet.address
+            verifier, item_address=item_address, seller_address=seller_address
         )
 
         active_intent = await session.scalar(
@@ -308,7 +308,7 @@ async def create_listing_intent(
             seller_wallet_id=seller_wallet.id,
             network="testnet",
             item_address=item_address,
-            seller_address_snapshot=seller_wallet.address,
+            seller_address_snapshot=seller_address,
             price_amount=listing.price_amount,
             price_currency="TON",
             status="intent_only",
@@ -397,9 +397,9 @@ async def create_deal_intent(
         if intent.seller_id == user.id:
             raise HTTPException(status_code=409, detail="A seller cannot buy their own listing")
         listing = await session.get(Listing, intent.marketplace_listing_id)
-        if listing is None or listing.status is not ListingStatus.ACTIVE:
+        if listing is None or listing.status is not ListingStatus.ACTIVE or listing.asset_id != intent.asset_id:
             raise HTTPException(status_code=409, detail="Underlying listing is no longer active")
-        buyer_wallet = await _verified_wallet(
+        buyer_wallet, buyer_address = await _verified_wallet(
             session, user_id=user.id, wallet_id=payload.buyer_wallet_id
         )
         await _verify_current_nft_owner(
@@ -424,7 +424,7 @@ async def create_deal_intent(
             contract_abi_version=None,
             item_address=intent.item_address,
             seller_address_snapshot=intent.seller_address_snapshot,
-            buyer_address_snapshot=buyer_wallet.address,
+            buyer_address_snapshot=buyer_address,
             price_amount=intent.price_amount,
             price_currency="TON",
             principal_nanotons=integral_principal,
@@ -496,7 +496,7 @@ async def prepare_listing_transaction(
     )
     if intent is None:
         raise HTTPException(status_code=404, detail="Escrow listing intent not found")
-    wallet = await _verified_wallet(session, user_id=user.id, wallet_id=intent.seller_wallet_id)
+    wallet, _ = await _verified_wallet(session, user_id=user.id, wallet_id=intent.seller_wallet_id)
     try:
         await _contract_adapter.prepare_transaction(
             EscrowWalletAction.DEPLOY_LISTING, actor_wallet=wallet, resource_id=str(intent.id)
@@ -523,7 +523,7 @@ async def prepare_receipt_confirmation(
     )
     if deal is None:
         raise HTTPException(status_code=404, detail="Escrow deal not found")
-    wallet = await _verified_wallet(session, user_id=user.id, wallet_id=deal.buyer_wallet_id)
+    wallet, _ = await _verified_wallet(session, user_id=user.id, wallet_id=deal.buyer_wallet_id)
     try:
         await _contract_adapter.prepare_transaction(
             EscrowWalletAction.ACCEPT_RECEIPT, actor_wallet=wallet, resource_id=str(deal.id)
@@ -641,10 +641,10 @@ async def prepare_withdrawal(
                 id=replay.id, recipient_address=replay.recipient_address,
                 status=replay.status, reason_code=replay.reason_code, created_at=replay.created_at,
             )
-        wallet = await _verified_wallet(session, user_id=user.id, wallet_id=payload.wallet_id)
+        wallet, canonical_address = await _verified_wallet(session, user_id=user.id, wallet_id=payload.wallet_id)
         withdrawal = EscrowWithdrawal(
             id=uuid4(), seller_id=user.id, wallet_id=wallet.id, network="testnet",
-            recipient_address=wallet.address, amount_nanotons=None,
+            recipient_address=canonical_address, amount_nanotons=None,
             status="blocked_abi_unavailable", reason_code="contract_abi_pending",
             transaction_hash=None,
         )
