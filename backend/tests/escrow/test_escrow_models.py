@@ -29,7 +29,8 @@ def test_escrow_tables_are_separate_from_order_and_payment_tables() -> None:
         "escrow_idempotency_records",
         "escrow_observer_checkpoints",
     }
-    assert EscrowDeal.__table__.c.status.default is not None or EscrowDeal.__table__.c.status.server_default is not None
+    status_column = EscrowDeal.__table__.c.status
+    assert status_column.default is not None or status_column.server_default is not None
 
 
 def test_chain_event_replay_and_idempotency_are_database_constrained() -> None:
