@@ -54,6 +54,9 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Audit npm dependencies for known vulnerabilities
+        run: npm audit --audit-level=high
+
       - name: Run unit tests
         run: npm run test:coverage
 
