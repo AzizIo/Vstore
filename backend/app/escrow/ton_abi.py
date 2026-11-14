@@ -252,14 +252,27 @@ def validate_snapshot(snapshot: Any) -> tuple[Address, Address, Address, Address
         raise TONABIError("action value must be at least 0.01 TON")
     if snapshot.deployment_value_nanotons <= 0:
         raise TONABIError("deployment value must be positive")
+    if (
+        snapshot.deployment_value_nanotons
+        < snapshot.activation_value_nanotons
+        + refund
+        + _TERMINAL_STORAGE_RESERVE
+    ):
+        raise TONABIError(
+            "deployment value cannot fund activation, seller refund and terminal storage reserve"
+        )
     if snapshot.nft_deposit_value_nanotons < 10_000_000:
         raise TONABIError("NFT deposit value must cover the 0.01 TON forward amount")
     if snapshot.nft_return_value_nanotons < 10_000_000:
         raise TONABIError("NFT return value must cover the 0.01 TON forward amount")
-    _uint(snapshot.contract_state, 8, "contract_state")
+    contract_state = _uint(snapshot.contract_state, 8, "contract_state")
+    if contract_state > 13:
+        raise TONABIError("contract_state is not defined by DealEscrow v1")
     _uint(snapshot.deadline_unix, 64, "deadline_unix")
     _uint(snapshot.observed_chain_time_unix, 64, "observed_chain_time_unix")
-    _uint(snapshot.dispute_phase, 8, "dispute_phase")
+    dispute_phase = _uint(snapshot.dispute_phase, 8, "dispute_phase")
+    if dispute_phase > 2:
+        raise TONABIError("dispute_phase is not defined by DealEscrow v1")
     if (
         not isinstance(snapshot.nft_in_escrow, bool)
         or not isinstance(snapshot.principal_locked, bool)
