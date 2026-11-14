@@ -20,7 +20,7 @@ docker compose -f "$COMPOSE_FILE" exec -T db sh -ec \
 
 test -s "$TMP"
 # Validate that PostgreSQL can read the custom archive before publishing it.
-docker compose -f "$COMPOSE_FILE" exec -T db pg_restore --list - < "$TMP" >/dev/null
+docker compose -f "$COMPOSE_FILE" exec -T db pg_restore --list < "$TMP" >/dev/null
 
 mv "$TMP" "$FINAL"
 sha256sum "$FINAL" > "$FINAL.sha256"
