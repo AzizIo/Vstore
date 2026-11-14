@@ -26,7 +26,7 @@ docker compose -f "$COMPOSE_FILE" exec -T -e DRILL_DB="$DRILL_DB" db sh -ec \
   >/dev/null
 
 docker compose -f "$COMPOSE_FILE" exec -T -e DRILL_DB="$DRILL_DB" db sh -ec \
-  'pg_restore --no-owner --no-acl --exit-on-error --username="$POSTGRES_USER" --dbname="$DRILL_DB" -' \
+  'pg_restore --no-owner --no-acl --exit-on-error --username="$POSTGRES_USER" --dbname="$DRILL_DB"' \
   < "$BACKUP_FILE"
 
 docker compose -f "$COMPOSE_FILE" exec -T -e DRILL_DB="$DRILL_DB" db sh -ec \
