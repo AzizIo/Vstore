@@ -500,7 +500,6 @@ async def get_admin_overview(
     events.sort(key=lambda item: (item.occurred_at, str(item.id)), reverse=True)
     total_users, blocked_users, new_24h, new_7d = (int(value or 0) for value in user_counts)
     total_listings = sum(listing_counts.values())
-    total_orders = sum(order_counts.values())
     completed = order_counts.get(OrderStatus.COMPLETED.value, 0)
     in_progress = sum(
         order_counts.get(state.value, 0)
