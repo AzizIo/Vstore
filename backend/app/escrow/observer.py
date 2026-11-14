@@ -212,8 +212,10 @@ async def _apply_one_event(
             return "rejected"
 
     valid_shape = (
-        event.network == "testnet" and bool(event.transaction_hash)
-        and len(event.transaction_hash) <= 128 and event.event_index >= 0
+        event.network == "testnet"
+        and bool(event.transaction_hash)
+        and len(event.transaction_hash) <= 128
+        and event.event_index >= 0
         and len(event.evidence_sha256) == 64
         and all(ch in "0123456789abcdef" for ch in event.evidence_sha256.lower())
         and bool(event.event_key)
@@ -302,8 +304,11 @@ async def _apply_one_event(
     if event.event_type is EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED:
         # Provider adapter must confirm accepted oracle evidence and reconciled
         # contract state; raw NFT transfer evidence cannot reach this branch.
-        if (event.observed_contract_state != next_state.value or not event.attestation_accepted
-                or not event.contract_state_reconciled):
+        if (
+            event.observed_contract_state != next_state.value
+            or not event.attestation_accepted
+            or not event.contract_state_reconciled
+        ):
             await _persist_event(session, event, status="manual_review",
                 reason_code="oracle_state_not_reconciled", deal_id=deal.id, existing=existing)
             deal.status = EscrowDealStatus.MANUAL_REVIEW.value
