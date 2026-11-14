@@ -282,14 +282,13 @@ async def _mark_refunded(
     current_time = now or datetime.now(UTC)
     # This durable transaction update is idempotent. If the process crashes
     # before the job row is finalized, the next pass recovers from Telegram history.
-    async with session.begin():
-        await record_stars_refund_result(
-            session,
-            transaction_id=claim.transaction_id,
-            provider_event_id=f"refund-history:{claim.transaction_id}",
-            succeeded=True,
-            now=current_time,
-        )
+    await record_stars_refund_result(
+        session,
+        transaction_id=claim.transaction_id,
+        provider_event_id=f"refund-history:{claim.transaction_id}",
+        succeeded=True,
+        now=current_time,
+    )
 
     return await _set_job_state(
         session,
