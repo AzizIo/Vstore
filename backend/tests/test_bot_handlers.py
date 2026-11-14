@@ -2,10 +2,10 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Chat, Message, Update
+import pytest
 
 from app import bot_handlers
 from app.bot import BOT_COMMANDS, create_dispatcher, register_bot_commands
@@ -255,7 +255,8 @@ async def test_guided_callback_edits_message_and_acknowledges_query(
 
     callback.answer.assert_awaited_once()
     assert "Покупка NFT" in edit_text.await_args.args[0]
-    assert edit_text.await_args.kwargs["reply_markup"].inline_keyboard[-1][0].callback_data == "bot:menu"
+    keyboard = edit_text.await_args.kwargs["reply_markup"]
+    assert keyboard.inline_keyboard[-1][0].callback_data == "bot:menu"
 
 
 @pytest.mark.asyncio
