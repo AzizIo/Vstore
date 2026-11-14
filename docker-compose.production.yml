@@ -10,7 +10,7 @@ x-viltara-backend-env: &viltara-backend-env
   TELEGRAM_MINI_APP_URL: ${PROD_TELEGRAM_MINI_APP_URL:?Set PROD_TELEGRAM_MINI_APP_URL in .env}
   TELEGRAM_MINI_APP_DIRECT_LINK: ${PROD_TELEGRAM_MINI_APP_DIRECT_LINK:-}
   ADMIN_TELEGRAM_IDS: ${PROD_ADMIN_TELEGRAM_IDS:-[]}
-  DATABASE_URL: postgresql+asyncpg://viltara_production:${PROD_DB_PASSWORD:?Set PROD_DB_PASSWORD in .env}@db:5432/viltara_production
+  DATABASE_URL: postgresql+asyncpg://${PROD_DB_USER:?Set PROD_DB_USER in .env}:${PROD_DB_PASSWORD:?Set PROD_DB_PASSWORD in .env}@db:5432/${PROD_DB_NAME:?Set PROD_DB_NAME in .env}
   REDIS_URL: redis://redis:6379/0
   TON_CONNECT_ALLOWED_DOMAINS: ${PROD_TON_CONNECT_ALLOWED_DOMAINS:?Set PROD_TON_CONNECT_ALLOWED_DOMAINS in .env}
   CORS_ALLOWED_ORIGINS: ${PROD_CORS_ALLOWED_ORIGINS:?Set PROD_CORS_ALLOWED_ORIGINS in .env}
@@ -23,13 +23,13 @@ services:
   db:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: viltara_production
-      POSTGRES_USER: viltara_production
+      POSTGRES_DB: ${PROD_DB_NAME:?Set PROD_DB_NAME in .env}
+      POSTGRES_USER: ${PROD_DB_USER:?Set PROD_DB_USER in .env}
       POSTGRES_PASSWORD: ${PROD_DB_PASSWORD:?Set PROD_DB_PASSWORD in .env}
     volumes:
       - production_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U viltara_production -d viltara_production"]
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 10
