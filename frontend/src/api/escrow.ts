@@ -228,6 +228,18 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }
 
+function isNonNegativeTonAmount(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\\d+(?:\\.\\d+)?$/.test(value)) return false;
+  const [whole, fraction = ""] = value.split(".");
+  return BigInt(whole) >= 0n && (fraction.length === 0 || /^\\d+$/.test(fraction));
+}
+
+function isPositiveTonAmountValue(value: unknown): value is string {
+  if (!isNonNegativeTonAmount(value)) return false;
+  const [whole, fraction = ""] = value.split(".");
+  return BigInt(whole) > 0n || /[1-9]/.test(fraction);
+}
+
 function isEscrowState(value: unknown): value is EscrowState {
   return value === "awaiting_nft_deposit"
     || value === "listed"
@@ -273,8 +285,8 @@ export function isEscrowListing(value: unknown): value is EscrowListing {
     && isNftSnapshot(value.nft)
     && isNullableString(value.contract_address)
     && typeof value.seller_wallet_address === "string"
-    && typeof value.price_ton === "string"
-    && isNullableString(value.platform_fee_ton)
+    && isPositiveTonAmountValue(value.price_ton)
+    && (value.platform_fee_ton === null || isNonNegativeTonAmount(value.platform_fee_ton))
     && typeof value.created_at === "string"
     && typeof value.updated_at === "string";
 }
@@ -291,9 +303,9 @@ export function isEscrowDeal(value: unknown): value is EscrowDeal {
     && typeof value.contract_address === "string"
     && typeof value.seller_wallet_address === "string"
     && typeof value.buyer_wallet_address === "string"
-    && typeof value.price_ton === "string"
-    && isNullableString(value.platform_fee_ton)
-    && isNullableString(value.seller_claimable_ton)
+    && isPositiveTonAmountValue(value.price_ton)
+    && (value.platform_fee_ton === null || isNonNegativeTonAmount(value.platform_fee_ton))
+    && (value.seller_claimable_ton === null || isNonNegativeTonAmount(value.seller_claimable_ton))
     && isNullableString(value.buyer_confirmation_deadline)
     && isNullableString(value.dispute_deadline)
     && typeof value.created_at === "string"
@@ -322,9 +334,9 @@ export function isPreparedEscrowTransaction(value: unknown): value is PreparedEs
   return typeof value.id === "string"
     && typeof value.contract_address === "string"
     && isNullableString(value.nft_item_address)
-    && isNullableString(value.amount_ton)
-    && isNullableString(value.fee_ton)
-    && (value.network_fee_ton === undefined || isNullableString(value.network_fee_ton))
+    && (value.amount_ton === null || isNonNegativeTonAmount(value.amount_ton))
+    && (value.fee_ton === null || isNonNegativeTonAmount(value.fee_ton))
+    && (value.network_fee_ton === undefined || value.network_fee_ton === null || isNonNegativeTonAmount(value.network_fee_ton))
     && typeof value.valid_until === "string"
     && Number.isFinite(Date.parse(value.valid_until))
     && typeof value.display_summary === "string"
