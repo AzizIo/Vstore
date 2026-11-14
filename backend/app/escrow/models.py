@@ -23,11 +23,11 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
-    event as sa_event,
     func,
-    inspect as sa_inspect,
     text,
 )
+from sqlalchemy import event as sa_event
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.db.models import Listing, NFTAsset, TimestampMixin, User, Wallet
@@ -178,7 +178,7 @@ _IMMUTABLE_DEAL_TERMS = (
 )
 
 
-def assert_deal_terms_immutable(target: "EscrowDeal") -> None:
+def assert_deal_terms_immutable(target: EscrowDeal) -> None:
     state = sa_inspect(target)
     changed = [
         name for name in _IMMUTABLE_DEAL_TERMS
