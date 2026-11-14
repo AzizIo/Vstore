@@ -60,7 +60,7 @@ Acton's generated `DealEscrow.fromStorage(...)` wrapper calculates StateInit and
 - `nftTransferValue` is the fixed TON value attached by escrow to each outbound TEP-62 transfer. It is funded by execution reserve.
 - Seller's deposit transaction targets the snapshotted NFT item and sets `new_owner = escrowAddress`, `response_destination = sellerAddress`, `forward_amount > 0`, and inline payload containing the fixed magic + deal salt. It must use the stored `nftDepositQueryId`.
 - Buyer funding targets the escrow address, carries exactly `principalNanotons + executionReserve`, and uses `fundQueryId`.
-- Buyer acceptance and dispute messages target the escrow address with operation query ID and deal salt; they do not attach principal again.
+- Buyer acceptance and dispute messages target the escrow address with operation query ID and deal salt; they do not attach principal again. For outbound NFT releases/returns and TON payout/refund, the contract ignores the static operation query IDs and uses the next persisted `oracleAttemptId` as the message query ID.
 - No frontend or backend callback can mark delivery/settlement successful. The observer must provide finalized transaction and trace evidence to the separate oracle quorum.
 - Payout and refund are contract-initiated to the fixed seller/buyer addresses. A client cannot choose or replace recipient or amount.
 
