@@ -128,6 +128,7 @@ jobs:
           assert db_volume["target"] == "/var/lib/postgresql/data"
           app_services = ("migrate", "tools", "bot", "refund-worker")
           for name in app_services:
+              assert not services[name].get("volumes"), f"{name} must not mount host source or secrets"
               env = services[name]["environment"]
               assert env["ENVIRONMENT"] == "test"
               assert env["TELEGRAM_STARS_TEST_ENABLED"] == "true"
