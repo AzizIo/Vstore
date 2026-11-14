@@ -21,8 +21,8 @@ class EscrowDealCreate(BaseModel):
 
 class EscrowDisputeCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    reason_code: Literal["not_received", "wrong_asset", "payment_mismatch", "other"]
     reason: str = Field(min_length=5, max_length=2000)
+    reason_code: Literal["not_received", "wrong_asset", "payment_mismatch", "other"] = "other"
 
 
 class EscrowWithdrawalCreate(BaseModel):
