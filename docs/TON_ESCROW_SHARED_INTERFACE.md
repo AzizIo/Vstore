@@ -238,6 +238,20 @@ Do not expose a post-delivery `confirm_receipt` button as a state transition in 
 
 Payout is contract-initiated after the dispute window or authorized seller-favourable resolution. The buyer/seller UI should display `seller_payout_pending` and `buyer_refund_pending` as waiting states; do not add manual "claim proceeds" buttons unless a future ABI explicitly implements claimable balances.
 
+### 6.5 Resource and API sequencing — bind the buyer before deployment
+
+The public marketplace listing and the immutable on-chain deal contract are different resources:
+
+1. Seller creates/maintains the existing off-chain marketplace listing and a seller-scoped escrow listing intent. This does not claim that an NFT is already in escrow.
+2. Buyer selects the public listing and creates a deal intent. This binds the buyer's verified testnet wallet and snapshots seller wallet, buyer wallet, NFT item, TON principal, network and deal salt.
+3. Only after the buyer is bound may the backend prepare deployment of the immutable per-deal DealEscrow. The deployment request is sourced from the deal snapshot, not a seller-only listing intent.
+4. Seller signs the deployment/deposit operation from their own verified wallet (exact sequence depends on the reviewed factory UX); the contract address and state-init/code hash are persisted only after independent chain reconciliation.
+5. Seller deposits the exact NFT into that DealEscrow. The contract validates the TEP-62 notification and enters AWAITING_BUYER_FUNDS.
+6. Buyer may fund only after that contract state is confirmed. The contract then enters FUNDED_REVIEW.
+7. Observer evidence, oracle-attested contract transitions and participant-scoped read APIs project the remainder of the deal.
+
+**Do not deploy the immutable DealEscrow from a seller-only intent before a buyer wallet is known.** A `DEPLOY_LISTING` operation that binds no buyer is a different reusable-listing topology and must not be mixed with this per-deal design. Prefer a deal-scoped deployment preparation endpoint. Public buyer discovery also needs an explicit read contract that exposes only approved public listing facts plus the identifier needed to create a deal; a seller-only `GET /listing-intents/{id}` is not sufficient to power the buyer marketplace.
+
 ## 7. Wallet action preparation contract
 
 The backend may prepare an unsigned TON Connect transaction request. It must not sign it or infer that it succeeded.
