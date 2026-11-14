@@ -363,6 +363,21 @@ async def _persist_claim_result(
             # already completed the refund, the next worker will reconcile it.
             return False
 
+        if transaction.status not in {"refund_pending", "refunded"}:
+            # The transaction state may have changed after the claim. Even a
+            # provider success must not rewrite a non-refundable ledger state.
+            job.status = "manual_review"
+            job.last_error_code = "transaction_not_refund_pending"
+            job.lease_token = None
+            job.locked_until = None
+            logger.error(
+                "Refund result rejected for transaction %s with status %s",
+                transaction.id,
+                transaction.status,
+            )
+            await session.flush()
+            return False
+
         if succeeded or transaction.status == "refunded":
             transaction.status = "refunded"
             transaction.refunded_at = transaction.refunded_at or checked_at
