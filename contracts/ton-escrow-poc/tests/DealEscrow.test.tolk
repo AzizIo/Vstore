@@ -75,6 +75,7 @@ fun createFixture(salt: uint256): (DealEscrow, TestNftItem, Treasury, Treasury) 
         pendingAction: PENDING_NONE,
         nftInEscrow: false,
         principalLocked: false,
+        oracleAttemptId: 0,
         evidence: DealEvidence {
             lastEvidenceHash: 0,
             disputeReasonHash: 0,
