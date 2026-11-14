@@ -199,7 +199,7 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Validate isolated PostgreSQL and Redis targets
         working-directory: backend
