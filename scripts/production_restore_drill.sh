@@ -12,6 +12,15 @@ if [[ ! -f "$BACKUP_FILE" || ! -s "$BACKUP_FILE" ]]; then
   exit 2
 fi
 
+if [[ ! -f "$BACKUP_FILE.sha256" ]]; then
+  echo "Backup SHA-256 sidecar is missing." >&2
+  exit 2
+fi
+(
+  cd "$(dirname "$BACKUP_FILE")"
+  sha256sum --check "$(basename "$BACKUP_FILE").sha256"
+)
+
 # Always restore into a throwaway database, never the configured production DB.
 DRILL_DB="viltara_restore_drill_$(date -u +%s)_$$"
 cleanup() {
