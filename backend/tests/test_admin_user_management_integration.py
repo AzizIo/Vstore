@@ -32,7 +32,9 @@ def admin_user_database() -> str:
     )
     database_name = f"admin_user_{uuid4().hex[:8]}_test"
     temporary_url = source_url.set(database=database_name)
-    maintenance_url = source_url.set(database="postgres")
+    # Connect to the same test DB whose credentials the workflow has proven valid;
+    # this role is created as the service's POSTGRES_USER and can CREATE DATABASE.
+    maintenance_url = source_url
 
     async def create_database() -> None:
         engine = create_async_engine(
