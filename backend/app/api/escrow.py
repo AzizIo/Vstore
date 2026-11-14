@@ -523,7 +523,7 @@ async def create_deal_intent(
                 raise HTTPException(status_code=404, detail="Escrow deal not found")
             return await _deal_projection(session, replay, user.id)
         intent = await session.scalar(select(EscrowListingIntent).where(
-            EscrowListingIntent.marketplace_listing_id == payload.listing_id).with_for_update())
+            EscrowListingIntent.marketplace_listing_id == payload.listing_id))
         if intent is None or intent.status not in {"intent_only", "active"}:
             raise HTTPException(status_code=404, detail="Escrow listing intent not found")
         if intent.seller_id == user.id:
@@ -534,9 +534,7 @@ async def create_deal_intent(
                 detail="Escrow listing is missing immutable collection or listing identity",
             )
         listing = await session.scalar(
-            select(Listing)
-            .where(Listing.id == intent.marketplace_listing_id)
-            .with_for_update()
+            select(Listing).where(Listing.id == intent.marketplace_listing_id)
         )
         if (
             listing is None
@@ -552,10 +550,65 @@ async def create_deal_intent(
                 status_code=409,
                 detail="Active listing price/currency changed after the escrow intent",
             )
-        buyer_wallet, buyer_address = await _verified_wallet(session, user_id=user.id,
-            wallet_id=payload.buyer_wallet_id)
-        await _verify_current_nft_owner(verifier, item_address=intent.item_address,
-            seller_address=intent.seller_address_snapshot)
+        # Capture the immutable facts, then end the read transaction before
+        # calling the external ownership provider. Re-lock/revalidate afterwards.
+        intent_id = intent.id
+        intent_snapshot = {
+            "marketplace_listing_id": intent.marketplace_listing_id,
+            "asset_id": intent.asset_id,
+            "seller_id": intent.seller_id,
+            "listing_key": intent.listing_key,
+            "item_address": intent.item_address,
+            "collection_address_snapshot": intent.collection_address_snapshot,
+            "seller_address_snapshot": intent.seller_address_snapshot,
+            "price_amount": intent.price_amount,
+            "price_currency": intent.price_currency,
+        }
+        listing_snapshot = {
+            "id": listing.id,
+            "asset_id": listing.asset_id,
+            "seller_id": listing.seller_id,
+            "price_amount": listing.price_amount,
+            "price_currency": listing.price_currency,
+        }
+        await session.rollback()
+        await _verify_current_nft_owner(
+            verifier,
+            item_address=intent_snapshot["item_address"],
+            seller_address=intent_snapshot["seller_address_snapshot"],
+        )
+
+        # Lock in the same order as ordinary order reservation: Listing first,
+        # then escrow intent. Concurrent reservations serialize on Listing.
+        listing = await session.scalar(
+            select(Listing)
+            .where(Listing.id == payload.listing_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        intent = await session.scalar(
+            select(EscrowListingIntent)
+            .where(EscrowListingIntent.id == intent_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if (
+            listing is None
+            or listing.status is not ListingStatus.ACTIVE
+            or intent is None
+            or intent.status not in {"intent_only", "active"}
+        ):
+            raise HTTPException(status_code=409, detail="Listing was reserved or changed during verification")
+        if any(getattr(listing, field) != value for field, value in listing_snapshot.items()):
+            raise HTTPException(status_code=409, detail="Marketplace listing changed during verification")
+        if any(
+            getattr(intent, field) != value
+            for field, value in intent_snapshot.items()
+        ):
+            raise HTTPException(status_code=409, detail="Escrow listing snapshot changed during verification")
+        buyer_wallet, buyer_address = await _verified_wallet(
+            session, user_id=user.id, wallet_id=payload.buyer_wallet_id
+        )
         principal = intent.price_amount * _NANOTON
         if principal <= 0 or principal != principal.to_integral_value():
             raise HTTPException(status_code=409, detail="TON principal precision is invalid")
