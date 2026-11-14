@@ -52,6 +52,7 @@ class EscrowObserverPassResult:
     unmatched: int = 0
     lease_lost: bool = False
     provider_unavailable: bool = False
+    persistence_failed: bool = False
 
 
 SessionFactory = async_sessionmaker[AsyncSession]
@@ -334,39 +335,48 @@ async def run_observer_pass(
         return EscrowObserverPassResult(provider_unavailable=True)
 
     result_counts = {"applied": 0, "rejected": 0, "duplicates": 0, "unmatched": 0}
-    async with session_factory() as session:
-        async with session.begin():
-            checkpoint = await session.scalar(
-                select(EscrowObserverCheckpoint)
-                .where(EscrowObserverCheckpoint.checkpoint_id == CHECKPOINT_ID)
-                .with_for_update()
-            )
-            if checkpoint is None or checkpoint.lease_token != lease_token:
-                return EscrowObserverPassResult(scanned=len(batch.events), lease_lost=True)
-            try:
+    try:
+        async with session_factory() as session:
+            async with session.begin():
+                checkpoint = await session.scalar(
+                    select(EscrowObserverCheckpoint)
+                    .where(EscrowObserverCheckpoint.checkpoint_id == CHECKPOINT_ID)
+                    .with_for_update()
+                )
+                if checkpoint is None or checkpoint.lease_token != lease_token:
+                    return EscrowObserverPassResult(scanned=len(batch.events), lease_lost=True)
                 for event, verified in verified_events:
                     applied_result = await _apply_one_event(
                         session, event, provider_verified=verified
                     )
                     result_counts[applied_result] += 1
-            except IntegrityError:
-                # A duplicate-key race is retried as a whole batch next pass; do not
-                # advance the durable cursor when this transaction rolls back.
-                raise
-            checkpoint.cursor = batch.next_cursor
-            if verified_events:
-                latest_seqno = max(
-                    (event.masterchain_seqno for event, verified in verified_events if verified),
-                    default=None,
-                )
-                if latest_seqno is not None:
-                    checkpoint.last_masterchain_seqno = max(
-                        checkpoint.last_masterchain_seqno or 0, latest_seqno
+                checkpoint.cursor = batch.next_cursor
+                if verified_events:
+                    latest_seqno = max(
+                        (event.masterchain_seqno for event, verified in verified_events if verified),
+                        default=None,
                     )
-            checkpoint.lease_token = None
-            checkpoint.lease_until = None
-            checkpoint.next_scan_at = current_time
-            checkpoint.last_error_code = None
+                    if latest_seqno is not None:
+                        checkpoint.last_masterchain_seqno = max(
+                            checkpoint.last_masterchain_seqno or 0, latest_seqno
+                        )
+                checkpoint.lease_token = None
+                checkpoint.lease_until = None
+                checkpoint.next_scan_at = current_time
+                checkpoint.last_error_code = None
+    except Exception:
+        # The event writes and cursor are one transaction; on any DB failure the
+        # cursor rolls back. Release the fencing lease so the same batch can retry.
+        logger.exception("Escrow event batch could not be persisted; cursor remains unchanged")
+        await _release_lease(
+            session_factory,
+            lease_token,
+            error_code="batch_persistence_failed",
+            now=current_time,
+        )
+        return EscrowObserverPassResult(
+            scanned=len(batch.events), persistence_failed=True
+        )
 
     return EscrowObserverPassResult(
         scanned=len(batch.events),
