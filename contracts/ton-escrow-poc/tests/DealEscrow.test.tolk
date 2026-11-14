@@ -25,6 +25,9 @@ fun createFixture(
     salt: uint256,
     initialState: uint8 = STATE_INTENT_CREATED,
     oracleAttemptId: uint64 = 0,
+    initialDeadlineUnix: uint64 = 0,
+    initialNftInEscrow: bool = false,
+    initialPrincipalLocked: bool = false,
 ): (DealEscrow, TestNftItem, Treasury, Treasury) {
     configureTestnet();
     val seller = testing.treasury("seller");
@@ -73,11 +76,11 @@ fun createFixture(
     };
     val progress: DealProgress = {
         state: initialState,
-        deadlineUnix: 0,
+        deadlineUnix: initialDeadlineUnix,
         disputePhase: DISPUTE_PHASE_NONE,
         pendingAction: PENDING_NONE,
-        nftInEscrow: false,
-        principalLocked: false,
+        nftInEscrow: initialNftInEscrow,
+        principalLocked: initialPrincipalLocked,
         oracleAttemptId,
         disputeAttemptId: 0,
         evidence: DealEvidence {
@@ -402,4 +405,110 @@ get fun `test stale oracle attempt cannot advance escrow state`() {
         exitCode: Errors.InvalidAttestation,
     });
     expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
+}
+
+get fun `test terminal payout returns unused execution reserve to buyer`() {
+    val (escrow, nftItem, seller, buyer) = createFixture(
+        0xA11D8,
+        STATE_DELIVERED_DISPUTE_WINDOW,
+        0,
+        1,
+        false,
+        true,
+    );
+    val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
+    expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
+
+    // Simulate the buyer's exact principal + execution-reserve funding.
+    val buyerFunding = net.send(
+        buyer.address,
+        createMessage({
+            bounce: false,
+            value: grams("1.5"),
+            dest: escrow.address,
+            body: beginCell().endCell(),
+        }),
+    );
+    expect(buyerFunding).toHaveSuccessfulTx({
+        from: buyer.address,
+        to: escrow.address,
+    });
+    val buyerBalanceBeforeSettlement = testing.getAccountBalance(buyer.address);
+
+    val keeper = testing.treasury("reserve-oracle-keeper");
+    val timeout = escrow.sendAny(
+        keeper.address,
+        TimeoutDeal {
+            queryId: 77,
+            dealSalt: 0xA11D8,
+        }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(timeout).toHaveSuccessfulTx<TimeoutDeal>({
+        from: keeper.address,
+        to: escrow.address,
+    });
+    expect(escrow.getState()).toEqual(STATE_SELLER_PAYOUT_PENDING);
+
+    val sellerBalanceBeforeSettlement = testing.getAccountBalance(seller.address);
+    val payoutData: OracleAttestationData = {
+        context: OracleContext {
+            domain: ESCROW_DOMAIN,
+            protocolVersion: PROTOCOL_VERSION,
+            networkId: TESTNET_NETWORK_ID,
+            escrowAddress: escrow.address,
+            dealSalt: 0xA11D8,
+            action: ORACLE_ACTION_SELLER_PAYOUT,
+            attemptId: 1,
+        }.toCell(),
+        route: OracleRoute {
+            itemAddress: nftItem.address,
+            sourceAddress: escrow.address,
+            destinationAddress: seller.address,
+            amountNanotons: grams("1"),
+            queryId: 1,
+        }.toCell(),
+        position: OraclePosition {
+            masterchainSeqno: 1,
+            logicalTime: 1,
+        }.toCell(),
+        hashes: OracleEvidenceHashes {
+            messageHash: 1,
+            traceHash: 1,
+            evidenceHash: 2,
+        }.toCell(),
+    };
+    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
+    val payoutAttestation = OracleAttestation {
+        data: payoutData.toCell(),
+        signatures: OracleSignatureSet {
+            signatureA: dummySignature,
+            signatureB: dummySignature,
+            signatureC: dummySignature,
+        }.toCell(),
+    };
+
+    // The emulator bypass is intentionally scoped to this test. The separate
+    // crypto fixture tests exercise real Ed25519 verification.
+    testing.setChecksigIgnore(true);
+    val acceptedPayout = escrow.sendAny(
+        keeper.address,
+        payoutAttestation.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(acceptedPayout).toHaveSuccessfulTx<OracleAttestation>({
+        from: keeper.address,
+        to: escrow.address,
+    });
+    testing.setChecksigIgnore(false);
+
+    expect(escrow.getState()).toEqual(STATE_SETTLED);
+    expect(testing.getAccountBalance(buyer.address))
+        .toBeGreater(buyerBalanceBeforeSettlement + grams("0.4"));
+    expect(testing.getAccountBalance(seller.address))
+        .toBeGreater(sellerBalanceBeforeSettlement + grams("1.04"));
+    expect(testing.getAccountBalance(escrow.address))
+        .toBeGreater(grams("0.005"));
+    expect(testing.getAccountBalance(escrow.address))
+        .toBeLess(grams("0.02"));
 }
