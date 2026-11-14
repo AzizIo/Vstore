@@ -608,7 +608,6 @@ function WorkspaceBody({
     return verifiedWalletForAddress(deal.buyer_wallet_address);
   }
 
-  const selectedDealSellerWallet = selectedDeal ? sellerWalletForDeal(selectedDeal) : null;
   const selectedDealBuyerWallet = selectedDeal ? buyerWalletForDeal(selectedDeal) : null;
 
   return (
@@ -760,6 +759,11 @@ function WorkspaceBody({
                             Вернуть непроданный NFT
                           </button>
                         )}
+                        {allowed("withdraw_unsold_nft", deal.available_actions) && (
+                          <button className="escrow-button escrow-button-secondary" type="button" disabled={!api || busy || !signer} onClick={() => signer && void prepareWalletAction("withdraw_unsold_nft", deal, () => api!.prepareUnsoldNftWithdrawal({ deal_id: deal.id, wallet_id: signer.id }), signer)}>
+                            Вернуть непроданный NFT
+                          </button>
+                        )}
                       </div>
                     </article>
                   );
@@ -858,9 +862,6 @@ function WorkspaceBody({
                       Вернуть NFT в escrow
                     </button>
                   </div>
-                )}
-                {allowed("withdraw_unsold_nft", selectedDeal.available_actions) && selectedDealSellerWallet && (
-                  <p className="escrow-muted">Продавец может вернуть непроданный NFT только в разрешённом Backend состоянии.</p>
                 )}
               </article>
             )}
