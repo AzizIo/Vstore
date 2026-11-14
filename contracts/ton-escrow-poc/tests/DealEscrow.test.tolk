@@ -10,6 +10,7 @@ import "@wrappers/TestNftItem.gen"
 const TEST_KEY_A = 0x11
 const TEST_KEY_B = 0x22
 const TEST_KEY_C = 0x33
+const ZERO_SIGNATURE_BITS: bits512 = "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000".hexToSlice() as bits512
 
 fun configureTestnet() {
     val currentGlobalId = testing.getConfig().getParamRaw(19).beginParse().loadInt(32);
@@ -382,7 +383,7 @@ get fun `test stale oracle attempt cannot advance escrow state`() {
             evidenceHash: 1,
         }.toCell(),
     };
-    val dummySignature = Signature { data: beginCell().storeUint(0, 512).endCell().beginParse() as bits512 }.toCell();
+    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
     val staleAttestation = OracleAttestation {
         data: staleData.toCell(),
         signatures: OracleSignatureSet {
