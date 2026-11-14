@@ -82,7 +82,7 @@ async def _seed_payment(
     session_factory: async_sessionmaker,
     *,
     intent_status: str = "refund_pending",
-    transaction_status: str = "refund_pending",
+    transaction_status: str | None = "refund_pending",
     expires_in: timedelta = timedelta(minutes=15),
 ) -> dict[str, object]:
     suffix = uuid4().int % 900_000_000
@@ -95,6 +95,7 @@ async def _seed_payment(
     transaction_id = uuid4()
     intent_id = uuid4()
     charge_id = f"test-charge-{uuid4()}"
+    invoice_payload = f"refund-payload-{uuid4()}"
 
     async with session_factory.begin() as session:
         seller = User(
@@ -161,25 +162,28 @@ async def _seed_payment(
             amount=Decimal("25"),
             currency="XTR",
             payer_telegram_id=buyer_telegram_id,
-            invoice_payload=f"refund-payload-{uuid4()}",
+            invoice_payload=invoice_payload,
             expires_at=expires_at,
             paid_at=now if intent_status == "paid" else None,
         )
-        transaction = PaymentTransaction(
-            id=transaction_id,
-            payment_intent_id=intent_id,
-            provider="telegram_stars",
-            telegram_payment_charge_id=charge_id,
-            amount=Decimal("25"),
-            currency="XTR",
-            payer_telegram_id=buyer_telegram_id,
-            status=transaction_status,
-            captured_at=now,
-        )
+        transaction = None
+        if transaction_status is not None:
+            transaction = PaymentTransaction(
+                id=transaction_id,
+                payment_intent_id=intent_id,
+                provider="telegram_stars",
+                telegram_payment_charge_id=charge_id,
+                amount=Decimal("25"),
+                currency="XTR",
+                payer_telegram_id=buyer_telegram_id,
+                status=transaction_status,
+                captured_at=now,
+            )
         session.add_all([
-            seller, buyer, asset, seller_wallet, buyer_wallet, listing, order,
-            intent, transaction,
+            seller, buyer, asset, seller_wallet, buyer_wallet, listing, order, intent,
         ])
+        if transaction is not None:
+            session.add(transaction)
         await session.flush()
         if transaction_status == "refund_pending":
             session.add(
@@ -201,6 +205,7 @@ async def _seed_payment(
         "intent_id": intent_id,
         "transaction_id": transaction_id,
         "charge_id": charge_id,
+        "invoice_payload": invoice_payload,
         "expires_at": expires_at,
         "seller_wallet_id": seller_wallet_id,
         "buyer_wallet_id": buyer_wallet_id,
@@ -330,38 +335,45 @@ async def test_mismatched_successful_payment_is_queued_without_completing_order(
     ids = await _seed_payment(
         factory,
         intent_status="pending",
-        transaction_status="captured",
+        transaction_status=None,
     )
-    # Remove the synthetic captured row: this test must exercise the incoming update path.
-    async with factory.begin() as session:
-        await session.execute(
-            PaymentTransaction.__table__.delete().where(
-                PaymentTransaction.id == ids["transaction_id"]
-            )
-        )
-        await session.execute(
-            PaymentRefundJob.__table__.delete().where(
-                PaymentRefundJob.payment_transaction_id == ids["transaction_id"]
-            )
-        )
 
     try:
         async with factory() as session:
             result = await record_stars_success(
                 session,
-                invoice_payload=f"refund-payload-not-used",
-                payer_telegram_id=int(ids["buyer_telegram_id"]),
-                total_amount=25,
+                invoice_payload=str(ids["invoice_payload"]),
+                payer_telegram_id=(
+                    int(ids["buyer_telegram_id"]) + 99
+                    if mismatch == "payer"
+                    else int(ids["buyer_telegram_id"])
+                ),
+                total_amount=26 if mismatch == "amount" else 25,
                 currency="XTR",
                 telegram_payment_charge_id=f"bad-charge-{uuid4()}",
                 provider_payment_charge_id=None,
                 provider_event_id=f"bad-update-{uuid4()}",
             )
-        # The payload intentionally must map to the persisted immutable intent.
-        assert result != "captured"
+        assert result == "refund_pending"
         async with factory() as session:
             order = await session.get(Order, ids["order_id"])
+            transaction = await session.scalar(
+                select(PaymentTransaction).where(
+                    PaymentTransaction.payment_intent_id == ids["intent_id"]
+                )
+            )
+            job = (
+                await session.scalar(
+                    select(PaymentRefundJob).where(
+                        PaymentRefundJob.payment_transaction_id == transaction.id
+                    )
+                )
+                if transaction is not None
+                else None
+            )
             assert order is not None and order.status is OrderStatus.RESERVED
+            assert transaction is not None and transaction.status == "refund_pending"
+            assert job is not None and job.status == "pending"
     finally:
         await _cleanup(factory, ids)
         await engine.dispose()
@@ -534,6 +546,39 @@ async def test_lost_seller_ownership_queues_captured_charge_for_refund(
             assert transaction is not None and transaction.status == "refund_pending"
             assert job is not None and job.status == "pending"
             assert order is not None and order.status is OrderStatus.CANCELLED
+    finally:
+        await _cleanup(factory, ids)
+        await engine.dispose()
+
+
+async def test_valid_payment_does_not_complete_nft_delivery(
+    refund_test_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_test_settings(monkeypatch)
+    engine, factory = await _make_store(refund_test_database)
+    ids = await _seed_payment(
+        factory,
+        intent_status="pending",
+        transaction_status=None,
+    )
+    try:
+        async with factory() as session:
+            result = await record_stars_success(
+                session,
+                invoice_payload=str(ids["invoice_payload"]),
+                payer_telegram_id=int(ids["buyer_telegram_id"]),
+                total_amount=25,
+                currency="XTR",
+                telegram_payment_charge_id=f"valid-charge-{uuid4()}",
+                provider_payment_charge_id=None,
+                provider_event_id=f"valid-update-{uuid4()}",
+            )
+        assert result == "captured"
+        async with factory() as session:
+            order = await session.get(Order, ids["order_id"])
+            assert order is not None
+            assert order.status is OrderStatus.RESERVED
     finally:
         await _cleanup(factory, ids)
         await engine.dispose()
