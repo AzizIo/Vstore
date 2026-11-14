@@ -114,6 +114,7 @@ class User(TimestampMixin, Base):
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint("telegram_id > 0", name="ck_users_telegram_id_positive"),
+        Index("ix_users_created_at_id", "created_at", "id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -288,6 +289,7 @@ class Order(TimestampMixin, Base):
         Index("ix_orders_buyer_created_at", "buyer_id", "created_at"),
         Index("ix_orders_seller_created_at", "seller_id", "created_at"),
         Index("ix_orders_status_expires_at", "status", "expires_at"),
+        Index("ix_orders_created_at_id", "created_at", "id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
