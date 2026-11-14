@@ -274,7 +274,7 @@ async def _apply_one_event(
     if not deal.contract_address or event.contract_address != deal.contract_address:
         await _persist_event(session, event, status="pending",
             reason_code="contract_address_not_reconciled", deal_id=deal.id, existing=existing)
-        return "rejected"
+        return "pending"
     if (
         deal.last_chain_seqno is not None
         and (
@@ -289,7 +289,7 @@ async def _apply_one_event(
     ):
         await _persist_event(session, event, status="pending",
             reason_code="stale_chain_event", deal_id=deal.id, existing=existing)
-        return "rejected"
+        return "pending"
 
     try:
         validate_event_against_deal(_event_snapshot(event), _deal_snapshot(deal))
