@@ -33,7 +33,8 @@ from app.db.models import (
 )
 from app.db.session import get_db_session
 from app.escrow.contracts import (
-    EscrowContractABIUnavailable, EscrowWalletAction, UnconfiguredTONEscrowContractAdapter,
+    DealEscrowDeploymentSnapshot, EscrowContractABIUnavailable,
+    EscrowWalletAction, UnconfiguredTONEscrowContractAdapter,
 )
 from app.escrow.domain import EscrowDealStatus
 from app.escrow.models import (
@@ -588,9 +589,21 @@ async def _prepare_action(
     else:
         raise HTTPException(status_code=409, detail="Unsupported escrow action")
 
+    if not deal.collection_address_snapshot:
+        raise HTTPException(status_code=503, detail={"code": "nft_collection_snapshot_unavailable"})
+    intent = await session.get(EscrowListingIntent, deal.listing_intent_id)
+    if intent is None:
+        raise HTTPException(status_code=404, detail="Escrow listing intent not found")
+    deal_snapshot = DealEscrowDeploymentSnapshot(
+        network=deal.network, listing_key=intent.listing_key,
+        seller_address=deal.seller_address_snapshot, buyer_address=deal.buyer_address_snapshot,
+        collection_address=deal.collection_address_snapshot, item_address=deal.item_address,
+        principal_nanotons=int(deal.principal_nanotons), deal_salt=deal.deal_salt,
+    )
     try:
         await _contract_adapter.prepare_transaction(
             action, actor_wallet=wallet, resource_id=str(deal.id),
+            deal_snapshot=deal_snapshot,
         )
     except EscrowContractABIUnavailable as exc:
         raise HTTPException(
