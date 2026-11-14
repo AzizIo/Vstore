@@ -24,10 +24,8 @@ from app.db.models import (
     NFTAsset,
     Order,
     OrderDeliveryAttempt,
-    OrderEvent,
     OrderStatus,
     PriceCurrency,
-    TelegramNotificationOutbox,
     User,
     Wallet,
 )
