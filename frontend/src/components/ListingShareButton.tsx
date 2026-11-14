@@ -12,14 +12,15 @@ export function ListingShareButton({ listingId, title, directLink }: Props) {
   const shareUrl = buildTelegramListingShareUrl(configuredDirectLink, listingId, title);
 
   if (!shareUrl) return null;
+  const safeShareUrl = shareUrl;
 
   function handleShare() {
     const openTelegramLink = window.Telegram?.WebApp?.openTelegramLink;
     if (typeof openTelegramLink === "function") {
-      openTelegramLink(shareUrl);
+      openTelegramLink(safeShareUrl);
       return;
     }
-    window.open(shareUrl, "_blank", "noopener,noreferrer");
+    window.open(safeShareUrl, "_blank", "noopener,noreferrer");
   }
 
   return (
