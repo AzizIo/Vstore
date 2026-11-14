@@ -28,7 +28,6 @@ from app.db.models import (
     PriceCurrency,
     User,
 )
-
 from tests.database_safety import require_test_database_url
 
 pytestmark = pytest.mark.integration
