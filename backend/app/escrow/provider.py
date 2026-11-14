@@ -47,16 +47,22 @@ class NormalizedChainEvent:
     account_address: str | None = None
     observed_contract_state: str | None = None
     attestation_accepted: bool = False
+    contract_state_reconciled: bool = False
 
     @property
     def event_key(self) -> str:
-        # Same message/trace/phase/attempt can be promoted from pending to final.
-        # Attempt ID is part of identity: a retry must remain a distinct operation.
-        return ":".join((
-            self.network, self.transaction_hash, self.message_hash or f"idx-{self.event_index}",
-            self.trace_id or "trace-unknown", self.phase or "phase-unknown",
-            self.attempt_id or "attempt-unknown",
-        ))
+        # Stable across pending -> final. Distinct traces/phases/attempts and
+        # query/operation IDs are separate attempts, not duplicates.
+        identity = (
+            self.network, self.transaction_hash,
+            self.message_hash or f"idx-{self.event_index}",
+            self.deal_id or "deal-unknown", self.trace_id or "trace-unknown",
+            self.phase or "phase-unknown", self.attempt_id or "attempt-unknown",
+            self.query_id or "query-unknown", self.operation_id or "operation-unknown",
+        )
+        import hashlib
+        import json
+        return hashlib.sha256(json.dumps(identity, separators=(",", ":")).encode()).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
