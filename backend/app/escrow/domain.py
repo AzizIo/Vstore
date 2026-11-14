@@ -189,7 +189,7 @@ def transition_for_verified_event(
 class DealEvidenceSnapshot:
     network: str
     contract_address: str | None
-    collection_address: str | None
+    collection_address: str
     item_address: str
     seller_address: str
     buyer_address: str
