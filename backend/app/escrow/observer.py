@@ -28,12 +28,19 @@ from app.escrow.domain import (
     transition_for_verified_event,
     validate_event_against_deal,
 )
-from app.escrow.models import EscrowChainEvent, EscrowDeal, EscrowObserverCheckpoint
+from app.db.models import Listing, ListingStatus, NFTAsset
+from app.escrow.models import (
+    EscrowChainEvent,
+    EscrowDeal,
+    EscrowListingIntent,
+    EscrowObserverCheckpoint,
+)
 from app.escrow.provider import (
     EscrowProviderInvalidEvidence,
     EscrowProviderUnavailable,
     FinalityVerification,
     NormalizedChainEvent,
+    TerminalOwnerVerification,
     TONTestnetEscrowProvider,
 )
 
@@ -188,6 +195,134 @@ async def _persist_event(
     existing.status = status
     existing.reason_code = reason_code
     return existing
+
+
+async def _reconcile_terminal_listing(
+    session: AsyncSession,
+    deal: EscrowDeal,
+    next_state: EscrowDealStatus,
+    event: NormalizedChainEvent,
+) -> bool:
+    """Release/relist only when terminal getter state and current owner agree."""
+    intent_hint = await session.scalar(
+        select(EscrowListingIntent).where(EscrowListingIntent.id == deal.listing_intent_id)
+    )
+    if intent_hint is None:
+        return False
+    listing = await session.scalar(
+        select(Listing)
+        .where(Listing.id == intent_hint.marketplace_listing_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    intent = await session.scalar(
+        select(EscrowListingIntent)
+        .where(EscrowListingIntent.id == deal.listing_intent_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if listing is None or intent is None:
+        return False
+    asset = await session.scalar(
+        select(NFTAsset)
+        .where(NFTAsset.id == intent.asset_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if asset is None:
+        intent.status = "manual_review"
+        return False
+
+    expected_owner = (
+        deal.buyer_address_snapshot
+        if next_state is EscrowDealStatus.SETTLED
+        else deal.seller_address_snapshot
+    )
+    proof_hash = event.terminal_owner_proof_sha256 or ""
+    owner_proof_valid = (
+        event.terminal_owner_address == expected_owner
+        and event.terminal_owner_masterchain_seqno is not None
+        and event.terminal_owner_masterchain_seqno >= event.masterchain_seqno
+        and len(proof_hash) == 64
+        and all(char in "0123456789abcdef" for char in proof_hash.lower())
+        and bool(event.terminal_owner_provider)
+        and event.item_address == deal.item_address
+        and intent.item_address == deal.item_address
+        and asset.item_address == deal.item_address
+        and listing.status is ListingStatus.RESERVED
+    )
+    if not owner_proof_valid:
+        # Fail closed: keep the marketplace reservation and require operator review.
+        intent.status = "manual_review"
+        return False
+
+    if next_state is EscrowDealStatus.SETTLED:
+        listing.status = ListingStatus.SOLD
+        intent.status = "cancelled"
+        asset.owner_id = deal.buyer_id
+    elif next_state in {EscrowDealStatus.REFUNDED, EscrowDealStatus.EXPIRED}:
+        listing.status = ListingStatus.ACTIVE
+        intent.status = "active"
+        asset.owner_id = deal.seller_id
+    else:
+        intent.status = "manual_review"
+        return False
+    return True
+
+
+async def _terminal_owner_evidence(
+    session_factory: SessionFactory,
+    provider: TONTestnetEscrowProvider,
+    event: NormalizedChainEvent,
+) -> NormalizedChainEvent:
+    """Fetch current-owner proof outside transactions for confirmed terminal events."""
+    if (
+        not event.deal_id
+        or not event.contract_state_reconciled
+        or not event.observed_contract_state
+    ):
+        return event
+    try:
+        deal_id = uuid.UUID(event.deal_id)
+    except ValueError:
+        return event
+    async with session_factory() as session:
+        deal = await session.scalar(select(EscrowDeal).where(EscrowDeal.id == deal_id))
+    if deal is None:
+        return event
+    try:
+        next_state = transition_for_verified_event(deal.status, event.event_type)
+    except (EscrowDomainError, ValueError):
+        return event
+    if (
+        next_state not in TERMINAL_DEAL_STATES
+        or event.observed_contract_state != next_state.value
+        or not event.item_address
+    ):
+        return event
+    expected_owner = (
+        deal.buyer_address_snapshot
+        if next_state is EscrowDealStatus.SETTLED
+        else deal.seller_address_snapshot
+    )
+    proof = await provider.verify_terminal_owner(
+        item_address=deal.item_address,
+        expected_owner_address=expected_owner,
+        minimum_masterchain_seqno=event.masterchain_seqno,
+    )
+    if isinstance(proof, TerminalOwnerVerification) and proof.matches(
+        item_address=deal.item_address,
+        expected_owner_address=expected_owner,
+        minimum_masterchain_seqno=event.masterchain_seqno,
+    ):
+        return replace(
+            event,
+            terminal_owner_address=proof.owner_address,
+            terminal_owner_proof_sha256=proof.proof_sha256,
+            terminal_owner_masterchain_seqno=proof.masterchain_seqno,
+            terminal_owner_provider=proof.provider_id,
+        )
+    return event
 
 
 async def _apply_one_event(
@@ -356,6 +491,16 @@ async def _apply_one_event(
             deal.status = EscrowDealStatus.MANUAL_REVIEW.value
         return "rejected"
 
+    if next_state in TERMINAL_DEAL_STATES and (
+        not event.contract_state_reconciled
+        or event.observed_contract_state != next_state.value
+    ):
+        await _persist_event(
+            session, event, status="pending", reason_code="terminal_state_not_reconciled",
+            deal_id=deal.id, existing=existing,
+        )
+        return "pending"
+
     if event.event_type is EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED:
         # Provider adapter must confirm accepted oracle evidence and reconciled
         # contract state; raw NFT transfer evidence cannot reach this branch.
@@ -369,12 +514,17 @@ async def _apply_one_event(
             deal.status = EscrowDealStatus.MANUAL_REVIEW.value
             return "rejected"
 
-    await _persist_event(session, event, status="applied",
-        reason_code=None, deal_id=deal.id, existing=existing)
+    event_row = await _persist_event(
+        session, event, status="applied", reason_code=None,
+        deal_id=deal.id, existing=existing,
+    )
     deal.status = next_state.value
     deal.last_chain_seqno = max(deal.last_chain_seqno or 0, event.masterchain_seqno)
     if event.logical_time is not None:
         deal.last_chain_logical_time = max(deal.last_chain_logical_time or 0, event.logical_time)
+    if next_state in TERMINAL_DEAL_STATES:
+        if not await _reconcile_terminal_listing(session, deal, next_state, event):
+            event_row.reason_code = "terminal_listing_owner_unverified"
     return "applied"
 
 
@@ -470,6 +620,7 @@ async def run_observer_pass(
                     finality_proof_sha256=proof.proof_sha256,
                     finality_provider=proof.provider_id,
                 )
+                event = await _terminal_owner_evidence(session_factory, provider, event)
                 verified_events.append((event, True))
             else:
                 verified_events.append((event, False))
