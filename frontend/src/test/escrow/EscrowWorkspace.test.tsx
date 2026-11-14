@@ -74,6 +74,7 @@ function listing(overrides: Partial<EscrowListingIntent> = {}): EscrowListingInt
     seller_wallet_address: sellerAddress,
     price_nano: "2500000000",
     fee_bps: 0,
+    available_actions: ["create_deal_intent"],
     created_at: "2026-11-14T10:00:00Z",
     updated_at: "2026-11-14T10:00:00Z",
     ...overrides,
