@@ -112,7 +112,8 @@ async def _listing_projection(
             collection_address=intent.collection_address_snapshot,
         ),
         seller_wallet_address=intent.seller_address_snapshot,
-        price_nano=_ton_nano(intent.price_amount), available_actions=_listing_actions(intent, actor_id),
+        price_nano=_ton_nano(intent.price_amount),
+        available_actions=_listing_actions(intent, actor_id),
         created_at=intent.created_at, updated_at=intent.updated_at,
     )
 
@@ -457,8 +458,10 @@ async def discover_listing_intents(user: CurrentUser, session: DbSession, limit:
         .order_by(EscrowListingIntent.created_at.desc(), EscrowListingIntent.id.desc())
         .offset(max(offset, 0)).limit(min(max(limit, 1), 50))
     )).all())
-    return EscrowPageResponse(items=[await _listing_projection(session, row, user.id) for row in rows],
-        total=len(rows))
+    return EscrowPageResponse(
+        items=[await _listing_projection(session, row, user.id) for row in rows],
+        total=len(rows),
+    )
 
 
 @router.get("/listing-intents", response_model=EscrowPageResponse)
