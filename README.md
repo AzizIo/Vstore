@@ -110,7 +110,7 @@ For order notification deep links, optionally set a **separate** `TELEGRAM_MINI_
 https://t.me/<bot_username>/<app_short_name>
 ```
 
-Create/configure the named Mini App via [@BotFather](https://t.me/BotFather) and use the exact bot username and app short name. The notification worker appends an `order_<32-hex-id>` `startapp` value to this direct link. A Telegram direct link is not a valid `WebAppInfo` URL, and the public website URL is not a Telegram direct link; keep the two settings separate. These parameters are navigation hints only; authentication still uses verified Telegram `initData`.
+Create/configure the named Mini App via [@BotFather](https://t.me/BotFather) and use the exact bot username and app short name. The notification worker appends an `order_<32-hex-id>` `startapp` value to this direct link. The Mini App also embeds the same link at build time for the listing-share button, which adds a `listing_<32-hex-id>` `startapp` value. Rebuild the frontend after changing it. A Telegram direct link is not a valid `WebAppInfo` URL, and the public website URL is not a Telegram direct link; keep the two settings separate. These parameters are navigation hints only; authentication still uses verified Telegram `initData`.
 
 See [Telegram Mini Apps direct links](https://core.telegram.org/bots/webapps#direct-link-mini-apps) for details.
 
