@@ -107,7 +107,10 @@ def test_snapshot_rejects_duplicate_authority_keys_and_invalid_reserve() -> None
             replace(deal, resolver_key_a=deal.oracle_key_a),
         )
     with pytest.raises(TONABIError, match="reserve formula"):
-        derive_deployment(load_pinned_code_boc(), replace(deal, execution_reserve_nanotons=400_000_000))
+        derive_deployment(
+            load_pinned_code_boc(),
+            replace(deal, execution_reserve_nanotons=400_000_000),
+        )
 
 
 @pytest.mark.asyncio
