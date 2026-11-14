@@ -2,6 +2,7 @@ import "@acton/emulation/config"
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
 import "@acton/testing/expect"
+import "@acton/types/transaction"
 
 import "@contracts/types"
 import "@contracts/signatures"
