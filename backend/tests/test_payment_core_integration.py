@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
+from urllib.parse import urlsplit
 
 import pytest
 from alembic import command
@@ -52,6 +53,18 @@ def payment_database() -> str:
         pytest.skip("TEST_DATABASE_URL is not configured")
     if not url.startswith("postgresql+asyncpg://"):
         pytest.fail("Payment integration tests require PostgreSQL")
+    try:
+        parsed = urlsplit(url)
+        _ = parsed.port
+    except ValueError:
+        pytest.fail("Payment integration tests received an invalid TEST_DATABASE_URL")
+    database_name = parsed.path.lstrip("/").split("?", maxsplit=1)[0]
+    if not (
+        database_name.startswith("test_") or database_name.endswith("_test")
+    ):
+        pytest.fail("Payment integration tests require a test-named database")
+    if parsed.hostname not in {"localhost", "127.0.0.1", "::1", "db", "postgres"}:
+        pytest.fail("Payment integration tests may connect only to a local test DB")
     previous_url = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = url
     get_settings.cache_clear()
