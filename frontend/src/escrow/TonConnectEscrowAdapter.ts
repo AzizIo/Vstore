@@ -91,12 +91,15 @@ export function createTonConnectEscrowAdapter(options: {
         throw new Error("Срок подготовки escrow-транзакции истёк. Обновите данные перед подписанием.");
       }
 
-      const messages = transaction.messages.map((message) => ({
-        address: Address.parse(message.address).toString(),
+      const messages = transaction.messages.map((message) => {
+        normalizedAddress(message.address);
+        return {
+        address: message.address,
         amount: message.amount_nanotons,
         ...(message.payload_boc ? { payload: message.payload_boc } : {}),
         ...(message.state_init_boc ? { stateInit: message.state_init_boc } : {}),
-      }));
+        };
+      });
 
       // The adapter never constructs an opcode or payload. All message data is supplied
       // by the reviewed backend contract adapter and shown to the user before this call.
