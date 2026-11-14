@@ -44,7 +44,9 @@ def evidence(
 
 
 def test_state_machine_accepts_only_the_defined_onchain_path() -> None:
-    state = transition_for_verified_event(EscrowDealStatus.INTENT_CREATED, EscrowChainEventType.CONTRACT_ACTIVATED)
+    state = transition_for_verified_event(
+        EscrowDealStatus.INTENT_CREATED, EscrowChainEventType.CONTRACT_ACTIVATED
+    )
     assert state is EscrowDealStatus.AWAITING_NFT
     state = transition_for_verified_event(state, EscrowChainEventType.NFT_DEPOSITED)
     assert state is EscrowDealStatus.AWAITING_BUYER_FUNDS
@@ -62,9 +64,13 @@ def test_state_machine_accepts_only_the_defined_onchain_path() -> None:
 
 def test_replay_or_out_of_order_event_cannot_advance_state() -> None:
     with pytest.raises(EscrowDomainError):
-        transition_for_verified_event(EscrowDealStatus.FUNDED_REVIEW, EscrowChainEventType.NFT_DEPOSITED)
+        transition_for_verified_event(
+            EscrowDealStatus.FUNDED_REVIEW, EscrowChainEventType.NFT_DEPOSITED
+        )
     with pytest.raises(EscrowDomainError):
-        transition_for_verified_event(EscrowDealStatus.SETTLED, EscrowChainEventType.SELLER_PAYOUT_CONFIRMED)
+        transition_for_verified_event(
+            EscrowDealStatus.SETTLED, EscrowChainEventType.SELLER_PAYOUT_CONFIRMED
+        )
 
 
 def test_exact_nft_deposit_evidence_is_accepted(deal: DealEvidenceSnapshot) -> None:
@@ -138,8 +144,12 @@ def test_missing_contract_binding_fails_closed(deal: DealEvidenceSnapshot) -> No
 
 
 
-def test_refund_requires_finalized_nft_return_then_exact_refund(deal: DealEvidenceSnapshot) -> None:
-    state = transition_for_verified_event(EscrowDealStatus.FUNDED_REVIEW, EscrowChainEventType.NFT_RETURN_STARTED)
+def test_refund_requires_finalized_nft_return_then_exact_refund(
+    deal: DealEvidenceSnapshot,
+) -> None:
+    state = transition_for_verified_event(
+        EscrowDealStatus.FUNDED_REVIEW, EscrowChainEventType.NFT_RETURN_STARTED
+    )
     assert state is EscrowDealStatus.NFT_RETURN_PENDING
     state = transition_for_verified_event(state, EscrowChainEventType.NFT_RETURN_CONFIRMED)
     assert state is EscrowDealStatus.BUYER_REFUND_PENDING
