@@ -228,7 +228,7 @@ fun settleRemainingBalanceForBuyer(
     val sellerRefundId = progress.startOracleAttempt();
     sendSellerDeploymentRefund(roles, asset, money, sellerRefundId);
 
-    reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, RESERVE_MODE_REGULAR);
+    reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, 0);
     val buyerRefundId = progress.startOracleAttempt();
     sendRemainingBalanceTo(roles.buyer, asset, buyerRefundId);
 }
@@ -240,7 +240,7 @@ fun settleExpiredBalanceForSeller(
     roles: DealRoles,
     asset: DealAsset,
 ) {
-    reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, RESERVE_MODE_REGULAR);
+    reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, 0);
     val sellerRefundId = progress.startOracleAttempt();
     sendRemainingBalanceTo(roles.seller, asset, sellerRefundId);
 }
