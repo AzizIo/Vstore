@@ -208,9 +208,25 @@ delivery remains a separate gate before describing that flow as tested.
 
 ## 6. Backups and rollback
 
-The Compose stack does not create backups. Schedule encrypted off-host backups
-and test restoration to a separate database before launch. A sample manual
-PostgreSQL dump (run from the repository directory) is:
+The Compose stack does not schedule backups. Use the checked-in backup
+script to create a custom-format dump, validate that PostgreSQL can read the
+archive, and write a SHA-256 sidecar:
+
+```bash
+bash scripts/production_backup.sh
+```
+
+Run a restore drill against a fresh temporary database (never the live
+production database) using the generated dump:
+
+```bash
+bash scripts/production_restore_drill.sh ./backups/<backup-file>.dump
+```
+
+The restore drill drops its temporary database on exit. It checks the core
+schema, not application-level business invariants. Schedule encrypted off-host
+copies, retention, and alerts on the VPS; a local backup is not sufficient.
+A sample manual PostgreSQL dump remains available as a fallback:
 
 ```bash
 mkdir -p /root/backups

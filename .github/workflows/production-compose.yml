@@ -7,6 +7,8 @@ on:
       - "frontend/Dockerfile.production"
       - "frontend/nginx.production.conf"
       - ".github/workflows/production-compose.yml"
+      - "scripts/production_backup.sh"
+      - "scripts/production_restore_drill.sh"
   push:
     branches: [main]
     paths:
@@ -14,6 +16,8 @@ on:
       - "frontend/Dockerfile.production"
       - "frontend/nginx.production.conf"
       - ".github/workflows/production-compose.yml"
+      - "scripts/production_backup.sh"
+      - "scripts/production_restore_drill.sh"
 
 permissions:
   contents: read
@@ -22,6 +26,7 @@ jobs:
   compose-and-image:
     runs-on: ubuntu-latest
     env:
+      COMPOSE_PROJECT_NAME: viltara-production-ci-${{ github.run_id }}-${{ github.run_attempt }}
       PROD_DB_NAME: viltara_production
       PROD_DB_USER: viltara_production
       PROD_DB_PASSWORD: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
@@ -35,7 +40,7 @@ jobs:
       PROD_TON_CONNECT_NETWORK: mainnet
       PROD_VITE_TONCONNECT_APP_URL: https://viltara-ci.example
       PROD_VITE_TONCONNECT_MANIFEST_URL: https://viltara-ci.example/tonconnect-manifest.json
-      PROD_POSTGRES_VOLUME_NAME: viltara-ci-volume
+      PROD_POSTGRES_VOLUME_NAME: viltara-ci-volume-${{ github.run_id }}-${{ github.run_attempt }}
       PROD_HTTP_PORT: "8081"
       PROD_TON_CENTER_API_KEY: ""
     steps:
@@ -130,6 +135,31 @@ jobs:
           docker run --rm --add-host api:127.0.0.1 \
             -v "$PWD/frontend/nginx.production.conf:/etc/nginx/conf.d/default.conf:ro" \
             nginx:alpine nginx -t
+      - name: Validate production backup and restore-drill scripts
+        run: |
+          bash -n scripts/production_backup.sh
+          bash -n scripts/production_restore_drill.sh
+          docker volume create "$PROD_POSTGRES_VOLUME_NAME"
+          docker compose -f docker-compose.production.yml up -d db
+          for attempt in $(seq 1 30); do
+            if docker compose -f docker-compose.production.yml exec -T db pg_isready -U "$PROD_DB_USER" -d "$PROD_DB_NAME"; then
+              break
+            fi
+            sleep 2
+          done
+          docker compose -f docker-compose.production.yml exec -T db psql \
+            --username "$PROD_DB_USER" --dbname "$PROD_DB_NAME" --set=ON_ERROR_STOP=1 \
+            --command "CREATE TABLE alembic_version (version_num varchar(32) NOT NULL); CREATE TABLE users (id integer PRIMARY KEY); CREATE TABLE listings (id integer PRIMARY KEY); CREATE TABLE orders (id integer PRIMARY KEY); INSERT INTO users VALUES (1); INSERT INTO listings VALUES (1); INSERT INTO orders VALUES (1);"
+          PROD_BACKUP_DIR=/tmp/viltara-production-ci-backups bash scripts/production_backup.sh
+          backup_file="$(find /tmp/viltara-production-ci-backups -maxdepth 1 -type f -name '*.dump' -print -quit)"
+          test -n "$backup_file"
+          (cd "$(dirname "$backup_file")" && sha256sum -c "$(basename "$backup_file").sha256")
+          bash scripts/production_restore_drill.sh "$backup_file"
+      - name: Stop disposable production database fixture
+        if: always()
+        run: |
+          docker compose -f docker-compose.production.yml down --remove-orphans || true
+          docker volume rm "$PROD_POSTGRES_VOLUME_NAME" || true
       - name: Build production Mini App image
         run: |
           docker build \
