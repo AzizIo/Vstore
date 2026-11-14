@@ -34,6 +34,7 @@ from app.db.models import (
     Wallet,
 )
 from app.db.payments import PaymentEvent, PaymentIntent, PaymentTransaction
+from app.orders.payment_service import queue_stars_refund
 
 
 class OrderConflict(Exception):
@@ -492,6 +493,12 @@ async def _request_stars_refund_for_order(
         transaction.status = "refund_pending"
         transaction.refund_requested_at = now
         transaction.last_error_code = reason
+        await queue_stars_refund(
+            session,
+            transaction,
+            reason_code=reason,
+            now=now,
+        )
         session.add(
             PaymentEvent(
                 payment_intent_id=intent.id,
