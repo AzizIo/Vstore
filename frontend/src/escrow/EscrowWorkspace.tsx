@@ -537,10 +537,10 @@ function WorkspaceBody({
     setActionError("");
     let walletRequestStarted = false;
     try {
-      walletRequestStarted = true;
       const result = await walletAdapter.sendPreparedTransaction(
         pending.transaction,
         pending.expectedWalletAddress,
+        () => { walletRequestStarted = true; },
       );
       const reference = await walletBocReference(result.boc);
       try {
