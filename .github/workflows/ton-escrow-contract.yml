@@ -32,6 +32,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify frozen artifact verifier tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+
+      - name: Verify source-controlled ABI snapshot
+        run: python3 scripts/verify_frozen_files.py
+
       - name: Set up Acton
         shell: bash
         run: |
@@ -45,6 +51,9 @@ jobs:
 
       - name: Compile contract BoCs
         run: acton build
+
+      - name: Verify generated code and BoC against frozen manifest
+        run: python3 scripts/verify_build_matches_manifest.py
 
       - name: Generate ABI-backed wrappers
         run: |
