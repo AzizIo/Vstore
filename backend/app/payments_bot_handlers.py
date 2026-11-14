@@ -23,6 +23,15 @@ logger = logging.getLogger(__name__)
 router = Router(name="viltara-stars-test")
 
 
+@router.message(Command("whoami"))
+async def show_test_account_id(message: Message) -> None:
+    """Show the Telegram test account ID needed to seed a local synthetic order."""
+
+    if message.from_user is None:
+        return
+    await message.answer(f"Ваш Telegram test ID: `{message.from_user.id}`")
+
+
 @router.message(Command("pay"))
 async def create_test_invoice(message: Message) -> None:
     """Issue an invoice only from the isolated Stars test bot."""
