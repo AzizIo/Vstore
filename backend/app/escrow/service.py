@@ -8,10 +8,11 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
+from datetime import datetime, timedelta
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.escrow.models import EscrowWalletActionRecord
@@ -100,3 +101,77 @@ def record_submission_reference(
     action.status = "ambiguous"
     action.attempt_count += 1
     action.last_error_code = "awaiting_independent_chain_reconciliation"
+
+
+
+async def claim_next_action(
+    session: AsyncSession,
+    *,
+    now: datetime,
+    lease_seconds: int = 90,
+) -> EscrowWalletActionRecord | None:
+    """Claim one due action using PostgreSQL SKIP LOCKED and a fencing token.
+
+    The caller commits the lease before any provider/broadcast operation. A
+    second worker skips this row; a stale worker cannot release a newer lease.
+    """
+    if lease_seconds < 1 or lease_seconds > 900:
+        raise ValueError("invalid_lease_seconds")
+    action = await session.scalar(
+        select(EscrowWalletActionRecord)
+        .where(
+            EscrowWalletActionRecord.status.in_(
+                ("pending", "prepared", "submitted", "ambiguous")
+            ),
+            or_(
+                EscrowWalletActionRecord.next_retry_at.is_(None),
+                EscrowWalletActionRecord.next_retry_at <= now,
+            ),
+            or_(
+                EscrowWalletActionRecord.lease_until.is_(None),
+                EscrowWalletActionRecord.lease_until <= now,
+            ),
+        )
+        .order_by(EscrowWalletActionRecord.created_at, EscrowWalletActionRecord.id)
+        .with_for_update(skip_locked=True)
+        .limit(1)
+    )
+    if action is None:
+        return None
+    action.lease_token = uuid4()
+    action.lease_until = now + timedelta(seconds=lease_seconds)
+    return action
+
+
+async def release_action_lease(
+    session: AsyncSession,
+    *,
+    action_id: UUID,
+    lease_token: UUID,
+    now: datetime,
+    retry_after_seconds: int,
+    error_code: str | None,
+    ambiguous: bool = False,
+) -> bool:
+    """Release only the lease still owned by this worker and schedule recovery."""
+    if retry_after_seconds < 0 or retry_after_seconds > 86_400:
+        raise ValueError("invalid_retry_after_seconds")
+    action = await session.scalar(
+        select(EscrowWalletActionRecord)
+        .where(EscrowWalletActionRecord.id == action_id)
+        .with_for_update()
+    )
+    if action is None or action.lease_token != lease_token:
+        return False
+    action.lease_token = None
+    action.lease_until = None
+    action.next_retry_at = now + timedelta(seconds=retry_after_seconds)
+    if error_code is not None and (
+        not 1 <= len(error_code) <= 64
+        or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789_" for char in error_code)
+    ):
+        error_code = "provider_error"
+    action.last_error_code = error_code
+    if ambiguous:
+        action.status = "ambiguous"
+    return True
