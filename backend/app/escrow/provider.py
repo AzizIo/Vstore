@@ -38,6 +38,7 @@ class NormalizedChainEvent:
     finalized: bool
     evidence_sha256: str
     cursor: str
+    collection_address: str | None = None
     message_hash: str | None = None
     trace_id: str | None = None
     logical_time: int | None = None
