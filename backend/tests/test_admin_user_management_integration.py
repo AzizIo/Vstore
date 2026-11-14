@@ -110,71 +110,71 @@ async def test_block_unblock_idempotency_audit_and_immutability(
 
         try:
             client = TestClient(app)
-                block_payload = {"reason": "Repeated policy violations confirmed"}
-                block_headers = {"Idempotency-Key": f"block-user-{uuid4()}"}
-                block_url = f"/api/admin/users/{target.id}/block"
+            block_payload = {"reason": "Repeated policy violations confirmed"}
+            block_headers = {"Idempotency-Key": f"block-user-{uuid4()}"}
+            block_url = f"/api/admin/users/{target.id}/block"
 
-                first = client.post(block_url, headers=block_headers, json=block_payload)
-                assert first.status_code == 200, first.text
-                block_result = first.json()
-                assert block_result["is_blocked"] is True
-                first_audit_id = block_result["audit"]["id"]
+            first = client.post(block_url, headers=block_headers, json=block_payload)
+            assert first.status_code == 200, first.text
+            block_result = first.json()
+            assert block_result["is_blocked"] is True
+            first_audit_id = block_result["audit"]["id"]
 
-                replay = client.post(block_url, headers=block_headers, json=block_payload)
-                assert replay.status_code == 200, replay.text
-                assert replay.json()["audit"]["id"] == first_audit_id
-                assert replay.json()["is_blocked"] is True
+            replay = client.post(block_url, headers=block_headers, json=block_payload)
+            assert replay.status_code == 200, replay.text
+            assert replay.json()["audit"]["id"] == first_audit_id
+            assert replay.json()["is_blocked"] is True
 
-                mismatch = client.post(
-                    block_url,
-                    headers=block_headers,
-                    json={"reason": "A different reason for the same operation"},
-                )
-                assert mismatch.status_code == 409
+            mismatch = client.post(
+                block_url,
+                headers=block_headers,
+                json={"reason": "A different reason for the same operation"},
+            )
+            assert mismatch.status_code == 409
 
-                duplicate_block = client.post(
-                    block_url,
-                    headers={"Idempotency-Key": f"second-block-{uuid4()}"},
-                    json=block_payload,
-                )
-                assert duplicate_block.status_code == 409
+            duplicate_block = client.post(
+                block_url,
+                headers={"Idempotency-Key": f"second-block-{uuid4()}"},
+                json=block_payload,
+            )
+            assert duplicate_block.status_code == 409
 
-                unblock_payload = {"reason": "Restriction review has been completed"}
-                unblock_headers = {"Idempotency-Key": f"unblock-user-{uuid4()}"}
-                unblock_url = f"/api/admin/users/{target.id}/unblock"
-                unblocked = client.post(
-                    unblock_url, headers=unblock_headers, json=unblock_payload
-                )
-                assert unblocked.status_code == 200, unblocked.text
-                unblock_audit_id = unblocked.json()["audit"]["id"]
-                assert unblocked.json()["is_blocked"] is False
+            unblock_payload = {"reason": "Restriction review has been completed"}
+            unblock_headers = {"Idempotency-Key": f"unblock-user-{uuid4()}"}
+            unblock_url = f"/api/admin/users/{target.id}/unblock"
+            unblocked = client.post(
+                unblock_url, headers=unblock_headers, json=unblock_payload
+            )
+            assert unblocked.status_code == 200, unblocked.text
+            unblock_audit_id = unblocked.json()["audit"]["id"]
+            assert unblocked.json()["is_blocked"] is False
 
-                unblock_replay = client.post(
-                    unblock_url, headers=unblock_headers, json=unblock_payload
-                )
-                assert unblock_replay.status_code == 200, unblock_replay.text
-                assert unblock_replay.json()["audit"]["id"] == unblock_audit_id
+            unblock_replay = client.post(
+                unblock_url, headers=unblock_headers, json=unblock_payload
+            )
+            assert unblock_replay.status_code == 200, unblock_replay.text
+            assert unblock_replay.json()["audit"]["id"] == unblock_audit_id
 
-                searched = client.get(
-                    "/api/admin/users", params={"q": str(target.telegram_id), "limit": 10}
-                )
-                assert searched.status_code == 200, searched.text
-                assert searched.json()["total"] == 1
-                assert searched.json()["items"][0]["telegram_id"] == target.telegram_id
+            searched = client.get(
+                "/api/admin/users", params={"q": str(target.telegram_id), "limit": 10}
+            )
+            assert searched.status_code == 200, searched.text
+            assert searched.json()["total"] == 1
+            assert searched.json()["items"][0]["telegram_id"] == target.telegram_id
 
-                detail = client.get(f"/api/admin/users/{target.id}")
-                assert detail.status_code == 200, detail.text
-                assert detail.json()["is_blocked"] is False
-                assert "access_token" not in detail.text
-                assert "private_key" not in detail.text
-                assert "seed_phrase" not in detail.text
+            detail = client.get(f"/api/admin/users/{target.id}")
+            assert detail.status_code == 200, detail.text
+            assert detail.json()["is_blocked"] is False
+            assert "access_token" not in detail.text
+            assert "private_key" not in detail.text
+            assert "seed_phrase" not in detail.text
 
-                audit_page = client.get(f"/api/admin/users/{target.id}/audit")
-                assert audit_page.status_code == 200, audit_page.text
-                assert {row["action"] for row in audit_page.json()["items"]} >= {
-                    "blocked",
-                    "unblocked",
-                }
+            audit_page = client.get(f"/api/admin/users/{target.id}/audit")
+            assert audit_page.status_code == 200, audit_page.text
+            assert {row["action"] for row in audit_page.json()["items"]} >= {
+                "blocked",
+                "unblocked",
+            }
 
             async with factory() as session:
                 persisted_target = await session.get(User, target.id)
