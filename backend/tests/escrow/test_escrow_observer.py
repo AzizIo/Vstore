@@ -167,7 +167,7 @@ async def test_duplicate_final_event_is_idempotent_after_restart() -> None:
 
 @pytest.mark.asyncio
 async def test_conflicting_parameters_for_same_identity_go_to_manual_review() -> None:
-    event = make_event()
+    event = make_event(source_address="0:" + "c" * 64)
     existing = stored_row(event)
     conflict = replace(event, source_address="0:" + "f" * 64)
     session = FakeSession(existing)
