@@ -11,20 +11,45 @@ from verify_artifact import ArtifactVerificationError, verify_artifact
 
 
 class VerifyArtifactTests(unittest.TestCase):
-    def _archive(self, *, extra_member: tuple[str, bytes] | None = None) -> Path:
+    def _archive(
+        self,
+        *,
+        abi: bytes | None = None,
+        build: bytes | None = None,
+        extra_member: tuple[str, bytes] | None = None,
+    ) -> Path:
         temporary = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
         temporary.close()
         path = Path(temporary.name)
         with zipfile.ZipFile(path, "w") as archive:
-            archive.writestr("build/abi/DealEscrow.json", b"{}")
+            archive.writestr(
+                "build/abi/DealEscrow.json",
+                abi
+                or json.dumps({"contract_name": "DealEscrow", "version": "1.0.0"}).encode(),
+            )
             archive.writestr(
                 "build/DealEscrow.json",
-                json.dumps({"hash": "0" * 64, "code_boc64": "AA=="}).encode(),
+                build
+                or json.dumps({"hash": "A" * 64, "code_boc64": "AA=="}).encode(),
             )
             if extra_member is not None:
                 archive.writestr(*extra_member)
         self.addCleanup(path.unlink, missing_ok=True)
         return path
+
+    def test_accepts_valid_archive_when_all_digests_are_pinned(self) -> None:
+        path = self._archive()
+        with zipfile.ZipFile(path) as archive:
+            abi = archive.read("build/abi/DealEscrow.json")
+            build = archive.read("build/DealEscrow.json")
+        result = verify_artifact(
+            path,
+            expected_archive_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            expected_abi_sha256=hashlib.sha256(abi).hexdigest(),
+            expected_build_sha256=hashlib.sha256(build).hexdigest(),
+            expected_code_hash="A" * 64,
+        )
+        self.assertEqual(result["code_hash"], "A" * 64)
 
     def test_rejects_archive_with_wrong_digest_before_parsing(self) -> None:
         with self.assertRaisesRegex(ArtifactVerificationError, "archive SHA-256 mismatch"):
