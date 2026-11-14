@@ -77,3 +77,4 @@ def test_unknown_notification_event_remains_unsupported(
 
     with pytest.raises(notification_service.UnsupportedNotificationEvent):
         notification_service.build_notification_message(delivery)
+
