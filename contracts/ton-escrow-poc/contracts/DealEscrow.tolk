@@ -189,7 +189,7 @@ fun sendSellerDeploymentRefund(
         body: SettlementMessage {
             queryId,
             dealSalt: asset.dealSalt,
-            action: ORACLE_ACTION_SELLER_DEPLOYMENT_REFUND,
+            action: SETTLEMENT_ACTION_SELLER_DEPLOYMENT_REFUND,
         },
     });
     refund.send(SEND_MODE_PAY_FEES_SEPARATELY + SEND_MODE_BOUNCE_ON_ACTION_FAIL);
@@ -207,7 +207,7 @@ fun sendRemainingBalanceTo(
         body: SettlementMessage {
             queryId,
             dealSalt: asset.dealSalt,
-            action: ORACLE_ACTION_EXECUTION_RESERVE_REFUND,
+            action: SETTLEMENT_ACTION_EXECUTION_RESERVE_REFUND,
         },
     });
     refund.send(
