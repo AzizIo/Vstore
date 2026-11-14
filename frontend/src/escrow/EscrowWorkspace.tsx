@@ -133,7 +133,7 @@ function ListingIntentCard({
   onSelect: () => void;
 }) {
   const title = titleForNft(listing.nft);
-  const available = listing.state === "intent_only" || listing.state === "active";
+  const available = listing.available_actions.includes("create_deal_intent");
   return (
     <button
       type="button"
@@ -238,7 +238,7 @@ function TransactionReview({
         <div><dt>DealEscrow</dt><dd><code>{transaction.escrow_address ?? "Будет создан Factory; адрес подтвердит observer"}</code></dd></div>
         <div><dt>NFT item address</dt><dd><code>{transaction.nft_item_address}</code></dd></div>
         {transaction.price_nano !== null && <div><dt>Цена сделки</dt><dd>{nanoToTon(transaction.price_nano)} TON</dd></div>}
-        <div><dt>Комиссия платформы</dt><dd>0 bps · PoC</dd></div>
+        <div><dt>Комиссия платформы</dt><dd>0 TON · 0 bps · PoC</dd></div>
         <div><dt>Execution reserve</dt><dd>{transaction.execution_reserve_nano === null ? "Не указан" : `${nanoToTon(transaction.execution_reserve_nano)} TON (${transaction.execution_reserve_nano} nanotons)`}</dd></div>
         <div><dt>Подписывающий кошелёк</dt><dd><code>{pending.expectedWalletAddress}</code></dd></div>
         <div><dt>Срок действия</dt><dd>{formatEscrowDate(transaction.valid_until)}</dd></div>
@@ -392,7 +392,7 @@ function WorkspaceBody({
   const marketplaceListings = useMemo(
     () => listings.filter((listing) =>
       listing.seller_id !== currentUserId &&
-      (listing.state === "intent_only" || listing.state === "active"),
+      listing.available_actions.includes("create_deal_intent"),
     ),
     [listings, currentUserId],
   );
@@ -805,11 +805,11 @@ function WorkspaceBody({
                   <div><dt>Сеть</dt><dd>TON testnet</dd></div>
                   <div><dt>NFT item</dt><dd><code>{selectedListing.nft.item_address}</code></dd></div>
                   <div><dt>Цена</dt><dd>{nanoToTon(selectedListing.price_nano)} TON</dd></div>
-                  <div><dt>Комиссия</dt><dd>0 bps · PoC</dd></div>
+                  <div><dt>Комиссия</dt><dd>0 TON · 0 bps · PoC</dd></div>
                   <div><dt>Продавец</dt><dd><code>{shortAddress(selectedListing.seller_wallet_address)}</code></dd></div>
                 </dl>
                 <p className="escrow-warning">Создание deal intent привяжет ваш verified testnet wallet к сделке. Это ещё не оплата. Сначала продавец подпишет создание DealEscrow и внесёт точный NFT; только после observer-confirmed состояния awaiting_buyer_funds появится подготовка TON funding.</p>
-                <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !selectedBuyerWallet || selectedListing.seller_id === currentUserId} onClick={() => void createBuyerDealIntent()}>
+                <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !selectedBuyerWallet || selectedListing.seller_id === currentUserId || !selectedListing.available_actions.includes("create_deal_intent")} onClick={() => void createBuyerDealIntent()}>
                   Создать сделку
                 </button>
               </article>
