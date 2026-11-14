@@ -247,7 +247,8 @@ def validate_event_against_deal(event: NormalizedEventEvidence, deal: DealEviden
         EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED,
     }
     if event.event_type in nft_related and (
-        event.item_address != deal.item_address
+        not deal.collection_address
+        or event.item_address != deal.item_address
         or event.collection_address != deal.collection_address
     ):
         raise EscrowDomainError("NFT collection or item does not match the deal snapshot")
