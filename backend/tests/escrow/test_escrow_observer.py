@@ -497,3 +497,17 @@ def test_event_identity_survives_pending_metadata_enrichment() -> None:
 
     assert pending.event_key == finalized.event_key
     assert len(pending.event_key) == 64
+
+
+@pytest.mark.asyncio
+async def test_replay_with_conflicting_final_masterchain_seqno_requires_review() -> None:
+    event = make_event()
+    existing = stored_row(event, status="applied")
+    existing.payload_json["finalized"] = True
+    existing.payload_json["masterchain_seqno"] = 100
+    session = FakeSession(existing)
+    replay = replace(event, masterchain_seqno=101)
+
+    assert await _apply_one_event(session, replay, provider_verified=True) == "rejected"
+    assert existing.status == "manual_review"
+    assert existing.reason_code == "event_correlation_conflict"
