@@ -270,15 +270,18 @@ describe("TON Escrow workspace", () => {
     renderWorkspace(api, "seller-1");
     fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
 
-    expect(await screen.findByRole("button", { name: "Проверить условия депозита" })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: "Проверить условия депозита" })).toBeDisabled();
     expect(screen.getByText("Подтверждённый кошелёк · 0:11111111…11111111")).toBeInTheDocument();
     expect(screen.queryByText(ignoredMainnetWallet.address)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Цена лота · TON testnet"), { target: { value: "2.5" } });
+    expect(screen.getByRole("button", { name: "Проверить условия депозита" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Проверить условия депозита" }));
 
     expect(await screen.findByRole("dialog", { name: "Параметры TON-транзакции" })).toBeInTheDocument();
     expect(api.prepareNftDeposit).toHaveBeenCalledWith({
       asset_id: "asset-1",
       seller_wallet_id: "wallet-testnet",
+      price_ton: "2.5",
     });
     expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
   });
