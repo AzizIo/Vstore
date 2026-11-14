@@ -4,8 +4,8 @@ import pytest
 
 from app.escrow.domain import (
     DealEvidenceSnapshot,
-    EscrowChainEventType as EventType,
-    EscrowDealStatus as DealStatus,
+    EscrowChainEventType,
+    EscrowEscrowDealStatus,
     EscrowDomainError,
     NormalizedEventEvidence,
     transition_for_verified_event,
