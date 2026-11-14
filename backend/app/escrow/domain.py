@@ -169,6 +169,7 @@ class NormalizedEventEvidence:
     deal_salt: str | None = None
     observed_contract_state: str | None = None
     attestation_accepted: bool = False
+    contract_state_reconciled: bool = False
 
 
 def validate_event_against_deal(event: NormalizedEventEvidence, deal: DealEvidenceSnapshot) -> None:
@@ -184,6 +185,7 @@ def validate_event_against_deal(event: NormalizedEventEvidence, deal: DealEviden
     if event.event_type is EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED:
         if (
             not event.attestation_accepted
+            or not event.contract_state_reconciled
             or event.observed_contract_state != EscrowDealStatus.DELIVERED_DISPUTE_WINDOW.value
             or not event.message_hash or not event.trace_id or not event.attempt_id
         ):
