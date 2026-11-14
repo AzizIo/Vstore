@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app.api.escrow import router
+from app.api.escrow import _prepare_action, router
+from app.escrow.contracts import EscrowWalletAction
 from app.escrow.schemas import (
     EscrowDealCreate,
     EscrowDealResponse,
@@ -101,3 +104,36 @@ def test_backend_exposes_expected_deal_scoped_preparation_routes() -> None:
     assert "/escrow/deals/{deal_id}/prepare/nft-return" in paths
     assert "/escrow/deals/{deal_id}/prepare/withdraw-unsold-nft" in paths
     assert "/escrow/deals/{deal_id}/receipt" not in paths
+
+
+@pytest.mark.asyncio
+async def test_accept_deal_is_buyer_only_and_funded_review_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    seller_id, buyer_id, deal_id = uuid4(), uuid4(), uuid4()
+    seller = SimpleNamespace(id=seller_id)
+    buyer = SimpleNamespace(id=buyer_id)
+
+    class DealSession:
+        def __init__(self, deal: SimpleNamespace) -> None:
+            self.deal = deal
+
+        async def scalar(self, statement: object) -> SimpleNamespace:
+            return self.deal
+
+    deal = SimpleNamespace(
+        id=deal_id, seller_id=seller_id, buyer_id=buyer_id, status="funded_review",
+    )
+    with pytest.raises(HTTPException) as seller_error:
+        await _prepare_action(
+            deal_id, EscrowWalletAction.ACCEPT_DEAL, seller, DealSession(deal), None
+        )
+    assert seller_error.value.status_code == 409
+
+    deal.status = "awaiting_buyer_funds"
+    with pytest.raises(HTTPException) as buyer_error:
+        await _prepare_action(
+            deal_id, EscrowWalletAction.ACCEPT_DEAL, buyer, DealSession(deal), None
+        )
+    assert buyer_error.value.status_code == 409
