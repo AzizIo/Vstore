@@ -152,7 +152,8 @@ def test_trace_and_attempt_ids_are_part_of_event_correlation_identity() -> None:
     assert replace(event, attempt_id="attempt-002").event_key != event.event_key
     assert replace(event, trace_id="trace-002").event_key != event.event_key
     assert replace(event, message_hash="message-002").event_key != event.event_key
-    assert replace(event, logical_time=501).event_key == event.event_key
+    assert replace(event, logical_time=501).event_key != event.event_key
+    assert replace(event, deal_salt="e" * 64).event_key != event.event_key
 
 
 class FakeContext:
