@@ -368,7 +368,24 @@ async def test_database_disconnect_during_batch_keeps_cursor_for_replay() -> Non
     )
 
     class CommitFailingContext(FakeContext):
+        async def __aenter__(self) -> FakeEscrowSession:
+            self.before = (
+                checkpoint.cursor,
+                checkpoint.lease_token,
+                checkpoint.lease_until,
+                checkpoint.next_scan_at,
+                checkpoint.last_error_code,
+            )
+            return await super().__aenter__()
+
         async def __aexit__(self, *args: object) -> None:
+            (
+                checkpoint.cursor,
+                checkpoint.lease_token,
+                checkpoint.lease_until,
+                checkpoint.next_scan_at,
+                checkpoint.last_error_code,
+            ) = self.before
             raise RuntimeError("simulated database disconnect during commit")
 
     class CommitFailingSession(FakeEscrowSession):
