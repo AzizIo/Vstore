@@ -1,9 +1,9 @@
 """Escrow domain rules independent of the database and TON contract ABI.
 
-Only normalized, independently verified chain evidence may advance on-chain deal
-states. Client requests are intents, never on-chain state transitions.
+Only accepted contract state, reconciled against finalized chain evidence, may
+advance canonical deal states. Off-chain provider observations are never state
+transitions. Client requests are intents, not proof of chain activity.
 """
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -36,7 +36,29 @@ class EscrowDealStatus(StrEnum):
 
 
 class EscrowChainEventType(StrEnum):
+    # Layer A: off-chain evidence observations. These never move a Deal.
+    NFT_DEPOSIT_EVIDENCE_OBSERVED = "nft_deposit_evidence_observed"
+    BUYER_PAYMENT_EVIDENCE_OBSERVED = "buyer_payment_evidence_observed"
+    NFT_DELIVERY_EVIDENCE_OBSERVED = "nft_delivery_evidence_observed"
+    NFT_RETURN_EVIDENCE_OBSERVED = "nft_return_evidence_observed"
+    SELLER_PAYOUT_EVIDENCE_OBSERVED = "seller_payout_evidence_observed"
+    BUYER_REFUND_EVIDENCE_OBSERVED = "buyer_refund_evidence_observed"
+
+    # Layer B: contract-accepted facts; observer still verifies finality/getter state.
     CONTRACT_ACTIVATED = "contract_activated"
+    NFT_DEPOSIT_ACCEPTED = "nft_deposit_accepted"
+    BUYER_PAYMENT_ACCEPTED = "buyer_payment_accepted"
+    BUYER_ACCEPTANCE_RECORDED = "buyer_acceptance_recorded"
+    ORACLE_DELIVERY_ATTESTATION_ACCEPTED = "oracle_delivery_attestation_accepted"
+    DISPUTE_OPENED_ONCHAIN = "dispute_opened_onchain"
+    DISPUTE_RESOLUTION_ACCEPTED = "dispute_resolution_accepted"
+    ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED = "oracle_nft_return_attestation_accepted"
+    SELLER_PAYOUT_RECONCILED = "seller_payout_reconciled"
+    BUYER_REFUND_RECONCILED = "buyer_refund_reconciled"
+    DEAL_EXPIRED = "deal_expired"
+    MANUAL_REVIEW_REQUIRED = "manual_review_required"
+
+    # Legacy event names are parseable for forensic/history purposes only.
     NFT_DEPOSITED = "nft_deposited"
     BUYER_PAYMENT_CONFIRMED = "buyer_payment_confirmed"
     NFT_RELEASE_STARTED = "nft_release_started"
@@ -49,77 +71,68 @@ class EscrowChainEventType(StrEnum):
     BUYER_REFUND_STARTED = "buyer_refund_started"
     BUYER_REFUND_CONFIRMED = "buyer_refund_confirmed"
     NFT_RETURN_CONFIRMED = "nft_return_confirmed"
-    MANUAL_REVIEW_REQUIRED = "manual_review_required"
 
 
 class EscrowDomainError(ValueError):
     """A proposed escrow operation violates a domain invariant."""
 
 
-TERMINAL_DEAL_STATES = frozenset(
-    {EscrowDealStatus.SETTLED, EscrowDealStatus.REFUNDED, EscrowDealStatus.EXPIRED}
-)
+RAW_EVIDENCE_EVENTS = frozenset({
+    EscrowChainEventType.NFT_DEPOSIT_EVIDENCE_OBSERVED,
+    EscrowChainEventType.BUYER_PAYMENT_EVIDENCE_OBSERVED,
+    EscrowChainEventType.NFT_DELIVERY_EVIDENCE_OBSERVED,
+    EscrowChainEventType.NFT_RETURN_EVIDENCE_OBSERVED,
+    EscrowChainEventType.SELLER_PAYOUT_EVIDENCE_OBSERVED,
+    EscrowChainEventType.BUYER_REFUND_EVIDENCE_OBSERVED,
+    EscrowChainEventType.NFT_DEPOSITED,
+    EscrowChainEventType.BUYER_PAYMENT_CONFIRMED,
+    EscrowChainEventType.NFT_TRANSFER_CONFIRMED,
+    EscrowChainEventType.NFT_RETURN_TO_ESCROW_CONFIRMED,
+    EscrowChainEventType.NFT_RETURN_CONFIRMED,
+    EscrowChainEventType.SELLER_PAYOUT_CONFIRMED,
+    EscrowChainEventType.BUYER_REFUND_CONFIRMED,
+})
 
-# This is intentionally a narrow event state machine. The API never calls this
-# function directly; only the observer may apply a provider-verified chain event.
+TERMINAL_DEAL_STATES = frozenset({
+    EscrowDealStatus.SETTLED, EscrowDealStatus.REFUNDED, EscrowDealStatus.EXPIRED,
+})
+
 _CHAIN_TRANSITIONS: dict[tuple[EscrowDealStatus, EscrowChainEventType], EscrowDealStatus] = {
-    (EscrowDealStatus.INTENT_CREATED, EscrowChainEventType.CONTRACT_ACTIVATED):
-        EscrowDealStatus.AWAITING_NFT,
-    (EscrowDealStatus.AWAITING_NFT, EscrowChainEventType.NFT_DEPOSITED):
-        EscrowDealStatus.AWAITING_BUYER_FUNDS,
-    (EscrowDealStatus.AWAITING_BUYER_FUNDS, EscrowChainEventType.BUYER_PAYMENT_CONFIRMED):
-        EscrowDealStatus.FUNDED_REVIEW,
-    (EscrowDealStatus.FUNDED_REVIEW, EscrowChainEventType.NFT_RELEASE_STARTED):
-        EscrowDealStatus.NFT_RELEASE_PENDING,
-    (EscrowDealStatus.NFT_RELEASE_PENDING, EscrowChainEventType.NFT_TRANSFER_CONFIRMED):
-        EscrowDealStatus.DELIVERED_DISPUTE_WINDOW,
-    (EscrowDealStatus.DELIVERED_DISPUTE_WINDOW, EscrowChainEventType.DISPUTE_CONFIRMED):
-        EscrowDealStatus.DISPUTED,
-    (EscrowDealStatus.DISPUTED, EscrowChainEventType.NFT_RETURN_STARTED):
-        EscrowDealStatus.NFT_RETURN_PENDING,
-    (EscrowDealStatus.DISPUTED, EscrowChainEventType.NFT_RETURN_TO_ESCROW_CONFIRMED):
-        EscrowDealStatus.NFT_RETURN_PENDING,
-    (EscrowDealStatus.DELIVERED_DISPUTE_WINDOW, EscrowChainEventType.SELLER_PAYOUT_STARTED):
-        EscrowDealStatus.SELLER_PAYOUT_PENDING,
-    (EscrowDealStatus.SELLER_PAYOUT_PENDING, EscrowChainEventType.SELLER_PAYOUT_CONFIRMED):
-        EscrowDealStatus.SETTLED,
-    (EscrowDealStatus.FUNDED_REVIEW, EscrowChainEventType.NFT_RETURN_STARTED):
-        EscrowDealStatus.NFT_RETURN_PENDING,
-    (EscrowDealStatus.NFT_RETURN_PENDING, EscrowChainEventType.NFT_RETURN_STARTED):
-        EscrowDealStatus.NFT_RETURN_PENDING,
-    (EscrowDealStatus.NFT_RETURN_PENDING, EscrowChainEventType.NFT_RETURN_CONFIRMED):
-        EscrowDealStatus.BUYER_REFUND_PENDING,
-    (EscrowDealStatus.BUYER_REFUND_PENDING, EscrowChainEventType.BUYER_REFUND_STARTED):
-        EscrowDealStatus.BUYER_REFUND_PENDING,
-    (EscrowDealStatus.BUYER_REFUND_PENDING, EscrowChainEventType.BUYER_REFUND_CONFIRMED):
-        EscrowDealStatus.REFUNDED,
-    (EscrowDealStatus.DISPUTED, EscrowChainEventType.NFT_TRANSFER_CONFIRMED):
-        EscrowDealStatus.DELIVERED_DISPUTE_WINDOW,
-    (EscrowDealStatus.DISPUTED, EscrowChainEventType.SELLER_PAYOUT_STARTED):
-        EscrowDealStatus.SELLER_PAYOUT_PENDING,
+    (EscrowDealStatus.INTENT_CREATED, EscrowChainEventType.CONTRACT_ACTIVATED): EscrowDealStatus.AWAITING_NFT,
+    (EscrowDealStatus.AWAITING_NFT, EscrowChainEventType.NFT_DEPOSIT_ACCEPTED): EscrowDealStatus.AWAITING_BUYER_FUNDS,
+    (EscrowDealStatus.AWAITING_BUYER_FUNDS, EscrowChainEventType.BUYER_PAYMENT_ACCEPTED): EscrowDealStatus.FUNDED_REVIEW,
+    (EscrowDealStatus.FUNDED_REVIEW, EscrowChainEventType.BUYER_ACCEPTANCE_RECORDED): EscrowDealStatus.NFT_RELEASE_PENDING,
+    (EscrowDealStatus.NFT_RELEASE_PENDING, EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED): EscrowDealStatus.DELIVERED_DISPUTE_WINDOW,
+    (EscrowDealStatus.DELIVERED_DISPUTE_WINDOW, EscrowChainEventType.DISPUTE_OPENED_ONCHAIN): EscrowDealStatus.DISPUTED,
+    (EscrowDealStatus.DISPUTED, EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED): EscrowDealStatus.NFT_RETURN_PENDING,
+    (EscrowDealStatus.DELIVERED_DISPUTE_WINDOW, EscrowChainEventType.SELLER_PAYOUT_RECONCILED): EscrowDealStatus.SETTLED,
+    (EscrowDealStatus.BUYER_REFUND_PENDING, EscrowChainEventType.BUYER_REFUND_RECONCILED): EscrowDealStatus.REFUNDED,
+    (EscrowDealStatus.INTENT_CREATED, EscrowChainEventType.DEAL_EXPIRED): EscrowDealStatus.EXPIRED,
+    (EscrowDealStatus.AWAITING_NFT, EscrowChainEventType.DEAL_EXPIRED): EscrowDealStatus.EXPIRED,
+    (EscrowDealStatus.AWAITING_BUYER_FUNDS, EscrowChainEventType.DEAL_EXPIRED): EscrowDealStatus.EXPIRED,
 }
 
 
-def transition_for_verified_event(
-    current: EscrowDealStatus | str,
-    event_type: EscrowChainEventType | str,
-) -> EscrowDealStatus:
-    """Return the only allowed next state for a verified chain event.
-
-    A caller must verify provider evidence, exact deal facts, network and finality
-    before calling this function. Unknown or repeated events fail closed.
-    """
+def is_raw_evidence_event(event_type: EscrowChainEventType | str) -> bool:
     try:
-        source = EscrowDealStatus(current)
-        event = EscrowChainEventType(event_type)
+        return EscrowChainEventType(event_type) in RAW_EVIDENCE_EVENTS
+    except ValueError:
+        return False
+
+
+def transition_for_verified_event(
+    current: EscrowDealStatus | str, event_type: EscrowChainEventType | str,
+) -> EscrowDealStatus:
+    try:
+        source, event = EscrowDealStatus(current), EscrowChainEventType(event_type)
     except ValueError as exc:
         raise EscrowDomainError("Unknown escrow state or chain event") from exc
-
+    if event in RAW_EVIDENCE_EVENTS:
+        raise EscrowDomainError("Raw off-chain evidence cannot advance a canonical deal state")
     if event is EscrowChainEventType.MANUAL_REVIEW_REQUIRED:
         if source in TERMINAL_DEAL_STATES:
             raise EscrowDomainError("A terminal deal cannot be silently reopened")
         return EscrowDealStatus.MANUAL_REVIEW
-
     target = _CHAIN_TRANSITIONS.get((source, event))
     if target is None:
         raise EscrowDomainError(f"Event {event.value} is not allowed from {source.value}")
@@ -128,8 +141,6 @@ def transition_for_verified_event(
 
 @dataclass(frozen=True, slots=True)
 class DealEvidenceSnapshot:
-    """Immutable deal facts used to compare observed chain evidence."""
-
     network: str
     contract_address: str | None
     item_address: str
@@ -140,8 +151,6 @@ class DealEvidenceSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class NormalizedEventEvidence:
-    """Provider-normalized event; hashes and addresses are not trusted by themselves."""
-
     network: str
     contract_address: str
     event_type: EscrowChainEventType
@@ -151,80 +160,70 @@ class NormalizedEventEvidence:
     amount_nanotons: int | None
     masterchain_seqno: int
     finalized: bool
+    logical_time: int | None = None
+    message_hash: str | None = None
+    trace_id: str | None = None
+    phase: str | None = None
+    attempt_id: str | None = None
+    query_id: str | None = None
+    deal_salt: str | None = None
+    observed_contract_state: str | None = None
+    attestation_accepted: bool = False
 
 
-def validate_event_against_deal(
-    event: NormalizedEventEvidence,
-    deal: DealEvidenceSnapshot,
-) -> None:
-    """Raise unless the event is final and matches the exact immutable deal snapshot."""
+def validate_event_against_deal(event: NormalizedEventEvidence, deal: DealEvidenceSnapshot) -> None:
     if event.network != "testnet" or deal.network != "testnet":
         raise EscrowDomainError("Escrow backend only accepts TON testnet evidence")
     if not event.finalized or event.masterchain_seqno <= 0:
         raise EscrowDomainError("Chain evidence is not finalized")
+    if event.event_type in RAW_EVIDENCE_EVENTS:
+        raise EscrowDomainError("Raw observations are evidence only, not accepted contract state")
     if not deal.contract_address or event.contract_address != deal.contract_address:
         raise EscrowDomainError("Event does not belong to the configured deal contract")
 
-    if event.event_type in {
-        EscrowChainEventType.NFT_DEPOSITED,
-        EscrowChainEventType.NFT_TRANSFER_CONFIRMED,
-        EscrowChainEventType.NFT_RETURN_TO_ESCROW_CONFIRMED,
-        EscrowChainEventType.NFT_RETURN_STARTED,
-        EscrowChainEventType.NFT_RETURN_CONFIRMED,
-    }:
-        if event.item_address != deal.item_address:
-            raise EscrowDomainError("NFT item does not match the deal snapshot")
+    if event.event_type is EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED:
+        if (
+            not event.attestation_accepted
+            or event.observed_contract_state != EscrowDealStatus.DELIVERED_DISPUTE_WINDOW.value
+            or not event.message_hash or not event.trace_id or not event.attempt_id
+        ):
+            raise EscrowDomainError("Delivery attestation lacks finalized contract-state reconciliation")
 
-    if event.event_type is EscrowChainEventType.NFT_DEPOSITED and (
-        event.source_address != deal.seller_address
-        or event.destination_address != deal.contract_address
+    nft_related = {
+        EscrowChainEventType.NFT_DEPOSIT_ACCEPTED,
+        EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED,
+        EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED,
+    }
+    if event.event_type in nft_related and event.item_address != deal.item_address:
+        raise EscrowDomainError("NFT item does not match the deal snapshot")
+
+    if event.event_type is EscrowChainEventType.NFT_DEPOSIT_ACCEPTED and (
+        event.source_address != deal.seller_address or event.destination_address != deal.contract_address
     ):
         raise EscrowDomainError("NFT deposit sender or escrow recipient does not match the deal")
-
-    if event.event_type is EscrowChainEventType.BUYER_PAYMENT_CONFIRMED and (
+    if event.event_type is EscrowChainEventType.BUYER_PAYMENT_ACCEPTED and (
         event.source_address != deal.buyer_address
         or event.destination_address != deal.contract_address
         or event.amount_nanotons != deal.principal_nanotons
     ):
-        raise EscrowDomainError(
-            "Payment sender, escrow recipient or exact principal does not match the deal"
-        )
-
-    if event.event_type is EscrowChainEventType.NFT_TRANSFER_CONFIRMED and (
-        event.source_address != deal.contract_address
-        or event.destination_address != deal.buyer_address
+        raise EscrowDomainError("Payment sender, escrow recipient or exact principal does not match the deal")
+    if event.event_type is EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED and (
+        event.source_address != deal.contract_address or event.destination_address != deal.buyer_address
     ):
         raise EscrowDomainError("NFT source or destination does not match the deal")
-
-    if event.event_type is EscrowChainEventType.NFT_RETURN_TO_ESCROW_CONFIRMED and (
-        event.source_address != deal.buyer_address
-        or event.destination_address != deal.contract_address
-    ):
-        raise EscrowDomainError("NFT return must be from buyer to the configured escrow")
-
-    if event.event_type in {
-        EscrowChainEventType.NFT_RETURN_STARTED,
-        EscrowChainEventType.NFT_RETURN_CONFIRMED,
-    } and (
-        event.source_address != deal.contract_address
-        or event.destination_address != deal.seller_address
+    if event.event_type is EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED and (
+        event.source_address != deal.contract_address or event.destination_address != deal.seller_address
     ):
         raise EscrowDomainError("NFT return to seller must use the fixed escrow and seller")
-
-    if event.event_type is EscrowChainEventType.SELLER_PAYOUT_CONFIRMED and (
+    if event.event_type is EscrowChainEventType.SELLER_PAYOUT_RECONCILED and (
         event.source_address != deal.contract_address
         or event.destination_address != deal.seller_address
         or event.amount_nanotons != deal.principal_nanotons
     ):
-        raise EscrowDomainError(
-            "Seller payout does not match the contract, fixed recipient and principal"
-        )
-
-    if event.event_type is EscrowChainEventType.BUYER_REFUND_CONFIRMED and (
+        raise EscrowDomainError("Seller payout does not match contract, fixed recipient and principal")
+    if event.event_type is EscrowChainEventType.BUYER_REFUND_RECONCILED and (
         event.source_address != deal.contract_address
         or event.destination_address != deal.buyer_address
         or event.amount_nanotons != deal.principal_nanotons
     ):
-        raise EscrowDomainError(
-            "Buyer refund does not match the contract, fixed recipient and principal"
-        )
+        raise EscrowDomainError("Buyer refund does not match contract, fixed recipient and principal")
