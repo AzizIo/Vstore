@@ -74,6 +74,7 @@ def upgrade() -> None:
         sa.Column("buyer_id", sa.Uuid(), nullable=False),
         sa.Column("buyer_wallet_id", sa.Uuid(), nullable=False),
         sa.Column("network", sa.String(16), server_default="testnet", nullable=False),
+        sa.Column("deal_salt", sa.String(128), nullable=False),
         sa.Column("contract_address", sa.String(128), nullable=True),
         sa.Column("contract_abi_version", sa.String(64), nullable=True),
         sa.Column("item_address", sa.String(128), nullable=False),
@@ -132,9 +133,20 @@ def upgrade() -> None:
         "escrow_chain_events",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("network", sa.String(16), server_default="testnet", nullable=False),
+        sa.Column("event_key", sa.String(512), nullable=False),
         sa.Column("transaction_hash", sa.String(128), nullable=False),
         sa.Column("event_index", sa.BigInteger(), nullable=False),
-        sa.Column("event_type", sa.String(48), nullable=False),
+        sa.Column("message_hash", sa.String(128), nullable=True),
+        sa.Column("trace_id", sa.String(128), nullable=True),
+        sa.Column("logical_time", sa.BigInteger(), nullable=True),
+        sa.Column("phase", sa.String(32), nullable=True),
+        sa.Column("attempt_id", sa.String(128), nullable=True),
+        sa.Column("query_id", sa.String(128), nullable=True),
+        sa.Column("operation_id", sa.String(128), nullable=True),
+        sa.Column("deal_salt", sa.String(128), nullable=True),
+        sa.Column("account_address", sa.String(128), nullable=True),
+        sa.Column("observed_contract_state", sa.String(64), nullable=True),
+        sa.Column("event_type", sa.String(64), nullable=False),
         sa.Column("contract_address", sa.String(128), nullable=False),
         sa.Column("deal_id", sa.Uuid(), nullable=True),
         sa.Column("source_address", sa.String(128), nullable=True),
@@ -147,24 +159,18 @@ def upgrade() -> None:
         sa.Column("payload_json", sa.JSON(), nullable=False),
         sa.Column("status", sa.String(24), nullable=False),
         sa.Column("reason_code", sa.String(64), nullable=True),
-        sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
-        ),
-        sa.Column(
-            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
-        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.CheckConstraint("network = 'testnet'", name="ck_escrow_event_network_testnet"),
         sa.CheckConstraint("event_index >= 0", name="ck_escrow_event_index_nonnegative"),
         sa.CheckConstraint(
-            "status IN ('applied', 'duplicate', 'rejected', 'manual_review', 'unmatched')",
+            "status IN ('pending', 'applied', 'duplicate', 'rejected', 'manual_review', 'unmatched')",
             name="ck_escrow_event_status",
         ),
         sa.CheckConstraint("length(evidence_sha256) = 64", name="ck_escrow_event_evidence_hash"),
         sa.ForeignKeyConstraint(["deal_id"], ["escrow_deals.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "network", "transaction_hash", "event_index", name="uq_escrow_chain_event_position"
-        ),
+        sa.UniqueConstraint("network", "event_key", name="uq_escrow_chain_event_key"),
     )
     op.create_index(
         "ix_escrow_chain_event_deal_created", "escrow_chain_events", ["deal_id", "created_at"]
