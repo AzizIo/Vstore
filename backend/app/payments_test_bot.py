@@ -6,6 +6,8 @@ import logging
 from urllib.parse import urlsplit
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
 
 from app.core.config import get_settings
 from app.payments_bot_handlers import router as payments_test_router
@@ -17,6 +19,15 @@ def create_test_dispatcher() -> Dispatcher:
     dispatcher = Dispatcher()
     dispatcher.include_router(payments_test_router)
     return dispatcher
+
+
+def _test_api_server() -> TelegramAPIServer:
+    """Use Telegram's isolated test Bot API, never the production endpoint."""
+
+    return TelegramAPIServer(
+        base="https://api.telegram.org/bot{token}/test/{method}",
+        file="https://api.telegram.org/file/bot{token}/test/{path}",
+    )
 
 
 def _validate_test_bot_runtime() -> str:
@@ -63,7 +74,8 @@ async def main() -> None:
 
     token = _validate_test_bot_runtime()
     logging.basicConfig(level=logging.INFO)
-    bot = Bot(token=token)
+    session = AiohttpSession(api=_test_api_server())
+    bot = Bot(token=token, session=session)
     dispatcher = create_test_dispatcher()
     try:
         await dispatcher.start_polling(bot)
