@@ -74,7 +74,7 @@ PROD_VITE_TONCONNECT_MANIFEST_URL=https://<public-mini-app-host>/tonconnect-mani
 PROD_TON_CONNECT_ALLOWED_DOMAINS=["<public-mini-app-host>"]
 PROD_CORS_ALLOWED_ORIGINS=["https://<public-mini-app-host>"]
 PROD_TON_CONNECT_NETWORK=mainnet
-PROD_ADMIN_TELEGRAM_IDS=["<numeric-telegram-user-id>"]
+PROD_ADMIN_TELEGRAM_IDS=[123456789]
 
 PROD_POSTGRES_VOLUME_NAME=<exact-existing-or-new-volume-name>
 PROD_HTTP_PORT=8081
