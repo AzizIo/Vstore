@@ -81,6 +81,7 @@ jobs:
           PREVIEW_TON_CONNECT_NETWORK: testnet
           PREVIEW_AUTH_SECRET_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef
           PREVIEW_BOT_TOKEN: 123456:ci-test-token
+          PREVIEW_ADMIN_TELEGRAM_IDS: "[123456789]"
           PREVIEW_VITE_TONCONNECT_APP_URL: https://viltara-ci.example
           PREVIEW_VITE_TONCONNECT_MANIFEST_URL: https://viltara-ci.example/tonconnect-manifest.json
         run: |
@@ -104,6 +105,7 @@ jobs:
           assert "viltara_preview" in api_env["DATABASE_URL"], "Preview must use its dedicated database"
           assert api_env["AUTH_SECRET_KEY"] == bot_env["AUTH_SECRET_KEY"]
           assert api_env["BOT_TOKEN"] == bot_env["BOT_TOKEN"]
+          assert api_env["ADMIN_TELEGRAM_IDS"] == "[123456789]", "Preview admin allowlist must be passed only from PREVIEW_ADMIN_TELEGRAM_IDS"
           '
 
       - name: Validate isolated Telegram Stars test Compose configuration
