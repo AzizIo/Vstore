@@ -23,7 +23,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    event as sa_event,
     func,
+    inspect as sa_inspect,
     text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -152,6 +154,51 @@ class EscrowDeal(TimestampMixin, EscrowBase):
     last_chain_seqno: Mapped[int | None] = mapped_column(BigInteger)
     last_chain_logical_time: Mapped[int | None] = mapped_column(BigInteger)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+
+
+_IMMUTABLE_DEAL_TERMS = (
+    "id",
+    "listing_intent_id",
+    "marketplace_listing_id",
+    "seller_id",
+    "buyer_id",
+    "buyer_wallet_id",
+    "network",
+    "deal_salt",
+    "collection_address_snapshot",
+    "item_address",
+    "seller_address_snapshot",
+    "buyer_address_snapshot",
+    "price_amount",
+    "price_currency",
+    "principal_nanotons",
+    "idempotency_key",
+)
+
+
+def assert_deal_terms_immutable(target: "EscrowDeal") -> None:
+    state = sa_inspect(target)
+    changed = [
+        name for name in _IMMUTABLE_DEAL_TERMS
+        if state.attrs[name].history.has_changes()
+    ]
+    if target.contract_address is not None and state.attrs.contract_address.history.has_changes():
+        changed.append("contract_address")
+    if target.contract_abi_version is not None and state.attrs.contract_abi_version.history.has_changes():
+        changed.append("contract_abi_version")
+    if changed:
+        fields = ", ".join(sorted(set(changed)))
+        raise ValueError(f"Immutable DealEscrow terms cannot be changed: {fields}")
+
+
+def _before_escrow_deal_update(_mapper: object, _connection: object, target: "EscrowDeal") -> None:
+    assert_deal_terms_immutable(target)
+
+
+
+
+
+sa_event.listen(EscrowDeal, "before_update", _before_escrow_deal_update)
 
 
 class EscrowChainEvent(TimestampMixin, EscrowBase):
