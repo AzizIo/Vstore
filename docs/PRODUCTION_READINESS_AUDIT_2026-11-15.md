@@ -29,12 +29,12 @@ Mandatory release gates still fail closed until the P1 evidence below is complet
 
 | Finding | Evidence / impact | Required action |
 |---|---|---|
-| Frontend dependency graph is not reproducible | No npm lockfile exists in main; CI and production Dockerfile use npm install with semver ranges | Generate and commit a reviewed package-lock.json; switch CI and production image to npm ci; rerun frontend tests/build/E2E |
+| Frontend dependency graph was not reproducible at baseline | Main had no npm lockfile and used npm install with semver ranges | Addressed in this sprint branch: package-lock.json is committed, production/preview Dockerfiles and CI use npm ci, and npm audit --audit-level=high passed after upgrading TonConnect UI React to 3.1.0 and Vitest/coverage to 4.1.12 |
 | Backup/restore was documentation-only | Production Compose provides persistent PostgreSQL storage, but does not schedule backups or verify restore | Use the backup and isolated restore-drill scripts added in this sprint; schedule encrypted off-host retention on the VPS and perform a real restore drill |
 | Monitoring and alerting are external | Compose healthchecks cover DB, Redis, API and Mini App; no external uptime/alerting or disk/volume monitoring is configured in-repo | Configure external checks and alerts for API readiness, Mini App, bot process, PostgreSQL storage, backup freshness and restore failures |
 | Telegram notification delivery is at-least-once | Outbox uses row locks, claim tokens and retry leases; a crash after Telegram accepts a message but before DB acknowledgement can result in a duplicate | Keep message IDs/dedupe keys in logs and add operator reconciliation; do not claim exactly-once Telegram delivery |
 | Bot runtime is polling-based and single-instance | Production bot is an opt-in Compose profile and uses polling; duplicate polling workers for one token conflict | Enforce one bot replica per token and monitor bot container health/restarts |
-| Dependency security status is unverified | Dependabot/code-scanning alert endpoints were not available to this audit session | Owner must review GitHub Security alerts and run dependency audit before release |
+| Repository Security alerts remain unverified | Dependabot/code-scanning alert endpoints were not available to this audit session. CI dependency audit found pytest 8.4.2 vulnerable (PYSEC-2026-1845; fix 9.0.3). | pytest constraint updated to >=9.0.3; verify the final pip-audit run and review GitHub Security alerts before release |
 | Backup protection/retention is not automated | Existing docs explicitly leave off-host backup, encryption, retention and restore drills to the operator | Configure encryption, off-host storage, retention and alerting; never keep the only backup on the VPS |
 
 ## Verified safety boundaries in source
@@ -63,13 +63,12 @@ Mandatory release gates still fail closed until the P1 evidence below is complet
 
 ## Remaining owner actions
 
-1. Review GitHub Security/Dependabot alerts and resolve all critical/high findings.
-2. Generate and commit the npm lockfile; change frontend CI and Docker build to npm ci.
-3. Configure encrypted off-host backup retention and run the restore drill on a production-like copy.
-4. Configure external uptime, bot, disk, backup-freshness and restore-failure alerts.
-5. Verify actual VPS reverse proxy/TLS/firewall and exact production volume/database before cutover.
-6. Complete live Telegram Mini App launch, seller/buyer notifications and order cancellation acceptance with test users.
-7. Keep Stars test bot, test payments, escrow and signing unavailable in production unless separately approved.
+1. Confirm the final pip-audit run passes after the pytest 9.0.3 upgrade; review GitHub Security/Dependabot alerts and resolve all critical/high findings.
+2. Configure encrypted off-host backup retention and run the restore drill on a production-like copy; CI validates the script against disposable PostgreSQL but does not prove the VPS backup destination.
+3. Configure external uptime, bot, disk, backup-freshness and restore-failure alerts.
+4. Verify actual VPS reverse proxy/TLS/firewall and exact production volume/database before cutover.
+5. Complete live Telegram Mini App launch, seller/buyer notifications and order cancellation acceptance with test users.
+6. Keep Stars test bot, test payments, escrow and signing unavailable in production unless separately approved.
 
 ## Release decision
 
