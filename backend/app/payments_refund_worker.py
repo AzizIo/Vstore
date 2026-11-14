@@ -6,7 +6,6 @@ import logging
 from aiogram import Bot
 
 from app.core.config import get_settings
-from app.db.session import async_session_factory
 from app.orders.refund_worker import run_refund_worker_pass
 
 logger = logging.getLogger(__name__)
@@ -22,6 +21,10 @@ async def main() -> None:
         raise RuntimeError("The Telegram Stars refund worker cannot run outside test environments")
     if settings.telegram_stars_test_bot_token is None:
         raise RuntimeError("TELEGRAM_STARS_TEST_BOT_TOKEN is required")
+
+    # Import the DB factory only after the environment guard, so importing or
+    # invoking this module in production never even constructs a DB engine.
+    from app.db.session import async_session_factory
 
     logging.basicConfig(level=logging.INFO)
     bot = Bot(token=settings.telegram_stars_test_bot_token.get_secret_value())
