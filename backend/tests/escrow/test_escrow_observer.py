@@ -127,10 +127,10 @@ async def test_conflicting_digest_for_same_event_goes_to_manual_review() -> None
 
 
 class FakeContext:
-    def __init__(self, session: "FakeEscrowSession") -> None:
+    def __init__(self, session: FakeEscrowSession) -> None:
         self.session = session
 
-    async def __aenter__(self) -> "FakeEscrowSession":
+    async def __aenter__(self) -> FakeEscrowSession:
         return self.session
 
     async def __aexit__(self, *args: object) -> None:
