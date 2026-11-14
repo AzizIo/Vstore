@@ -51,33 +51,37 @@ export DATABASE_URL='postgresql+asyncpg://postgres:YOUR_LOCAL_PASSWORD@127.0.0.1
 
 Replace only the local database role/password and test-bot token. Keep the host local and the database name test-scoped.
 
-## 4. Apply migrations and start the bot
+## 4. Apply migrations
 
-Run these commands from `backend/` in the same terminal so the process inherits the isolated test configuration:
+Run these commands from `backend/` in the same terminal so later processes inherit the isolated test configuration:
 
 ```bash
 python -m pip install -e '.[dev]'
 alembic upgrade head
-python -m app.payments_test_bot
 ```
 
-The bot uses long polling against Telegram's test Bot API. Do not register a webhook for this bot while polling is active. If any guard fails, stop and fix the test configuration; do not weaken or bypass the runtime guard.
+The migration command must use the same local disposable test database configured above. Do not register a webhook for this test bot; it uses long polling. If any guard fails, stop and fix the test configuration; do not weaken or bypass the runtime guard.
 
 ## 5. Exercise the test flow
 
-Only use synthetic rows in `viltara_test`. Before issuing an invoice, the database must contain:
+Only use synthetic rows in `viltara_test`. The repository includes a guarded seeder so you do not need to create linked rows manually.
 
-- a test user whose `telegram_id` is the ID of your Telegram test account;
-- a reserved order owned by that user;
-- an order price denominated in `XTR` with a valid positive amount.
+1. Start the test bot with `python -m app.payments_test_bot`.
+2. In a private chat, send `/whoami` and copy the numeric Telegram test account ID returned by the bot.
+3. Stop polling with Ctrl+C. In the same terminal, create a disposable order:
 
-In a private chat with the test bot, send:
+   ```bash
+   python -m scripts.seed_stars_test_order --buyer-telegram-id 123456789 --stars 25
+   ```
 
-```text
-/pay ORDER_UUID
-```
+   Replace `123456789` with the ID returned by `/whoami`. The default amount is 25 XTR; allowed test amounts are 1–100000 XTR. The script reuses/creates the test buyer, creates a synthetic seller, and creates one reserved XTR order with a **pending, unverified placeholder NFT that has no item address or wallet**. It refuses to run unless all bot test-environment guards pass and it uses the same local disposable test database. The command prints the generated `order_id`.
+4. Start the test bot again and send the generated order ID:
 
-The bot creates an invoice from the persisted order snapshot. Telegram's test environment delivers `pre_checkout_query` and `successful_payment`; the backend validates the payer, payload, currency and amount before recording the payment ledger event.
+   ```text
+   /pay ORDER_UUID
+   ```
+
+The bot creates an invoice from the persisted order snapshot. Telegram's test environment delivers `pre_checkout_query` and `successful_payment`; the backend validates the payer, payload, currency and amount before recording the payment ledger event. The synthetic NFT is not transferable and no on-chain delivery is attempted.
 
 Available support commands are `/paysupport`, `/terms` and `/support`.
 
