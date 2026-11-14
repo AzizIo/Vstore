@@ -895,7 +895,7 @@ async def test_stale_refund_job_never_calls_provider_for_captured_transaction(
 
 
 @pytest.mark.asyncio
-async def test_refund_retry_requires_two_complete_negative_reconciliations(
+async def test_ambiguous_refund_with_two_negative_scans_requires_manual_review(
     refund_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _enable_test_stars(monkeypatch, refund_database)
@@ -942,9 +942,9 @@ async def test_refund_retry_requires_two_complete_negative_reconciliations(
                     .scalar_subquery()
                 )
             )
-            assert third.retried == 1
+            assert third.manual_review == 1
             assert provider.refund_calls == 1
-            assert job is not None and job.status == "retry_wait"
+            assert job is not None and job.status == "manual_review"
     finally:
         await _cleanup(session_factory, ids)
         await engine.dispose()
