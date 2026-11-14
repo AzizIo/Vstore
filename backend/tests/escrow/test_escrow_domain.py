@@ -137,7 +137,9 @@ def test_payment_requires_exact_buyer_and_principal(deal: DealEvidenceSnapshot) 
             )
 
 
-def test_delivery_requires_accepted_attestation_and_reconciled_getter(deal: DealEvidenceSnapshot) -> None:
+def test_delivery_requires_accepted_attestation_and_reconciled_getter(
+    deal: DealEvidenceSnapshot,
+) -> None:
     good = evidence(
         event_type=EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED,
         source_address=deal.contract_address,
@@ -205,7 +207,9 @@ def test_payout_and_refund_only_settle_after_reconciliation() -> None:
     assert state is EscrowDealStatus.REFUNDED
 
 
-def test_nft_return_attestation_requires_buyer_to_escrow_direction(deal: DealEvidenceSnapshot) -> None:
+def test_nft_return_attestation_requires_buyer_to_escrow_direction(
+    deal: DealEvidenceSnapshot,
+) -> None:
     validate_event_against_deal(evidence(
         event_type=EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED,
         source_address=deal.buyer_address,
