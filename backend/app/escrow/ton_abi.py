@@ -98,8 +98,18 @@ def load_pinned_abi() -> tuple[dict[str, Any], dict[str, Any]]:
     return abi, manifest
 
 
-def verify_compiled_code(code_boc_base64: str) -> VerifiedArtifacts:
+def load_pinned_code_boc() -> str:
+    """Read the checked-in compiler BOC; whitespace is not part of its digest."""
+    try:
+        return (_ARTIFACTS / "DealEscrow.code.boc.b64").read_text(encoding="ascii").strip()
+    except (OSError, UnicodeError) as exc:
+        raise TONABIError("pinned DealEscrow code BOC is unavailable") from exc
+
+
+def verify_compiled_code(code_boc_base64: str | None = None) -> VerifiedArtifacts:
     """Verify compiler BOC digests and the TON cell representation hash."""
+    if code_boc_base64 is None:
+        code_boc_base64 = load_pinned_code_boc()
     if not isinstance(code_boc_base64, str) or not code_boc_base64:
         raise TONABIError("the pinned DealEscrow code BOC is required")
     try:
