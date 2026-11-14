@@ -286,6 +286,7 @@ function WorkspaceBody({
   currentUserId,
   api,
   allowTestnetSigning,
+  onManageListings,
   walletAdapter,
   walletConnected,
   onConnectWallet,
