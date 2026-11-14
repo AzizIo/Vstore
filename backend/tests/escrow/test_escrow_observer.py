@@ -116,7 +116,7 @@ async def test_nonfinal_event_is_pending_then_promoted_once_when_final() -> None
         deal_salt=pending.deal_salt, item_address="0:" + "b" * 64,
         seller_address_snapshot="0:" + "c" * 64, buyer_address_snapshot="0:" + "e" * 64,
         principal_nanotons=2_000_000_000, status=EscrowDealStatus.INTENT_CREATED.value,
-        last_chain_seqno=None,
+        last_chain_seqno=None, last_chain_logical_time=None,
     )
     finalized = replace(pending, finalized=True, masterchain_seqno=101)
     second = FakeSession(row, deal)
