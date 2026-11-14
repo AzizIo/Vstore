@@ -152,6 +152,17 @@ describe("marketplace catalog", () => {
     expect(screen.getByText("1 предмет")).toBeInTheDocument();
   });
 
+  it("shows blocked-account restrictions while keeping orders visible and uses vector nav icons", async () => {
+    setTelegramInitData();
+    setSuccessfulTelegramAuth(jsonResponse({ ...profile, is_blocked: true }));
+    renderMarketplace();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Аккаунт ограничен администратором.");
+    expect(screen.getByRole("button", { name: "Заказы" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Разделы маркетплейса" }).querySelectorAll(".navigation-icon svg")).toHaveLength(5);
+    expect(screen.getByRole("button", { name: "Admin" })).not.toBeInTheDocument();
+  });
+
   it("shows an empty state when the API returns no listings", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ...page, items: [], total: 0 }));
     renderMarketplace();
