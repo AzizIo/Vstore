@@ -93,3 +93,14 @@ def test_test_bot_runtime_requires_explicit_enable_flag_and_bot_token(
     monkeypatch.setattr(payments_test_bot, "get_settings", lambda: missing_token)
     with pytest.raises(RuntimeError, match="TELEGRAM_STARS_TEST_BOT_TOKEN"):
         payments_test_bot._validate_test_bot_runtime()
+
+def test_test_bot_api_server_uses_telegram_test_endpoint_for_methods_and_files() -> None:
+    api = payments_test_bot._test_api_server()
+    token = "123456:test-token"
+
+    assert api.api_url(token, "getMe") == (
+        "https://api.telegram.org/bot123456:test-token/test/getMe"
+    )
+    assert api.file_url(token, "documents/example.pdf") == (
+        "https://api.telegram.org/file/bot123456:test-token/test/documents/example.pdf"
+    )
