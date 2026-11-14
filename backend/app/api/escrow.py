@@ -632,10 +632,11 @@ async def _prepare_action(
     request_context: dict[str, object] | None = None,
 ):
     _require_testnet()
+    # Do not hold a database row lock across ownership-provider calls.
     deal = await session.scalar(select(EscrowDeal).where(
         deal_id == EscrowDeal.id,
         (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id),
-    ).with_for_update())
+    ))
     if deal is None:
         raise HTTPException(status_code=404, detail="Escrow deal not found")
 
@@ -705,6 +706,23 @@ async def _prepare_action(
     intent = await session.get(EscrowListingIntent, deal.listing_intent_id)
     if intent is None:
         raise HTTPException(status_code=404, detail="Escrow listing intent not found")
+    # Reacquire the deal lock only after external ownership checks have finished.
+    locked_deal = await session.scalar(select(EscrowDeal).where(
+        EscrowDeal.id == deal.id,
+        (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id),
+    ).with_for_update())
+    if locked_deal is None or locked_deal.status != deal.status:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail={"code": "escrow_deal_changed_during_validation"})
+    immutable_snapshot_fields = (
+        "id", "buyer_id", "seller_id", "listing_key_snapshot", "item_address",
+        "collection_address_snapshot", "seller_address_snapshot", "buyer_address_snapshot",
+        "principal_nanotons", "deal_salt", "network",
+    )
+    if any(getattr(locked_deal, field) != getattr(deal, field) for field in immutable_snapshot_fields):
+        await session.rollback()
+        raise HTTPException(status_code=409, detail={"code": "escrow_deal_snapshot_changed"})
+    deal = locked_deal
     deal_snapshot = DealEscrowDeploymentSnapshot(
         network=deal.network, listing_key=deal.listing_key_snapshot,
         seller_address=deal.seller_address_snapshot, buyer_address=deal.buyer_address_snapshot,
@@ -816,8 +834,8 @@ async def prepare_dispute(
     deal_id: UUID, payload: EscrowDisputeCreate, user: CurrentUser,
     session: DbSession, verifier: Verifier, idempotency_key: IdempotencyKey,
 ):
-    del payload, idempotency_key
-    return await _prepare_action(deal_id, EscrowWalletAction.OPEN_DISPUTE, user, session, verifier, idempotency_key)
+    return await _prepare_action(deal_id, EscrowWalletAction.OPEN_DISPUTE, user, session, verifier,
+        idempotency_key, {"reason": payload.reason, "reason_code": payload.reason_code})
 
 
 @router.post("/deals/{deal_id}/prepare/nft-return",
