@@ -602,6 +602,7 @@ function WorkspaceBody({
                     name="price_ton"
                     type="text"
                     inputMode="decimal"
+                    aria-label="Цена лота · TON testnet"
                     autoComplete="off"
                     placeholder="Например, 2.5"
                     value={sellerPriceTon}
