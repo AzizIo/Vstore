@@ -43,7 +43,6 @@ from app.orders.service import OrderConflict, cancel_order, prepare_delivery
 pytestmark = pytest.mark.integration  # PostgreSQL-only payment safety suite.
 # All fixtures use synthetic accounts and the isolated test Stars configuration.
 ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
-ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 
 @pytest.fixture(scope="session")
@@ -318,6 +317,9 @@ async def test_stars_intent_validation_and_success_are_idempotent(
                 )
             ).all()
             assert persisted is not None and persisted.status == "paid"
+            persisted_order = await session.get(Order, ids["order_id"])
+            assert persisted_order is not None
+            assert persisted_order.status is OrderStatus.RESERVED
             assert len(transactions) == 1
             assert len(events) == 2
     finally:
