@@ -45,6 +45,22 @@ describe("orders", () => {
     }));
   });
 
+  it("explains reservation, direct NFT delivery, and the limits of the current Beta", async () => {
+    render(<Orders accessToken="private-token" />);
+
+    const summary = screen.getByText("Как работает сделка в VILTARA");
+    expect(summary).toBeInTheDocument();
+    expect(screen.queryByText(/VILTARA не принимает и не удерживает оплату/)).not.toBeVisible();
+
+    fireEvent.click(summary);
+
+    expect(screen.getByText(/Цена объявления фиксируется в заказе, но деньги не списываются/)).toBeVisible();
+    expect(screen.getByText(/Продавец передаёт NFT напрямую/)).toBeVisible();
+    expect(screen.getByText(/независимой проверки перевода по данным блокчейна/)).toBeVisible();
+    expect(screen.getByText(/VILTARA не принимает и не удерживает оплату/)).toBeVisible();
+    expect(screen.getByText(/Никогда не сообщайте seed-фразу или приватный ключ/)).toBeVisible();
+  });
+
   it("shows loading, pending-payment status, and a clear no-payment notice", async () => {
     let resolveRequest: ((value: Response) => void) | undefined;
     vi.mocked(fetch).mockReturnValueOnce(new Promise((resolve) => {
