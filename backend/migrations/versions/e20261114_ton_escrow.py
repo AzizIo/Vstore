@@ -72,6 +72,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("listing_intent_id", sa.Uuid(), nullable=False),
         sa.Column("marketplace_listing_id", sa.Uuid(), nullable=False),
+        sa.Column("listing_key_snapshot", sa.String(128), nullable=False),
         sa.Column("seller_id", sa.Uuid(), nullable=False),
         sa.Column("buyer_id", sa.Uuid(), nullable=False),
         sa.Column("buyer_wallet_id", sa.Uuid(), nullable=False),
@@ -141,6 +142,7 @@ def upgrade() -> None:
             IF NEW.id IS DISTINCT FROM OLD.id
                 OR NEW.listing_intent_id IS DISTINCT FROM OLD.listing_intent_id
                 OR NEW.marketplace_listing_id IS DISTINCT FROM OLD.marketplace_listing_id
+                OR NEW.listing_key_snapshot IS DISTINCT FROM OLD.listing_key_snapshot
                 OR NEW.seller_id IS DISTINCT FROM OLD.seller_id
                 OR NEW.buyer_id IS DISTINCT FROM OLD.buyer_id
                 OR NEW.buyer_wallet_id IS DISTINCT FROM OLD.buyer_wallet_id
