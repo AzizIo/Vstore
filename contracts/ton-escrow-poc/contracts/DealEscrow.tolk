@@ -15,7 +15,7 @@ fun assertTestnet(terms: DealTerms) {
 
     val globalIdCell = blockchain.configParam(0);
     assert (globalIdCell != null) throw Errors.NotTestnet;
-    val globalId = globalIdCell!.beginParse().loadInt(32);
+    val globalId = globalIdCell.beginParse().loadInt(32);
     assert (globalId == TESTNET_GLOBAL_ID) throw Errors.NotTestnet;
 
     val security = terms.security.load();
@@ -366,7 +366,7 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         assert (route.sourceAddress == contract.getAddress()) throw Errors.InvalidAttestation;
         val recovery = progress.recovery.load();
         assert (recovery.unexpectedPreviousOwner != null) throw Errors.InvalidState;
-        assert (route.destinationAddress == recovery.unexpectedPreviousOwner!) throw Errors.InvalidAttestation;
+        assert (route.destinationAddress == recovery.unexpectedPreviousOwner) throw Errors.InvalidAttestation;
         assert (route.amountNanotons == 0) throw Errors.InvalidAttestation;
         assert (route.queryId == money.nftReturnToSellerQueryId) throw Errors.InvalidAttestation;
         progress.nftInEscrow = false;
@@ -638,7 +638,7 @@ fun onInternalMessage(in: InMessage) {
             assert (progress.nftInEscrow) throw Errors.NothingToRecover;
             val previousOwner = recovery.unexpectedPreviousOwner!;
             assert (in.senderAddress == previousOwner) throw Errors.NotAuthorized;
-            val unexpectedItem = recovery.unexpectedItemAddress!;
+            val unexpectedItem = recovery.unexpectedItemAddress;
             sendNftTo(
                 unexpectedItem,
                 previousOwner,
