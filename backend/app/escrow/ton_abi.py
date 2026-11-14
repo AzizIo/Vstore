@@ -301,12 +301,12 @@ def build_storage_cell(snapshot: Any) -> Cell:
     recovery = begin_cell().store_address(None).store_address(None).end_cell()
     progress = (
         begin_cell()
-        .store_uint(snapshot.contract_state, 8)
-        .store_uint(snapshot.deadline_unix, 64)
-        .store_uint(snapshot.dispute_phase, 8)
-        .store_uint(0, 8)  # pendingAction = PENDING_NONE on immutable initial storage
-        .store_bit(snapshot.nft_in_escrow)
-        .store_bit(snapshot.principal_locked)
+        .store_uint(0, 8)  # STATE_INTENT_CREATED
+        .store_uint(0, 64)  # deadlineUnix
+        .store_uint(0, 8)  # DISPUTE_PHASE_NONE
+        .store_uint(0, 8)  # PENDING_NONE
+        .store_bit(0)  # nftInEscrow
+        .store_bit(0)  # principalLocked
         .store_uint(0, 64)  # oracleAttemptId
         .store_uint(0, 64)  # disputeAttemptId
         .store_ref(evidence)
