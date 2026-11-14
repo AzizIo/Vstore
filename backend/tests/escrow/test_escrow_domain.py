@@ -125,14 +125,13 @@ def test_payment_requires_exact_buyer_and_principal(deal: DealEvidenceSnapshot) 
     ):
         with pytest.raises(EscrowDomainError):
             validate_event_against_deal(
-                evidence(
-                    event_type=EscrowChainEventType.BUYER_PAYMENT_ACCEPTED,
-                    source_address=deal.buyer_address,
-                    destination_address=deal.contract_address,
-                    item_address=None,
-                    amount_nanotons=deal.principal_nanotons,
+                evidence(event_type=EscrowChainEventType.BUYER_PAYMENT_ACCEPTED, **{
+                    "source_address": deal.buyer_address,
+                    "destination_address": deal.contract_address,
+                    "item_address": None,
+                    "amount_nanotons": deal.principal_nanotons,
                     **changes,
-                ),
+                }),
                 deal,
             )
 
@@ -156,15 +155,14 @@ def test_delivery_requires_accepted_attestation_and_reconciled_getter(deal: Deal
     ):
         with pytest.raises(EscrowDomainError):
             validate_event_against_deal(
-                evidence(
-                    event_type=EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED,
-                    source_address=deal.contract_address,
-                    destination_address=deal.buyer_address,
-                    attestation_accepted=True,
-                    contract_state_reconciled=True,
-                    observed_contract_state=EscrowDealStatus.DELIVERED_DISPUTE_WINDOW.value,
+                evidence(event_type=EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED, **{
+                    "source_address": deal.contract_address,
+                    "destination_address": deal.buyer_address,
+                    "attestation_accepted": True,
+                    "contract_state_reconciled": True,
+                    "observed_contract_state": EscrowDealStatus.DELIVERED_DISPUTE_WINDOW.value,
                     **changes,
-                ),
+                }),
                 deal,
             )
 
