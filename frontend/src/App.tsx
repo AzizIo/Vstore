@@ -447,10 +447,10 @@ function MarketplaceApp() {
     : null;
   const escrowTestnetEnabled = import.meta.env.VITE_ESCROW_TESTNET_ENABLED === "true";
   const escrowApi = useMemo(() => (
-    session.status === "authenticated" && escrowTestnetEnabled
-      ? createEscrowApiClient(session.accessToken, createEscrowHttpContract(API_BASE_URL))
+    sessionAccessToken && escrowTestnetEnabled
+      ? createEscrowApiClient(sessionAccessToken, createEscrowHttpContract(API_BASE_URL))
       : null
-  ), [session.status === "authenticated" ? session.accessToken : null, escrowTestnetEnabled]);
+  ), [sessionAccessToken, escrowTestnetEnabled]);
   const [selectedWalletState, setSelectedWalletState] = useState<{
     accessToken: string;
     wallet: WalletRecord | null;
