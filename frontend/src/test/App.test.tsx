@@ -63,7 +63,7 @@ const ownListings = [
 ];
 const profile = {
   id: "user-1", telegram_id: 12345, username: "alex", first_name: "Alex",
-  last_name: "Example", language_code: "en",
+  last_name: "Example", language_code: "en", is_blocked: false,
 };
 const authResponse = {
   access_token: "test-access-token", token_type: "bearer", expires_in: 3600,
@@ -150,6 +150,17 @@ describe("marketplace catalog", () => {
     expect(screen.getByText("12,5 TON")).toBeInTheDocument();
     expect(screen.getByText("TON NFT", { selector: ".listing-card-type" })).toBeInTheDocument();
     expect(screen.getByText("1 предмет")).toBeInTheDocument();
+  });
+
+  it("shows blocked-account restrictions while keeping orders visible and uses vector nav icons", async () => {
+    setTelegramInitData();
+    setSuccessfulTelegramAuth(jsonResponse({ ...profile, is_blocked: true }));
+    renderMarketplace();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Аккаунт ограничен администратором.");
+    expect(screen.getByRole("button", { name: "Заказы" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Разделы маркетплейса" }).querySelectorAll(".navigation-icon svg")).toHaveLength(5);
+    expect(screen.queryByRole("button", { name: /admin|админ/i })).not.toBeInTheDocument();
   });
 
   it("shows an empty state when the API returns no listings", async () => {
@@ -368,6 +379,26 @@ describe("marketplace catalog", () => {
     const sellerProfile = await screen.findByRole("region", { name: "Профиль продавца" });
     expect(sellerProfile).toHaveTextContent("Ari");
     expect(sellerProfile).toHaveTextContent("@collector");
+    const contactLink = screen.getByRole("link", { name: "Написать продавцу в Telegram" });
+    expect(contactLink).toHaveAttribute("href", "https://t.me/collector");
+    expect(contactLink).toHaveAttribute("target", "_blank");
+    expect(contactLink).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("does not create a Telegram contact link for malformed seller usernames", async () => {
+    const unsafeUsername = {
+      ...listing,
+      seller: { ...listing.seller, username: "collector?start=attacker" },
+    };
+    vi.mocked(fetch).mockImplementation(async (input) =>
+      String(input).endsWith("/api/listings/listing-1") ? jsonResponse(unsafeUsername) : jsonResponse(page),
+    );
+    renderMarketplace();
+    fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
+
+    await screen.findByRole("heading", { name: "Moon Lantern" });
+    expect(screen.getByRole("region", { name: "Профиль продавца" })).toHaveTextContent("collector?start=attacker");
+    expect(screen.queryByRole("link", { name: "Написать продавцу в Telegram" })).not.toBeInTheDocument();
   });
 
   it("shows the collection and item address on the listing detail view", async () => {

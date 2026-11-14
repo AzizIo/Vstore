@@ -32,9 +32,17 @@ function formatListingCount(count: number) {
       : "объявлений";
   return `${count} ${word}`;
 }
-interface Props { accessToken: string; active: boolean; }
+interface Props {
+  accessToken: string;
+  active: boolean;
+  showGlobalAuditButton?: boolean;
+}
 
-export function AdminCenter({ accessToken, active }: Props) {
+export function AdminCenter({
+  accessToken,
+  active,
+  showGlobalAuditButton = true,
+}: Props) {
   const [items, setItems] = useState<ModerationItem[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -125,13 +133,21 @@ export function AdminCenter({ accessToken, active }: Props) {
       <header className="admin-center-header">
         <div><p className="admin-eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ</p><h1 id="admin-center-title">Модерация и аудит</h1><p>Для каждого решения требуется причина. Все действия сохраняются в журнале.</p></div>
         <div className="admin-header-actions">
-          <button type="button" className="admin-secondary" onClick={() => void openGlobalAudit()}>Общий журнал аудита</button>
+          {showGlobalAuditButton && (
+            <button
+              type="button"
+              className="admin-secondary"
+              onClick={() => void openGlobalAudit()}
+            >
+              Общий журнал аудита
+            </button>
+          )}
           <button type="button" className="admin-secondary" onClick={() => setRetry((value) => value + 1)} disabled={loading}>{loading ? "Обновляем…" : "Обновить очередь"}</button>
         </div>
       </header>
       {success && <p className="admin-success" role="status">{success}</p>}
       {error && <div className="admin-error" role="alert"><span>{error}</span><button type="button" onClick={() => setRetry((value) => value + 1)}>Повторить</button></div>}
-      {showGlobalAudit && <section className="admin-audit admin-global-audit" aria-labelledby="admin-global-audit-title">
+      {showGlobalAuditButton && showGlobalAudit && <section className="admin-audit admin-global-audit" aria-labelledby="admin-global-audit-title">
         <div className="admin-global-audit-heading">
           <h2 id="admin-global-audit-title">Общий журнал аудита</h2>
           <button type="button" className="admin-secondary" onClick={() => setShowGlobalAudit(false)}>Скрыть</button>

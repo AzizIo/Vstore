@@ -580,6 +580,7 @@ def localize_http_detail(detail: Any, status_code: int) -> Any:
         if isinstance(checks, dict):
             allowed = {
                 "database",
+                "database_migrations",
                 "redis",
                 "authentication",
                 "ton_connect_proof",

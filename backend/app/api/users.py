@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_current_user_allow_blocked
 from app.db.models import Listing, ListingStatus, NFTAsset, Order, OrderStatus, User, Wallet
 from app.db.session import get_db_session
 
@@ -22,6 +22,7 @@ class UserProfileResponse(BaseModel):
     first_name: str
     last_name: str | None
     language_code: str | None
+    is_blocked: bool
 
 
 class WalletResponse(BaseModel):
@@ -36,7 +37,7 @@ class WalletResponse(BaseModel):
 
 @router.get("/me", response_model=UserProfileResponse)
 async def get_my_profile(
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_current_user_allow_blocked)],
 ) -> UserProfileResponse:
     return UserProfileResponse(
         id=str(user.id),
@@ -45,12 +46,13 @@ async def get_my_profile(
         first_name=user.first_name,
         last_name=user.last_name,
         language_code=user.language_code,
+        is_blocked=user.is_blocked,
     )
 
 
 @router.get("/me/wallets", response_model=list[WalletResponse])
 async def get_my_wallets(
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_current_user_allow_blocked)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> list[Wallet]:
     result = await session.scalars(
@@ -165,7 +167,7 @@ def _count_statuses(
 
 @router.get("/me/overview", response_model=SellerOverviewResponse)
 async def get_my_overview(
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_current_user_allow_blocked)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> SellerOverviewResponse:
     listing_statuses = (

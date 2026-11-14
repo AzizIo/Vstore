@@ -112,6 +112,8 @@ test("admin moderates a real PostgreSQL listing and preserves an immutable audit
     expect(queue.items.some((item) => item.id === draft.id && item.status === "pending_review"), JSON.stringify(queue)).toBe(true);
 
     await page.goto("/admin");
+    await expect(page.getByRole("heading", { name: "Admin Dashboard" })).toBeVisible();
+    await page.getByRole("button", { name: "Listings", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Модерация и аудит" })).toBeVisible();
     const card = page.locator(".admin-listing").filter({ hasText: "E2E Admin Moderation Listing" });
     await expect(card).toBeVisible();

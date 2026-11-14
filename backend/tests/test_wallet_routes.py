@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_current_user_allow_blocked
 from app.db.models import User, Wallet
 from app.db.session import get_db_session
 from app.main import app
@@ -19,6 +19,7 @@ def wallet_client():
         is_blocked=False,
     )
     app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_user_allow_blocked] = lambda: user
     session = AsyncMock()
     session.add = Mock()
 

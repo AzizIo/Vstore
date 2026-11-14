@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_current_user_allow_blocked
 from app.db.models import User
 from app.db.session import get_db_session
 from app.main import app
@@ -22,6 +22,7 @@ def client() -> TestClient:
         is_blocked=False,
     )
     app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_current_user_allow_blocked] = lambda: user
     try:
         with TestClient(app) as test_client:
             yield test_client
@@ -57,7 +58,7 @@ def test_user_profile_returns_only_current_user(client: TestClient) -> None:
     assert response.json()["telegram_id"] == 123456789
     assert response.json()["username"] == "seller"
     assert response.json()["first_name"] == "Seller"
-    assert "is_blocked" not in response.json()
+    assert response.json()["is_blocked"] is False
 
 
 @pytest.mark.parametrize("limit", ["0", "101", "-1"])

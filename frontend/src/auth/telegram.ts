@@ -3,6 +3,7 @@ export interface TelegramWebApp {
   initDataUnsafe?: { start_param?: string };
   ready?: () => void;
   expand?: () => void;
+  openTelegramLink?: (url: string) => void;
 }
 
 declare global {

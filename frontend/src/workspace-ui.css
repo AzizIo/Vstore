@@ -464,3 +464,82 @@
     outline: 2px solid Highlight;
   }
 }
+
+
+/* Transaction guide: visible on the order workspace before users open an order. */
+.order-safety-guide {
+  margin: 0 0 22px;
+  border: 1px solid var(--mini-border);
+  border-radius: 13px;
+  background: var(--mini-panel);
+  color: var(--mini-text);
+}
+.order-safety-guide summary {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 15px;
+  color: var(--mini-text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.order-safety-guide summary::-webkit-details-marker { display: none; }
+.order-safety-guide summary::after {
+  content: "+";
+  flex: 0 0 auto;
+  color: var(--mini-accent);
+  font-size: 18px;
+  font-weight: 500;
+}
+.order-safety-guide[open] summary::after { content: "−"; }
+.order-safety-guide summary:focus-visible {
+  outline: 2px solid var(--mini-accent);
+  outline-offset: 3px;
+  border-radius: 11px;
+}
+.order-safety-guide-content {
+  display: grid;
+  gap: 12px;
+  padding: 0 15px 15px;
+  border-top: 1px solid var(--mini-border);
+}
+.order-safety-guide-content ol {
+  display: grid;
+  gap: 11px;
+  margin: 13px 0 0;
+  padding-left: 20px;
+}
+.order-safety-guide-content li {
+  padding-left: 3px;
+  color: var(--mini-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.order-safety-guide-content li strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--mini-text);
+  font-size: 12px;
+}
+.order-safety-guide-warning,
+.order-safety-guide-security {
+  margin: 0;
+  color: var(--mini-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.order-safety-guide-warning {
+  padding: 11px 12px;
+  border-left: 2px solid var(--mini-accent);
+  background: var(--mini-panel-raised);
+  color: var(--mini-text);
+}
+.order-safety-guide-security { padding: 0 2px; }
+@media (max-width: 640px) {
+  .order-safety-guide summary { min-height: 46px; padding: 11px 12px; }
+  .order-safety-guide-content { padding-inline: 12px; }
+}

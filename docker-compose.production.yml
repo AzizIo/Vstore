@@ -1,0 +1,108 @@
+name: viltara-production
+
+# Production credentials are isolated behind PROD_* names.
+# The PostgreSQL volume must be selected explicitly.
+x-viltara-backend-env: &viltara-backend-env
+  APP_NAME: VILTARA SHOP API
+  ENVIRONMENT: production
+  AUTH_SECRET_KEY: ${PROD_AUTH_SECRET_KEY:?Set PROD_AUTH_SECRET_KEY in .env}
+  BOT_TOKEN: ${PROD_BOT_TOKEN:?Set PROD_BOT_TOKEN in .env}
+  TELEGRAM_MINI_APP_URL: ${PROD_TELEGRAM_MINI_APP_URL:?Set PROD_TELEGRAM_MINI_APP_URL in .env}
+  TELEGRAM_MINI_APP_DIRECT_LINK: ${PROD_TELEGRAM_MINI_APP_DIRECT_LINK:-}
+  ADMIN_TELEGRAM_IDS: ${PROD_ADMIN_TELEGRAM_IDS:-[]}
+  DATABASE_URL: postgresql+asyncpg://${PROD_DB_USER:?Set PROD_DB_USER in .env}:${PROD_DB_PASSWORD:?Set PROD_DB_PASSWORD in .env}@db:5432/${PROD_DB_NAME:?Set PROD_DB_NAME in .env}
+  REDIS_URL: redis://redis:6379/0
+  TON_CONNECT_ALLOWED_DOMAINS: ${PROD_TON_CONNECT_ALLOWED_DOMAINS:?Set PROD_TON_CONNECT_ALLOWED_DOMAINS in .env}
+  CORS_ALLOWED_ORIGINS: ${PROD_CORS_ALLOWED_ORIGINS:?Set PROD_CORS_ALLOWED_ORIGINS in .env}
+  TON_CONNECT_NETWORK: ${PROD_TON_CONNECT_NETWORK:?Set PROD_TON_CONNECT_NETWORK explicitly in .env}
+  TON_CENTER_API_KEY: ${PROD_TON_CENTER_API_KEY:-}
+  TON_CENTER_MAINNET_BASE_URL: https://toncenter.com/api/v3
+  TON_CENTER_TESTNET_BASE_URL: https://testnet.toncenter.com/api/v3
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${PROD_DB_NAME:?Set PROD_DB_NAME in .env}
+      POSTGRES_USER: ${PROD_DB_USER:?Set PROD_DB_USER in .env}
+      POSTGRES_PASSWORD: ${PROD_DB_PASSWORD:?Set PROD_DB_PASSWORD in .env}
+    volumes:
+      - production_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+    environment: *viltara-backend-env
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/ready', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+
+  miniapp:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.production
+      args:
+        VITE_TONCONNECT_APP_URL: ${PROD_VITE_TONCONNECT_APP_URL:?Set PROD_VITE_TONCONNECT_APP_URL in .env}
+        VITE_TONCONNECT_MANIFEST_URL: ${PROD_VITE_TONCONNECT_MANIFEST_URL:?Set PROD_VITE_TONCONNECT_MANIFEST_URL in .env}
+        VITE_TELEGRAM_MINI_APP_DIRECT_LINK: ${PROD_TELEGRAM_MINI_APP_DIRECT_LINK:-}
+    ports:
+      - "127.0.0.1:${PROD_HTTP_PORT:-8081}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: ./backend
+    environment: *viltara-backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    command: ["python", "-m", "app.bot"]
+    profiles: ["bot"]
+    restart: unless-stopped
+
+volumes:
+  production_postgres_data:
+    external: true
+    name: ${PROD_POSTGRES_VOLUME_NAME:?Set PROD_POSTGRES_VOLUME_NAME to the exact Docker volume name}

@@ -7,6 +7,14 @@ from app.api import health
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def default_database_migrations_ready(monkeypatch) -> None:
+    async def migrations_ready() -> bool:
+        return True
+
+    monkeypatch.setattr(health, "_database_migrations_ready", migrations_ready)
+
+
 def test_readiness_returns_each_dependency_status(monkeypatch) -> None:
     async def database_ready() -> bool:
         return True
@@ -35,6 +43,7 @@ def test_readiness_returns_each_dependency_status(monkeypatch) -> None:
         "status": "ready",
         "checks": {
             "database": "ok",
+            "database_migrations": "ok",
             "redis": "ok",
             "authentication": "ok",
             "ton_connect_proof": "ok",
@@ -71,12 +80,41 @@ def test_readiness_returns_503_when_a_dependency_is_unavailable(monkeypatch) -> 
         "status": "not_ready",
         "checks": {
             "database": "error",
+            "database_migrations": "ok",
             "redis": "ok",
             "authentication": "ok",
             "ton_connect_proof": "ok",
             "ton_connect_proof_domains": ["shop.example.test"],
         },
     }
+
+
+def test_readiness_returns_503_when_database_migrations_are_behind(monkeypatch) -> None:
+    async def dependency_ready() -> bool:
+        return True
+
+    async def migrations_behind() -> bool:
+        return False
+
+    monkeypatch.setattr(health, "_database_ready", dependency_ready)
+    monkeypatch.setattr(health, "_database_migrations_ready", migrations_behind)
+    monkeypatch.setattr(health, "_redis_ready", dependency_ready)
+    monkeypatch.setattr(health, "_authentication_ready", lambda: True)
+    monkeypatch.setattr(health, "_ton_connect_proof_ready", lambda: True)
+    monkeypatch.setattr(
+        health,
+        "settings",
+        SimpleNamespace(
+            ton_connect_allowed_domains=["shop.example.test"],
+            ton_connect_network="testnet",
+        ),
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/api/health/ready")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["checks"]["database_migrations"] == "error"
 
 
 def test_readiness_reports_both_dependencies_unavailable(monkeypatch) -> None:
@@ -105,6 +143,7 @@ def test_readiness_reports_both_dependencies_unavailable(monkeypatch) -> None:
     assert response.status_code == 503
     assert response.json()["detail"]["checks"] == {
         "database": "error",
+        "database_migrations": "ok",
         "redis": "error",
         "authentication": "ok",
         "ton_connect_proof": "ok",
@@ -136,6 +175,7 @@ def test_readiness_returns_503_when_authentication_is_not_configured(monkeypatch
         "status": "not_ready",
         "checks": {
             "database": "ok",
+            "database_migrations": "ok",
             "redis": "ok",
             "authentication": "error",
             "ton_connect_proof": "ok",
@@ -192,6 +232,7 @@ def test_readiness_exposes_disabled_ton_connect_without_breaking_catalogue_healt
         "status": "ready",
         "checks": {
             "database": "ok",
+            "database_migrations": "ok",
             "redis": "ok",
             "authentication": "ok",
             "ton_connect_proof": "error",

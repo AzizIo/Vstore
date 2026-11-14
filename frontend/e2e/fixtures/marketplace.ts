@@ -109,6 +109,7 @@ const profile = {
   first_name: "Alex",
   last_name: "Example",
   language_code: "ru",
+  is_blocked: false,
 };
 
 const authResponse = {
