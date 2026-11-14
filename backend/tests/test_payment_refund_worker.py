@@ -84,6 +84,7 @@ def refund_test_database() -> str:
 def _enable_test_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings(
         environment="test",
+        database_url=os.environ["TEST_DATABASE_URL"],
         telegram_stars_test_enabled=True,
         telegram_stars_test_bot_token=SecretStr("synthetic-test-token"),
         telegram_stars_refund_worker_enabled=True,
@@ -785,3 +786,19 @@ async def test_refund_worker_refuses_production_environment_before_provider_io(
 
     with pytest.raises(PaymentConflict, match="outside test environments"):
         await run_refund_worker_pass(None, ProviderMustNotRun())  # type: ignore[arg-type]
+
+
+async def test_refund_worker_refuses_non_disposable_database_in_test_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        environment="test",
+        database_url="postgresql+asyncpg://local:local@localhost:5432/viltara",
+        telegram_stars_test_enabled=True,
+        telegram_stars_test_bot_token=SecretStr("synthetic-test-token"),
+        telegram_stars_refund_worker_enabled=True,
+    )
+    monkeypatch.setattr(refund_worker, "get_settings", lambda: settings)
+
+    with pytest.raises(PaymentConflict, match="disposable PostgreSQL test database"):
+        await run_refund_worker_pass(None, object())  # type: ignore[arg-type]
