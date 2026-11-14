@@ -3,10 +3,8 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.admin.user_management import (
-    AdminUserAccessDecisionRequest,
-    router as admin_user_management_router,
-)
+from app.admin.user_management import AdminUserAccessDecisionRequest
+from app.admin.user_management import router as admin_user_management_router
 from app.assets.ton_nft.dependencies import get_ton_nft_verifier
 from app.auth.dependencies import get_current_user, get_current_user_allow_blocked
 from app.core.config import get_settings
