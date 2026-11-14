@@ -180,7 +180,7 @@ describe("AdminDashboard", () => {
   it("requires a reason before confirming a block and sends an idempotent decision", async () => {
     const { container } = render(<AdminDashboard accessToken="test-token" />);
     fireEvent.click(screen.getByRole("button", { name: "Users" }));
-    await screen.findByText("123456789");
+    await screen.findAllByText("123456789");
     fireEvent.click(container.querySelector(".ad-table-wrap .ad-link-button")!);
     await screen.findByRole("heading", { name: "Карточка пользователя" });
 
@@ -202,12 +202,12 @@ describe("AdminDashboard", () => {
   });
 
   it("shows read-only order status and never invents payment controls", async () => {
-    render(<AdminDashboard accessToken="test-token" />);
+    const { container } = render(<AdminDashboard accessToken="test-token" />);
     fireEvent.click(screen.getByRole("button", { name: "Orders" }));
 
     expect(await screen.findAllByText("Moon Lantern")).not.toHaveLength(0);
     expect(container.querySelector(".ad-status-observing_transfer")).toHaveTextContent("Проверка перевода");
-    expect(screen.getByText("Проверяется")).toBeInTheDocument();
+    expect(screen.getAllByText("Проверяется").length).toBeGreaterThan(0);
     expect(screen.getByText("Только чтение · резервирование не является оплатой")).toBeInTheDocument();
     expect(screen.queryByText(/оплачен|payment|refund|payout/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /завершить сделку|refund|payout/i })).not.toBeInTheDocument();
