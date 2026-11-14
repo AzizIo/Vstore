@@ -246,6 +246,7 @@ class EscrowChainEvent(TimestampMixin, EscrowBase):
     source_address: Mapped[str | None] = mapped_column(String(128))
     destination_address: Mapped[str | None] = mapped_column(String(128))
     item_address: Mapped[str | None] = mapped_column(String(128))
+    collection_address: Mapped[str | None] = mapped_column(String(128))
     amount_nanotons: Mapped[Decimal | None] = mapped_column(Numeric(30, 0))
     masterchain_seqno: Mapped[int] = mapped_column(BigInteger, nullable=False)
     finalized: Mapped[bool] = mapped_column(Boolean, nullable=False)
