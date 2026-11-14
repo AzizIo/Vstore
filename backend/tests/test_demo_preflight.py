@@ -161,7 +161,7 @@ def test_demo_preflight_fails_readiness_when_one_dependency_is_unavailable(
                         "status": "not_ready",
                         "checks": {
                             "database": "ok",
-                    "database_migrations": "ok",
+                            "database_migrations": "ok",
                             "redis": "error",
                             "authentication": "ok",
                             "ton_connect_proof": "ok",
