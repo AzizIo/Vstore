@@ -369,8 +369,20 @@ class EscrowWalletActionRecord(TimestampMixin, EscrowBase):
             name="ck_escrow_action_idempotency_length"),
         CheckConstraint("length(request_sha256) = 64", name="ck_escrow_action_request_hash"),
         CheckConstraint(
+            "unsigned_boc_sha256 IS NULL OR length(unsigned_boc_sha256) = 64",
+            name="ck_escrow_action_boc_hash"),
+        CheckConstraint(
+            "(unsigned_boc_sha256 IS NULL AND unsigned_boc_ref IS NULL) OR "
+            "(unsigned_boc_sha256 IS NOT NULL AND unsigned_boc_ref IS NOT NULL)",
+            name="ck_escrow_action_boc_pair"),
+        CheckConstraint(
             "submission_reference_sha256 IS NULL OR length(submission_reference_sha256) = 64",
             name="ck_escrow_action_submission_hash"),
+        CheckConstraint(
+            "(submission_reference IS NULL AND submission_reference_sha256 IS NULL) OR "
+            "(submission_reference IS NOT NULL AND submission_reference_sha256 IS NOT NULL "
+            "AND length(submission_reference) BETWEEN 1 AND 512)",
+            name="ck_escrow_action_submission_pair"),
         CheckConstraint("attempt_count >= 0", name="ck_escrow_action_attempt_count"),
         UniqueConstraint(
             "actor_id", "action_type", "idempotency_key",
