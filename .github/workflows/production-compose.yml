@@ -153,7 +153,7 @@ jobs:
           PROD_BACKUP_DIR=/tmp/viltara-production-ci-backups bash scripts/production_backup.sh
           backup_file="$(find /tmp/viltara-production-ci-backups -maxdepth 1 -type f -name '*.dump' -print -quit)"
           test -n "$backup_file"
-          sha256sum -c "$backup_file.sha256"
+          (cd "$(dirname "$backup_file")" && sha256sum -c "$(basename "$backup_file").sha256")
           bash scripts/production_restore_drill.sh "$backup_file"
       - name: Stop disposable production database fixture
         if: always()
