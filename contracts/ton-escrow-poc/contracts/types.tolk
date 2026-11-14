@@ -87,9 +87,6 @@ struct DealMoney {
     nftDepositQueryId: uint64
     nftReleaseQueryId: uint64
     nftReturnToEscrowQueryId: uint64
-    nftReturnToSellerQueryId: uint64
-    sellerPayoutQueryId: uint64
-    buyerRefundQueryId: uint64
 }
 
 struct AuthorityKeys {
