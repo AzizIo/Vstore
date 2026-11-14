@@ -42,7 +42,8 @@ Initial configurable thresholds are in rules/alerts.yml:
 | TLS remaining validity | <21 days for 15m | <7 days for 5m |
 | API readiness | — | failed for 2m |
 | Mini App HTTPS | — | failed for 3m |
-| PostgreSQL / Redis | — | unavailable for 1m |\n| Node/container/backup exporters | — | scrape target unavailable for 2m |
+| PostgreSQL / Redis | — | unavailable for 1m |
+| Node/container/backup exporters | — | scrape target unavailable for 2m |
 | Bot container | — | unhealthy or >=3 restarts in 15m for 2m |
 
 All rules have severity, firing debounce and runbook annotations. Alertmanager groups by alertname/service/severity. group_wait, group_interval and repeat_interval are explicit. Stable names and bounded labels support deduplication. The checked-in receiver is a non-delivering sink. A real receiver must set send_resolved: true; the alert must transition to resolved when the expression clears. Maintenance silences require an expiry and incident reference.
