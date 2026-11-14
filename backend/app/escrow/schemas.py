@@ -53,6 +53,16 @@ class EscrowListingIntentResponse(BaseModel):
     updated_at: datetime
 
 
+class EscrowDisputeProjection(BaseModel):
+    id: UUID
+    status: Literal["open", "under_review", "resolved_buyer", "resolved_seller"]
+    reason_code: str
+    summary: str | None
+    opened_at: datetime
+    resolved_at: datetime | None
+    resolution_note: str | None
+
+
 class EscrowDealResponse(BaseModel):
     id: UUID
     listing_id: UUID
@@ -80,7 +90,7 @@ class EscrowDealResponse(BaseModel):
     ]]
     created_at: datetime
     updated_at: datetime
-    dispute: dict | None = None
+    dispute: EscrowDisputeProjection | None = None
 
 
 class EscrowPageResponse(BaseModel):
