@@ -63,7 +63,8 @@ jobs:
       - name: Cross-check fixed StateInit vector with generated Acton wrapper and @ton/core
         run: |
           npm install --no-save --no-package-lock @ton/core@0.63.1 tsx@4.19.2
-          npx tsx scripts/verify_state_init_vector.ts | tee build/state_init_vector.json
+          npx tsx scripts/verify_state_init_vector.ts > build/state_init_vector.json
+          cat build/state_init_vector.json
 
       - name: Format Tolk sources
         run: acton fmt
