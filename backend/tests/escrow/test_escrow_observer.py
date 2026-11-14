@@ -141,7 +141,7 @@ class FakeEscrowSession:
     def __init__(self, checkpoint: EscrowObserverCheckpoint) -> None:
         self.checkpoint = checkpoint
 
-    async def __aenter__(self) -> "FakeEscrowSession":
+    async def __aenter__(self) -> FakeEscrowSession:
         return self
 
     async def __aexit__(self, *args: object) -> None:
