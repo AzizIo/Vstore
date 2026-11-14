@@ -128,6 +128,7 @@ class EscrowDeal(TimestampMixin, EscrowBase):
     marketplace_listing_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("listings.id", ondelete="RESTRICT"), nullable=False
     )
+    listing_key_snapshot: Mapped[str] = mapped_column(String(128), nullable=False)
     seller_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
@@ -160,6 +161,7 @@ _IMMUTABLE_DEAL_TERMS = (
     "id",
     "listing_intent_id",
     "marketplace_listing_id",
+    "listing_key_snapshot",
     "seller_id",
     "buyer_id",
     "buyer_wallet_id",
