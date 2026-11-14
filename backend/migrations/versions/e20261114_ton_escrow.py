@@ -85,8 +85,12 @@ def upgrade() -> None:
         sa.Column("status", sa.String(32), server_default="intent_created", nullable=False),
         sa.Column("last_chain_seqno", sa.BigInteger(), nullable=True),
         sa.Column("idempotency_key", sa.String(128), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint("network = 'testnet'", name="ck_escrow_deal_network_testnet"),
         sa.CheckConstraint("price_currency = 'TON'", name="ck_escrow_deal_currency_ton"),
         sa.CheckConstraint("price_amount > 0", name="ck_escrow_deal_price_positive"),
@@ -143,8 +147,12 @@ def upgrade() -> None:
         sa.Column("payload_json", sa.JSON(), nullable=False),
         sa.Column("status", sa.String(24), nullable=False),
         sa.Column("reason_code", sa.String(64), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint("network = 'testnet'", name="ck_escrow_event_network_testnet"),
         sa.CheckConstraint("event_index >= 0", name="ck_escrow_event_index_nonnegative"),
         sa.CheckConstraint(
@@ -175,8 +183,12 @@ def upgrade() -> None:
         sa.Column("status", sa.String(24), server_default="requested", nullable=False),
         sa.Column("contract_confirmation_event_id", sa.Uuid(), nullable=True),
         sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint(
             "status IN ('requested', 'confirmed', 'resolved_buyer', 'resolved_seller', "
             "'rejected', 'manual_review')",
@@ -215,8 +227,12 @@ def upgrade() -> None:
         ),
         sa.Column("reason_code", sa.String(64), nullable=False),
         sa.Column("transaction_hash", sa.String(128), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint("network = 'testnet'", name="ck_escrow_withdrawal_network_testnet"),
         sa.CheckConstraint(
             "status IN ('blocked_abi_unavailable', 'prepared', 'submitted', "
@@ -244,8 +260,12 @@ def upgrade() -> None:
         sa.Column("request_sha256", sa.String(64), nullable=False),
         sa.Column("resource_type", sa.String(32), nullable=True),
         sa.Column("resource_id", sa.Uuid(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint(
             "length(idempotency_key) BETWEEN 8 AND 128", name="ck_escrow_idem_key_length"
         ),
@@ -267,7 +287,9 @@ def upgrade() -> None:
         sa.Column("lease_until", sa.DateTime(timezone=True), nullable=True),
         sa.Column("next_scan_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_error_code", sa.String(64), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint("network = 'testnet'", name="ck_escrow_checkpoint_network_testnet"),
         sa.PrimaryKeyConstraint("checkpoint_id"),
     )
