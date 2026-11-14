@@ -204,6 +204,7 @@ class NormalizedEventEvidence:
     source_address: str | None
     destination_address: str | None
     item_address: str | None
+    collection_address: str | None
     amount_nanotons: int | None
     masterchain_seqno: int
     finalized: bool
@@ -245,8 +246,11 @@ def validate_event_against_deal(event: NormalizedEventEvidence, deal: DealEviden
         EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED,
         EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED,
     }
-    if event.event_type in nft_related and event.item_address != deal.item_address:
-        raise EscrowDomainError("NFT item does not match the deal snapshot")
+    if event.event_type in nft_related and (
+        event.item_address != deal.item_address
+        or event.collection_address != deal.collection_address
+    ):
+        raise EscrowDomainError("NFT collection or item does not match the deal snapshot")
 
     if event.event_type is EscrowChainEventType.NFT_DEPOSIT_ACCEPTED and (
         event.source_address != deal.seller_address
