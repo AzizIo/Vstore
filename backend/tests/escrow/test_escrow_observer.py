@@ -413,3 +413,47 @@ async def test_database_disconnect_during_batch_keeps_cursor_for_replay() -> Non
     assert checkpoint.lease_token is None
     assert checkpoint.lease_until is None
     assert checkpoint.last_error_code == "batch_persistence_failed"
+
+
+@pytest.mark.asyncio
+async def test_unreconciled_contract_address_pins_event_for_requery() -> None:
+    deal_id = uuid4()
+    deal = SimpleNamespace(
+        id=deal_id, network="testnet", contract_address=None,
+        collection_address_snapshot="0:" + "f" * 64,
+        item_address="0:" + "b" * 64,
+        seller_address_snapshot="0:" + "c" * 64,
+        buyer_address_snapshot="0:" + "d" * 64,
+        principal_nanotons=2_500_000_000, deal_salt="d" * 64,
+        status="intent_created", last_chain_seqno=None, last_chain_logical_time=None,
+    )
+    event = make_event(
+        deal_id=str(deal_id), event_type=EscrowChainEventType.CONTRACT_ACTIVATED,
+        deal_salt="d" * 64,
+    )
+    session = FakeSession(None, deal)
+
+    assert await _apply_one_event(session, event, provider_verified=True) == "pending"
+    assert session.added[0].reason_code == "contract_address_not_reconciled"
+
+
+@pytest.mark.asyncio
+async def test_stale_logical_time_pins_event_instead_of_advancing_cursor() -> None:
+    deal_id = uuid4()
+    deal = SimpleNamespace(
+        id=deal_id, network="testnet", contract_address="0:" + "a" * 64,
+        collection_address_snapshot="0:" + "f" * 64,
+        item_address="0:" + "b" * 64,
+        seller_address_snapshot="0:" + "c" * 64,
+        buyer_address_snapshot="0:" + "d" * 64,
+        principal_nanotons=2_500_000_000, deal_salt="d" * 64,
+        status="intent_created", last_chain_seqno=100, last_chain_logical_time=600,
+    )
+    event = make_event(
+        deal_id=str(deal_id), event_type=EscrowChainEventType.CONTRACT_ACTIVATED,
+        deal_salt="d" * 64, masterchain_seqno=100, logical_time=599,
+    )
+    session = FakeSession(None, deal)
+
+    assert await _apply_one_event(session, event, provider_verified=True) == "pending"
+    assert session.added[0].reason_code == "stale_chain_event"
