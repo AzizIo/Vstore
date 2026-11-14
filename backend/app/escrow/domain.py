@@ -100,36 +100,62 @@ TERMINAL_DEAL_STATES = frozenset({
 })
 
 _CHAIN_TRANSITIONS: dict[tuple[EscrowDealStatus, EscrowChainEventType], EscrowDealStatus] = {
-    (EscrowDealStatus.INTENT_CREATED,
-        EscrowChainEventType.CONTRACT_ACTIVATED): EscrowDealStatus.AWAITING_NFT,
-    (EscrowDealStatus.AWAITING_NFT,
-        EscrowChainEventType.NFT_DEPOSIT_ACCEPTED): EscrowDealStatus.AWAITING_BUYER_FUNDS,
-    (EscrowDealStatus.AWAITING_BUYER_FUNDS,
-        EscrowChainEventType.BUYER_PAYMENT_ACCEPTED): EscrowDealStatus.FUNDED_REVIEW,
-    (EscrowDealStatus.FUNDED_REVIEW,
-        EscrowChainEventType.BUYER_ACCEPTANCE_RECORDED): EscrowDealStatus.NFT_RELEASE_PENDING,
+    (
+        EscrowDealStatus.INTENT_CREATED,
+        EscrowChainEventType.CONTRACT_ACTIVATED,
+    ): EscrowDealStatus.AWAITING_NFT,
+    (
+        EscrowDealStatus.AWAITING_NFT,
+        EscrowChainEventType.NFT_DEPOSIT_ACCEPTED,
+    ): EscrowDealStatus.AWAITING_BUYER_FUNDS,
+    (
+        EscrowDealStatus.AWAITING_BUYER_FUNDS,
+        EscrowChainEventType.BUYER_PAYMENT_ACCEPTED,
+    ): EscrowDealStatus.FUNDED_REVIEW,
+    (
+        EscrowDealStatus.FUNDED_REVIEW,
+        EscrowChainEventType.BUYER_ACCEPTANCE_RECORDED,
+    ): EscrowDealStatus.NFT_RELEASE_PENDING,
     (
         EscrowDealStatus.NFT_RELEASE_PENDING,
         EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED,
     ): EscrowDealStatus.DELIVERED_DISPUTE_WINDOW,
-    (EscrowDealStatus.DELIVERED_DISPUTE_WINDOW,
-        EscrowChainEventType.DISPUTE_OPENED_ONCHAIN): EscrowDealStatus.DISPUTED,
+    (
+        EscrowDealStatus.DELIVERED_DISPUTE_WINDOW,
+        EscrowChainEventType.DISPUTE_OPENED_ONCHAIN,
+    ): EscrowDealStatus.DISPUTED,
     (
         EscrowDealStatus.DISPUTED,
         EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED,
     ): EscrowDealStatus.NFT_RETURN_PENDING,
-    (EscrowDealStatus.DELIVERED_DISPUTE_WINDOW,
-        EscrowChainEventType.SELLER_PAYOUT_INITIATED): EscrowDealStatus.SELLER_PAYOUT_PENDING,
-    (EscrowDealStatus.SELLER_PAYOUT_PENDING,
-        EscrowChainEventType.SELLER_PAYOUT_RECONCILED): EscrowDealStatus.SETTLED,
-    (EscrowDealStatus.NFT_RETURN_PENDING,
-        EscrowChainEventType.BUYER_REFUND_INITIATED): EscrowDealStatus.BUYER_REFUND_PENDING,
-    (EscrowDealStatus.BUYER_REFUND_PENDING,
-        EscrowChainEventType.BUYER_REFUND_RECONCILED): EscrowDealStatus.REFUNDED,
-    (EscrowDealStatus.INTENT_CREATED, EscrowChainEventType.DEAL_EXPIRED): EscrowDealStatus.EXPIRED,
-    (EscrowDealStatus.AWAITING_NFT, EscrowChainEventType.DEAL_EXPIRED): EscrowDealStatus.EXPIRED,
-    (EscrowDealStatus.AWAITING_BUYER_FUNDS,
-        EscrowChainEventType.DEAL_EXPIRED): EscrowDealStatus.EXPIRED,
+    (
+        EscrowDealStatus.DELIVERED_DISPUTE_WINDOW,
+        EscrowChainEventType.SELLER_PAYOUT_INITIATED,
+    ): EscrowDealStatus.SELLER_PAYOUT_PENDING,
+    (
+        EscrowDealStatus.SELLER_PAYOUT_PENDING,
+        EscrowChainEventType.SELLER_PAYOUT_RECONCILED,
+    ): EscrowDealStatus.SETTLED,
+    (
+        EscrowDealStatus.NFT_RETURN_PENDING,
+        EscrowChainEventType.BUYER_REFUND_INITIATED,
+    ): EscrowDealStatus.BUYER_REFUND_PENDING,
+    (
+        EscrowDealStatus.BUYER_REFUND_PENDING,
+        EscrowChainEventType.BUYER_REFUND_RECONCILED,
+    ): EscrowDealStatus.REFUNDED,
+    (
+        EscrowDealStatus.INTENT_CREATED,
+        EscrowChainEventType.DEAL_EXPIRED,
+    ): EscrowDealStatus.EXPIRED,
+    (
+        EscrowDealStatus.AWAITING_NFT,
+        EscrowChainEventType.DEAL_EXPIRED,
+    ): EscrowDealStatus.EXPIRED,
+    (
+        EscrowDealStatus.AWAITING_BUYER_FUNDS,
+        EscrowChainEventType.DEAL_EXPIRED,
+    ): EscrowDealStatus.EXPIRED,
 }
 
 
