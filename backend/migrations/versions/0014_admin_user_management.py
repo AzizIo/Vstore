@@ -12,6 +12,8 @@ depends_on: str | None = None
 
 
 def upgrade() -> None:
+    op.create_index("ix_users_created_at_id", "users", ["created_at", "id"])
+    op.create_index("ix_orders_created_at_id", "orders", ["created_at", "id"])
     op.create_table(
         "admin_user_audit_log",
         sa.Column("id", sa.Uuid(), nullable=False),
@@ -110,3 +112,5 @@ def downgrade() -> None:
     op.drop_index("ix_admin_user_audit_actor_time", table_name="admin_user_audit_log")
     op.drop_index("ix_admin_user_audit_target_time", table_name="admin_user_audit_log")
     op.drop_table("admin_user_audit_log")
+    op.drop_index("ix_orders_created_at_id", table_name="orders")
+    op.drop_index("ix_users_created_at_id", table_name="users")
