@@ -740,7 +740,7 @@ get fun `test expired resolver decision is still accepted before timeout transac
     expect(escrow.getState()).toEqual(STATE_DISPUTED);
 
     val arbitrationDeadline = escrow.getProgress().deadlineUnix;
-    testing.setNow(arbitrationDeadline + 1);
+    testing.setNow((arbitrationDeadline + 1) as uint32);
     expect(testing.getNow()).toBeGreater(arbitrationDeadline);
 
     val decision: ResolverDecisionData = {
