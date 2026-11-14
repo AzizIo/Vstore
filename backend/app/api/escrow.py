@@ -378,7 +378,10 @@ async def create_listing_intent(
             Listing.status.in_((ListingStatus.ACTIVE, ListingStatus.DRAFT)),
         ).order_by(Listing.status.asc()).with_for_update())
         if listing is not None and listing.status is ListingStatus.ACTIVE:
-            if listing.price_currency is not PriceCurrency.TON or listing.price_amount != price_amount:
+            if (
+                listing.price_currency is not PriceCurrency.TON
+                or listing.price_amount != price_amount
+            ):
                 raise HTTPException(status_code=409,
                     detail="Active listing price/currency must match the escrow intent")
         elif listing is not None:
@@ -469,7 +472,11 @@ async def get_listing_intent(intent_id: UUID, user: CurrentUser, session: DbSess
         raise HTTPException(status_code=404, detail="Escrow listing intent not found")
     if intent.seller_id != user.id:
         listing = await session.get(Listing, intent.marketplace_listing_id)
-        if listing is None or listing.status is not ListingStatus.ACTIVE or intent.status not in {"intent_only", "active"}:
+        if (
+            listing is None
+            or listing.status is not ListingStatus.ACTIVE
+            or intent.status not in {"intent_only", "active"}
+        ):
             raise HTTPException(status_code=404, detail="Escrow listing intent not found")
     return await _listing_projection(session, intent)
 
@@ -493,7 +500,11 @@ async def create_deal_intent(payload: EscrowDealCreate, user: CurrentUser, sessi
         if intent.seller_id == user.id:
             raise HTTPException(status_code=409, detail="A seller cannot buy their own listing")
         listing = await session.get(Listing, intent.marketplace_listing_id)
-        if listing is None or listing.status is not ListingStatus.ACTIVE or listing.asset_id != intent.asset_id:
+        if (
+            listing is None
+            or listing.status is not ListingStatus.ACTIVE
+            or listing.asset_id != intent.asset_id
+        ):
             raise HTTPException(status_code=409, detail="Underlying listing is no longer active")
         buyer_wallet, buyer_address = await _verified_wallet(session, user_id=user.id,
             wallet_id=payload.buyer_wallet_id)
