@@ -10,6 +10,7 @@ export interface AuthenticatedUser {
 
 export interface UserProfile extends AuthenticatedUser {
   language_code: string | null;
+  is_blocked: boolean;
 }
 
 interface TelegramAuthResponse {
@@ -60,7 +61,8 @@ function isTelegramAuthResponse(value: unknown): value is TelegramAuthResponse {
 function isUserProfile(value: unknown): value is UserProfile {
   if (!isAuthenticatedUser(value)) return false;
   const profile = value as Partial<UserProfile>;
-  return profile.language_code === null || typeof profile.language_code === "string";
+  return (profile.language_code === null || typeof profile.language_code === "string") &&
+    typeof profile.is_blocked === "boolean";
 }
 
 async function readJson(response: Response): Promise<unknown> {
