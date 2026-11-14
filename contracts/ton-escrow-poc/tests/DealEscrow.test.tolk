@@ -152,7 +152,7 @@ get fun `deployment address is derived from immutable StateInit`() {
 get fun `seller activates a per-deal escrow`() {
     val (escrow, _, seller, _) = createFixture();
     deployAndActivate(escrow, seller, 0xA11CE);
-    expect(escrow.get_state()).toEqual(STATE_AWAITING_NFT);
+    expect(escrow.getState()).toEqual(STATE_AWAITING_NFT);
 }
 
 get fun `only the snapshotted seller can activate the deal`() {
@@ -171,7 +171,7 @@ get fun `only the snapshotted seller can activate the deal`() {
         to: escrow.address,
         exitCode: Errors.NotSeller,
     });
-    expect(escrow.get_state()).toEqual(STATE_INTENT_CREATED);
+    expect(escrow.getState()).toEqual(STATE_INTENT_CREATED);
 }
 
 get fun `exact TEP-62 item deposit unlocks buyer funding state`() {
@@ -183,7 +183,7 @@ get fun `exact TEP-62 item deposit unlocks buyer funding state`() {
 
     deployAndActivate(escrow, seller, 0xA11CE);
     depositExpectedNft(escrow, nftItem, seller);
-    expect(escrow.get_state()).toEqual(STATE_AWAITING_BUYER_FUNDS);
+    expect(escrow.getState()).toEqual(STATE_AWAITING_BUYER_FUNDS);
 }
 
 get fun `a different NFT item sender cannot unlock buyer funding`() {
@@ -207,7 +207,7 @@ get fun `a different NFT item sender cannot unlock buyer funding`() {
         from: fakeOwner.address,
         to: fakeItem.address,
     });
-    expect(escrow.get_state()).toEqual(STATE_AWAITING_NFT);
+    expect(escrow.getState()).toEqual(STATE_AWAITING_NFT);
 }
 
 get fun `buyer must attach exact principal plus execution reserve`() {
@@ -230,7 +230,7 @@ get fun `buyer must attach exact principal plus execution reserve`() {
         to: escrow.address,
         exitCode: Errors.InvalidValue,
     });
-    expect(escrow.get_state()).toEqual(STATE_AWAITING_BUYER_FUNDS);
+    expect(escrow.getState()).toEqual(STATE_AWAITING_BUYER_FUNDS);
 
     val funding = escrow.sendFundDeal(
         buyer.address,
@@ -242,7 +242,7 @@ get fun `buyer must attach exact principal plus execution reserve`() {
         from: buyer.address,
         to: escrow.address,
     });
-    expect(escrow.get_state()).toEqual(STATE_FUNDED_REVIEW);
+    expect(escrow.getState()).toEqual(STATE_FUNDED_REVIEW);
 }
 
 get fun `buyer acceptance is pre-delivery and participant scoped`() {
@@ -266,7 +266,7 @@ get fun `buyer acceptance is pre-delivery and participant scoped`() {
         to: escrow.address,
         exitCode: Errors.NotBuyer,
     });
-    expect(escrow.get_state()).toEqual(STATE_FUNDED_REVIEW);
+    expect(escrow.getState()).toEqual(STATE_FUNDED_REVIEW);
 
     val accepted = escrow.sendAcceptDeal(
         buyer.address,
@@ -278,7 +278,7 @@ get fun `buyer acceptance is pre-delivery and participant scoped`() {
         from: buyer.address,
         to: escrow.address,
     });
-    expect(escrow.get_state()).toEqual(STATE_NFT_RELEASE_PENDING);
+    expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
     expect(nftItem.get_owner()).toEqual(buyer.address);
 }
 
@@ -294,5 +294,5 @@ get fun `observed NFT transfer alone never settles a deal`() {
     escrow.sendAcceptDeal(buyer.address, 1003, 0xA11CE, { value: grams("0.03"), bounce: true });
 
     expect(nftItem.get_owner()).toEqual(buyer.address);
-    expect(escrow.get_state()).toEqual(STATE_NFT_RELEASE_PENDING);
+    expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
 }
