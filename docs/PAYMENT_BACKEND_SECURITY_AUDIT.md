@@ -27,7 +27,7 @@
    - transaction intent/provider/charge IDs/amount/currency/payer/capture timestamp/creation snapshot cannot change;
    - TRUNCATE triggers are installed for intents, transactions, events and refund workflow rows. These triggers are separate from row-level DELETE policy: payment events are append-only; transaction/intent deletion is constrained when referenced by dependent rows; ordinary DELETE of a payment_refunds workflow row is not blocked by this migration and remains an explicit retention-policy decision;
    - legitimate status, lease, retry and reconciliation fields remain mutable through the state machine.
-4. Migration `0015_payment_ledger_guards` is followed by `0016_refund_evidence_delete_guard`, which installs `trg_payment_refunds_no_delete` and a dedicated rejecting trigger function. Its downgrade drops only the trigger/function and never deletes or rewrites existing refund records; as with any downgrade, removal of the guard weakens future protection and requires an explicit maintenance decision.
+4. Migration `0015_payment_ledger_guards` is followed by `0016_refund_evidence`, which installs `trg_payment_refunds_no_delete` and a dedicated rejecting trigger function. Its downgrade drops only the trigger/function and never deletes or rewrites existing refund records; as with any downgrade, removal of the guard weakens future protection and requires an explicit maintenance decision.
 
 
 ## Refund evidence retention and database role assumptions
@@ -37,7 +37,7 @@
 - **Application role:** the runtime database role must not own payment tables or have schema/DDL privileges such as `ALTER`, `DROP`, trigger management or ownership transfer. It may perform only the INSERT/SELECT/UPDATE operations required by the payment/refund state machine. Confirm actual grants for each deployment before enabling live payments.
 - **Break-glass administrators:** PostgreSQL superusers/table owners can disable or remove triggers; triggers are not protection against a privileged administrator. Any emergency maintenance that changes evidence or guards must use a separately controlled role, require approval, and leave an external audit trail.
 - **Cascade and partitions:** the current `payment_refunds` table is not partitioned. Its FK to `payment_transactions` uses restrictive deletion semantics; a parent-row delete cannot be used to bypass the refund DELETE trigger. The `BEFORE DELETE` trigger rejects direct row deletes and deletes caused by a future cascading relationship, while the existing `BEFORE TRUNCATE` guard rejects table truncation. Reassess these guarantees if partitioning or new FK relationships are introduced.
-- **Downgrade:** migration `0016_refund_evidence_delete_guard` removes only the guard function and trigger. It does not delete refund records, but downgrading weakens the guarantee for future writes and requires an explicit maintenance decision.
+- **Downgrade:** migration `0016_refund_evidence` removes only the guard function and trigger. It does not delete refund records, but downgrading weakens the guarantee for future writes and requires an explicit maintenance decision.
 
 ## Webhook / replay boundary
 
