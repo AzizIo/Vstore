@@ -1010,3 +1010,96 @@ async def test_refund_processing_entrypoint_rejects_production_even_with_fake_pr
     monkeypatch.setattr(refund_worker, "get_settings", lambda: settings)
     with pytest.raises(RuntimeError, match="cannot run in production"):
         await process_due_refunds(None, FakeRefundProvider())  # type: ignore[arg-type]
+
+@pytest.mark.asyncio
+async def test_late_provider_success_cannot_mark_a_captured_transaction_refunded(
+    refund_database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_test_stars(monkeypatch, refund_database)
+    engine = create_async_engine(refund_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    ids = await _seed_order(session_factory)
+    try:
+        intent = await _create_intent(session_factory, ids)
+        evidence = _evidence(
+            intent, ids, event=f"update-{uuid4()}", charge=f"charge-{uuid4()}"
+        )
+        assert await _record(session_factory, evidence) == "captured"
+        now = datetime.now(UTC)
+        lease_token = uuid4()
+        async with session_factory.begin() as session:
+            transaction = await session.scalar(
+                select(PaymentTransaction).where(
+                    PaymentTransaction.telegram_payment_charge_id
+                    == evidence["telegram_payment_charge_id"]
+                )
+            )
+            assert transaction is not None
+            job = PaymentRefund(
+                payment_transaction_id=transaction.id,
+                status="processing",
+                reason_code="invalid_stale_job",
+                attempt_count=1,
+                next_attempt_at=now,
+                lease_token=lease_token,
+                locked_until=now + timedelta(minutes=5),
+            )
+            session.add(job)
+            await session.flush()
+
+        async with session_factory() as session:
+            job = await session.scalar(
+                select(PaymentRefund).where(
+                    PaymentRefund.payment_transaction_id
+                    == select(PaymentTransaction.id)
+                    .where(PaymentTransaction.telegram_payment_charge_id
+                    == evidence["telegram_payment_charge_id"])
+                    .scalar_subquery()
+                )
+            )
+            transaction = await session.scalar(
+                select(PaymentTransaction).where(
+                    PaymentTransaction.telegram_payment_charge_id
+                    == evidence["telegram_payment_charge_id"]
+                )
+            )
+            assert job is not None and transaction is not None
+            claim = refund_worker.RefundClaim(
+                refund_id=job.id,
+                claim_token=lease_token,
+                transaction_id=transaction.id,
+                intent_id=intent.id,
+                order_id=ids["order_id"],
+                payer_telegram_id=int(ids["telegram_id"]),
+                telegram_payment_charge_id=str(evidence["telegram_payment_charge_id"]),
+                attempt_count=1,
+                reconciliation_count=0,
+                needs_reconciliation=False,
+            )
+            persisted = await refund_worker._persist_claim_result(
+                session,
+                claim,
+                now=now,
+                target_status="succeeded",
+                succeeded=True,
+            )
+            assert persisted is False
+
+        async with session_factory() as session:
+            transaction = await session.scalar(
+                select(PaymentTransaction).where(
+                    PaymentTransaction.telegram_payment_charge_id
+                    == evidence["telegram_payment_charge_id"]
+                )
+            )
+            job = await session.scalar(
+                select(PaymentRefund).where(
+                    PaymentRefund.payment_transaction_id == transaction.id
+                )
+            )
+            assert transaction is not None and transaction.status == "captured"
+            assert job is not None and job.status == "manual_review"
+            assert job.last_error_code == "transaction_not_refund_pending"
+    finally:
+        await _cleanup(session_factory, ids)
+        await engine.dispose()
