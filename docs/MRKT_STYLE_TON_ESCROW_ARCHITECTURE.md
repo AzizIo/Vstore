@@ -48,6 +48,20 @@ A small factory / registry contract:
 
 A new purchase attempt uses a new deal instance. The backend's listing intent is an off-chain proposal, not a funded order or chain-state assertion. A contract deployment and validated NFT deposit are required before the contract accepts the buyer's principal.
 
+### 3.1.1 Deal creation and deployment order
+
+The public marketplace listing is an off-chain catalogue resource; it is not the immutable escrow deal:
+
+1. Seller creates an off-chain listing and seller-scoped escrow intent.
+2. Buyer selects the listing and creates a deal intent with a verified buyer testnet wallet.
+3. Backend snapshots seller, buyer, exact NFT item, principal, network and deal salt. Only now are all immutable deal parties/terms known.
+4. Backend prepares deployment of the per-deal DealEscrow from that immutable deal snapshot.
+5. Seller signs deployment/deposit from their own wallet. Contract address and deployment evidence are stored only after chain reconciliation.
+6. Seller deposits the exact NFT; contract validates and records the NFT lock.
+7. Buyer funds only after the contract is confirmed in AWAITING_BUYER_FUNDS.
+
+A seller-only listing intent must not deploy a buyer-less instance and then be reused for multiple buyers. That would be a different reusable-listing contract topology and would require a separate architecture/security review. The buyer marketplace API must expose public listing facts and the identifier needed to create the deal; a seller-private intent read is not enough.
+
 ### 3.2 DealEscrow
 
 One contract instance per deal. It is the on-chain source of truth for that deal:
