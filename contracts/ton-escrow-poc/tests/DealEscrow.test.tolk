@@ -49,9 +49,6 @@ fun createFixture(
         nftDepositQueryId: 1002,
         nftReleaseQueryId: 1003,
         nftReturnToEscrowQueryId: 1004,
-        nftReturnToSellerQueryId: 1005,
-        sellerPayoutQueryId: 1006,
-        buyerRefundQueryId: 1007,
     };
     val security: DealSecurity = {
         oracleKeys: AuthorityKeys {
