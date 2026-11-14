@@ -98,6 +98,7 @@ def test_exact_nft_deposit_attestation_is_validated(deal: DealEvidenceSnapshot) 
     "overrides",
     [
         {"item_address": "0:" + "e" * 64},
+        {"collection_address": "0:" + "e" * 64},
         {"source_address": "0:" + "f" * 64},
         {"contract_address": "0:" + "e" * 64},
         {"network": "mainnet"},
