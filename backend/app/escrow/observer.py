@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.escrow.domain import (
     TERMINAL_DEAL_STATES,
-    RAW_EVIDENCE_EVENTS,
     DealEvidenceSnapshot,
     EscrowChainEventType,
     EscrowDealStatus,
@@ -260,7 +259,7 @@ async def _apply_one_event(
     )
     if deal is None:
         await _persist_event(session, event, status="pending",
-            reason_code="deal_not_found", deal_id=deal_uuid, existing=existing)
+            reason_code="deal_not_found", deal_id=None, existing=existing)
         return "unmatched"
 
     if event.deal_salt != deal.deal_salt:
@@ -285,15 +284,6 @@ async def _apply_one_event(
     ):
         await _persist_event(session, event, status="pending",
             reason_code="stale_chain_event", deal_id=deal.id, existing=existing)
-        return "rejected"
-
-    if event.event_type in RAW_EVIDENCE_EVENTS:
-        # Layer A: retain provider evidence as pending only. It is not a contract
-        # state transition and must not push the Deal into MANUAL_REVIEW.
-        await _persist_event(
-            session, event, status="pending", reason_code="raw_evidence_observed_only",
-            deal_id=deal.id, existing=existing,
-        )
         return "rejected"
 
     try:
