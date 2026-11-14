@@ -42,6 +42,7 @@ class EscrowChainEventType(StrEnum):
     NFT_RELEASE_STARTED = "nft_release_started"
     NFT_TRANSFER_CONFIRMED = "nft_transfer_confirmed"
     DISPUTE_CONFIRMED = "dispute_confirmed"
+    NFT_RETURN_TO_ESCROW_CONFIRMED = "nft_return_to_escrow_confirmed"
     NFT_RETURN_STARTED = "nft_return_started"
     SELLER_PAYOUT_STARTED = "seller_payout_started"
     SELLER_PAYOUT_CONFIRMED = "seller_payout_confirmed"
@@ -76,13 +77,19 @@ _CHAIN_TRANSITIONS: dict[tuple[EscrowDealStatus, EscrowChainEventType], EscrowDe
         EscrowDealStatus.DISPUTED,
     (EscrowDealStatus.DISPUTED, EscrowChainEventType.NFT_RETURN_STARTED):
         EscrowDealStatus.NFT_RETURN_PENDING,
+    (EscrowDealStatus.DISPUTED, EscrowChainEventType.NFT_RETURN_TO_ESCROW_CONFIRMED):
+        EscrowDealStatus.NFT_RETURN_PENDING,
     (EscrowDealStatus.DELIVERED_DISPUTE_WINDOW, EscrowChainEventType.SELLER_PAYOUT_STARTED):
         EscrowDealStatus.SELLER_PAYOUT_PENDING,
     (EscrowDealStatus.SELLER_PAYOUT_PENDING, EscrowChainEventType.SELLER_PAYOUT_CONFIRMED):
         EscrowDealStatus.SETTLED,
     (EscrowDealStatus.FUNDED_REVIEW, EscrowChainEventType.NFT_RETURN_STARTED):
         EscrowDealStatus.NFT_RETURN_PENDING,
+    (EscrowDealStatus.NFT_RETURN_PENDING, EscrowChainEventType.NFT_RETURN_STARTED):
+        EscrowDealStatus.NFT_RETURN_PENDING,
     (EscrowDealStatus.NFT_RETURN_PENDING, EscrowChainEventType.NFT_RETURN_CONFIRMED):
+        EscrowDealStatus.BUYER_REFUND_PENDING,
+    (EscrowDealStatus.BUYER_REFUND_PENDING, EscrowChainEventType.BUYER_REFUND_STARTED):
         EscrowDealStatus.BUYER_REFUND_PENDING,
     (EscrowDealStatus.BUYER_REFUND_PENDING, EscrowChainEventType.BUYER_REFUND_CONFIRMED):
         EscrowDealStatus.REFUNDED,
@@ -161,6 +168,7 @@ def validate_event_against_deal(
     if event.event_type in {
         EscrowChainEventType.NFT_DEPOSITED,
         EscrowChainEventType.NFT_TRANSFER_CONFIRMED,
+        EscrowChainEventType.NFT_RETURN_TO_ESCROW_CONFIRMED,
         EscrowChainEventType.NFT_RETURN_STARTED,
         EscrowChainEventType.NFT_RETURN_CONFIRMED,
     }:
@@ -169,28 +177,39 @@ def validate_event_against_deal(
 
     if event.event_type is EscrowChainEventType.NFT_DEPOSITED and (
         event.source_address != deal.seller_address
+        or event.destination_address != deal.contract_address
     ):
-        raise EscrowDomainError("NFT deposit sender does not match the seller wallet")
+        raise EscrowDomainError("NFT deposit sender or escrow recipient does not match the deal")
 
     if event.event_type is EscrowChainEventType.BUYER_PAYMENT_CONFIRMED and (
         event.source_address != deal.buyer_address
+        or event.destination_address != deal.contract_address
         or event.amount_nanotons != deal.principal_nanotons
     ):
-        raise EscrowDomainError("Payment sender or exact principal does not match the deal")
+        raise EscrowDomainError(
+            "Payment sender, escrow recipient or exact principal does not match the deal"
+        )
 
     if event.event_type is EscrowChainEventType.NFT_TRANSFER_CONFIRMED and (
-        event.destination_address != deal.buyer_address
+        event.source_address != deal.contract_address
+        or event.destination_address != deal.buyer_address
     ):
-        raise EscrowDomainError("NFT destination does not match the buyer wallet")
+        raise EscrowDomainError("NFT source or destination does not match the deal")
 
     if event.event_type is EscrowChainEventType.SELLER_PAYOUT_CONFIRMED and (
-        event.destination_address != deal.seller_address
+        event.source_address != deal.contract_address
+        or event.destination_address != deal.seller_address
         or event.amount_nanotons != deal.principal_nanotons
     ):
-        raise EscrowDomainError("Seller payout does not match the fixed recipient and principal")
+        raise EscrowDomainError(
+            "Seller payout does not match the contract, fixed recipient and principal"
+        )
 
     if event.event_type is EscrowChainEventType.BUYER_REFUND_CONFIRMED and (
-        event.destination_address != deal.buyer_address
+        event.source_address != deal.contract_address
+        or event.destination_address != deal.buyer_address
         or event.amount_nanotons != deal.principal_nanotons
     ):
-        raise EscrowDomainError("Buyer refund does not match the fixed recipient and principal")
+        raise EscrowDomainError(
+            "Buyer refund does not match the contract, fixed recipient and principal"
+        )
