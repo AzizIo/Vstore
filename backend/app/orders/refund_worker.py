@@ -233,6 +233,10 @@ async def claim_due_refunds(
                 )
             ).first()
             if transaction_data is None:
+                logger.error(
+                    "Refund job %s requires manual review: transaction is missing",
+                    job.id,
+                )
                 job.status = "manual_review"
                 job.last_error_code = "refund_transaction_missing"
                 job.lease_token = None
@@ -253,6 +257,11 @@ async def claim_due_refunds(
                     job.completed_at = job.completed_at or current_time
                 else:
                     # A refund row must never authorize a charge that is still captured.
+                    logger.error(
+                        "Refund job %s requires manual review: transaction status is %s",
+                        job.id,
+                        transaction_status,
+                    )
                     job.status = "manual_review"
                     job.last_error_code = "transaction_not_refund_pending"
                 job.lease_token = None
@@ -422,6 +431,11 @@ async def _persist_claim_result(
 
         if target_status == "manual_review":
             job.completed_at = None
+            logger.error(
+                "Refund transaction %s requires manual review: %s",
+                transaction.id,
+                job.last_error_code or "unspecified_refund_failure",
+            )
 
         if record_failure_event:
             digest = hashlib.sha256(
