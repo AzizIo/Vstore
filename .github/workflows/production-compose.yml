@@ -70,11 +70,37 @@ jobs:
           if miniapp_build_args.get("VITE_TELEGRAM_MINI_APP_DIRECT_LINK") != os.environ["PROD_TELEGRAM_MINI_APP_DIRECT_LINK"]:
               raise SystemExit("Mini App share direct link is not passed into the production build")
 
+          # Validate that production cannot silently boot against test infrastructure.
+          api_env = services["api"].get("environment", {})
+          expected_origin = os.environ["PROD_TELEGRAM_MINI_APP_URL"].rstrip("/")
+          expected_host = expected_origin.removeprefix("https://")
+          if not expected_origin.startswith("https://") or "/" in expected_host:
+              raise SystemExit("Production Mini App URL must be an HTTPS origin")
+          if api_env.get("TELEGRAM_MINI_APP_URL", "").rstrip("/") != expected_origin:
+              raise SystemExit("API Mini App URL differs from the production frontend origin")
+          if api_env.get("TON_CONNECT_NETWORK") != "mainnet":
+              raise SystemExit("Production TON_CONNECT_NETWORK must be mainnet")
+          try:
+              allowed_domains = json.loads(api_env["TON_CONNECT_ALLOWED_DOMAINS"])
+              cors_origins = json.loads(api_env["CORS_ALLOWED_ORIGINS"])
+          except (KeyError, json.JSONDecodeError) as error:
+              raise SystemExit("Production domain/CORS allowlists must be valid JSON") from error
+          if allowed_domains != [expected_host]:
+              raise SystemExit("TON Connect allowlist must contain only the exact production hostname")
+          if cors_origins != [expected_origin]:
+              raise SystemExit("CORS allowlist must contain only the exact production HTTPS origin")
+          if api_env.get("DATABASE_URL", "").find("@db:5432/") < 0:
+              raise SystemExit("Production API must use its private PostgreSQL service")
+          if any(marker in api_env.get("DATABASE_URL", "").lower() for marker in ("preview", "test")):
+              raise SystemExit("Production database URL must not point to a test/Preview database")
+          if "TELEGRAM_STARS_TEST_ENABLED" in api_env or "TELEGRAM_STARS_TEST_BOT_TOKEN" in api_env:
+              raise SystemExit("Test-only Telegram Stars settings must not be present in production")
+
           for name in ("api", "bot"):
               env = services[name].get("environment", {})
               if env.get("ENVIRONMENT") != "production" or "PREVIEW_MODE" in env:
                   raise SystemExit(f"{name} has incorrect environment mode")
-          print("Production Compose security exposure checks passed.")
+          print("Production Compose security exposure and environment isolation checks passed.")
           PY
       - name: Validate production Nginx configuration
         run: |
