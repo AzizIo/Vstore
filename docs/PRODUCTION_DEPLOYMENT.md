@@ -31,20 +31,20 @@ docker inspect <current-postgres-container> --format '{{json .Mounts}}'
 Identify the exact named volume mounted at `/var/lib/postgresql/data`. Check the
 PostgreSQL major version and take a verified backup before any upgrade or
 container replacement. Do not attach one PostgreSQL data directory to two
-running PostgreSQL containers. Do not run this stack alongside another app
-using the same database volume.
+running PostgreSQL containers.
 
-If this is a genuinely new production database, create a dedicated volume:
+For the safest first production cutover, create a **new dedicated production
+volume** and restore a database dump into it rather than reusing the development
+volume. This keeps development and production data stores isolated:
 
 ```bash
 docker volume create viltara_production_postgres_data
 ```
 
-Then set `PROD_POSTGRES_VOLUME_NAME=viltara_production_postgres_data`.
-For an existing installation, set this variable to the exact volume name found
-above only after the backup and cutover plan are ready. The Compose file fails
-closed when the volume name is absent; it will not silently create a new empty
-database.
+Set `PROD_POSTGRES_VOLUME_NAME=viltara_production_postgres_data`.
+The Compose file requires the volume to exist and will not silently create one.
+Keep the old stack and its volume untouched until the new database has been
+restored, validated and the reverse-proxy cutover is approved.
 
 ## 2. Configure production-only variables
 
@@ -60,6 +60,8 @@ Append production-specific variables to `.env`. Never paste secret values into
 chat, shell history, Git commits or screenshots.
 
 ```dotenv
+PROD_DB_NAME=viltara_production
+PROD_DB_USER=viltara_production
 PROD_DB_PASSWORD=<first-64-hex-secret>
 PROD_AUTH_SECRET_KEY=<different-64-hex-secret>
 PROD_BOT_TOKEN=<production-BotFather-token>
@@ -111,19 +113,37 @@ do not substitute development credentials.
 ## 4. Back up, migrate, and start
 
 Take a database backup before changing images or schema. For an existing
-installation, confirm the backup file is non-empty and retain it off the VPS
-before proceeding.
+installation, create a dump from the old database and copy it off the VPS:
 
-For a new database, create the selected external volume first. For an existing
-database, stop the old PostgreSQL container cleanly before attaching its volume
-to this stack. Confirm the PostgreSQL major version is compatible with the
-volume.
+```bash
+docker compose exec -T db pg_dump -U <old-db-user> -d <old-db-name> -Fc \
+  > /root/backups/viltara-before-production.dump
+test -s /root/backups/viltara-before-production.dump
+```
+
+Start the new production database on the dedicated empty volume, then restore
+the dump into it. Do not mount the old database volume into this stack while
+the old PostgreSQL container is running. Confirm that the source dump is
+compatible with PostgreSQL 17 before restoring.
 
 Start only dependencies:
 
 ```bash
 docker compose -f docker-compose.production.yml up -d db redis
 ```
+
+For a migration from an existing database, restore the previously created
+custom-format dump into the new production database before applying migrations:
+
+```bash
+cat /root/backups/viltara-before-production.dump | \
+  docker compose -f docker-compose.production.yml exec -T db \
+  pg_restore -U "$PROD_DB_USER" -d "$PROD_DB_NAME" --clean --if-exists
+```
+
+Run this restore only against the new, dedicated production database. Verify
+users, listings, orders and the current Alembic revision before proceeding.
+Do not use `--clean` against the old/live database.
 
 Apply migrations explicitly as a one-off API container:
 
@@ -191,7 +211,7 @@ PostgreSQL dump (run from the repository directory) is:
 ```bash
 mkdir -p /root/backups
 docker compose -f docker-compose.production.yml exec -T db \
-  pg_dump -U viltara_production -d viltara_production -Fc \
+  sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
   > /root/backups/viltara-production-$(date +%F-%H%M%S).dump
 test -s /root/backups/viltara-production-*.dump
 ```
