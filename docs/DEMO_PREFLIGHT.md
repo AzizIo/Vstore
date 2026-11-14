@@ -4,7 +4,7 @@ Run this read-only check from a laptop or another machine with outbound HTTPS be
 
 It verifies the public endpoints that can be checked without signing in:
 
-- API readiness, including PostgreSQL, Redis and Telegram authentication configuration
+- API readiness, including PostgreSQL, current Alembic migration heads, Redis and Telegram authentication configuration
 - TON Connect proof configuration (a valid backend domain allowlist and network; not just a reachable public manifest)
 - Mini App entry page (HTTP 200 HTML)
 - TON Connect manifest (HTTP 200 JSON, expected same-origin URLs and cross-origin GET access)
