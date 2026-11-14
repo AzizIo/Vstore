@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from app.db.models import Base as MarketplaceBase
 import pytest
+from sqlalchemy.orm.attributes import set_committed_value
 
+from app.db.models import Base as MarketplaceBase
 from app.escrow.models import (
     EscrowBase,
     EscrowChainEvent,
@@ -122,8 +123,6 @@ def test_deal_deployment_terms_cannot_be_mutated_after_creation(field: str) -> N
         principal_nanotons=2_500_000_000,
         idempotency_key="deal-create-1",
     )
-    from sqlalchemy.orm.attributes import set_committed_value
-
     for immutable_field in (
         "id",
         "listing_intent_id",
@@ -194,8 +193,6 @@ def test_deployed_contract_address_cannot_be_replaced() -> None:
         contract_abi_version="abi-v1",
         idempotency_key="deal-create-1",
     )
-    from sqlalchemy.orm.attributes import set_committed_value
-
     set_committed_value(deal, "contract_address", deal.contract_address)
     set_committed_value(deal, "contract_abi_version", deal.contract_abi_version)
     deal.contract_address = "0:" + "f" * 64
