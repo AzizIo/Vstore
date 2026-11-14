@@ -605,6 +605,7 @@ async def test_escrow_deal_terms_are_immutable_in_postgres(
     ids = await _seed_order(session_factory)
     intent_id = uuid4()
     deal_id = uuid4()
+    listing_key = uuid4().hex * 2
     seller_address = "0:" + "a" * 64
     buyer_address = "0:" + "b" * 64
     try:
@@ -618,7 +619,7 @@ async def test_escrow_deal_terms_are_immutable_in_postgres(
                     seller_wallet_id=ids["seller_wallet_id"],
                     network="testnet",
                     item_address="0:" + "c" * 64,
-                    listing_key=uuid4().hex * 2,
+                    listing_key=listing_key,
                     collection_address_snapshot="0:" + "d" * 64,
                     seller_address_snapshot=seller_address,
                     price_amount=Decimal("2.5"),
@@ -632,7 +633,7 @@ async def test_escrow_deal_terms_are_immutable_in_postgres(
                     id=deal_id,
                     listing_intent_id=intent_id,
                     marketplace_listing_id=ids["listing_id"],
-                    listing_key_snapshot=uuid4().hex * 2,
+                    listing_key_snapshot=listing_key,
                     seller_id=ids["seller_id"],
                     buyer_id=ids["buyer_id"],
                     buyer_wallet_id=ids["buyer_wallet_id"],
