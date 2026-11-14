@@ -170,9 +170,9 @@ Every persisted evidence observation must carry enough information to independen
 | `finality_status`, `masterchain_seqno` | Provider/chain finality classification and checkpoint |
 | `observed_at` | Backend UTC timestamp; not a chain deadline |
 
-Use a unique chain-event key such as `(network, account_address, transaction_hash, message_hash)` where available. Do not deduplicate solely by query ID. Store enough raw or content-addressed evidence to replay a decision. A provider outage, incomplete message trace, inconsistent getter result or non-final transaction must leave the projection pending/exceptional, never successful.
+Use a unique chain-event key such as `(network, account_address, transaction_hash, message_hash)` where available. Do not deduplicate solely by query ID. Store enough raw or content-addressed evidence to replay a decision. A provider outage, incomplete message trace, inconsistent getter result or non-final transaction must leave the projection pending/exceptional, never successful. If the provider can return the same transaction before and after finality, do not mark the non-final observation as a terminal rejection and advance past it permanently. Keep it pending/re-queryable and promote only after the finality condition is met; preserve both observation versions for audit.
 
-The database needs to preserve both evidence observations and contract-accepted state transitions. A single normalized `NFT_TRANSFER_CONFIRMED` event is not enough to tell whether the observer saw an NFT item transaction or the contract accepted the oracle attestation. Use distinct event types/records or an equally explicit evidence-layer field.
+The database needs to preserve both evidence observations and contract-accepted state transitions. A single normalized `NFT_TRANSFER_CONFIRMED` event is not enough to tell whether the observer saw an NFT item transaction or the contract accepted the oracle attestation. Use distinct event types/records or an equally explicit evidence-layer field. Process per-account events in logical-time order (or use a bounded reorder buffer); masterchain seqno alone is not a total transaction order. An older event arriving after a newer one must be retained/reconciled, not silently applied out of sequence or allowed to force success.
 
 ### 6.3 Backend state projection rule
 
@@ -233,7 +233,7 @@ Both contract and backend suites, plus frontend integration tests where applicab
 8. **Buyer-favourable resolution after NFT left escrow:** no refund until exact NFT is returned to escrow and return is verified.
 9. **Seller-favourable resolution:** seller payout is initiated only after authorized on-chain resolution and finalized NFT delivery evidence, then remains pending until payout finality.
 10. **Payout/refund bounce or duplicate trigger:** the pending settlement stays owed to the same fixed recipient; retries are blocked until the original outcome is reconciled, and no duplicate transfer occurs.
-11. **Observer restart / replay:** duplicated and out-of-order traces, provider outage, cursor restart and database rebuild preserve the same final projection.
+11. **Observer restart / replay:** duplicated and out-of-order traces, provider outage, cursor restart and database rebuild preserve the same final projection; a transaction first observed as non-final and later finalized must be promoted exactly once, not stuck as rejected/duplicate.
 12. **Security / authorization:** IDOR, wrong participant, unverified wallet, client-forged state, wrong network and stale payload are rejected.
 
 ## 9. ABI freeze checklist
