@@ -20,6 +20,7 @@ export type EscrowAction =
   | "purchase"
   | "buyer_confirmation"
   | "dispute"
+  | "buyer_nft_return"
   | "unsold_nft_withdrawal"
   | "seller_proceeds_withdrawal";
 
@@ -121,6 +122,7 @@ export interface PreparedEscrowTransaction {
   nft_item_address: string | null;
   amount_ton: string | null;
   fee_ton: string | null;
+  network_fee_ton?: string | null;
   valid_until: string;
   messages: EscrowWalletMessage[];
   display_summary: string;
@@ -147,6 +149,11 @@ export interface EscrowPrepareWalletActionInput {
 export interface EscrowOpenDisputeInput {
   deal_id: string;
   reason: string;
+}
+
+export interface EscrowPrepareBuyerNftReturnInput {
+  deal_id: string;
+  buyer_wallet_id: string;
 }
 
 export interface EscrowPrepareUnsoldNftWithdrawalInput {
@@ -196,6 +203,7 @@ export interface EscrowApiClient {
   listMarketplaceListings(signal?: AbortSignal): Promise<EscrowPage<EscrowListing>>;
   listSellerListings(signal?: AbortSignal): Promise<EscrowPage<EscrowListing>>;
   listBuyerDeals(signal?: AbortSignal): Promise<EscrowPage<EscrowDeal>>;
+  listSellerDeals(signal?: AbortSignal): Promise<EscrowPage<EscrowDeal>>;
   listSellerWithdrawals(signal?: AbortSignal): Promise<EscrowPage<EscrowWithdrawal>>;
   getListing(listingId: string, signal?: AbortSignal): Promise<EscrowListing>;
   getDeal(dealId: string, signal?: AbortSignal): Promise<EscrowDeal>;
@@ -203,6 +211,7 @@ export interface EscrowApiClient {
   preparePurchase(input: EscrowPreparePurchaseInput): Promise<PreparedEscrowTransaction>;
   prepareBuyerConfirmation(input: EscrowPrepareWalletActionInput): Promise<PreparedEscrowTransaction>;
   prepareDispute(input: EscrowOpenDisputeInput): Promise<PreparedEscrowTransaction>;
+  prepareBuyerNftReturn(input: EscrowPrepareBuyerNftReturnInput): Promise<PreparedEscrowTransaction>;
   prepareUnsoldNftWithdrawal(input: EscrowPrepareUnsoldNftWithdrawalInput): Promise<PreparedEscrowTransaction>;
   prepareSellerProceedsWithdrawal(input: EscrowPrepareSellerWithdrawalInput): Promise<PreparedEscrowTransaction>;
   submitWalletReference(input: EscrowWalletReferenceInput): Promise<void>;
@@ -312,6 +321,7 @@ export function isPreparedEscrowTransaction(value: unknown): value is PreparedEs
     && isNullableString(value.nft_item_address)
     && isNullableString(value.amount_ton)
     && isNullableString(value.fee_ton)
+    && (value.network_fee_ton === undefined || isNullableString(value.network_fee_ton))
     && typeof value.valid_until === "string"
     && Number.isFinite(Date.parse(value.valid_until))
     && typeof value.display_summary === "string"
@@ -421,6 +431,7 @@ export function createEscrowApiClient(
     listMarketplaceListings: (signal) => readPage(contract.marketplaceListings(), accessToken, isEscrowListing, signal),
     listSellerListings: (signal) => readPage(contract.sellerListings(), accessToken, isEscrowListing, signal),
     listBuyerDeals: (signal) => readPage(contract.buyerDeals(), accessToken, isEscrowDeal, signal),
+    listSellerDeals: (signal) => readPage(contract.sellerDeals(), accessToken, isEscrowDeal, signal),
     listSellerWithdrawals: (signal) => readPage(contract.sellerWithdrawals(), accessToken, isEscrowWithdrawal, signal),
     getListing: (id, signal) => readJson(contract.listingDetails(id), accessToken, isEscrowListing, { signal }),
     getDeal: (id, signal) => readJson(contract.dealDetails(id), accessToken, isEscrowDeal, { signal }),
@@ -428,6 +439,7 @@ export function createEscrowApiClient(
     preparePurchase: (input) => getPrepared(contract.preparePurchase(input)),
     prepareBuyerConfirmation: (input) => getPrepared(contract.prepareBuyerConfirmation(input)),
     prepareDispute: (input) => getPrepared(contract.prepareDispute(input)),
+    prepareBuyerNftReturn: (input) => getPrepared(contract.prepareBuyerNftReturn(input)),
     prepareUnsoldNftWithdrawal: (input) => getPrepared(contract.prepareUnsoldNftWithdrawal(input)),
     prepareSellerProceedsWithdrawal: (input) => getPrepared(contract.prepareSellerProceedsWithdrawal(input)),
     submitWalletReference: async (input) => {
