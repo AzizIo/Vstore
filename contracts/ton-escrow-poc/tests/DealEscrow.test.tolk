@@ -12,9 +12,12 @@ const TEST_KEY_B = 0x22
 const TEST_KEY_C = 0x33
 
 fun configureTestnet() {
-    var config = testing.getConfig();
-    config.setParamRaw(19, beginCell().storeInt(TESTNET_GLOBAL_ID, 32).endCell());
-    assert (testing.setConfig(config)) throw Errors.NotTestnet;
+    val currentGlobalId = testing.getConfig().getParamRaw(19).beginParse().loadInt(32);
+    if (currentGlobalId != TESTNET_GLOBAL_ID) {
+        var config = testing.getConfig();
+        config.setParamRaw(19, beginCell().storeInt(TESTNET_GLOBAL_ID, 32).endCell());
+        assert (testing.setConfig(config)) throw Errors.NotTestnet;
+    }
 }
 
 fun createFixture(salt: uint256): (DealEscrow, TestNftItem, Treasury, Treasury) {
