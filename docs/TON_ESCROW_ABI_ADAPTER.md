@@ -54,7 +54,20 @@ Wallet messages are constructed from the versioned Tolk structs, not from user-p
 - All wallet payloads are unsigned TON Connect requests. Server-side signing, wallet custody and submission are not implemented.
 - Payout/refund are contract-initiated and deliberately have no user wallet encoder.
 
-`verify_message_vectors.ts` creates fixed message BOCs with the generated Acton wrapper and `@ton/core 0.63.1`. CI uploads their JSON output as part of the `ton-escrow-acton-artifacts` workflow artifact. Backend tests compare encoded body BOC hashes with the cross-generated fixed vector. Regenerate only alongside an ABI/protocol review; do not update expected hashes just to make tests pass.
+`verify_message_vectors.ts` creates fixed message BOCs with the generated Acton wrapper and `@ton/core 0.63.1`. CI uploads their JSON output as part of the `ton-escrow-acton-artifacts` workflow artifact. Backend tests compare decoded body BOC SHA-256 values with the cross-generated fixed vector. Regenerate only alongside an ABI/protocol review; do not update expected hashes just to make tests pass.
+
+Fixed message BOC SHA-256 values:
+
+| Message | BOC SHA-256 |
+|---|---|
+| ActivateDeal (query 1000) | `d277f33218afe7a525da50ecd8d61770c6a21112fe9b529d1f6951a7a5d55476` |
+| FundDeal (query 1001) | `ed4ce8f9f3d78815d72e2ecfbecbc9f38aa6d4863a55b4a777a1459449819db6` |
+| AcceptDeal (query 1003) | `aaebfe6189c5d23bfe5227ce4fbe0b97bf10cf763ac2e092d608730f50e4ce1b` |
+| OpenDispute (query 2001, reason hash `ab` × 32) | `687c3f5300af7371f946dd9dae1c849eede2887f167f8028aa4d1da228a709cd` |
+| TimeoutDeal (query 2002) | `2cc8443c10c2749973e51ce2e051ebfaac6e8bb191e231948104a235dc3e43f3` |
+| RecoverUnexpectedNft (query 2003) | `296bbfd9ed948575f6e8dfd31d529384e016cbfe321f73d42717b294b8b3ac34` |
+| TEP-62 seller deposit (query 1002) | `a7fca11d00418b3ed92a117b0d1cfd9f61fc140cb94765bd0968390ba2b15fd4` |
+| TEP-62 buyer return (query 1004) | `a38747229d7e04d4b490eceef609a7e7f9cfac4bb884e163870c16f1f2e99d6a` |
 
 ## Reproduce in CI
 
