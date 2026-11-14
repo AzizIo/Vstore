@@ -435,12 +435,15 @@ async def list_seller_listing_intents(user: CurrentUser, session: DbSession, lim
 @router.get("/listing-intents/{intent_id}", response_model=EscrowListingIntentResponse)
 async def get_listing_intent(intent_id: UUID, user: CurrentUser, session: DbSession):
     intent = await session.scalar(select(EscrowListingIntent).where(
-        EscrowListingIntent.marketplace_listing_id == intent_id, EscrowListingIntent.seller_id == user.id,
+        EscrowListingIntent.marketplace_listing_id == intent_id,
     ))
     if intent is None:
         raise HTTPException(status_code=404, detail="Escrow listing intent not found")
+    if intent.seller_id != user.id:
+        listing = await session.get(Listing, intent.marketplace_listing_id)
+        if listing is None or listing.status is not ListingStatus.ACTIVE or intent.status not in {"intent_only", "active"}:
+            raise HTTPException(status_code=404, detail="Escrow listing intent not found")
     return await _listing_projection(session, intent)
-
 
 @router.post("/deals", response_model=EscrowDealResponse, status_code=201)
 async def create_deal_intent(payload: EscrowDealCreate, user: CurrentUser, session: DbSession,
