@@ -1,52 +1,101 @@
 # TON escrow backend API — Draft
 
-**Status:** isolated backend prototype; not mounted into the public FastAPI app and not enabled for checkout. The smart-contract ABI, address derivation, event decoder and settlement accounting are not approved.
+**Status:** isolated testnet-only backend prototype. The router is intentionally not mounted in `backend/app/main.py`; no public checkout or TON signing is enabled.
+
+This API follows `docs/TON_ESCROW_SHARED_INTERFACE.md`. It defines transport semantics only. Numeric opcodes, cell layouts, BOCs, state-init/address derivation and real TON Connect messages remain unavailable until the contract ABI is reviewed and approved.
 
 ## Safety boundary
 
-- The module only accepts TON testnet. API mutations require the existing authenticated API session and a verified wallet record owned by that session.
-- A listing intent or deal intent is an off-chain request record. Creating one does not reserve an NFT on-chain, deploy a contract, collect TON or guarantee a deal.
-- PostgreSQL stores immutable snapshots and a projection of provider evidence. It is not the source of truth for NFT ownership, funds or seller balances.
-- TON Connect payload preparation returns HTTP 503 with code contract_abi_pending until a versioned ABI, code hash, state-init/address calculation and exact message layouts are approved. No temporary opcode or payload is invented.
-- Client-supplied transaction hashes are not an input to observer state transitions. The observer consumes only provider-normalized events with independent verification and finalized masterchain evidence.
-- Telegram Stars (XTR) are rejected by this TON-only prototype and are not represented as TON.
-- The backend uses no mainnet provider and the observer's default provider fails closed. It is not started automatically and does not alter the current delivery observer.
+- All authenticated actors come from the verified API session. Wallet IDs are resolved server-side to verified testnet wallet records; client wallet addresses are never authoritative.
+- All amounts are integer nanotons encoded as decimal strings. The seller's listing price is snapshotted as the immutable deal principal.
+- A listing intent is an off-chain seller preparation record. It does not claim that the NFT is held by escrow.
+- Creating a buyer deal intent locks one buyer, seller, collection, NFT item, principal, network and unique deal salt into one immutable deal record.
+- Deal-scoped deployment is not prepared from a seller-only listing intent.
+- The observer stores raw evidence separately from accepted contract events. Raw NFT transfer observations cannot advance canonical deal state.
+- Non-final, unverified or unmatched events remain pending and pin the durable cursor. The same provider page is re-queried until it can be promoted or reconciled.
+- No contract adapter/provider is configured. All transaction preparation, wallet-reference submission and settlement actions fail closed with HTTP 503.
+- No production/mainnet routes, real TON transfers, production migrations or observer autostart are enabled.
 
-## Endpoints in backend/app/api/escrow.py
+## Endpoints
 
-All paths below are prefixed by /api/escrow after the router is mounted by an approved integration change. The router is intentionally not added to backend/app/main.py in this branch because that file is outside the task's allowed change scope.
+All routes below are under `/api/escrow` when the isolated router is mounted in a future reviewed integration.
 
-| Method | Path | Behavior |
+| Method | Path | Scope / behavior |
 |---|---|---|
-| POST | /listing-intents | Validate a seller-owned active TON testnet NFT listing, verified testnet seller wallet, current ownership provider and Idempotency-Key; create an intent_only record. |
-| GET | /listing-intents/{intent_id} | Seller-scoped read; foreign IDs return 404. |
-| POST | /deals | Verify buyer-owned verified testnet wallet and current NFT ownership; persist an intent_created intent, not an on-chain deal. One active deal intent per listing is enforced in PostgreSQL. |
-| GET | /deals/{deal_id} | Participant-only read; non-participants receive 404. |
-| POST | /listing-intents/{intent_id}/transaction | Fails closed with 503 until the ABI-gated adapter is implemented. |
-| POST | /deals/{deal_id}/receipt | Buyer-scoped request; does not change deal state and fails closed with 503 until an unsigned TON Connect payload can be built from the approved ABI. |
-| POST | /deals/{deal_id}/disputes | Records a dispute request only when chain-projected state is dispute-eligible; the record is not an on-chain dispute until contract evidence confirms it. |
-| GET | /seller/balance | Returns available_balance_nanotons: null, not a fabricated zero or seller sub-ledger. |
-| POST | /withdrawals | Validates ownership of a verified testnet wallet and writes an explicitly blocked intent with null amount and no transaction payload. |
+| POST | `/listing-intents` | Seller creates an escrow intent from `asset_id`, verified `seller_wallet_id` and positive `price_nano`. A normal marketplace draft listing is created/reused; publication/moderation is not bypassed. |
+| GET | `/marketplace/listing-intents` | Buyer discovery. Returns only active published listings with safe public listing projection. |
+| GET | `/listing-intents` | Seller-scoped listing-intent page. |
+| GET | `/listing-intents/{listing_id}` | Seller detail, or public detail only while the underlying listing is active. |
+| POST | `/deals` | Buyer creates a deal intent using `listing_id` and verified `buyer_wallet_id`. The listing intent is single-sale reserved under a row lock and database uniqueness constraint. |
+| GET | `/buyer/deals` | Current buyer's deals. |
+| GET | `/seller/deals` | Current seller's deals. |
+| GET | `/deals/{deal_id}` | Participant-only deal projection. Other users receive 404. |
+| POST | `/deals/{deal_id}/prepare/create-deal-escrow` | Seller-only, deal-scoped deployment preparation; currently 503 until ABI approval. |
+| POST | `/deals/{deal_id}/prepare/deposit-nft` | Seller-only, only in `awaiting_nft`; ownership is rechecked; currently 503. |
+| POST | `/deals/{deal_id}/prepare/funding` | Bound buyer only, only in `awaiting_buyer_funds`; currently 503. |
+| POST | `/deals/{deal_id}/prepare/accept` | Bound buyer only, only in `funded_review`; currently 503. |
+| POST | `/deals/{deal_id}/prepare/dispute` | Bound buyer only, only in `funded_review` or `delivered_dispute_window`; currently 503. |
+| POST | `/deals/{deal_id}/prepare/nft-return` | Bound buyer only in `disputed`; buyer ownership is rechecked; currently 503. |
+| POST | `/deals/{deal_id}/prepare/withdraw-unsold-nft` | Seller only after `expired`; escrow ownership is rechecked; currently 503. |
+| POST | `/wallet-references` | Currently 503. A client-supplied hash/BOC is never accepted as evidence or state. |
+| GET | `/seller/balance` | Returns unavailable; this design does not define a withdrawable seller balance. |
+| GET | `/seller/withdrawals` | Empty page until an approved settlement/withdrawal model exists. |
+| POST | `/withdrawals` | Legacy generic withdrawal is blocked with 503. |
 
-Mutating operations accept an Idempotency-Key header (8–128 characters). Reusing a key with different canonical request data returns 409. The database uses a unique (actor_id, operation, idempotency_key) constraint. All resource reads are scoped by the authenticated user.
+Every mutating request requires an `Idempotency-Key`. Deal/listing creation stores the request hash and returns the original resource on an exact replay; a changed payload under the same key conflicts.
 
-## Observer
+## DTOs
 
-app.escrow.observer.run_observer_pass() uses a durable escrow_observer_checkpoints row and lease token. It queries the provider outside database transactions, verifies the batch, and commits event persistence plus cursor movement atomically. A provider outage or lost lease leaves the cursor unchanged. Events are deduplicated by (network, transaction_hash, event_index). A hash conflict, stale sequence, wrong NFT, wrong payer/recipient, amount mismatch, non-final event or invalid transition is rejected or marked for manual review; it never marks success from a client callback.
+Listing intent creation request:
 
-A real TONTestnetEscrowProvider is intentionally not supplied. The accepted ABI must define how contract address/deal IDs are bound, how events are decoded, how trace completeness and masterchain finality are established, and whether any event proof is independently checked.
+```json
+{
+  "asset_id": "UUID",
+  "seller_wallet_id": "UUID",
+  "price_nano": "2500000000"
+}
+```
 
-## Migration
+Buyer deal intent request:
 
-Migration e20261114_ton_escrow creates only escrow-specific tables and a testnet observer checkpoint. It references existing users, wallets, listings and NFT assets, but does not change those tables or order/payment status constraints. It descends from the current payment/refund head 0013_payment_refund_workflow so that this branch adds a single next migration instead of creating an Alembic multi-head graph. If the payment/refund migration is reverted or replaced before integration, recheck the down_revision against the then-current main migration head.
+```json
+{
+  "listing_id": "UUID",
+  "buyer_wallet_id": "UUID"
+}
+```
 
-## ABI / product decisions still required
+Listing and deal projections contain the frontend's `listing_key`, `available_actions`, `nft`, `price_nano`, participant wallet snapshots, status and timestamps. Listing projection `id` is the marketplace `listing_id`, which is the buyer's deal-intent reference. A 256-bit random `listing_key` is assigned once per listing intent; each deal receives a separate 256-bit `deal_salt`.
 
-1. Obtain the final ABI and code hash from the smart-contract owner, including deterministic deployment/state-init calculation, message opcodes/layouts, bounce behavior and versioning.
-2. Decide whether the agreed design holds NFT and TON together through the entire dispute window, or permits conditional refund after delivery; this affects the contract state machine and refund invariants.
-3. Reconcile the design's fixed direct seller payout with the requested seller balance/withdrawal API. Direct settlement to the seller wallet does not create a marketplace withdrawable balance. A balance model requires a separate on-chain accounting decision.
-4. Specify what constitutes independent finalized evidence (trace verification, masterchain checkpoint, provider quorum/oracle signatures) and how provider disagreement/reorgs are handled.
-5. Decide whether on-chain disputes need a separate resolver transaction, a 2-of-3 threshold attestation, or another approved design, and how resolver keys are operated.
-6. Confirm testnet wallet-proof configuration, exact network allowlist, code deployment process and disposable test wallet policy.
-7. Resolve the missing requested file path docs/MRKT_STYLE_TON_ESCROW_ARCHITECTURE.md; this branch was implemented against current docs/TON_TESTNET_ESCROW_ARCHITECTURE.md instead.
-8. Approve ADR-0001 and relevant product/platform/legal/security gates before any live-value implementation. This backend prototype does not approve those decisions.
+## Canonical deal lifecycle
+
+`intent_created → awaiting_nft → awaiting_buyer_funds → funded_review → nft_release_pending → delivered_dispute_window`
+
+Buyer acceptance is a distinct operation in `funded_review`. It is not a receipt confirmation after delivery. The post-delivery dispute window starts only after accepted oracle delivery attestation, finality and contract-state reconciliation.
+
+Payout and refund use pending states; terminal `settled` / `refunded` are not set by a message submission. They require finalized, exact-recipient and exact-amount reconciliation. Dispute resolution and payout/refund contract operations remain blocked pending ABI and resolver decisions.
+
+## Chain event and cursor policy
+
+Normalized event identity includes transaction hash, message hash (or transaction event index fallback), deal ID, trace ID, phase, attempt ID, query ID, operation ID, logical time and deal salt. Different trace/attempt identities are not collapsed.
+
+- Raw observations (`nft_transfer_observed`, payment/return/payout/refund observations and legacy raw event labels) are persisted as evidence only. They do not call the canonical transition function.
+- Contract-accepted events are applied only after provider verification, finality and immutable deal snapshot checks.
+- Delivery additionally requires an accepted oracle attestation, a finalized trace/attempt and explicit contract-state reconciliation to `delivered_dispute_window`.
+- A non-final, unverified or unmatched event is persisted as `pending`. The observer does not advance its durable cursor past that event; it re-queries the same provider page and promotes the same event row when final evidence arrives.
+- A conflicting event with the same identity is moved to `manual_review`; distinct attempts/traces remain distinct records.
+- Event persistence and cursor advancement share one database transaction. Provider outage, lease loss or database failure leaves the cursor replayable.
+
+## Migration and compatibility
+
+Revision `e20261114_ton_escrow` is chained after the current payment migration head `0013_payment_refund_workflow`. It creates escrow-only tables and does not alter Stars payment ledger tables, `OrderStatus`, orders or the existing non-custodial delivery workflow. Migration tests must use a disposable test database only; never run this migration on production/VPS.
+
+## Explicit blockers
+
+1. Contract ABI, code hash, factory and deterministic address derivation are not approved.
+2. TEP-62 deposit message validation and collection/item authenticity strategy need contract-owner fixtures.
+3. Oracle/quorum authority and actual getter reconciliation need reviewed provider contracts.
+4. Dispute resolver policy, timing and recovery paths remain proposals.
+5. No transaction payload, opcode, state-init, deployment or financial message is implemented here.
+
+Until these blockers close, all preparation endpoints remain fail-closed. The router must remain unmounted and Draft.
