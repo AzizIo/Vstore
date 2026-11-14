@@ -136,9 +136,9 @@ For a migration from an existing database, restore the previously created
 custom-format dump into the new production database before applying migrations:
 
 ```bash
-cat /root/backups/viltara-before-production.dump | \
-  docker compose -f docker-compose.production.yml exec -T db \
-  pg_restore -U "$PROD_DB_USER" -d "$PROD_DB_NAME" --clean --if-exists
+docker compose -f docker-compose.production.yml exec -T db sh -c \
+  'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' \
+  < /root/backups/viltara-before-production.dump
 ```
 
 Run this restore only against the new, dedicated production database. Verify
@@ -210,10 +210,10 @@ PostgreSQL dump (run from the repository directory) is:
 
 ```bash
 mkdir -p /root/backups
+backup_file="/root/backups/viltara-production-$(date +%F-%H%M%S).dump"
 docker compose -f docker-compose.production.yml exec -T db \
-  sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
-  > /root/backups/viltara-production-$(date +%F-%H%M%S).dump
-test -s /root/backups/viltara-production-*.dump
+  sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup_file"
+test -s "$backup_file"
 ```
 
 The wildcard check only confirms that at least one matching file exists; inspect
