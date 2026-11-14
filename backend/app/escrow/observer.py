@@ -158,7 +158,7 @@ async def _apply_one_event(
         )
     )
     if existing is not None:
-        if existing.evidence_sha256 != event.evidence_sha256:
+        if existing.evidence_sha256 != _stored_evidence_hash(event):
             existing.status = "manual_review"
             existing.reason_code = "event_evidence_conflict"
             if existing.deal_id is not None:
