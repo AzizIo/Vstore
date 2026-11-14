@@ -10,13 +10,11 @@ import hashlib
 import json
 import logging
 import uuid
-from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.escrow.domain import (
@@ -31,10 +29,10 @@ from app.escrow.domain import (
 )
 from app.escrow.models import EscrowChainEvent, EscrowDeal, EscrowObserverCheckpoint
 from app.escrow.provider import (
-    NormalizedChainEvent,
-    TONTestnetEscrowProvider,
     EscrowProviderInvalidEvidence,
     EscrowProviderUnavailable,
+    NormalizedChainEvent,
+    TONTestnetEscrowProvider,
 )
 
 logger = logging.getLogger(__name__)
