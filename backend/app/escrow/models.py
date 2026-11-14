@@ -126,17 +126,17 @@ class EscrowDeal(TimestampMixin, EscrowBase):
         nullable=False,
     )
     marketplace_listing_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("listings.id", ondelete="RESTRICT"), nullable=False
+        Uuid(as_uuid=True), ForeignKey(Listing.__table__.c.id, ondelete="RESTRICT"), nullable=False
     )
     listing_key_snapshot: Mapped[str] = mapped_column(String(128), nullable=False)
     seller_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid(as_uuid=True), ForeignKey(User.__table__.c.id, ondelete="RESTRICT"), nullable=False
     )
     buyer_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid(as_uuid=True), ForeignKey(User.__table__.c.id, ondelete="RESTRICT"), nullable=False
     )
     buyer_wallet_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("wallets.id", ondelete="RESTRICT"), nullable=False
+        Uuid(as_uuid=True), ForeignKey(Wallet.__table__.c.id, ondelete="RESTRICT"), nullable=False
     )
     network: Mapped[str] = mapped_column(String(16), server_default="testnet", nullable=False)
     deal_salt: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -285,7 +285,7 @@ class EscrowDispute(TimestampMixin, EscrowBase):
         Uuid(as_uuid=True), ForeignKey("escrow_deals.id", ondelete="RESTRICT"), nullable=False
     )
     opened_by: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid(as_uuid=True), ForeignKey(User.__table__.c.id, ondelete="RESTRICT"), nullable=False
     )
     reason_code: Mapped[str] = mapped_column(String(32), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
@@ -314,10 +314,10 @@ class EscrowWithdrawal(TimestampMixin, EscrowBase):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     seller_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid(as_uuid=True), ForeignKey(User.__table__.c.id, ondelete="RESTRICT"), nullable=False
     )
     wallet_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("wallets.id", ondelete="RESTRICT"), nullable=False
+        Uuid(as_uuid=True), ForeignKey(Wallet.__table__.c.id, ondelete="RESTRICT"), nullable=False
     )
     network: Mapped[str] = mapped_column(String(16), server_default="testnet", nullable=False)
     recipient_address: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -344,7 +344,7 @@ class EscrowIdempotencyRecord(TimestampMixin, EscrowBase):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     actor_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid(as_uuid=True), ForeignKey(User.__table__.c.id, ondelete="RESTRICT"), nullable=False
     )
     operation: Mapped[str] = mapped_column(String(64), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
