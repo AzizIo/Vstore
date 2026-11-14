@@ -472,8 +472,10 @@ async def list_seller_listing_intents(user: CurrentUser, session: DbSession, lim
         .order_by(EscrowListingIntent.created_at.desc(), EscrowListingIntent.id.desc())
         .offset(max(offset, 0)).limit(min(max(limit, 1), 50))
     )).all())
-    return EscrowPageResponse(items=[await _listing_projection(session, row, user.id) for row in rows],
-        total=len(rows))
+    return EscrowPageResponse(
+        items=[await _listing_projection(session, row, user.id) for row in rows],
+        total=len(rows),
+    )
 
 
 @router.get("/listing-intents/{intent_id}", response_model=EscrowListingIntentResponse)
