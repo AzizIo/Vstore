@@ -960,7 +960,12 @@ body,
 }
 
 .navigation-icon {
-  display: none;
+  display: grid;
+  width: 28px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: currentColor;
 }
 
 .navigation-tab::before {
@@ -3970,8 +3975,13 @@ code,
   }
 
   .navigation-tab {
-    min-height: 40px;
-    padding: 0 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 58px;
+    padding: 6px 15px;
     border: 1px solid transparent;
     border-radius: 999px;
     font-weight: 650;
@@ -4347,4 +4357,21 @@ code,
     transition: none !important;
     transform: none !important;
   }
+}
+
+
+.session-restricted {
+  display: grid;
+  gap: 4px;
+  padding: 11px 13px;
+  border: 1px solid rgb(205 154 104 / 34%);
+  border-radius: 12px;
+  background: rgb(205 154 104 / 7%);
+  color: #e5c5a3;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.session-restricted strong {
+  color: #f0d6b9;
 }
