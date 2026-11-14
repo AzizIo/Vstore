@@ -12,8 +12,10 @@ from app.db.session import async_session_factory
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+async def _resolve_current_user(
+    credentials: HTTPAuthorizationCredentials | None,
+    *,
+    allow_blocked: bool,
 ) -> User:
     if credentials is None:
         raise HTTPException(
@@ -51,9 +53,30 @@ async def get_current_user(
             detail="User no longer exists",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if user.is_blocked:
+    if user.is_blocked and not allow_blocked:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This account is restricted",
+            detail=(
+                "This account is restricted. Creating listings and new orders is disabled; "
+                "existing order and delivery operations remain available."
+            ),
         )
     return user
+
+
+async def get_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+) -> User:
+    """Resolve a verified session and enforce the platform account restriction."""
+    return await _resolve_current_user(credentials, allow_blocked=False)
+
+
+async def get_current_user_allow_blocked(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+) -> User:
+    """Resolve identity for read-only account data and already-existing order workflows.
+
+    Callers using this dependency must not create a new listing/deal and must scope
+    mutations to an already-existing resource owned by the authenticated user.
+    """
+    return await _resolve_current_user(credentials, allow_blocked=True)
