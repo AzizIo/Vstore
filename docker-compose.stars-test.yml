@@ -15,8 +15,6 @@ x-stars-test-app: &stars-test-app
     context: ./backend
   working_dir: /app
   environment: *stars-test-env
-  volumes:
-    - ./backend:/app:ro
   depends_on:
     db:
       condition: service_healthy
