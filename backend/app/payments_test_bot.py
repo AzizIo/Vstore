@@ -49,7 +49,9 @@ def _validate_test_bot_runtime() -> str:
     if not (
         database_name.startswith("test_") or database_name.endswith("_test")
     ):
-        raise RuntimeError("The Stars test bot database name must start with test_ or end with _test")
+        raise RuntimeError(
+            "The Stars test bot database name must start with test_ or end with _test"
+        )
     if parsed.hostname not in _ALLOWED_LOCAL_TEST_DB_HOSTS:
         raise RuntimeError("The Stars test bot may connect only to a local test PostgreSQL host")
 
