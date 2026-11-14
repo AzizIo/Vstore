@@ -136,6 +136,8 @@ async def _persist_event(
         "event_type",
         "contract_address",
         "deal_id",
+        "account_address",
+        "observed_contract_state",
         "source_address",
         "destination_address",
         "item_address",
@@ -156,7 +158,17 @@ async def _persist_event(
         return existing
     # Promotion from pending -> final is monotonic. Keep one durable row per stable
     # event identity; different trace/phase/attempt IDs remain separate events.
+    if (
+        existing.contract_state_reconciled and not event.contract_state_reconciled
+    ) or (existing.attestation_accepted and not event.attestation_accepted):
+        existing.status = "manual_review"
+        existing.reason_code = "event_correlation_conflict"
+        return existing
     existing.finalized = existing.finalized or event.finalized
+    existing.contract_state_reconciled = (
+        existing.contract_state_reconciled or event.contract_state_reconciled
+    )
+    existing.attestation_accepted = existing.attestation_accepted or event.attestation_accepted
     existing.masterchain_seqno = max(existing.masterchain_seqno, event.masterchain_seqno)
     existing.evidence_sha256 = _stored_evidence_hash(event)
     existing.payload_json = payload
@@ -188,6 +200,8 @@ async def _apply_one_event(
             "event_type",
             "contract_address",
             "deal_id",
+            "account_address",
+            "observed_contract_state",
             "source_address",
             "destination_address",
             "item_address",
