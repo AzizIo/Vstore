@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.assets.ton_nft.dependencies import get_ton_nft_verifier
 from app.assets.ton_nft.models import VerificationStatus
 from app.assets.ton_nft.verifier import TONNFTVerifier
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_current_user_allow_blocked
 from app.core.config import get_settings
 from app.db.models import (
     AssetType,
@@ -228,7 +228,7 @@ async def get_listings(
 
 @router.get("/me", response_model=list[ListingResponse])
 async def get_my_listings(
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_current_user_allow_blocked)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> list[ListingResponse]:
     statement = _listing_query().where(Listing.seller_id == user.id).order_by(
