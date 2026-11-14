@@ -20,7 +20,11 @@ fun configureTestnet() {
     }
 }
 
-fun createFixture(salt: uint256): (DealEscrow, TestNftItem, Treasury, Treasury) {
+fun createFixture(
+    salt: uint256,
+    initialState: uint8 = STATE_INTENT_CREATED,
+    oracleAttemptId: uint64 = 0,
+): (DealEscrow, TestNftItem, Treasury, Treasury) {
     configureTestnet();
     val seller = testing.treasury("seller");
     val buyer = testing.treasury("buyer");
@@ -69,13 +73,13 @@ fun createFixture(salt: uint256): (DealEscrow, TestNftItem, Treasury, Treasury) 
         protocolVersion: PROTOCOL_VERSION,
     };
     val progress: DealProgress = {
-        state: STATE_INTENT_CREATED,
+        state: initialState,
         deadlineUnix: 0,
         disputePhase: DISPUTE_PHASE_NONE,
         pendingAction: PENDING_NONE,
         nftInEscrow: false,
         principalLocked: false,
-        oracleAttemptId: 0,
+        oracleAttemptId,
         disputeAttemptId: 0,
         evidence: DealEvidence {
             lastEvidenceHash: 0,
@@ -340,4 +344,63 @@ get fun `test contract rejects activation on mainnet global id`() {
         exitCode: Errors.NotTestnet,
     });
     expect(escrow.getState()).toEqual(STATE_INTENT_CREATED);
+}
+
+get fun `test stale oracle attempt cannot advance escrow state`() {
+    val (escrow, nftItem, seller, buyer) = createFixture(
+        0xA11D7,
+        STATE_NFT_RELEASE_PENDING,
+        2,
+    );
+    val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
+    expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
+
+    val staleData: OracleAttestationData = {
+        context: OracleContext {
+            domain: ESCROW_DOMAIN,
+            protocolVersion: PROTOCOL_VERSION,
+            networkId: TESTNET_NETWORK_ID,
+            escrowAddress: escrow.address,
+            dealSalt: 0xA11D7,
+            action: ORACLE_ACTION_NFT_DELIVERED,
+            attemptId: 1,
+        }.toCell(),
+        route: OracleRoute {
+            itemAddress: nftItem.address,
+            sourceAddress: escrow.address,
+            destinationAddress: buyer.address,
+            amountNanotons: 0,
+            queryId: 1,
+        }.toCell(),
+        position: OraclePosition {
+            masterchainSeqno: 1,
+            logicalTime: 1,
+        }.toCell(),
+        hashes: OracleEvidenceHashes {
+            messageHash: 1,
+            traceHash: 1,
+            evidenceHash: 1,
+        }.toCell(),
+    };
+    val dummySignature = Signature { data: 0 }.toCell();
+    val staleAttestation = OracleAttestation {
+        data: staleData.toCell(),
+        signatures: OracleSignatureSet {
+            signatureA: dummySignature,
+            signatureB: dummySignature,
+            signatureC: dummySignature,
+        }.toCell(),
+    };
+
+    val rejected = escrow.sendAny(
+        seller.address,
+        staleAttestation.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(rejected).toHaveFailedTx<OracleAttestation>({
+        from: seller.address,
+        to: escrow.address,
+        exitCode: Errors.InvalidAttestation,
+    });
+    expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
 }
