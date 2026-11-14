@@ -6,7 +6,7 @@ from app.db.models import (
     OrderStatus,
     PriceCurrency,
 )
-from app.db.payments import PaymentEvent, PaymentIntent, PaymentTransaction
+from app.db.payments import PaymentEvent, PaymentIntent, PaymentRefundJob, PaymentTransaction
 
 
 def test_marketplace_tables_are_registered() -> None:
@@ -25,10 +25,12 @@ def test_marketplace_tables_are_registered() -> None:
         "payment_intents",
         "payment_transactions",
         "payment_events",
+        "payment_refund_jobs",
     }
     assert PaymentIntent.__tablename__ == "payment_intents"
     assert PaymentTransaction.__tablename__ == "payment_transactions"
     assert PaymentEvent.__tablename__ == "payment_events"
+    assert PaymentRefundJob.__tablename__ == "payment_refund_jobs"
 
 
 def test_asset_types_keep_integrations_separate() -> None:
