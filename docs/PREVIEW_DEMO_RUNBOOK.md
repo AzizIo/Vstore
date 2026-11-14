@@ -51,6 +51,8 @@ The TON proof allowlist is a JSON array containing the hostname only: no scheme,
 
 Use a dedicated BotFather bot. PREVIEW_BOT_TOKEN is required by the API to verify Telegram initData, even when the separate bot container is not running. Start the optional polling bot only once for that token; two polling processes using the same Telegram bot token conflict. Users must open the bot at least once before Telegram will allow it to send them messages.
 
+`PREVIEW_ADMIN_TELEGRAM_IDS` controls access to the isolated Preview admin dashboard. Use numeric Telegram user IDs in a JSON array; leave it as `[]` to disable admin access.
+
 The PREVIEW_* values are deliberately separate from the development stack's normal BOT_TOKEN, AUTH_SECRET_KEY, DATABASE_URL, REDIS_URL, and TON settings. Do not copy production secrets into Preview. Preview migrations fail closed unless PREVIEW_MODE=1 and the configured target is exactly the isolated viltara_preview database on the Compose db service, with the dedicated Preview Redis target. The polling bot is optional, but PREVIEW_BOT_TOKEN is required by API-side Telegram initData verification.
 
 ## 2. Start the isolated stack and migrate its database
