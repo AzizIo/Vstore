@@ -17,6 +17,7 @@ import {
   type EscrowWithdrawal,
   type PreparedEscrowTransaction,
 } from "../api/escrow";
+import type { InventoryAsset } from "../api/assets";
 import type { WalletRecord } from "../wallet/api";
 import {
   createTonConnectEscrowAdapter,
@@ -69,8 +70,8 @@ function imageUrl(value: string | null): string | null {
   }
 }
 
-function titleForNft(nft: EscrowOwnedNft["asset"] | EscrowListing["nft"] | EscrowDeal["nft"]) {
-  return nft.name ?? ("title" in nft ? nft.title : null) ?? "TON NFT";
+function titleForNft(nft: InventoryAsset | EscrowListing["nft"] | EscrowDeal["nft"]) {
+  return ("name" in nft ? nft.name : nft.title) ?? "TON NFT";
 }
 
 function addressesMatch(left: string, right: string): boolean {
@@ -145,7 +146,8 @@ function TransactionReview({
         <div><dt>Адрес escrow</dt><dd><code>{transaction.contract_address}</code></dd></div>
         <div><dt>NFT item</dt><dd><code>{transaction.nft_item_address ?? "Не относится к этой операции"}</code></dd></div>
         <div><dt>Сумма TON</dt><dd>{formatTonAmount(transaction.amount_ton)} TON</dd></div>
-        <div><dt>Комиссия</dt><dd>{formatTonAmount(transaction.fee_ton)} TON</dd></div>
+        <div><dt>Комиссия платформы</dt><dd>{formatTonAmount(transaction.fee_ton)} TON</dd></div>
+        <div><dt>Сетевой резерв</dt><dd>{formatTonAmount(transaction.network_fee_ton)} TON</dd></div>
         <div><dt>Подписывающий кошелёк</dt><dd><code>{pending.expectedWalletAddress}</code></dd></div>
         <div><dt>Срок запроса</dt><dd>{formatEscrowDate(transaction.valid_until)}</dd></div>
       </dl>
@@ -271,6 +273,7 @@ function WorkspaceBody({
   const [listings, setListings] = useState<EscrowListing[]>([]);
   const [sellerListings, setSellerListings] = useState<EscrowListing[]>([]);
   const [buyerDeals, setBuyerDeals] = useState<EscrowDeal[]>([]);
+  const [sellerDeals, setSellerDeals] = useState<EscrowDeal[]>([]);
   const [withdrawals, setWithdrawals] = useState<EscrowWithdrawal[]>([]);
   const [inventory, setInventory] = useState<WalletInventory>({ wallets: [], nfts: [] });
   const [selectedListingId, setSelectedListingId] = useState("");
@@ -301,6 +304,7 @@ function WorkspaceBody({
       setListings([]);
       setSellerListings([]);
       setBuyerDeals([]);
+      setSellerDeals([]);
       setWithdrawals([]);
       setApiError("Escrow Backend API пока не подключён. Существующие Order и Delivery API не используются для имитации escrow.");
       setLoading(false);
@@ -309,13 +313,15 @@ function WorkspaceBody({
         api.listMarketplaceListings(controller.signal),
         api.listSellerListings(controller.signal),
         api.listBuyerDeals(controller.signal),
+        api.listSellerDeals(controller.signal),
         api.listSellerWithdrawals(controller.signal),
       ])
-        .then(([marketplacePage, sellerPage, buyerPage, withdrawalPage]) => {
+        .then(([marketplacePage, sellerPage, buyerPage, sellerDealPage, withdrawalPage]) => {
           if (controller.signal.aborted) return;
           setListings(marketplacePage.items);
           setSellerListings(sellerPage.items);
           setBuyerDeals(buyerPage.items);
+          setSellerDeals(sellerDealPage.items);
           setWithdrawals(withdrawalPage.items);
           setSelectedListingId((current) => current || marketplacePage.items[0]?.id || "");
           setSelectedDealId((current) => current || buyerPage.items[0]?.id || "");
@@ -370,7 +376,11 @@ function WorkspaceBody({
   const selectedNft = sellerInventory.find((entry) => entry.asset.id === selectedNftId) ?? null;
   const selectedBuyerWallet = inventory.wallets.find((wallet) => wallet.id === selectedBuyerWalletId) ?? null;
   const selectedListing = marketplaceListings.find((listing) => listing.id === selectedListingId) ?? null;
-  const selectedDeal = (role === "buyer" ? ownedBuyerDeals : buyerDeals)
+  const ownedSellerDeals = useMemo(
+    () => sellerDeals.filter((deal) => deal.seller_id === currentUserId),
+    [sellerDeals, currentUserId],
+  );
+  const selectedDeal = (role === "buyer" ? ownedBuyerDeals : ownedSellerDeals)
     .find((deal) => deal.id === selectedDealId) ?? null;
 
   const signingEnabled = Boolean(
@@ -513,14 +523,6 @@ function WorkspaceBody({
     return expectedWalletForAddress(deal.seller_wallet_address);
   }
 
-  const buyerWalletCanSign = Boolean(selectedBuyerWallet && walletAdapter?.connectedWallet
-    && walletAdapter.connectedWallet.chain === CHAIN.TESTNET
-    && addressesMatch(walletAdapter.connectedWallet.address, selectedBuyerWallet.address));
-
-  const sellerWalletCanSign = Boolean(selectedNft && walletAdapter?.connectedWallet
-    && walletAdapter.connectedWallet.chain === CHAIN.TESTNET
-    && addressesMatch(walletAdapter.connectedWallet.address, selectedNft.wallet.address));
-
   return (
     <section className="escrow-workspace" aria-labelledby="escrow-workspace-title">
       <header className="escrow-workspace-heading">
@@ -542,7 +544,7 @@ function WorkspaceBody({
         <button type="button" role="tab" aria-selected={role === "buyer"} className={role === "buyer" ? "is-active" : ""} onClick={() => { setRole("buyer"); setSelectedDealId(ownedBuyerDeals[0]?.id ?? ""); }}>
           Покупатель
         </button>
-        <button type="button" role="tab" aria-selected={role === "seller"} className={role === "seller" ? "is-active" : ""} onClick={() => { setRole("seller"); setSelectedDealId(buyerDeals.find((deal) => deal.seller_id === currentUserId)?.id ?? ""); }}>
+        <button type="button" role="tab" aria-selected={role === "seller"} className={role === "seller" ? "is-active" : ""} onClick={() => { setRole("seller"); setSelectedDealId(sellerDeals.find((deal) => deal.seller_id === currentUserId)?.id ?? ""); }}>
           Продавец
         </button>
       </div>
@@ -766,7 +768,21 @@ function WorkspaceBody({
                   </div>
                 )}
                 {selectedDeal.state === "refund_pending_nft_return" && (
-                  <p className="escrow-warning">Возврат покупателю не считается завершённым, пока Backend observer не подтвердит возврат NFT в escrow.</p>
+                  <div className="escrow-return-nft">
+                    <p className="escrow-warning">Для buyer-favourable refund после доставки NFT необходимо сначала вернуть предмет в escrow. Нельзя запросить возврат денег, пока NFT остаётся у покупателя.</p>
+                    <button
+                      className="escrow-button escrow-button-primary"
+                      type="button"
+                      disabled={!api || busy || !expectedWalletForAddress(selectedDeal.buyer_wallet_address)}
+                      onClick={() => void prepareAction(
+                        () => api!.prepareBuyerNftReturn({
+                          deal_id: selectedDeal.id,
+                          buyer_wallet_id: expectedWalletForAddress(selectedDeal.buyer_wallet_address)!.id,
+                        }),
+                        expectedWalletForAddress(selectedDeal.buyer_wallet_address),
+                      )}
+                    >Вернуть NFT в escrow</button>
+                  </div>
                 )}
                 {selectedDeal.state === "refundable_failure" && (
                   <p className="escrow-warning">Обнаружена ошибка, допускающая возврат. Следите за состоянием возврата; не отправляйте повторную оплату.</p>
