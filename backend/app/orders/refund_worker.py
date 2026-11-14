@@ -474,11 +474,12 @@ async def process_due_refunds(
                 logger.exception("Refund reconciliation failed for %s", claim.transaction_id)
                 lookup = RefundLookupResult.UNKNOWN
 
+            result_time = max(current_time, datetime.now(UTC))
             if lookup is RefundLookupResult.REFUNDED:
                 persisted = await _persist_claim_result(
                     session,
                     claim,
-                    now=current_time,
+                    now=result_time,
                     target_status="succeeded",
                     succeeded=True,
                 )
@@ -490,7 +491,7 @@ async def process_due_refunds(
                     manual_review += 1
                 else:
                     target = "retry_wait"
-                    next_at = current_time + timedelta(
+                    next_at = result_time + timedelta(
                         seconds=max(
                             settings.payment_refund_reconcile_delay_seconds,
                             _retry_delay(claim.attempt_count),
@@ -500,7 +501,7 @@ async def process_due_refunds(
                 await _persist_claim_result(
                     session,
                     claim,
-                    now=current_time,
+                    now=result_time,
                     target_status=target,
                     error_code="refund_absent_after_reconciliation",
                     next_attempt_at=next_at,
@@ -512,14 +513,14 @@ async def process_due_refunds(
                     manual_review += 1
                 else:
                     target = "reconciliation_required"
-                    next_at = current_time + timedelta(
+                    next_at = result_time + timedelta(
                         seconds=settings.payment_refund_reconcile_delay_seconds
                     )
                     reconciliations += 1
                 await _persist_claim_result(
                     session,
                     claim,
-                    now=current_time,
+                    now=result_time,
                     target_status=target,
                     error_code="refund_outcome_unknown",
                     next_attempt_at=next_at,
@@ -538,11 +539,12 @@ async def process_due_refunds(
                 RefundCallOutcome.AMBIGUOUS, error_code="provider_outcome_unknown"
             )
 
+        result_time = max(current_time, datetime.now(UTC))
         if result.outcome is RefundCallOutcome.SUCCEEDED:
             persisted = await _persist_claim_result(
                 session,
                 claim,
-                now=current_time,
+                now=result_time,
                 target_status="succeeded",
                 succeeded=True,
             )
@@ -554,14 +556,14 @@ async def process_due_refunds(
                 manual_review += 1
             else:
                 target = "reconciliation_required"
-                next_at = current_time + timedelta(
+                next_at = result_time + timedelta(
                     seconds=settings.payment_refund_reconcile_delay_seconds
                 )
                 reconciliations += 1
             await _persist_claim_result(
                 session,
                 claim,
-                now=current_time,
+                now=result_time,
                 target_status=target,
                 error_code=result.error_code or "provider_outcome_unknown",
                 next_attempt_at=next_at,
@@ -575,12 +577,12 @@ async def process_due_refunds(
                 target = "retry_wait"
                 delay = result.retry_after_seconds or _retry_delay(claim.attempt_count)
                 delay = max(1, min(delay, settings.payment_refund_retry_max_seconds))
-                next_at = current_time + timedelta(seconds=delay)
+                next_at = result_time + timedelta(seconds=delay)
                 retried += 1
             await _persist_claim_result(
                 session,
                 claim,
-                now=current_time,
+                now=result_time,
                 target_status=target,
                 error_code=result.error_code or "refund_retryable_failure",
                 next_attempt_at=next_at,
@@ -591,7 +593,7 @@ async def process_due_refunds(
             await _persist_claim_result(
                 session,
                 claim,
-                now=current_time,
+                now=result_time,
                 target_status="manual_review",
                 error_code=result.error_code or "refund_permanent_failure",
                 record_failure_event=True,
