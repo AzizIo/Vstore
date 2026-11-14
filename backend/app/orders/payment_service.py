@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.models import Order, OrderStatus, PriceCurrency, User
-from app.db.payments import PaymentEvent, PaymentIntent, PaymentTransaction
+from app.db.payments import PaymentEvent, PaymentIntent, PaymentRefundJob, PaymentTransaction
 
 
 class PaymentConflict(Exception):
@@ -330,6 +330,15 @@ async def record_stars_success(
         )
         session.add(transaction)
         await session.flush()
+        if transaction_status == "refund_pending":
+            session.add(
+                PaymentRefundJob(
+                    payment_transaction_id=transaction.id,
+                    status="pending",
+                    next_attempt_at=current_time,
+                    last_error_code=error_code,
+                )
+            )
 
         if is_first_payment:
             intent.status = "paid"
