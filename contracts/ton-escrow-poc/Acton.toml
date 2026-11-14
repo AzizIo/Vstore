@@ -1,0 +1,27 @@
+[package]
+name = "viltara-ton-escrow-poc"
+description = "Isolated immutable single-deal TON escrow proof of concept. Testnet only."
+version = "0.1.0"
+repository = "https://github.com/AzizIo/Vstore"
+license = "MIT"
+
+[toolchain]
+acton = "1.2.1"
+
+[contracts.DealEscrow]
+src = "contracts/DealEscrow.tolk"
+
+[contracts.TestNftItem]
+src = "contracts/TestNftItem.tolk"
+
+[wrappers.tolk]
+output-dir = "wrappers"
+
+[wrappers.typescript]
+output-dir = "wrappers-ts"
+
+[import-mappings]
+acton = ".acton"
+contracts = "contracts"
+wrappers = "wrappers"
+tests = "tests"

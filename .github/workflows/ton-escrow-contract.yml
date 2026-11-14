@@ -1,0 +1,80 @@
+name: TON Escrow Contract CI
+
+on:
+  pull_request:
+    paths:
+      - "contracts/ton-escrow-poc/**"
+      - ".github/workflows/ton-escrow-contract.yml"
+  push:
+    branches:
+      - main
+      - "feat/ton-escrow-*"
+    paths:
+      - "contracts/ton-escrow-poc/**"
+      - ".github/workflows/ton-escrow-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ton-escrow-contract-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: Acton build, ABI and Sandbox tests
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: contracts/ton-escrow-poc
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Acton
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -LsSf https://github.com/ton-blockchain/acton/releases/latest/download/acton-installer.sh | sh
+          echo "$HOME/.acton/bin" >> "$GITHUB_PATH"
+          "$HOME/.acton/bin/acton" --version
+
+      - name: Initialize pinned Acton project
+        run: acton init
+
+      - name: Compile contract BoCs
+        run: acton build
+
+      - name: Generate ABI-backed wrappers
+        run: |
+          acton wrapper --all
+          acton wrapper DealEscrow --ts --output wrappers-ts/DealEscrow.gen.ts
+
+      - name: Format Tolk sources
+        run: acton fmt
+
+      - name: Verify formatted Tolk sources
+        run: acton fmt --check
+
+      - name: Static checks
+        run: acton check
+
+      - name: Emulator tests with coverage
+        run: acton test --coverage --no-studio-reporting
+
+      - name: Upload reproducible contract artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ton-escrow-acton-artifacts
+          path: |
+            contracts/ton-escrow-poc/build/**
+            contracts/ton-escrow-poc/artifacts/**
+            contracts/ton-escrow-poc/wrappers/**
+            contracts/ton-escrow-poc/wrappers-ts/**
+            contracts/ton-escrow-poc/coverage/**
+            contracts/ton-escrow-poc/contracts/**
+            contracts/ton-escrow-poc/tests/**
+          if-no-files-found: warn
+          retention-days: 90
