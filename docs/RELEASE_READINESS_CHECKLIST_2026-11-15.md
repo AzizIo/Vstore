@@ -7,7 +7,7 @@
 - Repository: `AzizIo/Vstore`
 - Default branch: `main`
 - Audited main SHA: `2138d2b69c86507f05cec7ee768b4cc11ad00e47`
-- All three active implementation PRs below were created from this same baseline. No merge was performed during this audit.
+- All reviewed implementation PRs below are based on this same baseline. No merge was performed during this audit.
 - Production credentials, VPS/SSH, DNS, production database, Telegram bot, payment accounts and TON signing keys were not accessed.
 
 ## 2. Active PR inventory and evidence
@@ -25,7 +25,7 @@ The current open-PR inventory includes #197, #198, #203, #204 and this checklist
 
 | Issue | Current evidence | Status |
 |---|---|---|
-| [#199 Payments Backend](https://github.com/AzizIo/Vstore/issues/199) | Issue comment links Draft PR #203. The PR adds migration `0015_payment_ledger_guards`, PostgreSQL tests and payment security documentation. | In review; CI was still running at this snapshot. |
+| [#199 Payments Backend](https://github.com/AzizIo/Vstore/issues/199) | Issue comment links Draft PR #203. The PR adds migration `0015_payment_ledger_guards`, PostgreSQL tests and payment security documentation. Backend and Frontend CI both passed on its recorded head. | In review; add coverage for all four TRUNCATE guards and complete independent schema review. |
 | [#200 Production Infrastructure](https://github.com/AzizIo/Vstore/issues/200) | Dedicated PR [#204](https://github.com/AzizIo/Vstore/pull/204) adds the operations runbook, off-site backup/retention design, monitoring plan and static checks. Its infrastructure guardrails CI [43643388858](https://github.com/AzizIo/Vstore/actions/runs/43643388858) passed. | Repository/runbook slice delivered; live owner-operated gates remain unverified. PR is not merged. |
 | [#201 Frontend, Mini App, E2E](https://github.com/AzizIo/Vstore/issues/201) | No issue progress comment and no dedicated PR found in the open-PR inventory. | Not delivered / not verified. |
 
@@ -59,7 +59,7 @@ PR #198 already owns the current backup/restore scripts and several shared workf
 | PR #198 backend, frontend, production Compose CI | **PASS** | All three workflows succeeded on exact head `8cca15b...`; not a merge or live-host test. |
 | Reproducible frontend install, unit/build/Playwright and API-backed E2E | **PASS on PR #198 head** | npm lockfile, `npm ci`, npm audit, unit/build/Playwright and disposable PostgreSQL/Redis API-backed journey succeeded. Must rerun after integration. |
 | Python dependency audit | **PASS on PR #198 head** | `pip-audit --strict` step succeeded in Backend CI. GitHub Security/Dependabot alert inventory is still not independently reviewed. |
-| Payment ledger/refund code on main | **PARTIAL** | Test-only Stars integration and durable refund workflow are present. PR #203 hardening is pending CI/review. No live charge or refund has been performed. |
+| Payment ledger/refund code on main | **PARTIAL** | Test-only Stars integration and durable refund workflow are present. PR #203 CI passes, but its additional immutability migration remains under review and the TRUNCATE test coverage needs expansion. No live charge or refund has been performed. |
 | Telegram Stars live test acceptance | **NOT VERIFIED** | Issue #152 still requires a real dedicated test-bot invoice → pre-checkout → successful-payment round trip against disposable PostgreSQL. |
 | Telegram policy approval for public paid checkout | **BLOCKED** | [Issue #155](https://github.com/AzizIo/Vstore/issues/155) is open and has no recorded written Telegram response. Keep public paid checkout disabled. |
 | Provider / seller settlement model | **BLOCKED** | Seller entity/status, seller and buyer jurisdictions, merchant-of-record, payout model and provider underwriting facts are not established in the repository. |
@@ -71,11 +71,11 @@ PR #198 already owns the current backup/restore scripts and several shared workf
 
 ## 6. Required next actions
 
-1. Payments owner: finish PR #203 CI; add TRUNCATE tests for all four protected tables; resolve schema-owner review.
+1. Payments owner: add PostgreSQL TRUNCATE assertions for all four protected tables in PR #203 and complete schema-owner review; current Backend/Frontend CI already passes.
 2. Release/infra owner: fix the hard-coded Alembic head assertion in PR #198 and refresh its open-PR inventory. Coordinate the final workflow with PR #203 before either is considered integrated.
 3. Infrastructure owner: independently review and owner-accept PR #204's runbook/static guards; keep remote upload/retention automation blocked until provider and credentials are selected. Coordinate any changes to #198's backup scripts rather than overwriting them.
 4. Frontend/QA owner: deliver the dedicated #201 PR with Telegram initData trust-boundary review, payment-state UI review, TonConnect network guard, and critical API-backed E2E evidence. Coordinate package/lock/Docker/CI changes with #198.
-5. Update Issue #152 to reflect merged PR #179 and migration 0013, while keeping the real Telegram test cycle explicitly open.
+5. Issue #152 progress text has been corrected to reflect merged PR #179 and migration 0013; keep the real Telegram test cycle explicitly open.
 6. Obtain written Telegram policy guidance in #155 and the owner/legal/provider decisions before considering any public paid checkout.
 7. Complete live operational acceptance (encrypted off-site backup + restore drill, external monitoring, VPS TLS/firewall/volume checks and Telegram test-user journey) before a production decision.
 8. Rebase/revalidate each PR after each integration step; require all checks on the final combined SHA. No production merge/deploy or real-money action is implied.
