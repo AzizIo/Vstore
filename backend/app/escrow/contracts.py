@@ -20,7 +20,7 @@ from app.escrow.ton_abi import (
 
 
 class EscrowContractABIUnavailable(RuntimeError):
-    """Pinned ABI/code artifact is absent or cannot be verified."""
+    """Pinned ABI/code artifact is absent or a requested action is not safe."""
 
 
 class EscrowWalletAction(StrEnum):
@@ -33,8 +33,7 @@ class EscrowWalletAction(StrEnum):
     RETURN_NFT_TO_ESCROW = "return_nft_to_escrow"
     TIMEOUT_DEAL = "timeout_deal"
     RECOVER_UNEXPECTED_NFT = "recover_unexpected_nft"
-    # These are contract-initiated or not part of the wallet ABI. They remain
-    # here only to make old callers fail explicitly instead of guessing.
+    # Kept for backwards compatibility, but these are not user wallet actions.
     REFUND = "refund"
     PAYOUT = "payout"
     WITHDRAW_UNSOLD_NFT = "withdraw_unsold_nft"
@@ -42,7 +41,7 @@ class EscrowWalletAction(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class DealEscrowDeploymentSnapshot:
-    """Immutable deployment terms plus separately observed current getter state."""
+    """Immutable ABI terms plus getter state observed at a finalized chain position."""
 
     network: str
     network_id: int
@@ -75,10 +74,12 @@ class DealEscrowDeploymentSnapshot:
     nft_return_value_nanotons: int
     contract_state: int
     deadline_unix: int
+    observed_chain_time_unix: int
     dispute_phase: int
     nft_in_escrow: bool
     principal_locked: bool
     recovery_previous_owner: str | None = None
+    recovery_item_address: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +89,14 @@ class TONConnectMessage:
     payload: str | None = None
     state_init: str | None = None
 
+    def to_tonconnect_dict(self) -> dict[str, str]:
+        value = {"address": self.address, "amount": self.amount}
+        if self.payload is not None:
+            value["payload"] = self.payload
+        if self.state_init is not None:
+            value["stateInit"] = self.state_init
+        return value
+
 
 @dataclass(frozen=True, slots=True)
 class TONConnectTransactionPayload:
@@ -95,6 +104,13 @@ class TONConnectTransactionPayload:
     valid_until: int
     messages: tuple[TONConnectMessage, ...]
     abi_version: str
+
+    def to_tonconnect_dict(self) -> dict[str, object]:
+        return {
+            "network": self.network,
+            "validUntil": self.valid_until,
+            "messages": [message.to_tonconnect_dict() for message in self.messages],
+        }
 
 
 class TONEscrowContractAdapter(Protocol):
@@ -138,12 +154,12 @@ class UnconfiguredTONEscrowContractAdapter:
 class PinnedTONEscrowContractAdapter:
     """Build unsigned TON Connect testnet messages; never signs or submits them."""
 
-    def __init__(self, *, compiled_code_boc_base64: str) -> None:
+    def __init__(self, *, compiled_code_boc_base64: str | None = None) -> None:
         try:
             self._artifacts = verify_compiled_code(compiled_code_boc_base64)
+            self._compiled_code_boc_base64 = compiled_code_boc_base64
         except TONABIError as exc:
             raise EscrowContractABIUnavailable(str(exc)) from exc
-        self._code_boc_base64 = compiled_code_boc_base64
 
     @property
     def abi_version(self) -> str | None:
@@ -164,7 +180,12 @@ class PinnedTONEscrowContractAdapter:
             raise EscrowContractABIUnavailable("resource_id is required and must be bounded")
         try:
             seller, buyer, _collection, item, salt = validate_snapshot(deal_snapshot)
-            deployment = derive_deployment(self._code_boc_base64, deal_snapshot)
+            deployment = derive_deployment(
+                self._compiled_code_boc_base64 or __import__(
+                    "app.escrow.ton_abi", fromlist=["load_pinned_code_boc"]
+                ).load_pinned_code_boc(),
+                deal_snapshot,
+            )
             wallet_address = parse_basechain_address(actor_wallet.address, "actor_wallet.address")
         except (TONABIError, AttributeError) as exc:
             raise EscrowContractABIUnavailable(str(exc)) from exc
@@ -175,10 +196,12 @@ class PinnedTONEscrowContractAdapter:
 
         state = deal_snapshot.contract_state
         deadline = deal_snapshot.deadline_unix
+        chain_time = deal_snapshot.observed_chain_time_unix
         if isinstance(state, bool) or not isinstance(state, int) or not 0 <= state <= 13:
             raise EscrowContractABIUnavailable("contract_state must be a known DealEscrow state")
-        if isinstance(deadline, bool) or not isinstance(deadline, int) or deadline < 0:
-            raise EscrowContractABIUnavailable("deadline_unix is invalid")
+        if any(isinstance(v, bool) or not isinstance(v, int) or v < 0
+               for v in (deadline, chain_time)):
+            raise EscrowContractABIUnavailable("chain deadline/time snapshot is invalid")
         if valid_until is None:
             valid_until = int(time.time()) + 300
         if isinstance(valid_until, bool) or not isinstance(valid_until, int) or valid_until <= int(time.time()):
@@ -190,6 +213,13 @@ class PinnedTONEscrowContractAdapter:
         amount: int
         body: str | None = None
         state_init: str | None = None
+
+        def require_query_id() -> int:
+            if query_id is None:
+                raise TONABIError("query_id is required for this operation")
+            if isinstance(query_id, bool) or not isinstance(query_id, int) or not 0 < query_id < (1 << 64):
+                raise TONABIError("query_id must be a non-zero uint64")
+            return query_id
 
         try:
             if action is EscrowWalletAction.CREATE_DEAL_ESCROW:
@@ -203,10 +233,14 @@ class PinnedTONEscrowContractAdapter:
                     raise TONABIError("only the seller may activate an intent-created deal")
                 target = escrow_address
                 amount = deal_snapshot.activation_value_nanotons
-                body = encode_simple_action("activate_deal", deal_snapshot.activation_query_id, salt)
+                body = encode_simple_action(
+                    "activate_deal", deal_snapshot.activation_query_id, salt
+                )
             elif action is EscrowWalletAction.DEPOSIT_NFT:
                 if not is_seller or state != 1 or deal_snapshot.nft_in_escrow:
                     raise TONABIError("NFT deposit is available only to the seller in awaiting_nft")
+                if chain_time > deadline:
+                    raise TONABIError("seller NFT deposit window has expired")
                 target = item.to_str(is_user_friendly=False)
                 amount = deal_snapshot.nft_deposit_value_nanotons
                 body = encode_nft_transfer(
@@ -217,35 +251,35 @@ class PinnedTONEscrowContractAdapter:
                 )
             elif action is EscrowWalletAction.FUND_DEAL:
                 if not is_buyer or state != 2 or not deal_snapshot.nft_in_escrow:
-                    raise TONABIError("funding requires the bound buyer and an accepted NFT deposit")
+                    raise TONABIError("funding requires the bound buyer and accepted NFT deposit")
+                if chain_time > deadline or deal_snapshot.principal_locked:
+                    raise TONABIError("funding window expired or principal is already locked")
                 target = escrow_address
                 amount = deal_snapshot.principal_nanotons + deal_snapshot.execution_reserve_nanotons
                 body = encode_simple_action("fund_deal", deal_snapshot.fund_query_id, salt)
             elif action is EscrowWalletAction.ACCEPT_DEAL:
                 if (
                     not is_buyer or state != 3 or not deal_snapshot.nft_in_escrow
-                    or not deal_snapshot.principal_locked
+                    or not deal_snapshot.principal_locked or chain_time > deadline
                 ):
-                    raise TONABIError("acceptance requires the funded buyer-review state")
+                    raise TONABIError("acceptance requires the live funded buyer-review state")
                 target = escrow_address
                 amount = deal_snapshot.action_value_nanotons
                 body = encode_simple_action("accept_deal", deal_snapshot.nft_release_query_id, salt)
             elif action is EscrowWalletAction.OPEN_DISPUTE:
-                if not is_buyer or state not in {3, 5}:
-                    raise TONABIError("only the buyer may dispute funded-review or post-delivery state")
+                if not is_buyer or state not in {3, 5} or chain_time > deadline:
+                    raise TONABIError("only the buyer may dispute a live funded-review or post-delivery state")
                 if reason_hash is None:
                     raise TONABIError("reason_hash is required for an on-chain dispute")
                 target = escrow_address
                 amount = deal_snapshot.action_value_nanotons
-                body = encode_dispute_action(
-                    query_id or deal_snapshot.action_value_nanotons, salt, reason_hash
-                )
+                body = encode_dispute_action(require_query_id(), salt, reason_hash)
             elif action is EscrowWalletAction.RETURN_NFT_TO_ESCROW:
                 if (
                     not is_buyer or state != 6 or deal_snapshot.dispute_phase != 2
-                    or deal_snapshot.nft_in_escrow
+                    or deal_snapshot.nft_in_escrow or chain_time > deadline
                 ):
-                    raise TONABIError("NFT return requires a post-delivery dispute and buyer ownership")
+                    raise TONABIError("NFT return requires a live post-delivery dispute and buyer ownership")
                 target = item.to_str(is_user_friendly=False)
                 amount = deal_snapshot.nft_return_value_nanotons
                 body = encode_nft_transfer(
@@ -254,9 +288,33 @@ class PinnedTONEscrowContractAdapter:
                     response_destination=deal_snapshot.buyer_address,
                     deal_salt=salt,
                 )
+            elif action is EscrowWalletAction.TIMEOUT_DEAL:
+                if (not (is_buyer or is_seller) or state not in {1, 2, 3, 5}
+                        or deadline == 0 or chain_time <= deadline):
+                    raise TONABIError("timeout requires a participant and an expired supported state")
+                target = escrow_address
+                amount = deal_snapshot.action_value_nanotons
+                body = encode_simple_action("timeout_deal", require_query_id(), salt)
+            elif action is EscrowWalletAction.RECOVER_UNEXPECTED_NFT:
+                if (
+                    state != 13 or not deal_snapshot.nft_in_escrow
+                    or not deal_snapshot.recovery_previous_owner
+                    or not deal_snapshot.recovery_item_address
+                ):
+                    raise TONABIError("unexpected NFT recovery requires a manual-review recovery record")
+                previous_owner = parse_basechain_address(
+                    deal_snapshot.recovery_previous_owner, "recovery_previous_owner"
+                )
+                if wallet_address != previous_owner:
+                    raise TONABIError("only the recorded previous NFT owner may recover this item")
+                target = parse_basechain_address(
+                    deal_snapshot.recovery_item_address, "recovery_item_address"
+                ).to_str(is_user_friendly=False)
+                amount = deal_snapshot.action_value_nanotons
+                body = encode_simple_action("recover_unexpected_nft", require_query_id(), salt)
             else:
                 raise TONABIError(
-                    "this operation is contract-initiated, unsupported by the frozen wallet ABI, or awaiting audit"
+                    "refund/payout are contract-initiated; this wallet action is not supported"
                 )
         except TONABIError as exc:
             raise EscrowContractABIUnavailable(str(exc)) from exc
