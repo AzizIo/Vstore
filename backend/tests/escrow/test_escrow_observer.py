@@ -112,6 +112,7 @@ async def test_nonfinal_event_is_pending_then_promoted_once_when_final() -> None
 
     deal = SimpleNamespace(
         id=deal_id, network="testnet", contract_address=pending.contract_address,
+        collection_address_snapshot="0:" + "f" * 64,
         deal_salt=pending.deal_salt, item_address="0:" + "b" * 64,
         seller_address_snapshot="0:" + "c" * 64, buyer_address_snapshot="0:" + "e" * 64,
         principal_nanotons=2_000_000_000, status=EscrowDealStatus.INTENT_CREATED.value,
