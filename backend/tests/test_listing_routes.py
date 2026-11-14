@@ -14,7 +14,7 @@ from app.assets.ton_nft.models import (
     VerificationResult,
     VerificationStatus,
 )
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_current_user_allow_blocked
 from app.db.models import (
     AssetType,
     AssetVerificationStatus,
@@ -61,6 +61,7 @@ def seller() -> User:
 @pytest.fixture
 def api_client(seller: User):
     app.dependency_overrides[get_current_user] = lambda: seller
+    app.dependency_overrides[get_current_user_allow_blocked] = lambda: seller
     try:
         with TestClient(app) as client:
             yield client
