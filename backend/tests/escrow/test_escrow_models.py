@@ -40,6 +40,7 @@ def test_escrow_tables_are_separate_from_order_and_payment_tables() -> None:
     assert "uq_escrow_deal_network_salt" in {c.name for c in EscrowDeal.__table__.constraints}
     assert EscrowListingIntent.__table__.c.listing_key.unique is True
     assert "collection_address_snapshot" in EscrowDeal.__table__.c
+    assert "listing_key_snapshot" in EscrowDeal.__table__.c
 
 
 def test_chain_event_replay_and_idempotency_are_database_constrained() -> None:
@@ -83,6 +84,7 @@ def test_deal_deployment_terms_cannot_be_mutated_after_creation() -> None:
     deal = EscrowDeal(
         listing_intent_id=uuid4(),
         marketplace_listing_id=uuid4(),
+        listing_key_snapshot="k" * 64,
         seller_id=uuid4(),
         buyer_id=uuid4(),
         buyer_wallet_id=uuid4(),
@@ -100,7 +102,8 @@ def test_deal_deployment_terms_cannot_be_mutated_after_creation() -> None:
     from sqlalchemy.orm.attributes import set_committed_value
 
     for field in (
-        "listing_intent_id", "marketplace_listing_id", "seller_id", "buyer_id",
+        "listing_intent_id", "marketplace_listing_id", "listing_key_snapshot",
+        "seller_id", "buyer_id",
         "buyer_wallet_id", "network", "deal_salt", "collection_address_snapshot",
         "item_address", "seller_address_snapshot", "buyer_address_snapshot",
         "price_amount", "price_currency", "principal_nanotons", "idempotency_key",
