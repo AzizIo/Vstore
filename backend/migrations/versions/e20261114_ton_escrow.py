@@ -25,6 +25,7 @@ def upgrade() -> None:
         sa.Column("seller_wallet_id", sa.Uuid(), nullable=False),
         sa.Column("network", sa.String(16), server_default="testnet", nullable=False),
         sa.Column("item_address", sa.String(128), nullable=False),
+        sa.Column("listing_key", sa.String(64), nullable=False, unique=True),
         sa.Column("seller_address_snapshot", sa.String(128), nullable=False),
         sa.Column("price_amount", sa.Numeric(24, 9), nullable=False),
         sa.Column("price_currency", sa.String(8), server_default="TON", nullable=False),
