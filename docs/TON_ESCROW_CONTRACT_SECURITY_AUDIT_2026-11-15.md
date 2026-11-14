@@ -11,7 +11,7 @@
 
 The inspected source contains meaningful fail-closed controls: fixed per-deal roles/item/amounts, signed ConfigParam 19 testnet check, 2-of-3 signatures over typed cell hashes, distinct oracle/resolver key sets, attempt/query binding, exact NFT sender/payload checks, and manual-review transitions for bounced internal actions.
 
-This pass does **not** establish that the contract is safe to deploy. The emulator suite is materially narrower than the requested lifecycle matrix; bounce recovery loses action identity and can overwrite terminal state; oracle/resolver handlers do not enforce their state deadlines; and the reserve-accounting test bypasses signature checking for the terminal payout path. Core contract source blobs were compared between the manifest source commit and the current review baseline and found identical; exact-head rebuild and independent StateInit/BoC reproduction remain outstanding. No live testnet transactions or independent specialist review were performed. The branch adds three Acton emulator reproducers for late oracle attestation, late resolver decision and terminal-state overwrite after bounce; CI is pending.
+This pass does **not** establish that the contract is safe to deploy. The emulator suite is materially narrower than the requested lifecycle matrix; bounce recovery loses action identity and can overwrite terminal state; oracle/resolver handlers do not enforce their state deadlines; and the reserve-accounting test bypasses signature checking for the terminal payout path. Core contract source blobs were compared between the manifest source commit and the current review baseline and found identical; exact-head rebuild and independent StateInit/BoC reproduction remain outstanding. No live testnet transactions or independent specialist review were performed. The branch adds three Acton emulator reproducers for late oracle attestation, late resolver decision and terminal-state overwrite after bounce; all 16 contract emulator tests passed in TON Contract CI run #132 (43649259704) on exact head `f38221a45fca937f67d7f2f45cf4b72bd102fd32`.
 
 ## Findings
 
@@ -141,7 +141,7 @@ Independent reviewer to inspect signed payload format, source evidence verificat
 
 | Requirement | Current evidence | Result |
 |---|---|---|
-| Build, format, ABI generation | Contract CI workflow; needs latest-head run record | Not audited here |
+| Build, format, ABI generation | TON Contract CI #132 passed build, frozen digest compare, ABI snapshot, wrapper generation, format and static checks | Passed for exact reviewed head |
 | Exact testnet ConfigParam 19 gate | mainnet global ID fixture | Partial |
 | Exact NFT item deposit | happy path + wrong-item behavior in existing plan | Partial |
 | Buyer funding and acceptance | happy path | Partial |
@@ -149,8 +149,8 @@ Independent reviewer to inspect signed payload format, source evidence verificat
 | Full pre/post delivery dispute | no complete emulator traces | Missing |
 | Buyer principal refund | no full real-signature path | Missing |
 | Seller expiry/return | not fully exercised | Missing |
-| Every outbound bounce branch | generic bounce + terminal-state overwrite reproducer (pending CI) | Partial |
-| Deadline boundaries | new expired oracle/resolver reproducer tests (pending CI); expiry just before/at/after still incomplete | Partial |
+| Every outbound bounce branch | generic bounce + terminal-state overwrite reproducer (CI passed); full real NFT/principal/refund bounce matrix absent | Partial |
+| Deadline boundaries | late oracle/resolver reproducers (CI passed); -1/exact/+1 boundary matrix still incomplete | Partial |
 | Terminal principal/NFT/reserve invariants across branches | one seeded seller payout/reserve case | Missing |
 | Replay and stale attempt | stale oracle check only | Partial |
 | Live valueless testnet lifecycle | none attached | Blocked |
