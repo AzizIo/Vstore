@@ -12,7 +12,7 @@ EXPECTED = {
     "ViltaraApiUnavailable": ("critical", "2m"),
     "ViltaraMiniAppUnavailable": ("critical", "3m"),
     "ViltaraBotUnhealthy": ("critical", "2m"),
-    "ViltaraPostgresUnavailable": ("critical", "1m"),
+    "ViltaraPostgresUnavailable": ("critical", "1m"),\n    "ViltaraNodeExporterUnavailable": ("critical", "2m"),\n    "ViltaraContainerMetricsUnavailable": ("critical", "2m"),\n    "ViltaraBackupExporterUnavailable": ("critical", "2m"),
     "ViltaraRedisUnavailable": ("critical", "1m"),
     "ViltaraHostDiskHigh": ("warning", "10m"),
     "ViltaraHostDiskCritical": ("critical", "5m"),

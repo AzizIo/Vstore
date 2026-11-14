@@ -32,6 +32,36 @@ groups:
           summary: "Bot container is unhealthy or repeatedly restarting"
           description: "Container health failed or at least 3 restarts were observed in 15 minutes; verify separate polling heartbeat."
           runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraNodeExporterUnavailable
+        expr: up{job="node"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: node-exporter
+        annotations:
+          summary: "Node exporter is unavailable"
+          description: "Host disk and filesystem metrics are no longer being collected."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraContainerMetricsUnavailable
+        expr: up{job="containers"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: container-metrics
+        annotations:
+          summary: "Container metrics exporter is unavailable"
+          description: "Bot health and restart metrics are no longer being collected."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraBackupExporterUnavailable
+        expr: up{job="backup"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: backup-exporter
+        annotations:
+          summary: "Backup metadata exporter is unavailable"
+          description: "Backup freshness and backup-job status metrics are no longer being collected."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
       - alert: ViltaraPostgresUnavailable
         expr: pg_up == 0 or up{job="postgres"} == 0
         for: 1m
