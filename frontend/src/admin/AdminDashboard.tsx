@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AdminCenter } from "./AdminCenter";
 import {
   fetchAdminOverview,
@@ -149,10 +149,16 @@ export function AdminDashboard({ accessToken }: { accessToken: string }) {
           <h1 id="admin-dashboard-title">Admin Dashboard</h1>
           <p>Управление пользователями и обзор платформы. Все действия доступны по серверным правам.</p>
         </div>
-        <button className="ad-button ad-button-secondary" type="button" onClick={() => {
-          if (section === "overview") setOverviewRetry((value) => value + 1);
-          else setSelectedUserId((value) => value);
-        }}>{section === "overview" ? "Обновить данные" : "Панель Beta"}</button>
+        {section === "overview" && (
+          <button
+            className="ad-button ad-button-secondary"
+            type="button"
+            disabled={overviewLoading}
+            onClick={() => setOverviewRetry((value) => value + 1)}
+          >
+            {overviewLoading ? "Обновляем…" : "Обновить данные"}
+          </button>
+        )}
       </header>
 
       <nav className="ad-tabs" aria-label="Разделы административной панели">
@@ -303,7 +309,7 @@ function UsersSection({ accessToken, onOpenUser }: {
     return () => controller.abort();
   }, [accessToken, offset, query, blockedFilter, sortBy, sortOrder, retry]);
 
-  function applySearch(event: React.FormEvent<HTMLFormElement>) {
+  function applySearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setOffset(0);
     setQuery(queryDraft.trim());
@@ -418,7 +424,7 @@ function UserDetailPanel({ accessToken, userId, onClose, onAccessChanged }: {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [decisionOpen, onClose]);
 
-  async function submitAccessDecision(event: React.FormEvent<HTMLFormElement>) {
+  async function submitAccessDecision(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!detail || reason.trim().length < 5 || submitting) return;
     setSubmitting(true);
