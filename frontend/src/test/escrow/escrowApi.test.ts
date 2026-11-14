@@ -200,7 +200,7 @@ describe("escrow API boundary", () => {
   });
 
   it("rejects an empty session before any fetch", () => {
-    expect(() => createEscrowApiClient("  ", contract())).toThrow(/авторизованной сессии/i);
+    expect(() => createEscrowApiClient("  ", contract())).toThrow(/авторизованная сессия/i);
     expect(fetch).not.toHaveBeenCalled();
   });
 
