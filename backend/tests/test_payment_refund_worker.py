@@ -961,7 +961,7 @@ def test_refund_worker_runtime_rejects_production_before_any_provider_call(
         telegram_stars_test_bot_token=SecretStr("123456:dedicated-test-token"),
     )
     monkeypatch.setattr(refund_worker, "get_settings", lambda: settings)
-    with pytest.raises(RuntimeError, match="cannot run in production"):
+    with pytest.raises(RuntimeError, match="only with environment=test"):
         refund_worker._validate_worker_runtime()
 
 
@@ -1002,7 +1002,7 @@ async def test_refund_processing_entrypoint_rejects_production_even_with_fake_pr
         telegram_stars_test_bot_token=SecretStr("123456:dedicated-test-token"),
     )
     monkeypatch.setattr(refund_worker, "get_settings", lambda: settings)
-    with pytest.raises(RuntimeError, match="cannot run in production"):
+    with pytest.raises(RuntimeError, match="only with environment=test"):
         await process_due_refunds(None, FakeRefundProvider())  # type: ignore[arg-type]
 
 @pytest.mark.asyncio
@@ -1100,3 +1100,19 @@ async def test_late_provider_success_cannot_mark_a_captured_transaction_refunded
     finally:
         await _cleanup(session_factory, ids)
         await engine.dispose()
+
+
+def test_refund_worker_runtime_rejects_local_and_development_environments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for environment in ("local", "development"):
+        settings = Settings(
+            environment=environment,
+            database_url="postgresql+asyncpg://test:test@localhost:5432/viltara_test",
+            bot_token="654321:primary-token",
+            telegram_stars_test_enabled=True,
+            telegram_stars_test_bot_token=SecretStr("123456:dedicated-test-token"),
+        )
+        monkeypatch.setattr(refund_worker, "get_settings", lambda settings=settings: settings)
+        with pytest.raises(RuntimeError, match="only with environment=test"):
+            refund_worker._validate_worker_runtime()
