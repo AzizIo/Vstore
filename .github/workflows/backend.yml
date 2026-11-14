@@ -148,8 +148,19 @@ jobs:
           createdb --host=localhost --username=viltara viltara_upgrade_test
           python -m alembic upgrade 0014_admin_user_management
           python -m alembic upgrade head
-          psql --host=localhost --username=viltara --dbname=viltara_upgrade_test --tuples-only --no-align \
-            --command="SELECT version_num FROM alembic_version" | grep -qx e20261114_ton_escrow
+          expected_revision="$(python - <<'PY'
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+
+          print(ScriptDirectory.from_config(Config("alembic.ini")).get_current_head())
+          PY
+          )"
+          actual_revision="$(psql --host=localhost --username=viltara --dbname=viltara_upgrade_test --tuples-only --no-align \
+            --command="SELECT version_num FROM alembic_version")"
+          if [[ "$actual_revision" != "$expected_revision" ]]; then
+            echo "Migration upgrade ended at an unexpected revision." >&2
+            exit 1
+          fi
 
       - name: Lint
         run: ruff check app tests migrations scripts
