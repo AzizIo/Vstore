@@ -38,8 +38,13 @@ def _positive_int(value: str) -> int:
         parsed = int(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError("must be an integer") from exc
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("must be greater than zero")
+    if not 0 < parsed <= 9_223_372_036_854_775_807:
+        raise argparse.ArgumentTypeError("must be a positive PostgreSQL BIGINT")
+    return parsed
+
+
+def _stars_amount(value: str) -> int:
+    parsed = _positive_int(value)
     if parsed > 100_000:
         raise argparse.ArgumentTypeError("must be 100000 or less for a test invoice")
     return parsed
@@ -55,7 +60,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--stars",
-        type=_positive_int,
+        type=_stars_amount,
         default=25,
         help="Synthetic XTR invoice amount (default: 25; maximum: 100000)",
     )
@@ -122,7 +127,7 @@ async def _seed_order(*, buyer_telegram_id: int, stars: int) -> dict[str, object
         )
         session.add(order)
 
-    settings_name = urlsplit(get_settings().database_url).path.lstrip("/").split("?", maxsplit=1)[0]
+    settings_name = urlsplit(get_settings().database_url).path.lstrip("/")
     return {
         "order_id": str(order_id),
         "stars_amount": stars,
