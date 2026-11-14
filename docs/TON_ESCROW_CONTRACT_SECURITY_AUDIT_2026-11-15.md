@@ -11,7 +11,7 @@
 
 The inspected source contains meaningful fail-closed controls: fixed per-deal roles/item/amounts, signed ConfigParam 19 testnet check, 2-of-3 signatures over typed cell hashes, distinct oracle/resolver key sets, attempt/query binding, exact NFT sender/payload checks, and manual-review transitions for bounced internal actions.
 
-This pass does **not** establish that the contract is safe to deploy. The emulator suite is materially narrower than the requested lifecycle matrix; bounce recovery loses action identity; frozen-source provenance is not bound to the current reviewed source SHA; and the reserve-accounting test bypasses signature checking for the terminal payout path. No live testnet transactions or independent specialist review were performed. The branch adds three Acton emulator reproducers for late oracle attestation, late resolver decision and terminal-state overwrite after bounce; their CI run is pending.
+This pass does **not** establish that the contract is safe to deploy. The emulator suite is materially narrower than the requested lifecycle matrix; bounce recovery loses action identity and can overwrite terminal state; oracle/resolver handlers do not enforce their state deadlines; and the reserve-accounting test bypasses signature checking for the terminal payout path. Core contract source blobs were compared between the manifest source commit and the current review baseline and found identical; exact-head rebuild and independent StateInit/BoC reproduction remain outstanding. No live testnet transactions or independent specialist review were performed. The branch adds three Acton emulator reproducers for late oracle attestation, late resolver decision and terminal-state overwrite after bounce; CI is pending.
 
 ## Findings
 
@@ -22,20 +22,19 @@ This pass does **not** establish that the contract is safe to deploy. The emulat
 `onBouncedMessage(_in)` ignores the entire bounced message and unconditionally changes the current deal state to `STATE_MANUAL_REVIEW`. It does not inspect the original bounced body, sender/destination identity, operation opcode, query ID, deal salt or the current pending action/attempt. The critical practical case is a bounce of `sendSellerDeploymentRefund` sent during `settleRemainingBalanceForBuyer`: the principal may already have been paid and state set to `STATE_SETTLED` / `STATE_REFUNDED`, while the later refund bounce overwrites that terminal state.
 
 **Preconditions / potential impact**
-- Contract receives a valid TVM bounced internal message addressed to this escrow.
-- Contract is not already in a terminal state.
-- The bounced message may be unrelated to the current outbound NFT/principal/reserve action, or may be an intentionally induced failure by an actor who can cause an internal message to bounce to this address.
-- Any such bounce can force manual review and set `deadlineUnix=0`, stopping the ordinary state machine even when the current escrow action is otherwise healthy. The handler itself does not settle or transfer funds, so the direct impact is a griefing/availability freeze, not demonstrated principal theft.
+- Principal settlement has already been reconciled by the oracle and the contract has entered `STATE_SETTLED` or `STATE_REFUNDED`.
+- `settleRemainingBalanceForBuyer` also sends the fixed seller deployment allowance in a separate bounce-enabled message.
+- If the seller endpoint rejects that deployment-refund message, the resulting genuine TVM bounce is delivered after the terminal state was saved.
+- The bounce callback overwrites the terminal state with `STATE_MANUAL_REVIEW` and clears the deadline. It does not reverse the principal transfer or set `principalLocked` back to true, but it destroys the explicit terminal-state signal for reconciliation and any consumer relying on getters.
 
 **Evidence**
-- The only existing bounce emulator test constructs one synthetic bounced `TimeoutDeal` addressed to escrow and asserts the state becomes manual review (`DealEscrow.test.tolk:615-640`). It does not vary sender/action/attempt or test irrelevant bounced messages.
-- Current implementation: `onBouncedMessage(_in: InMessageBounced)` (`DealEscrow.tolk:738-745`).
+- The existing bounce test exercises a synthetic bounce and expects manual review (`DealEscrow.test.tolk:615-640`).
+- The added `test bounced message can overwrite an already terminal state` seeds `STATE_SETTLED`, delivers a bounced settlement message and observes `STATE_MANUAL_REVIEW`. This proves the callback does not preserve terminal states. A full transaction-chain test with a seller contract rejecting the actual deployment-refund message remains to be added.
+- `sendSellerDeploymentRefund` is bounce-enabled (`DealEscrow.tolk:179-195`) and is emitted during terminal settlement (`DealEscrow.tolk:223-235`); the handler does not discriminate message kind (`DealEscrow.tolk:738-745`).
 
-**Required reproducer**
-- In emulator, prepare a deal in an active non-terminal state.
-- Deliver a bounced message whose original body is unrelated to any currently pending escrow action (also test stale attempt ID, wrong salt and wrong original sender if available in the Acton bounce fixture).
-- Observe whether state changes to MANUAL_REVIEW.
-- Compare with a legitimate bounce from the snapshotted NFT item or fixed seller/buyer for the expected pending action.
+**Reproducer**
+- Added emulator test proves terminal-state overwrite by calling the bounced-message path after a seeded terminal state. The test is a callback-level synthetic bounce, not proof of arbitrary third-party bounce forgery or the full network action ordering.
+- Follow-up integration test should deploy a rejecting seller contract and cause the contract-controlled deployment allowance refund to bounce after the principal payout/refund message.
 
 **Recommendation**
 Decode the bounced body and bind recovery to the expected outbound operation/pending state/attempt/query/salt and trusted destination. Define a safe policy for unrecognized bounces (ignore vs manual review with recorded evidence). This is protocol/behavior-sensitive and must be coordinated with the #206 adapter owner before editing. Do not patch ABI/storage here.
@@ -69,21 +68,19 @@ Add deterministic Acton emulator tests for each state/actor/timing/failure branc
 
 **Location:** `artifacts/frozen/manifest.json`; `contracts/DealEscrow.tolk`.
 
-The manifest pins the artifact produced from `source_commit=2913ea7d53ea7344f57d6503142c08e0b328bc7d` and CI run/artifact IDs, while the review baseline in this issue is `dd7e5045450f4c95e564fae72c4200f3d921d196`. The manifest itself explicitly warns that the frozen artifact does not prove reproducibility, StateInit correctness or audit safety.
+The manifest records `source_commit=2913ea7d53ea7344f57d6503142c08e0b328bc7d`, while this review baseline is `dd7e5045450f4c95e564fae72c4200f3d921d196`. A direct Git-tree comparison confirms identical blob SHAs at both commits for:
+- `DealEscrow.tolk`: `3b7e7c220020ff7614fec0267fb3f427b7474dd4`
+- `types.tolk`: `5720ff7090138641c6354c850b7322d60451b3a5`
+- `signatures.tolk`: `67453fc0789efa403e366b33998ee82323413465`
+- pre-existing `DealEscrow.test.tolk`: `5b2d0ae96103663f0ef0eb795237ddd8d1c7fd34`
 
-This is not proof that source and bytecode differ; a byte-for-byte reproducible build could establish equivalence. At this point, however, the reviewer cannot infer the frozen code hash from the current source SHA alone.
+Therefore this review found **no contract source drift** in these files between those commits. The difference in manifest commit labels is a provenance bookkeeping caveat, not a finding that the bytecode differs from the source. The manifest itself explicitly warns it does not prove reproducibility, StateInit correctness or audit safety.
 
-**Impact**
-A reviewer could accidentally approve a different artifact from the source currently being integrated. Any source, ABI, storage or build-tool change after the frozen source commit must be bound to an exact artifact before independent audit/testnet acceptance.
-
-**Required evidence**
-- Rebuild exact reviewed source SHA with pinned Acton/Tolk toolchain.
-- Compare generated ABI, compiled BoC SHA-256 and code hash against manifest.
-- If source intentionally differs, create a new frozen manifest with exact source SHA, CI run/artifact link, toolchain, ABI digest, BoC digest/code hash, and complete immutable StateInit inputs.
-- Independently reproduce StateInit/address for golden test vectors.
-
-**Coordination**
-Do not change frozen ABI/storage/opcodes here. Coordinate any changed digest/ABI with Issue #206 adapter owner and #197 parent.
+**Remaining evidence**
+- Rebuild the exact reviewed head SHA with the pinned Acton/Tolk toolchain.
+- Compare generated ABI, compiled BoC SHA-256 and code hash with the existing manifest.
+- If the build is byte-identical, record the exact-head run as confirming equivalence. If it differs, coordinate a new frozen manifest, ABI snapshot and BoC/code hash with Issue #206 adapter owner and #197 parent.
+- Independently reproduce StateInit/address for golden vectors before external review.
 
 ### F-04 — MEDIUM: reserve/payout integration test bypasses signature verification
 
