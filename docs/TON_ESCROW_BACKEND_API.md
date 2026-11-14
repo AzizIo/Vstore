@@ -100,3 +100,15 @@ Revision `e20261114_ton_escrow` is chained after the current main Alembic head `
 5. No transaction payload, opcode, state-init, deployment or financial message is implemented here.
 
 Until these blockers close, all preparation endpoints remain fail-closed. The router must remain unmounted and Draft.
+
+
+## Explicit integration gates before mounting
+
+The isolated router must remain unmounted until all of the following are approved and tested:
+
+1. A versioned DealEscrow ABI and Factory contract are reviewed, including deterministic address derivation, state-init, opcodes, cell layouts and getter semantics. Until then, all transaction preparation returns HTTP 503.
+2. A real testnet provider adapter can prove transaction/message/trace identity, masterchain finality, accepted oracle attestations and getter-state reconciliation. A transaction hash or NFT transfer notification alone is never accepted delivery.
+3. Marketplace listing reservation is coordinated atomically with the existing Orders workflow so an escrow-reserved listing cannot also be purchased through the ordinary order path. This PR deliberately does not change OrderStatus, Stars payments or the current order workflow; that integration gate must be resolved before public discovery/checkout is enabled.
+4. The full backend, migration and API-backed E2E suites pass against disposable test infrastructure. No migration is run against production or VPS databases.
+
+Payout and refund remain contract-initiated state transitions. The API exposes their pending/finalized state through the deal projection and does not provide a manual client-controlled financial trigger.
