@@ -139,7 +139,7 @@ fun depositExpectedNft(
     });
 }
 
-get fun `deployment address is derived from immutable StateInit`() {
+get fun `test deployment address is derived from immutable StateInit`() {
     val (escrowA, _, seller, _) = createFixture();
     val (escrowB, _, _, _) = createFixture();
 
@@ -149,13 +149,13 @@ get fun `deployment address is derived from immutable StateInit`() {
     expect(escrowA.getState()).toEqual(STATE_INTENT_CREATED);
 }
 
-get fun `seller activates a per-deal escrow`() {
+get fun `test seller activates a per-deal escrow`() {
     val (escrow, _, seller, _) = createFixture();
     deployAndActivate(escrow, seller, 0xA11CE);
     expect(escrow.getState()).toEqual(STATE_AWAITING_NFT);
 }
 
-get fun `only the snapshotted seller can activate the deal`() {
+get fun `test only the snapshotted seller can activate the deal`() {
     val (escrow, _, seller, buyer) = createFixture();
     val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
@@ -174,7 +174,7 @@ get fun `only the snapshotted seller can activate the deal`() {
     expect(escrow.getState()).toEqual(STATE_INTENT_CREATED);
 }
 
-get fun `exact TEP-62 item deposit unlocks buyer funding state`() {
+get fun `test exact TEP-62 item deposit unlocks buyer funding state`() {
     val (escrow, nftItem, seller, _) = createFixture();
     val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
@@ -186,7 +186,7 @@ get fun `exact TEP-62 item deposit unlocks buyer funding state`() {
     expect(escrow.getState()).toEqual(STATE_AWAITING_BUYER_FUNDS);
 }
 
-get fun `a different NFT item sender cannot unlock buyer funding`() {
+get fun `test a different NFT item sender cannot unlock buyer funding`() {
     val (escrow, nftItem, seller, _) = createFixture();
     val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
@@ -210,7 +210,7 @@ get fun `a different NFT item sender cannot unlock buyer funding`() {
     expect(escrow.getState()).toEqual(STATE_AWAITING_NFT);
 }
 
-get fun `buyer must attach exact principal plus execution reserve`() {
+get fun `test buyer must attach exact principal plus execution reserve`() {
     val (escrow, nftItem, seller, buyer) = createFixture();
     val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
@@ -245,7 +245,7 @@ get fun `buyer must attach exact principal plus execution reserve`() {
     expect(escrow.getState()).toEqual(STATE_FUNDED_REVIEW);
 }
 
-get fun `buyer acceptance is pre-delivery and participant scoped`() {
+get fun `test buyer acceptance is pre-delivery and participant scoped`() {
     val (escrow, nftItem, seller, buyer) = createFixture();
     val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
@@ -282,7 +282,7 @@ get fun `buyer acceptance is pre-delivery and participant scoped`() {
     expect(nftItem.getOwner()).toEqual(buyer.address);
 }
 
-get fun `observed NFT transfer alone never settles a deal`() {
+get fun `test observed NFT transfer alone never settles a deal`() {
     val (escrow, nftItem, seller, buyer) = createFixture();
     val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
