@@ -44,6 +44,7 @@ fun createFixture(
     val money: DealMoney = {
         principalNanotons: grams("1"),
         executionReserve: grams("0.5"),
+        sellerDeploymentRefundNanotons: grams("0.05"),
         nftTransferValue: grams("0.08"),
         fundQueryId: 1001,
         nftDepositQueryId: 1002,
