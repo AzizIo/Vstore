@@ -50,11 +50,6 @@ from app.escrow.reservation import (
     EscrowListingReservationConflict,
     reserve_listing_for_escrow,
 )
-from app.escrow.service import (
-    EscrowActionConflict,
-    canonical_request_sha256,
-    create_or_replay_action,
-)
 from app.escrow.schemas import (
     EscrowDealCreate,
     EscrowDealResponse,
@@ -68,7 +63,11 @@ from app.escrow.schemas import (
     EscrowWalletReferenceInput,
     EscrowWithdrawalCreate,
 )
-
+from app.escrow.service import (
+    EscrowActionConflict,
+    canonical_request_sha256,
+    create_or_replay_action,
+)
 
 def _ton_nano(value: Decimal) -> str:
     amount = value * _NANOTON
