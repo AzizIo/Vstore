@@ -13,7 +13,7 @@ from alembic import command
 from alembic.config import Config
 from pydantic import SecretStr
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import Settings, get_settings
 from app.db.models import (
@@ -28,7 +28,7 @@ from app.db.models import (
     User,
     Wallet,
 )
-from app.db.payments import PaymentEvent, PaymentIntent, PaymentRefundJob, PaymentTransaction
+from app.db.payments import PaymentIntent, PaymentRefundJob, PaymentTransaction
 from app.orders import payment_service, refund_worker
 from app.orders.payment_service import record_stars_success
 from app.orders.refund_worker import run_refund_worker_pass
@@ -79,7 +79,7 @@ def _enable_test_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 async def _seed_payment(
-    session_factory: async_sessionmaker,
+    session_factory: async_sessionmaker[AsyncSession],
     *,
     intent_status: str = "refund_pending",
     transaction_status: str | None = "refund_pending",
@@ -212,7 +212,7 @@ async def _seed_payment(
     }
 
 
-async def _cleanup(session_factory: async_sessionmaker, ids: dict[str, object]) -> None:
+async def _cleanup(session_factory: async_sessionmaker[AsyncSession], ids: dict[str, object]) -> None:
     async with session_factory.begin() as session:
         order_id = ids["order_id"]
         await session.execute(
@@ -318,7 +318,7 @@ class FakeStarsProvider:
         return True
 
 
-async def _make_store(url: str):
+async def _make_store(url: str) -> tuple[object, async_sessionmaker[AsyncSession]]:
     engine = create_async_engine(url, pool_pre_ping=True)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     return engine, factory
