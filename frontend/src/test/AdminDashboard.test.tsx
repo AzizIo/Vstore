@@ -196,7 +196,7 @@ describe("AdminDashboard", () => {
     fireEvent.click(confirm);
 
     await waitFor(() => expect(api.submitUserAccessDecision).toHaveBeenCalledWith(
-      "test-token", "user-1", "block", "Repeated abuse confirmed",
+      "test-token", "user-1", "block", "Repeated abuse confirmed", expect.any(String),
     ));
     expect(await screen.findByText("Аккаунт заблокирован, решение записано в журнал.")).toBeInTheDocument();
   });
