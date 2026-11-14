@@ -32,7 +32,7 @@ Each outbox row snapshots the recipient Telegram ID and role. The unique dedupli
 based on order, lifecycle event, and recipient. The order transition, order event, and outbox
 rows are committed atomically.
 
-Messages contain an order reference, truthful lifecycle status, amount/currency, and an optional deep link with
+Messages contain an order reference, truthful lifecycle status, amount/currency, a role-aware next-step instruction, and an optional deep link with
 `startapp=order_<id>`. Delivery notifications never claim success before the backend observer has confirmed finalized evidence. Messages do not include wallet addresses, initData, JWTs, signatures, raw provider payloads or private data. Delivery notices are inserted in the same database transaction as the accepted delivery state transition.
 
 ## Retry and operations
