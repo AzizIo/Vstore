@@ -49,6 +49,7 @@ jobs:
           import json
           import os
           from pathlib import Path
+          from urllib.parse import urlsplit
 
           config = json.loads(Path("/tmp/viltara-production-compose.json").read_text())
           services = config["services"]
@@ -73,9 +74,20 @@ jobs:
           # Validate that production cannot silently boot against test infrastructure.
           api_env = services["api"].get("environment", {})
           expected_origin = os.environ["PROD_TELEGRAM_MINI_APP_URL"].rstrip("/")
-          expected_host = expected_origin.removeprefix("https://")
-          if not expected_origin.startswith("https://") or "/" in expected_host:
-              raise SystemExit("Production Mini App URL must be an HTTPS origin")
+          origin = urlsplit(expected_origin)
+          expected_host = origin.hostname
+          if (
+              origin.scheme != "https"
+              or not expected_host
+              or origin.username is not None
+              or origin.password is not None
+              or origin.path
+              or origin.query
+              or origin.fragment
+          ):
+              raise SystemExit("Production Mini App URL must be an HTTPS origin without credentials/path/query")
+          if origin.port is not None:
+              raise SystemExit("Production Mini App origin must not use a non-default port")
           if api_env.get("TELEGRAM_MINI_APP_URL", "").rstrip("/") != expected_origin:
               raise SystemExit("API Mini App URL differs from the production frontend origin")
           if api_env.get("TON_CONNECT_NETWORK") != "mainnet":
@@ -89,10 +101,21 @@ jobs:
               raise SystemExit("TON Connect allowlist must contain only the exact production hostname")
           if cors_origins != [expected_origin]:
               raise SystemExit("CORS allowlist must contain only the exact production HTTPS origin")
-          if api_env.get("DATABASE_URL", "").find("@db:5432/") < 0:
-              raise SystemExit("Production API must use its private PostgreSQL service")
-          if any(marker in api_env.get("DATABASE_URL", "").lower() for marker in ("preview", "test")):
-              raise SystemExit("Production database URL must not point to a test/Preview database")
+          database_url = urlsplit(api_env.get("DATABASE_URL", ""))
+          if (
+              database_url.scheme != "postgresql+asyncpg"
+              or database_url.hostname != "db"
+              or database_url.port != 5432
+              or database_url.username != os.environ["PROD_DB_USER"]
+              or database_url.path != "/" + os.environ["PROD_DB_NAME"]
+              or database_url.query
+              or database_url.fragment
+          ):
+              raise SystemExit("Production API DATABASE_URL must target the exact private production PostgreSQL database")
+          if any(marker in os.environ["PROD_DB_NAME"].lower() for marker in ("preview", "test")):
+              raise SystemExit("PROD_DB_NAME must not be a test/Preview database")
+          if len(os.environ["PROD_AUTH_SECRET_KEY"]) < 32 or len(os.environ["PROD_DB_PASSWORD"]) < 32:
+              raise SystemExit("Production authentication and database secrets must each be at least 32 characters")
           if "TELEGRAM_STARS_TEST_ENABLED" in api_env or "TELEGRAM_STARS_TEST_BOT_TOKEN" in api_env:
               raise SystemExit("Test-only Telegram Stars settings must not be present in production")
 
