@@ -46,6 +46,27 @@ function normalizedAddress(value: string): string {
   }
 }
 
+function allowedDestination(transaction: PreparedEscrowTransaction): string {
+  switch (transaction.action) {
+    case "create_deal_escrow":
+      if (!transaction.factory_address) {
+        throw new Error("Для создания DealEscrow Backend не вернул адрес Factory.");
+      }
+      return transaction.factory_address;
+    case "deposit_nft":
+    case "return_nft_to_escrow":
+      return transaction.nft_item_address;
+    case "fund_deal":
+    case "accept_deal":
+    case "open_dispute":
+    case "withdraw_unsold_nft":
+      if (!transaction.escrow_address) {
+        throw new Error("Для этой операции Backend не вернул адрес DealEscrow.");
+      }
+      return transaction.escrow_address;
+  }
+}
+
 export function createTonConnectEscrowAdapter(options: {
   connectedWallet: EscrowConnectedWallet | null;
   sendTransaction?: EscrowTonConnectSender;
@@ -81,10 +102,10 @@ export function createTonConnectEscrowAdapter(options: {
         throw new Error("Подключённый кошелёк не совпадает с подтверждённым кошельком участника.");
       }
 
-      // Validate every destination before handing the request to the wallet UI.
-      // The adapter does not decide what a message means; it only rejects malformed TON addresses.
-      normalizedAddress(transaction.contract_address);
-      if (transaction.nft_item_address) normalizedAddress(transaction.nft_item_address);
+      const expectedDestination = normalizedAddress(allowedDestination(transaction));
+      normalizedAddress(transaction.nft_item_address);
+      if (transaction.escrow_address) normalizedAddress(transaction.escrow_address);
+      if (transaction.factory_address) normalizedAddress(transaction.factory_address);
 
       const validUntil = Math.floor(Date.parse(transaction.valid_until) / 1000);
       if (!Number.isFinite(validUntil) || validUntil <= Math.floor(now() / 1000)) {
@@ -92,17 +113,19 @@ export function createTonConnectEscrowAdapter(options: {
       }
 
       const messages = transaction.messages.map((message) => {
-        normalizedAddress(message.address);
+        if (normalizedAddress(message.address) !== expectedDestination) {
+          throw new Error("Получатель TON-сообщения не соответствует разрешённому адресу для этого действия.");
+        }
         return {
           address: message.address,
-          amount: message.amount_nanotons,
+          amount: message.amount_nano,
           ...(message.payload_boc ? { payload: message.payload_boc } : {}),
           ...(message.state_init_boc ? { stateInit: message.state_init_boc } : {}),
         };
       });
 
-      // The adapter never constructs an opcode or payload. All message data is supplied
-      // by the reviewed backend contract adapter and shown to the user before this call.
+      // Payloads and values are forwarded exactly as prepared by the reviewed Backend.
+      // The adapter never invents opcodes, message bodies or amounts.
       return options.sendTransaction({
         validUntil,
         network: TON_TESTNET_CHAIN_ID,
