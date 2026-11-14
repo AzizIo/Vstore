@@ -469,6 +469,10 @@ async def test_replay_cannot_remove_previously_accepted_attestation() -> None:
     existing = stored_row(event, status="pending")
     existing.payload_json["attestation_accepted"] = True
     existing.payload_json["contract_state_reconciled"] = True
+    existing.payload_json["finalized"] = True
+    existing.payload_json["masterchain_seqno"] = 99
+    existing.finalized = True
+    event = replace(event, finalized=False)
     session = FakeSession(existing)
 
     assert await _apply_one_event(session, event, provider_verified=True) == "rejected"
