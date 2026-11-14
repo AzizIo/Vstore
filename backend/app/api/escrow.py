@@ -345,7 +345,7 @@ async def create_listing_intent(
             request_sha256=request_hash, model=EscrowListingIntent,
         )
         if replay is not None:
-            return await _listing_projection(session, replay)
+            return await _listing_projection(session, replay, user.id)
 
         asset = await session.scalar(select(NFTAsset).where(
             NFTAsset.id == payload.asset_id, NFTAsset.owner_id == user.id,
@@ -439,7 +439,7 @@ async def create_listing_intent(
         replay = await _idempotency_race_replay(session, actor_id=user.id,
             operation="create_listing_intent", key=idempotency_key,
             request_sha256=request_hash, model=EscrowListingIntent)
-        return await _listing_projection(session, replay)
+        return await _listing_projection(session, replay, user.id)
     except HTTPException:
         await session.rollback()
         raise
@@ -469,7 +469,7 @@ async def list_seller_listing_intents(user: CurrentUser, session: DbSession, lim
         .order_by(EscrowListingIntent.created_at.desc(), EscrowListingIntent.id.desc())
         .offset(max(offset, 0)).limit(min(max(limit, 1), 50))
     )).all())
-    return EscrowPageResponse(items=[await _listing_projection(session, row) for row in rows],
+    return EscrowPageResponse(items=[await _listing_projection(session, row, user.id) for row in rows],
         total=len(rows))
 
 
@@ -488,7 +488,7 @@ async def get_listing_intent(intent_id: UUID, user: CurrentUser, session: DbSess
             or intent.status not in {"intent_only", "active"}
         ):
             raise HTTPException(status_code=404, detail="Escrow listing intent not found")
-    return await _listing_projection(session, intent)
+    return await _listing_projection(session, intent, user.id)
 
 @router.post("/deals", response_model=EscrowDealResponse, status_code=201)
 async def create_deal_intent(
