@@ -5,7 +5,6 @@ import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from urllib.parse import urlsplit
 from uuid import uuid4
 
 import pytest
@@ -63,27 +62,14 @@ from app.orders.service import (
     submit_delivery_candidate,
 )
 
+from tests.database_safety import require_test_database_url
+
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(scope="session")
 def test_database_url() -> str:
-    url = os.getenv("TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("TEST_DATABASE_URL is not configured")
-    if not url.startswith("postgresql+asyncpg://"):
-        pytest.fail("Integration tests require a dedicated PostgreSQL TEST_DATABASE_URL")
-
-    # These tests apply migrations and must never target a default app/developer DB.
-    database_name = urlsplit(url).path.lstrip("/").split("?", maxsplit=1)[0]
-    if not database_name or not (
-        database_name.startswith("test_") or database_name.endswith("_test")
-    ):
-        pytest.fail(
-            "TEST_DATABASE_URL must target a dedicated database whose name starts "
-            "with 'test_' or ends with '_test'"
-        )
-    return url
+    return require_test_database_url("Integration tests")
 
 
 @pytest.fixture(scope="session")
