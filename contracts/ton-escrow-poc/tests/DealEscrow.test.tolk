@@ -62,10 +62,14 @@ fun createFixture(): (DealEscrow, TestNftItem, Treasury, Treasury) {
         pendingAction: PENDING_NONE,
         nftInEscrow: false,
         principalLocked: false,
-        lastEvidenceHash: 0,
-        disputeReasonHash: 0,
-        unexpectedPreviousOwner: null,
-        unexpectedItemAddress: null,
+        evidence: DealEvidence {
+            lastEvidenceHash: 0,
+            disputeReasonHash: 0,
+        }.toCell(),
+        recovery: DealRecovery {
+            unexpectedPreviousOwner: null,
+            unexpectedItemAddress: null,
+        }.toCell(),
     };
 
     val escrow = DealEscrow.fromStorage({
