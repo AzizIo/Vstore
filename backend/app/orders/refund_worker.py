@@ -82,6 +82,12 @@ class TelegramStarsRefundProvider:
     """Adapter for Telegram Stars refunds, used only with a dedicated test bot."""
 
     def __init__(self, bot: Bot) -> None:
+        # A caller cannot bypass the test-only runtime guard by directly
+        # instantiating the real Telegram adapter in application code.
+        expected_test_token = _validate_worker_runtime()
+        provided_token = getattr(bot, "token", None)
+        if provided_token is None or str(provided_token) != expected_test_token:
+            raise RuntimeError("Refund adapter requires the dedicated test bot token")
         self._bot = bot
 
     async def refund_payment(
@@ -489,6 +495,17 @@ async def process_due_refunds(
                     target = "manual_review"
                     next_at = None
                     manual_review += 1
+                elif claim.reconciliation_count < 2:
+                    # Transaction history may lag the refund side effect. Require
+                    # two separated complete scans that show no refund before retry.
+                    target = "reconciliation_required"
+                    next_at = result_time + timedelta(
+                        seconds=max(
+                            settings.payment_refund_reconcile_delay_seconds,
+                            _retry_delay(claim.attempt_count),
+                        )
+                    )
+                    reconciliations += 1
                 else:
                     target = "retry_wait"
                     next_at = result_time + timedelta(
