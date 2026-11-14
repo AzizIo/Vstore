@@ -468,7 +468,9 @@ async def create_deal_intent(
             model=EscrowDeal,
         )
         if replay.buyer_id != user.id:  # type: ignore[attr-defined]
-            raise HTTPException(status_code=404, detail="Escrow deal not found")
+            raise HTTPException(
+                status_code=404, detail="Escrow deal not found"
+            ) from None
         return replay  # type: ignore[return-value]
     except HTTPException:
         await session.rollback()
