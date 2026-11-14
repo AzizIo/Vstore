@@ -10,6 +10,7 @@ import {
 import { createOrder } from "./api/orders";
 import { SessionProvider, useRetrySession, useSession } from "./auth/SessionProvider";
 import { getTelegramStartParam } from "./auth/telegram";
+import { ListingShareButton } from "./components/ListingShareButton";
 
 import { WalletConnection } from "./wallet/WalletConnection";
 import type { WalletRecord } from "./wallet/api";
@@ -263,6 +264,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
               Написать продавцу в Telegram <span aria-hidden="true">↗</span>
             </a>
           )}
+          <ListingShareButton listingId={listingId} title={title} />
           {canOrder ? (
             <div className="order-action">
               <button ref={reserveTriggerRef} className="primary-button" type="button" disabled={ordering || orderCreated} onClick={() => { setOrderError(""); setConfirmationOpen(true); }}>
