@@ -270,8 +270,9 @@ async def test_provider_outage_preserves_cursor_and_releases_lease() -> None:
     def factory() -> FakeEscrowSession:
         return sessions.pop(0)
 
-    result = await run_observer_pass(factory, OutageProvider(), now=now, limit=5)
-    # type: ignore[arg-type]
+    result = await run_observer_pass(
+        factory, OutageProvider(), now=now, limit=5
+    )  # type: ignore[arg-type]
     assert result.provider_unavailable
     assert checkpoint.cursor == "durable-cursor-before-outage"
     assert checkpoint.lease_token is None
