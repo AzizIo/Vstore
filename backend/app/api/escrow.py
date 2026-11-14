@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
-from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -125,6 +124,7 @@ async def _deal_projection(session: AsyncSession, deal: EscrowDeal, actor_id: UU
             "status": (
                 "open" if dispute.status in {"requested", "confirmed"}
                 else "under_review" if dispute.status == "manual_review"
+                else "resolved_seller" if dispute.status == "rejected"
                 else dispute.status
             ),
             "reason_code": dispute.reason_code,
