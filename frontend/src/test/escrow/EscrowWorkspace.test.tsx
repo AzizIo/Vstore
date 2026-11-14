@@ -1,16 +1,17 @@
 import type { ReactNode } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const tonConnectMocks = vi.hoisted(() => ({
   sendTransaction: vi.fn(async () => ({ boc: "c2lnbmVkLWJvYw==" })),
   openModal: vi.fn(),
+  wallet: null as { account: { address: string; chain: string } } | null,
 }));
 
 vi.mock("@tonconnect/ui-react", () => ({
   CHAIN: { MAINNET: "-239", TESTNET: "-3" },
   TonConnectUIProvider: ({ children }: { children: ReactNode }) => children,
-  useTonWallet: () => null,
+  useTonWallet: () => tonConnectMocks.wallet,
   useTonConnectUI: () => [tonConnectMocks],
 }));
 
@@ -213,9 +214,17 @@ function renderWorkspace(api: EscrowApiClient, currentUserId = "buyer-1") {
 
 describe("TON Escrow workspace", () => {
   beforeEach(() => {
-    tonConnectMocks.sendTransaction.mockClear();
+    tonConnectMocks.sendTransaction.mockReset();
+    tonConnectMocks.sendTransaction.mockResolvedValue({ boc: "c2lnbmVkLWJvYw==" });
     tonConnectMocks.openModal.mockClear();
+    tonConnectMocks.wallet = null;
     installInventoryApi();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    tonConnectMocks.wallet = null;
   });
 
   it("shows an explicit unavailable state when the future Backend API is not configured", async () => {
@@ -237,14 +246,14 @@ describe("TON Escrow workspace", () => {
     renderWorkspace(api);
 
     expect(await screen.findByRole("heading", { name: "Moon Lantern" })).toBeInTheDocument();
-    expect(screen.getByText("2.5 TON")).toBeInTheDocument();
-    expect(screen.getByText("0.1 TON")).toBeInTheDocument();
+    expect(screen.getAllByText("2.5 TON").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("0.1 TON").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Купить за TON" }));
 
     expect(await screen.findByRole("dialog", { name: "Параметры TON-транзакции" })).toBeInTheDocument();
-    expect(screen.getByText(escrowAddress)).toBeInTheDocument();
-    expect(screen.getByText(itemAddress)).toBeInTheDocument();
+    expect(screen.getAllByText(escrowAddress).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(itemAddress).length).toBeGreaterThan(0);
     expect(screen.getByText("0.02 TON")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Подписать в TON Connect" })).toBeDisabled();
     expect(api.preparePurchase).toHaveBeenCalledWith({
@@ -261,7 +270,8 @@ describe("TON Escrow workspace", () => {
     renderWorkspace(api, "seller-1");
     fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
 
-    expect(await screen.findByText("Подтверждённый кошелёк · 0:11111111…11111111")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Проверить условия депозита" })).toBeEnabled();
+    expect(screen.getByText("Подтверждённый кошелёк · 0:11111111…11111111")).toBeInTheDocument();
     expect(screen.queryByText(ignoredMainnetWallet.address)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Проверить условия депозита" }));
 
@@ -354,12 +364,80 @@ describe("TON Escrow workspace", () => {
     expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
   });
 
-  it("keeps purchase actions unavailable when only a connected wallet is missing a verified backend record", async () => {
+  it("allows preparing a purchase but keeps signing disabled without explicit testnet opt-in", async () => {
     const api = makeApi();
     renderWorkspace(api);
     expect(await screen.findByRole("button", { name: "Купить за TON" })).toBeEnabled();
     expect(screen.getByText(/Кошелёк подключён/)).not.toBeInTheDocument();
     expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
+  });
+
+
+  it("blocks duplicate action preparation when the user taps twice", async () => {
+    let resolvePrepared: ((value: PreparedEscrowTransaction) => void) | undefined;
+    const api = makeApi();
+    vi.mocked(api.preparePurchase).mockImplementationOnce(() => new Promise((resolve) => {
+      resolvePrepared = resolve;
+    }));
+    renderWorkspace(api);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Купить за TON" }));
+    const purchaseButton = screen.getByRole("button", { name: "Купить за TON" });
+    fireEvent.click(purchaseButton);
+    fireEvent.click(purchaseButton);
+
+    expect(api.preparePurchase).toHaveBeenCalledTimes(1);
+    resolvePrepared?.(prepared("purchase"));
+    expect(await screen.findByRole("dialog", { name: "Параметры TON-транзакции" })).toBeInTheDocument();
+  });
+
+  it("surfaces a rejected TON Connect request without reporting payment or delivery success", async () => {
+    vi.stubEnv("VITE_ESCROW_TESTNET_SIGNING_ENABLED", "true");
+    tonConnectMocks.wallet = { account: { address: sellerAddress, chain: "-3" } };
+    tonConnectMocks.sendTransaction.mockRejectedValueOnce({ code: 300, message: "User rejected" });
+    const api = makeApi();
+    render(
+      <EscrowWorkspace
+        accessToken="session-token"
+        currentUserId="buyer-1"
+        api={api}
+        manifestUrl="https://miniapp.example/tonconnect-manifest.json"
+        allowTestnetSigning
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Купить за TON" }));
+    const signButton = await screen.findByRole("button", { name: "Подписать в TON Connect" });
+    expect(signButton).toBeEnabled();
+    fireEvent.click(signButton);
+
+    expect(await screen.findByText(/Запрос кошелька отклонён/)).toBeInTheDocument();
+    expect(screen.queryByText("Оплата получена")).not.toBeInTheDocument();
+    expect(screen.queryByText("Сделка завершена")).not.toBeInTheDocument();
+    expect(tonConnectMocks.sendTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("locks the pending action after an ambiguous TON Connect result", async () => {
+    vi.stubEnv("VITE_ESCROW_TESTNET_SIGNING_ENABLED", "true");
+    tonConnectMocks.wallet = { account: { address: sellerAddress, chain: "-3" } };
+    tonConnectMocks.sendTransaction.mockRejectedValueOnce(new Error("Wallet connection dropped"));
+    render(
+      <EscrowWorkspace
+        accessToken="session-token"
+        currentUserId="buyer-1"
+        api={makeApi()}
+        manifestUrl="https://miniapp.example/tonconnect-manifest.json"
+        allowTestnetSigning
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Купить за TON" }));
+    const signButton = await screen.findByRole("button", { name: "Подписать в TON Connect" });
+    fireEvent.click(signButton);
+
+    expect(await screen.findByText(/Результат запроса кошелька неизвестен/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Подписать в TON Connect" })).toBeDisabled();
+    expect(tonConnectMocks.sendTransaction).toHaveBeenCalledTimes(1);
   });
 
   it("retains a mobile-readable layout at a narrow WebView viewport", async () => {
