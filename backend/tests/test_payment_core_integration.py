@@ -672,8 +672,13 @@ async def test_escrow_migration_upgrade_and_downgrade_preserve_payments(
 ) -> None:
     engine = create_async_engine(payment_database, pool_pre_ping=True)
     config = Config(ALEMBIC_CONFIG_PATH)
+    script = ScriptDirectory.from_config(config)
+    escrow_revision = script.get_revision("e20261114_ton_escrow")
+    assert escrow_revision is not None
+    parent_revision = escrow_revision.down_revision
+    assert isinstance(parent_revision, str)
     try:
-        await asyncio.to_thread(command.downgrade, config, "0014_admin_user_management")
+        await asyncio.to_thread(command.downgrade, config, parent_revision)
         async with engine.connect() as connection:
             escrow_table = await connection.scalar(
                 text("SELECT to_regclass('public.escrow_deals')")
@@ -687,6 +692,10 @@ async def test_escrow_migration_upgrade_and_downgrade_preserve_payments(
             assert escrow_table is None
             assert payment_table == "payment_intents"
             assert orders_table == "orders"
+            revision = await connection.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
+            assert revision == parent_revision
 
         await asyncio.to_thread(command.upgrade, config, "head")
         async with engine.connect() as connection:
@@ -705,5 +714,9 @@ async def test_escrow_migration_upgrade_and_downgrade_preserve_payments(
             assert escrow_table == "escrow_deals"
             assert trigger_exists is True
             assert payment_table == "payment_intents"
+            revision = await connection.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
+            assert revision == script.get_current_head()
     finally:
         await engine.dispose()
