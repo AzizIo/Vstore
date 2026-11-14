@@ -18,12 +18,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.escrow.domain import (
+    TERMINAL_DEAL_STATES,
     DealEvidenceSnapshot,
-    EscrowChainEventType,
     EscrowDealStatus,
     EscrowDomainError,
     NormalizedEventEvidence,
-    TERMINAL_DEAL_STATES,
     transition_for_verified_event,
     validate_event_against_deal,
 )
