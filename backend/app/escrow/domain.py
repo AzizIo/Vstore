@@ -210,7 +210,9 @@ def validate_event_against_deal(event: NormalizedEventEvidence, deal: DealEviden
             or event.observed_contract_state != EscrowDealStatus.DELIVERED_DISPUTE_WINDOW.value
             or not event.message_hash or not event.trace_id or not event.attempt_id
         ):
-            raise EscrowDomainError("Delivery attestation lacks finalized contract-state reconciliation")
+            raise EscrowDomainError(
+                "Delivery attestation lacks finalized contract-state reconciliation"
+            )
 
     nft_related = {
         EscrowChainEventType.NFT_DEPOSIT_ACCEPTED,
@@ -259,10 +261,14 @@ def validate_event_against_deal(event: NormalizedEventEvidence, deal: DealEviden
         or event.destination_address != deal.seller_address
         or event.amount_nanotons != deal.principal_nanotons
     ):
-        raise EscrowDomainError("Seller payout does not match contract, fixed recipient and principal")
+        raise EscrowDomainError(
+            "Seller payout does not match contract, fixed recipient and principal"
+        )
     if event.event_type is EscrowChainEventType.BUYER_REFUND_RECONCILED and (
         event.source_address != deal.contract_address
         or event.destination_address != deal.buyer_address
         or event.amount_nanotons != deal.principal_nanotons
     ):
-        raise EscrowDomainError("Buyer refund does not match contract, fixed recipient and principal")
+        raise EscrowDomainError(
+            "Buyer refund does not match contract, fixed recipient and principal"
+        )
