@@ -56,11 +56,9 @@ class NormalizedChainEvent:
         identity = (
             self.network, self.transaction_hash,
             self.message_hash or f"idx-{self.event_index}",
-            self.deal_id or "deal-unknown", self.trace_id or "trace-unknown",
-            self.phase or "phase-unknown", self.attempt_id or "attempt-unknown",
-            self.query_id or "query-unknown", self.operation_id or "operation-unknown",
-            self.logical_time if self.logical_time is not None else "lt-unknown",
-            self.deal_salt or "salt-unknown",
+            self.trace_id or "trace-unknown", self.phase or "phase-unknown",
+            self.attempt_id or "attempt-unknown", self.query_id or "query-unknown",
+            self.operation_id or "operation-unknown",
         )
         import hashlib
         import json
