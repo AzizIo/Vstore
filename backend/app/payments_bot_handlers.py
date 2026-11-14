@@ -29,7 +29,7 @@ async def show_test_account_id(message: Message) -> None:
 
     if message.from_user is None:
         return
-    await message.answer(f"Ваш Telegram test ID: `{message.from_user.id}`")
+    await message.answer(f"Ваш Telegram test ID: {message.from_user.id}")
 
 
 @router.message(Command("pay"))
