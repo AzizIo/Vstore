@@ -50,6 +50,7 @@ def test_demo_preflight_passes_all_public_endpoint_checks(monkeypatch: pytest.Mo
                 "status": "ready",
                 "checks": {
                     "database": "ok",
+                    "database_migrations": "ok",
                     "redis": "ok",
                     "authentication": "ok",
                     "ton_connect_proof": "ok",
@@ -110,6 +111,7 @@ def test_demo_preflight_fails_when_manifest_does_not_allow_cross_origin_get(
                 "status": "ready",
                 "checks": {
                     "database": "ok",
+                    "database_migrations": "ok",
                     "redis": "ok",
                     "authentication": "ok",
                     "ton_connect_proof": "ok",
@@ -159,6 +161,7 @@ def test_demo_preflight_fails_readiness_when_one_dependency_is_unavailable(
                         "status": "not_ready",
                         "checks": {
                             "database": "ok",
+                            "database_migrations": "ok",
                             "redis": "error",
                             "authentication": "ok",
                             "ton_connect_proof": "ok",
@@ -242,6 +245,7 @@ def test_demo_preflight_fails_when_backend_wallet_proof_is_not_configured(
                 "status": "ready",
                 "checks": {
                     "database": "ok",
+                    "database_migrations": "ok",
                     "redis": "ok",
                     "authentication": "ok",
                     "ton_connect_proof": "error",
@@ -292,6 +296,7 @@ def test_demo_preflight_fails_when_backend_allowlist_uses_another_host(
                 "status": "ready",
                 "checks": {
                     "database": "ok",
+                    "database_migrations": "ok",
                     "redis": "ok",
                     "authentication": "ok",
                     "ton_connect_proof": "ok",

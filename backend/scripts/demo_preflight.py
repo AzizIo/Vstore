@@ -159,7 +159,7 @@ def run_preflight(
                 isinstance(allowed_proof_domains, list)
                 and expected_proof_domain in allowed_proof_domains
             )
-            required = ("database", "redis", "authentication")
+            required = ("database", "database_migrations", "redis", "authentication")
             missing_or_failed = [name for name in required if components.get(name) != "ok"]
             ready = (
                 health.status == 200
@@ -171,7 +171,7 @@ def run_preflight(
                     CheckResult(
                         "API readiness",
                         True,
-                        "API, database, Redis and authentication are ready.",
+                        "API, database, applied migrations, Redis and authentication are ready.",
                     )
                 )
             else:

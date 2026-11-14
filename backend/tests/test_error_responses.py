@@ -31,6 +31,7 @@ def test_readiness_response_keeps_its_machine_contract() -> None:
         "status": "not_ready",
         "checks": {
             "database": False,
+            "database_migrations": "error",
             "redis": True,
             "authentication": False,
             "ton_connect_proof": "ok",
@@ -43,6 +44,7 @@ def test_readiness_response_keeps_its_machine_contract() -> None:
         "status": "not_ready",
         "checks": {
             "database": False,
+            "database_migrations": "error",
             "redis": True,
             "authentication": False,
             "ton_connect_proof": "ok",
