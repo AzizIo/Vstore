@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 from dataclasses import FrozenInstanceError, replace
 from types import SimpleNamespace
 
@@ -66,6 +68,11 @@ def snapshot(**changes: object) -> DealEscrowDeploymentSnapshot:
 
 def wallet(address: str) -> SimpleNamespace:
     return SimpleNamespace(address=address, network="testnet", is_verified=True)
+
+
+def boc_sha256(payload: str) -> str:
+    raw = base64.b64decode(payload, validate=True)
+    return hashlib.sha256(raw).hexdigest()
 
 
 def test_pinned_abi_and_code_boc_are_verified() -> None:
@@ -166,6 +173,9 @@ async def test_deploy_and_activate_are_distinct_ton_connect_actions() -> None:
     assert activate.messages[0].address == deploy.messages[0].address
     assert activate.messages[0].amount == "30000000"
     assert activate.messages[0].payload is not None
+    assert boc_sha256(activate.messages[0].payload) == (
+        "d277f33218afe7a525da50ecd8d61770c6a21112fe9b529d1f6951a7a5d55476"
+    )
     assert activate.messages[0].state_init is None
 
 
@@ -187,6 +197,9 @@ async def test_buyer_funding_is_exact_principal_plus_execution_reserve() -> None
     assert payload.messages[0].address == derive_deployment(load_pinned_code_boc(), deal).address
     assert payload.messages[0].amount == "1500000000"
     assert payload.messages[0].payload
+    assert boc_sha256(payload.messages[0].payload) == (
+        "ed4ce8f9f3d78815d72e2ecfbecbc9f38aa6d4863a55b4a777a1459449819db6"
+    )
 
 
 @pytest.mark.asyncio
@@ -233,6 +246,104 @@ async def test_post_delivery_nft_return_is_buyer_only_and_state_bound() -> None:
     assert payload.messages[0].address == deal.item_address
     assert payload.messages[0].amount == "50000000"
     assert payload.messages[0].payload
+    assert boc_sha256(payload.messages[0].payload) == (
+        "a38747229d7e04d4b490eceef609a7e7f9cfac4bb884e163870c16f1f2e99d6a"
+    )
+
+
+@pytest.mark.asyncio
+async def test_seller_nft_deposit_payload_matches_generated_tep62_abi() -> None:
+    adapter = PinnedTONEscrowContractAdapter()
+    deal = snapshot(contract_state=1, deadline_unix=1_800_000_000)
+    payload = await adapter.prepare_transaction(
+        EscrowWalletAction.DEPOSIT_NFT,
+        actor_wallet=wallet(deal.seller_address),  # type: ignore[arg-type]
+        resource_id="deal-1",
+        deal_snapshot=deal,
+        valid_until=1_800_000_000,
+    )
+    assert payload.messages[0].address == deal.item_address
+    assert payload.messages[0].payload is not None
+    assert boc_sha256(payload.messages[0].payload) == (
+        "a7fca11d00418b3ed92a117b0d1cfd9f61fc140cb94765bd0968390ba2b15fd4"
+    )
+
+
+@pytest.mark.asyncio
+async def test_accept_dispute_timeout_and_recovery_bocs_match_generated_abi() -> None:
+    adapter = PinnedTONEscrowContractAdapter()
+    deal = snapshot(
+        contract_state=3,
+        deadline_unix=1_800_000_000,
+        nft_in_escrow=True,
+        principal_locked=True,
+    )
+    accept = await adapter.prepare_transaction(
+        EscrowWalletAction.ACCEPT_DEAL,
+        actor_wallet=wallet(deal.buyer_address),  # type: ignore[arg-type]
+        resource_id="deal-1",
+        deal_snapshot=deal,
+        valid_until=1_800_000_000,
+    )
+    assert accept.messages[0].payload is not None
+    assert boc_sha256(accept.messages[0].payload) == (
+        "aaebfe6189c5d23bfe5227ce4fbe0b97bf10cf763ac2e092d608730f50e4ce1b"
+    )
+
+    dispute = await adapter.prepare_transaction(
+        EscrowWalletAction.OPEN_DISPUTE,
+        actor_wallet=wallet(deal.buyer_address),  # type: ignore[arg-type]
+        resource_id="deal-1",
+        deal_snapshot=deal,
+        query_id=2001,
+        reason_hash=int("ab" * 32, 16),
+        valid_until=1_800_000_000,
+    )
+    assert dispute.messages[0].payload is not None
+    assert boc_sha256(dispute.messages[0].payload) == (
+        "687c3f5300af7371f946dd9dae1c849eede2887f167f8028aa4d1da228a709cd"
+    )
+
+    timeout_deal = replace(
+        deal,
+        contract_state=1,
+        deadline_unix=1_699_999_999,
+        observed_chain_time_unix=1_700_000_000,
+        nft_in_escrow=False,
+        principal_locked=False,
+    )
+    timeout = await adapter.prepare_transaction(
+        EscrowWalletAction.TIMEOUT_DEAL,
+        actor_wallet=wallet(timeout_deal.seller_address),  # type: ignore[arg-type]
+        resource_id="deal-1",
+        deal_snapshot=timeout_deal,
+        query_id=2002,
+        valid_until=1_800_000_000,
+    )
+    assert timeout.messages[0].payload is not None
+    assert boc_sha256(timeout.messages[0].payload) == (
+        "2cc8443c10c2749973e51ce2e051ebfaac6e8bb191e231948104a235dc3e43f3"
+    )
+
+    recovery_deal = replace(
+        deal,
+        contract_state=13,
+        recovery_previous_owner=deal.seller_address,
+        recovery_item_address="0:" + "55" * 32,
+    )
+    recovery = await adapter.prepare_transaction(
+        EscrowWalletAction.RECOVER_UNEXPECTED_NFT,
+        actor_wallet=wallet(recovery_deal.seller_address),  # type: ignore[arg-type]
+        resource_id="deal-1",
+        deal_snapshot=recovery_deal,
+        query_id=2003,
+        valid_until=1_800_000_000,
+    )
+    assert recovery.messages[0].address == recovery_deal.recovery_item_address
+    assert recovery.messages[0].payload is not None
+    assert boc_sha256(recovery.messages[0].payload) == (
+        "296bbfd9ed948575f6e8dfd31d529384e016cbfe321f73d42717b294b8b3ac34"
+    )
 
 
 @pytest.mark.asyncio
