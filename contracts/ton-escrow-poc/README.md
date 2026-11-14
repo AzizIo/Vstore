@@ -41,7 +41,7 @@ The evidence signature is Ed25519 over the TON representation hash of `OracleAtt
 3. `OraclePosition`: positive masterchain sequence number and transaction logical time.
 4. `OracleEvidenceHashes`: message hash, trace hash and retained raw evidence hash.
 
-Three independent public keys are snapshotted in StateInit. At least two signatures must validate; each signature is tied to its corresponding key slot, so one signer cannot be counted twice. Oracle public keys must be unique and disjoint from resolver keys. The backend observer is not automatically an oracle; private keys must be held by independent test operators and must never be stored in VILTARA's backend.
+Three independent public keys are snapshotted in StateInit. At least two signatures must validate; each signature is tied to its corresponding key slot, so one signer cannot be counted twice. Oracle public keys must be unique and disjoint from resolver keys. Every outbound action advances a stored, monotonic `oracleAttemptId`; the same value is placed into its TON query ID and must match the signed context and the observed route. Resolver decisions separately bind to a monotonic `disputeAttemptId`, so an old decision cannot be replayed in a later dispute even when the buyer reuses the same reason hash. The backend observer is not automatically an oracle; private keys must be held by independent test operators and must never be stored in VILTARA's backend.
 
 Resolver signatures are separately domain-separated and bind network, escrow, deal salt, dispute phase, outcome, attempt ID and the buyer's dispute evidence hash. Oracle and resolver key sets are distinct. Test fixtures must never be reused for a real deployment.
 
