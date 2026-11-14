@@ -13,7 +13,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.assets.ton_nft.address import AddressError, normalize_address
 from app.assets.ton_nft.dependencies import get_ton_nft_verifier
+from app.assets.ton_nft.models import VerificationStatus
 from app.assets.ton_nft.verifier import TONNFTVerifier
 from app.auth.dependencies import get_current_user
 from app.core.config import get_settings
@@ -21,8 +23,8 @@ from app.db.models import (
     AssetType,
     AssetVerificationStatus,
     Listing,
-    NFTAsset,
     ListingStatus,
+    NFTAsset,
     PriceCurrency,
     User,
     Wallet,
@@ -53,8 +55,6 @@ from app.escrow.schemas import (
     EscrowWithdrawalCreate,
     EscrowWithdrawalResponse,
 )
-from app.assets.ton_nft.address import AddressError, normalize_address
-from app.assets.ton_nft.models import VerificationStatus
 
 router = APIRouter(prefix="/escrow", tags=["ton-escrow"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
@@ -166,7 +166,10 @@ def _require_testnet() -> None:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
                 "code": "escrow_testnet_only",
-                "message": "Escrow backend is disabled unless TON Connect is configured for testnet.",
+                "message": (
+                    "Escrow backend is disabled unless TON Connect is configured "
+                    "for testnet."
+                ),
             },
         )
 
@@ -265,7 +268,10 @@ async def create_listing_intent(
         if listing.price_currency is not PriceCurrency.TON:
             raise HTTPException(
                 status_code=409,
-                detail="Escrow testnet intents require a TON-priced listing; XTR is a separate domain",
+                detail=(
+                    "Escrow testnet intents require a TON-priced listing; "
+                    "XTR is a separate domain"
+                ),
             )
         if (
             asset.asset_type is not AssetType.TON_NFT
@@ -298,7 +304,10 @@ async def create_listing_intent(
             )
         )
         if active_intent is not None:
-            raise HTTPException(status_code=409, detail="An escrow intent already exists for this listing")
+            raise HTTPException(
+                status_code=409,
+                detail="An escrow intent already exists for this listing",
+            )
 
         intent = EscrowListingIntent(
             id=uuid4(),
@@ -397,7 +406,11 @@ async def create_deal_intent(
         if intent.seller_id == user.id:
             raise HTTPException(status_code=409, detail="A seller cannot buy their own listing")
         listing = await session.get(Listing, intent.marketplace_listing_id)
-        if listing is None or listing.status is not ListingStatus.ACTIVE or listing.asset_id != intent.asset_id:
+        if (
+            listing is None
+            or listing.status is not ListingStatus.ACTIVE
+            or listing.asset_id != intent.asset_id
+        ):
             raise HTTPException(status_code=409, detail="Underlying listing is no longer active")
         buyer_wallet, buyer_address = await _verified_wallet(
             session, user_id=user.id, wallet_id=payload.buyer_wallet_id
@@ -479,7 +492,10 @@ async def get_deal_status(
     return deal
 
 
-@router.post("/listing-intents/{intent_id}/transaction", response_model=EscrowTransactionPreparationResponse)
+@router.post(
+    "/listing-intents/{intent_id}/transaction",
+    response_model=EscrowTransactionPreparationResponse,
+)
 async def prepare_listing_transaction(
     intent_id: UUID,
     user: CurrentUser,
@@ -506,7 +522,10 @@ async def prepare_listing_transaction(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "contract_abi_pending", "message": str(exc)},
         ) from exc
-    raise HTTPException(status_code=503, detail="No approved escrow transaction adapter is configured")
+    raise HTTPException(
+        status_code=503,
+        detail="No approved escrow transaction adapter is configured",
+    )
 
 
 @router.post("/deals/{deal_id}/receipt", response_model=EscrowTransactionPreparationResponse)
@@ -563,7 +582,9 @@ async def request_dispute(
                 raise HTTPException(status_code=404, detail="Dispute not found")
             return EscrowDisputeResponse(
                 id=dispute.id, deal_id=dispute.deal_id, opened_by=dispute.opened_by,
-                reason_code=dispute.reason_code, status=dispute.status, created_at=dispute.created_at,
+                reason_code=dispute.reason_code,
+                status=dispute.status,
+                created_at=dispute.created_at,
             )
         deal = await session.scalar(
             select(EscrowDeal)
@@ -578,7 +599,10 @@ async def request_dispute(
         }:
             raise HTTPException(
                 status_code=409,
-                detail="A dispute requires independently confirmed on-chain funding or delivery evidence",
+                detail=(
+                    "A dispute requires independently confirmed on-chain funding "
+                    "or delivery evidence"
+                ),
             )
         dispute = EscrowDispute(
             id=uuid4(), deal_id=deal.id, opened_by=user.id, reason_code=payload.reason_code,
@@ -641,7 +665,9 @@ async def prepare_withdrawal(
                 id=replay.id, recipient_address=replay.recipient_address,
                 status=replay.status, reason_code=replay.reason_code, created_at=replay.created_at,
             )
-        wallet, canonical_address = await _verified_wallet(session, user_id=user.id, wallet_id=payload.wallet_id)
+        wallet, canonical_address = await _verified_wallet(
+            session, user_id=user.id, wallet_id=payload.wallet_id
+        )
         withdrawal = EscrowWithdrawal(
             id=uuid4(), seller_id=user.id, wallet_id=wallet.id, network="testnet",
             recipient_address=canonical_address, amount_nanotons=None,
