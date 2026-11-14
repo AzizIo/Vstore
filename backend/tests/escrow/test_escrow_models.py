@@ -33,6 +33,10 @@ def test_escrow_tables_are_separate_from_order_and_payment_tables() -> None:
     }
     status_column = EscrowDeal.__table__.c.status
     assert status_column.default is not None or status_column.server_default is not None
+    assert EscrowDeal.__table__.c.deal_salt.unique is False
+    assert "uq_escrow_deal_network_salt" in {c.name for c in EscrowDeal.__table__.constraints}
+    assert EscrowListingIntent.__table__.c.listing_key.unique is True
+    assert "collection_address_snapshot" in EscrowDeal.__table__.c
 
 
 def test_chain_event_replay_and_idempotency_are_database_constrained() -> None:
@@ -41,7 +45,7 @@ def test_chain_event_replay_and_idempotency_are_database_constrained() -> None:
         for constraint in EscrowChainEvent.__table__.constraints
         if constraint.__class__.__name__ == "UniqueConstraint"
     }
-    assert ("network", "transaction_hash", "event_index") in event_uniques
+    assert ("network", "event_key") in event_uniques
     idem_uniques = {
         tuple(constraint.columns.keys())
         for constraint in EscrowIdempotencyRecord.__table__.constraints
