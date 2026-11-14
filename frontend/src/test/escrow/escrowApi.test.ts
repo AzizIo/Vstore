@@ -3,87 +3,99 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createEscrowApiClient,
   isEscrowDeal,
-  isEscrowListing,
+  isEscrowListingIntent,
   isEscrowWithdrawal,
+  type EscrowDeal,
   type EscrowHttpContract,
+  type EscrowListingIntent,
+  type EscrowWithdrawal,
   type PreparedEscrowTransaction,
 } from "../../api/escrow";
 
-function listing() {
+const item = "0:" + "1".repeat(64);
+const escrow = "0:" + "2".repeat(64);
+const factory = "0:" + "3".repeat(64);
+
+function listing(): EscrowListingIntent {
   return {
     id: "listing-1",
+    listing_key: "listing-key-1",
     seller_id: "seller-1",
-    state: "listed",
+    state: "intent_only",
     network: "testnet",
     nft: {
       asset_id: "asset-1",
       title: "Test NFT",
       image_url: null,
-      item_address: `0:${"1".repeat(64)}`,
+      item_address: item,
       collection_address: null,
     },
-    contract_address: `0:${"2".repeat(64)}`,
-    seller_wallet_address: `0:${"3".repeat(64)}`,
-    price_ton: "2.5",
-    platform_fee_ton: "0.1",
+    seller_wallet_address: "0:" + "4".repeat(64),
+    price_nano: "2500000000",
+    fee_bps: 0,
     created_at: "2026-11-14T10:00:00Z",
     updated_at: "2026-11-14T10:00:00Z",
   };
 }
 
-function deal() {
+function deal(overrides: Partial<EscrowDeal> = {}): EscrowDeal {
   return {
     id: "deal-1",
     listing_id: "listing-1",
+    listing_key: "listing-key-1",
     buyer_id: "buyer-1",
     seller_id: "seller-1",
-    state: "buyer_confirmation_window",
+    state: "funded_review",
     network: "testnet",
     nft: listing().nft,
-    contract_address: `0:${"2".repeat(64)}`,
-    seller_wallet_address: `0:${"3".repeat(64)}`,
-    buyer_wallet_address: `0:${"4".repeat(64)}`,
-    price_ton: "2.5",
-    platform_fee_ton: "0.1",
-    seller_claimable_ton: null,
-    buyer_confirmation_deadline: "2026-11-15T10:00:00Z",
+    escrow_address: escrow,
+    seller_wallet_address: "0:" + "4".repeat(64),
+    buyer_wallet_address: "0:" + "5".repeat(64),
+    price_nano: "2500000000",
+    fee_bps: 0,
+    buyer_review_deadline: "2026-11-15T10:00:00Z",
     dispute_deadline: "2026-11-16T10:00:00Z",
+    available_actions: ["accept_deal", "open_dispute"],
     created_at: "2026-11-14T10:00:00Z",
     updated_at: "2026-11-14T10:00:00Z",
     dispute: null,
+    ...overrides,
   };
 }
 
-function withdrawal() {
+function withdrawal(): EscrowWithdrawal {
   return {
     id: "withdrawal-1",
-    listing_id: null,
     deal_id: "deal-1",
-    kind: "seller_proceeds",
+    kind: "unsold_nft",
     status: "observing",
-    amount_ton: "2.4",
-    destination_address: `0:${"3".repeat(64)}`,
+    destination_address: "0:" + "4".repeat(64),
     transaction_hash: null,
     created_at: "2026-11-14T10:00:00Z",
     updated_at: "2026-11-14T10:00:00Z",
   };
 }
 
-function prepared(action: PreparedEscrowTransaction["action"] = "purchase") {
+function prepared(action: PreparedEscrowTransaction["action"] = "fund_deal") {
+  const isFactoryAction = action === "create_deal_escrow";
+  const destination = isFactoryAction ? factory
+    : action === "deposit_nft" || action === "return_nft_to_escrow" ? item
+      : escrow;
   return {
-    id: "operation-1",
+    action_id: "operation-1",
     action,
     network: "testnet",
-    contract_address: `0:${"2".repeat(64)}`,
-    nft_item_address: `0:${"1".repeat(64)}`,
-    amount_ton: "2.5",
-    fee_ton: "0.1",
-    network_fee_ton: "0.02",
+    factory_address: isFactoryAction ? factory : null,
+    escrow_address: isFactoryAction ? null : escrow,
+    nft_item_address: item,
+    price_nano: "2500000000",
+    fee_bps: 0,
+    execution_reserve_nano: "20000000",
     valid_until: "2099-01-01T00:00:00Z",
-    display_summary: "Подготовить действие",
+    display_purpose: "Проверьте параметры операции",
     messages: [{
-      address: `0:${"2".repeat(64)}`,
-      amount_nanotons: "2520000000",
+      address: destination,
+      amount_nano: "2520000000",
       payload_boc: null,
       state_init_boc: null,
     }],
@@ -100,13 +112,15 @@ function contract(): EscrowHttpContract {
     sellerWithdrawals: () => "/test/escrow/seller/withdrawals",
     listingDetails: (id) => `/test/escrow/listings/${id}`,
     dealDetails: (id) => `/test/escrow/deals/${id}`,
-    prepareNftDeposit: (input) => operation("/test/escrow/prepare-deposit", input),
-    preparePurchase: (input) => operation("/test/escrow/prepare-purchase", input),
-    prepareBuyerConfirmation: (input) => operation("/test/escrow/prepare-confirm", input),
+    createListingIntent: (input) => operation("/test/escrow/listing-intents", input),
+    createBuyerDealIntent: (input) => operation("/test/escrow/deal-intents", input),
+    prepareDealEscrow: (input) => operation("/test/escrow/prepare-deal-escrow", input),
+    prepareNftDeposit: (input) => operation("/test/escrow/prepare-nft-deposit", input),
+    prepareBuyerFunding: (input) => operation("/test/escrow/prepare-buyer-funding", input),
+    prepareBuyerAcceptance: (input) => operation("/test/escrow/prepare-buyer-acceptance", input),
     prepareDispute: (input) => operation("/test/escrow/prepare-dispute", input),
     prepareBuyerNftReturn: (input) => operation("/test/escrow/prepare-nft-return", input),
     prepareUnsoldNftWithdrawal: (input) => operation("/test/escrow/prepare-unsold-withdrawal", input),
-    prepareSellerProceedsWithdrawal: (input) => operation("/test/escrow/prepare-payout", input),
     submitWalletReference: (input) => operation("/test/escrow/submit-reference", input),
   };
 }
@@ -120,25 +134,22 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe("escrow API boundary", () => {
-  beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn());
-  });
+  beforeEach(() => vi.stubGlobal("fetch", vi.fn()));
+  afterEach(() => vi.unstubAllGlobals());
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("validates participant-scoped listings, deals and withdrawals", async () => {
+  it("validates listing intents, buyer/seller deals and unsold NFT withdrawals", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(response({ items: [listing()], total: 1, next_cursor: null }))
       .mockResolvedValueOnce(response({ items: [deal()], total: 1, next_cursor: null }))
+      .mockResolvedValueOnce(response({ items: [deal({ buyer_id: "buyer-2" })], total: 1, next_cursor: null }))
       .mockResolvedValueOnce(response({ items: [withdrawal()], total: 1, next_cursor: null }));
 
     const api = createEscrowApiClient("access-token", contract());
 
     await expect(api.listMarketplaceListings()).resolves.toMatchObject({ total: 1 });
-    await expect(api.listBuyerDeals()).resolves.toMatchObject({ items: [{ buyer_id: "buyer-1" }] });
-    await expect(api.listSellerWithdrawals()).resolves.toMatchObject({ items: [{ status: "observing" }] });
+    await expect(api.listBuyerDeals()).resolves.toMatchObject({ items: [{ state: "funded_review" }] });
+    await expect(api.listSellerDeals()).resolves.toMatchObject({ items: [{ seller_id: "seller-1" }] });
+    await expect(api.listSellerWithdrawals()).resolves.toMatchObject({ items: [{ kind: "unsold_nft" }] });
 
     expect(vi.mocked(fetch).mock.calls[0][0]).toBe("/test/escrow/listings");
     expect((vi.mocked(fetch).mock.calls[0][1] as RequestInit).headers).toMatchObject({
@@ -146,33 +157,40 @@ describe("escrow API boundary", () => {
     });
   });
 
-  it("has separate seller-deal feed and buyer NFT-return preparation methods", async () => {
+  it("serializes listing and buyer deal intents through injected API routes", async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(response({ items: [deal()], total: 1, next_cursor: null }))
-      .mockResolvedValueOnce(response(prepared("buyer_nft_return")));
+      .mockResolvedValueOnce(response(listing()))
+      .mockResolvedValueOnce(response(deal({ state: "intent_created", available_actions: [] })));
 
     const api = createEscrowApiClient("access-token", contract());
-    await expect(api.listSellerDeals()).resolves.toMatchObject({ items: [{ seller_id: "seller-1" }] });
-    await expect(api.prepareBuyerNftReturn({
-      deal_id: "deal-1",
-      buyer_wallet_id: "wallet-1",
-    })).resolves.toMatchObject({ action: "buyer_nft_return" });
+    await api.createListingIntent({
+      asset_id: "asset-1",
+      seller_wallet_id: "wallet-seller",
+      price_nano: "2500000000",
+    });
+    await api.createBuyerDealIntent({
+      listing_id: "listing-1",
+      buyer_wallet_id: "wallet-buyer",
+    });
 
-    expect(String(vi.mocked(fetch).mock.calls[1][0])).toBe("/test/escrow/prepare-nft-return");
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe("/test/escrow/listing-intents");
+    expect(JSON.parse(String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body))).toEqual({
+      asset_id: "asset-1",
+      seller_wallet_id: "wallet-seller",
+      price_nano: "2500000000",
+    });
+    expect(vi.mocked(fetch).mock.calls[1][0]).toBe("/test/escrow/deal-intents");
   });
 
-  it("uses the injected URL and payload rather than guessing API paths", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(response(prepared()));
+  it("uses the injected path and request body for a prepared TON action", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response(prepared("fund_deal")));
     const api = createEscrowApiClient("access-token", contract());
 
-    await api.preparePurchase({ listing_id: "listing-1", buyer_wallet_id: "wallet-1" });
+    await api.prepareBuyerFunding({ deal_id: "deal-1", wallet_id: "wallet-buyer" });
 
     const [url, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/test/escrow/prepare-purchase");
-    expect(JSON.parse(String(init.body))).toEqual({
-      listing_id: "listing-1",
-      buyer_wallet_id: "wallet-1",
-    });
+    expect(url).toBe("/test/escrow/prepare-buyer-funding");
+    expect(JSON.parse(String(init.body))).toEqual({ deal_id: "deal-1", wallet_id: "wallet-buyer" });
     expect(init.method).toBe("POST");
     expect(init.headers).toMatchObject({
       Authorization: "Bearer access-token",
@@ -185,22 +203,26 @@ describe("escrow API boundary", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("rejects unrecognized states, mainnet data and malformed pages", async () => {
-    expect(isEscrowListing({ ...listing(), state: "complete" })).toBe(false);
-    expect(isEscrowListing({ ...listing(), network: "mainnet" })).toBe(false);
-    expect(isEscrowListing({ ...listing(), price_ton: "NaN" })).toBe(false);
-    expect(isEscrowListing({ ...listing(), price_ton: "0" })).toBe(false);
-    expect(isEscrowListing({ ...listing(), platform_fee_ton: "-0.1" })).toBe(false);
-    expect(isEscrowDeal({ ...deal(), seller_claimable_ton: "1e6" })).toBe(false);
+  it("rejects unknown states, mainnet data, nonzero PoC fees and malformed nanotons", () => {
+    expect(isEscrowListingIntent({ ...listing(), state: "listed" })).toBe(false);
+    expect(isEscrowListingIntent({ ...listing(), network: "mainnet" })).toBe(false);
+    expect(isEscrowListingIntent({ ...listing(), price_nano: "2.5" })).toBe(false);
+    expect(isEscrowListingIntent({ ...listing(), price_nano: "0" })).toBe(false);
+    expect(isEscrowListingIntent({ ...listing(), fee_bps: 50 })).toBe(false);
     expect(isEscrowDeal({ ...deal(), state: "completed" })).toBe(false);
-    expect(isEscrowWithdrawal({ ...withdrawal(), status: "paid" })).toBe(false);
+    expect(isEscrowDeal({ ...deal(), available_actions: ["claim_payout"] })).toBe(false);
+    expect(isEscrowWithdrawal({ ...withdrawal(), kind: "seller_proceeds" })).toBe(false);
+  });
 
-    vi.mocked(fetch).mockResolvedValueOnce(response({
-      items: [{ ...listing(), network: "mainnet" }],
-      total: 1,
-      next_cursor: null,
-    }));
-    await expect(createEscrowApiClient("access-token", contract()).listMarketplaceListings())
+  it("rejects a prepared transaction with a non-testnet network or nonzero fee", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response({ ...prepared(), network: "mainnet" }))
+      .mockResolvedValueOnce(response({ ...prepared(), fee_bps: 1 }));
+
+    const api = createEscrowApiClient("access-token", contract());
+    await expect(api.prepareBuyerFunding({ deal_id: "deal-1", wallet_id: "wallet-buyer" }))
+      .rejects.toThrow(/не соответствует ожидаемому контракту/i);
+    await expect(api.prepareBuyerFunding({ deal_id: "deal-1", wallet_id: "wallet-buyer" }))
       .rejects.toThrow(/не соответствует ожидаемому контракту/i);
   });
 
