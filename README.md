@@ -31,6 +31,8 @@ Admin workspace: `/admin`. Access is fail-closed and requires the server-side `A
 | Telegram Gifts adapter, deal chat | Not implemented |
 | Payments, checkout, escrow/guarantee, refunds, commissions and seller payouts | Not implemented |
 
+An internal-only Telegram Stars test harness is available for development in Telegram's dedicated test environment. It requires a separate test bot token and a local test-named PostgreSQL database; it is not part of the public MVP checkout and does not enable production payments or escrow. Follow [the isolated Stars test runbook](docs/TELEGRAM_STARS_TEST_RUNBOOK.md).
+
 The B2 migration renames historical `pending_payment` order/event rows to `reserved` without changing their IDs, price/currency snapshots, idempotency keys, or event history. Delivery preparation snapshots the exact NFT item, network, seller source, buyer destination, query ID and deadline. The seller wallet signs the TEP-62 transfer; submitted references are untrusted hints. Only independently verified finalized evidence can complete the order.
 
 ## How listing and reservation work today
