@@ -7,9 +7,10 @@ This API follows `docs/TON_ESCROW_SHARED_INTERFACE.md`. It defines transport sem
 ## Safety boundary
 
 - All authenticated actors come from the verified API session. Wallet IDs are resolved server-side to verified testnet wallet records; client wallet addresses are never authoritative.
+- `available_actions` is derived from the authenticated participant and current server-side state. Sellers never receive buyer-only `create_deal_intent` actions, and buyers never receive seller-only actions.
 - All amounts are integer nanotons encoded as decimal strings. The seller's listing price is snapshotted as the immutable deal principal.
 - A listing intent is an off-chain seller preparation record. It does not claim that the NFT is held by escrow.
-- Creating a buyer deal intent locks one buyer, seller, collection, NFT item, principal, network and unique deal salt into one immutable deal record. ORM guards and a PostgreSQL trigger reject later changes to these terms.
+- Creating a buyer deal intent locks one buyer, seller, listing key, collection, NFT item, principal, network and unique deal salt into one immutable deal record. ORM guards and a PostgreSQL trigger reject later changes to these terms.
 - Deal-scoped deployment is not prepared from a seller-only listing intent.
 - The observer stores raw evidence separately from accepted contract events. Accepted NFT deposit/delivery/return events must match both the snapshotted collection and item; raw NFT transfer observations cannot advance canonical deal state.
 - Non-final, unverified or unmatched events remain pending and pin the durable cursor. The same provider page is re-queried until it can be promoted or reconciled.
