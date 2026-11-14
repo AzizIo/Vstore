@@ -122,7 +122,10 @@ jobs:
           for name, service in services.items():
               assert not service.get("ports"), f"{name} must not publish host ports"
               assert not service.get("env_file"), f"{name} must not load a production env file"
-          assert set(services["db"]["volumes"][0].keys()) == {"type", "source", "target"}
+          db_volume = services["db"]["volumes"][0]
+          assert db_volume["type"] == "volume"
+          assert "stars_test_data" in db_volume["source"]
+          assert db_volume["target"] == "/var/lib/postgresql/data"
           app_services = ("migrate", "tools", "bot", "refund-worker")
           for name in app_services:
               env = services[name]["environment"]
@@ -133,6 +136,7 @@ jobs:
               assert "@db:" in env["DATABASE_URL"]
           assert "stars_test_data" in config["volumes"]
           '
+
       - name: Lint
         run: ruff check app tests migrations scripts
 
