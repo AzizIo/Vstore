@@ -32,8 +32,12 @@ def upgrade() -> None:
         sa.Column("contract_address", sa.String(128), nullable=True),
         sa.Column("contract_abi_version", sa.String(64), nullable=True),
         sa.Column("idempotency_key", sa.String(128), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint("network = 'testnet'", name="ck_escrow_listing_network_testnet"),
         sa.CheckConstraint("price_currency = 'TON'", name="ck_escrow_listing_currency_ton"),
         sa.CheckConstraint("price_amount > 0", name="ck_escrow_listing_price_positive"),
@@ -95,7 +99,9 @@ def upgrade() -> None:
             "'settled', 'refunded', 'expired', 'manual_review')",
             name="ck_escrow_deal_status",
         ),
-        sa.ForeignKeyConstraint(["listing_intent_id"], ["escrow_listing_intents.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["listing_intent_id"], ["escrow_listing_intents.id"], ondelete="RESTRICT"
+        ),
         sa.ForeignKeyConstraint(["marketplace_listing_id"], ["listings.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["seller_id"], ["users.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["buyer_id"], ["users.id"], ondelete="RESTRICT"),
@@ -148,7 +154,9 @@ def upgrade() -> None:
         sa.CheckConstraint("length(evidence_sha256) = 64", name="ck_escrow_event_evidence_hash"),
         sa.ForeignKeyConstraint(["deal_id"], ["escrow_deals.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("network", "transaction_hash", "event_index", name="uq_escrow_chain_event_position"),
+        sa.UniqueConstraint(
+            "network", "transaction_hash", "event_index", name="uq_escrow_chain_event_position"
+        ),
     )
     op.create_index(
         "ix_escrow_chain_event_deal_created", "escrow_chain_events", ["deal_id", "created_at"]
@@ -170,7 +178,8 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.CheckConstraint(
-            "status IN ('requested', 'confirmed', 'resolved_buyer', 'resolved_seller', 'rejected', 'manual_review')",
+            "status IN ('requested', 'confirmed', 'resolved_buyer', 'resolved_seller', "
+            "'rejected', 'manual_review')",
             name="ck_escrow_dispute_status",
         ),
         sa.CheckConstraint("length(reason) BETWEEN 5 AND 2000", name="ck_escrow_dispute_reason"),
@@ -201,14 +210,17 @@ def upgrade() -> None:
         sa.Column("network", sa.String(16), server_default="testnet", nullable=False),
         sa.Column("recipient_address", sa.String(128), nullable=False),
         sa.Column("amount_nanotons", sa.Numeric(30, 0), nullable=True),
-        sa.Column("status", sa.String(32), server_default="blocked_abi_unavailable", nullable=False),
+        sa.Column(
+            "status", sa.String(32), server_default="blocked_abi_unavailable", nullable=False
+        ),
         sa.Column("reason_code", sa.String(64), nullable=False),
         sa.Column("transaction_hash", sa.String(128), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.CheckConstraint("network = 'testnet'", name="ck_escrow_withdrawal_network_testnet"),
         sa.CheckConstraint(
-            "status IN ('blocked_abi_unavailable', 'prepared', 'submitted', 'confirmed', 'failed', 'manual_review')",
+            "status IN ('blocked_abi_unavailable', 'prepared', 'submitted', "
+            "'confirmed', 'failed', 'manual_review')",
             name="ck_escrow_withdrawal_status",
         ),
         sa.CheckConstraint(
@@ -234,7 +246,9 @@ def upgrade() -> None:
         sa.Column("resource_id", sa.Uuid(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.CheckConstraint("length(idempotency_key) BETWEEN 8 AND 128", name="ck_escrow_idem_key_length"),
+        sa.CheckConstraint(
+            "length(idempotency_key) BETWEEN 8 AND 128", name="ck_escrow_idem_key_length"
+        ),
         sa.CheckConstraint("length(request_sha256) = 64", name="ck_escrow_idem_request_hash"),
         sa.ForeignKeyConstraint(["actor_id"], ["users.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
