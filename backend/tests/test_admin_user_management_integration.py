@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import os
 from pathlib import Path
 from uuid import uuid4
@@ -11,6 +10,7 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.auth.dependencies import get_current_user
@@ -46,7 +46,9 @@ async def test_block_unblock_idempotency_audit_and_immutability(
     admin_user_database: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    engine = create_async_engine(admin_user_database, pool_pre_ping=True)
+    engine = create_async_engine(
+        admin_user_database, pool_pre_ping=True, poolclass=NullPool
+    )
     factory = async_sessionmaker(engine, expire_on_commit=False)
     suffix = uuid4().int % 1_000_000_000
     admin = User(telegram_id=7_000_000_000 + suffix, first_name="Admin fixture")
