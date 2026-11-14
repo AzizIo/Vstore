@@ -1,10 +1,9 @@
-"""Provider protocol for finalized TON testnet escrow evidence.
+"""TON testnet event normalization boundary.
 
-TON Center/indexer data is treated as untrusted input. A concrete implementation
-must normalize contract events only after ABI review and document its finality and
-trace-verification guarantees. No live provider is enabled by this module.
+Non-final or incomplete observations may be replayed and promoted to final. The
+provider must include stable message/trace identifiers where available. No live
+provider is enabled before ABI approval.
 """
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,11 +13,11 @@ from app.escrow.domain import EscrowChainEventType
 
 
 class EscrowProviderUnavailable(RuntimeError):
-    """Provider is unavailable; the observer must preserve its cursor and retry."""
+    """Provider outage; cursor remains durable and can be retried."""
 
 
 class EscrowProviderInvalidEvidence(ValueError):
-    """Provider data is malformed, inconsistent or not independently verified."""
+    """Malformed or inconsistent normalized chain evidence."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,10 +36,27 @@ class NormalizedChainEvent:
     finalized: bool
     evidence_sha256: str
     cursor: str
+    message_hash: str | None = None
+    trace_id: str | None = None
+    logical_time: int | None = None
+    phase: str | None = None
+    attempt_id: str | None = None
+    query_id: str | None = None
+    operation_id: str | None = None
+    deal_salt: str | None = None
+    account_address: str | None = None
+    observed_contract_state: str | None = None
+    attestation_accepted: bool = False
 
     @property
     def event_key(self) -> str:
-        return f"{self.network}:{self.transaction_hash}:{self.event_index}"
+        # Same message/trace/phase/attempt can be promoted from pending to final.
+        # Attempt ID is part of identity: a retry must remain a distinct operation.
+        return ":".join((
+            self.network, self.transaction_hash, self.message_hash or f"idx-{self.event_index}",
+            self.trace_id or "trace-unknown", self.phase or "phase-unknown",
+            self.attempt_id or "attempt-unknown",
+        ))
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,26 +66,15 @@ class ChainEventBatch:
 
 
 class TONTestnetEscrowProvider(Protocol):
-    async def scan_events(
-        self, *, cursor: str | None, limit: int
-    ) -> ChainEventBatch: ...
-
+    async def scan_events(self, *, cursor: str | None, limit: int) -> ChainEventBatch: ...
     async def verify_event(self, event: NormalizedChainEvent) -> bool: ...
 
 
 class UnconfiguredTONTestnetEscrowProvider:
-    """Default provider. It never silently switches to mainnet or synthetic data."""
-
-    async def scan_events(
-        self, *, cursor: str | None, limit: int
-    ) -> ChainEventBatch:
+    async def scan_events(self, *, cursor: str | None, limit: int) -> ChainEventBatch:
         del cursor, limit
-        raise EscrowProviderUnavailable(
-            "TON testnet escrow provider is not configured for the approved contract ABI"
-        )
+        raise EscrowProviderUnavailable("TON escrow testnet provider is not configured")
 
     async def verify_event(self, event: NormalizedChainEvent) -> bool:
         del event
-        raise EscrowProviderUnavailable(
-            "TON testnet escrow evidence verification is not configured"
-        )
+        raise EscrowProviderUnavailable("TON testnet evidence verification is not configured")
