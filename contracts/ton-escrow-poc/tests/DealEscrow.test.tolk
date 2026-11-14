@@ -4,6 +4,7 @@ import "@acton/emulation/testing"
 import "@acton/testing/expect"
 
 import "@contracts/types"
+import "@contracts/signatures"
 import "@wrappers/DealEscrow.gen"
 import "@wrappers/TestNftItem.gen"
 
@@ -11,6 +12,13 @@ const TEST_KEY_A = 0x11
 const TEST_KEY_B = 0x22
 const TEST_KEY_C = 0x33
 const ZERO_SIGNATURE_BITS: bits512 = "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000".hexToSlice() as bits512
+const TEST_ED25519_DIGEST: uint256 = 0xabababababababababababababababababababababababababababababababab
+const TEST_SIGNER_A_KEY: uint256 = 0xd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737
+const TEST_SIGNER_B_KEY: uint256 = 0xa09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0
+const TEST_SIGNER_C_KEY: uint256 = 0x17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce
+const TEST_ED25519_SIGNATURE_A: bits512 = "d263f4be3cf5941bc3c063f085a595e5e0c3b9d2ec9061af2f461e226bc0643b992bae6982f3e3e6bbc3034486e873e49ec6adcbb11c2062f39686d82110cb02".hexToSlice() as bits512
+const TEST_ED25519_SIGNATURE_B: bits512 = "be9bf22e2e85ac1a0e7347407ccef4eb9822faceba5bcbc3faa18ae120ab11199fa3d727c4d4596b28b86ecc99e5e4795c73432c8af4f958214420d49b26cc06".hexToSlice() as bits512
+const TEST_ED25519_SIGNATURE_C: bits512 = "f896b2a98036e2710dcfb423c87d39ea8c91df1a114d7bb9a6dafb6333bfbcd87b2239c2154216f3ba6140f16c0efdd03a16c60e9296242021c1725357e74000".hexToSlice() as bits512
 
 fun configureTestnet() {
     val currentGlobalId = testing.getConfig().getParamRaw(19).beginParse().loadInt(32);
@@ -511,4 +519,73 @@ get fun `test terminal payout returns unused execution reserve to buyer`() {
         .toBeGreater(grams("0.005"));
     expect(testing.getAccountBalance(escrow.address))
         .toBeLess(grams("0.02"));
+}
+
+get fun `test 2-of-3 Ed25519 oracle and resolver signatures use distinct signer keys`() {
+    val keys: AuthorityKeys = {
+        keyA: TEST_SIGNER_A_KEY,
+        keyB: TEST_SIGNER_B_KEY,
+        keyC: TEST_SIGNER_C_KEY,
+    };
+    val validA = Signature { data: TEST_ED25519_SIGNATURE_A }.toCell();
+    val validB = Signature { data: TEST_ED25519_SIGNATURE_B }.toCell();
+    val validC = Signature { data: TEST_ED25519_SIGNATURE_C }.toCell();
+    val invalid = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
+
+    val threeValidOracle = OracleSignatureSet {
+        signatureA: validA,
+        signatureB: validB,
+        signatureC: validC,
+    };
+    expect(countValidOracleSignatures(TEST_ED25519_DIGEST, keys, threeValidOracle)).toEqual(3);
+
+    val twoValidOracle = OracleSignatureSet {
+        signatureA: validA,
+        signatureB: validB,
+        signatureC: invalid,
+    };
+    expect(countValidOracleSignatures(TEST_ED25519_DIGEST, keys, twoValidOracle)).toEqual(2);
+
+    val oneValidOracle = OracleSignatureSet {
+        signatureA: validA,
+        signatureB: invalid,
+        signatureC: invalid,
+    };
+    expect(countValidOracleSignatures(TEST_ED25519_DIGEST, keys, oneValidOracle)).toEqual(1);
+
+    // Copying one signer's signature into all three slots cannot produce quorum.
+    val duplicateOracle = OracleSignatureSet {
+        signatureA: validA,
+        signatureB: validA,
+        signatureC: validA,
+    };
+    expect(countValidOracleSignatures(TEST_ED25519_DIGEST, keys, duplicateOracle)).toEqual(1);
+
+    val threeValidResolver = ResolverSignatureSet {
+        signatureA: validA,
+        signatureB: validB,
+        signatureC: validC,
+    };
+    expect(countValidResolverSignatures(TEST_ED25519_DIGEST, keys, threeValidResolver)).toEqual(3);
+
+    val twoValidResolver = ResolverSignatureSet {
+        signatureA: validA,
+        signatureB: validB,
+        signatureC: invalid,
+    };
+    expect(countValidResolverSignatures(TEST_ED25519_DIGEST, keys, twoValidResolver)).toEqual(2);
+
+    val oneValidResolver = ResolverSignatureSet {
+        signatureA: validA,
+        signatureB: invalid,
+        signatureC: invalid,
+    };
+    expect(countValidResolverSignatures(TEST_ED25519_DIGEST, keys, oneValidResolver)).toEqual(1);
+
+    val duplicateResolver = ResolverSignatureSet {
+        signatureA: validA,
+        signatureB: validA,
+        signatureC: validA,
+    };
+    expect(countValidResolverSignatures(TEST_ED25519_DIGEST, keys, duplicateResolver)).toEqual(1);
 }
