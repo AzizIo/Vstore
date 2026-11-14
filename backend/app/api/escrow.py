@@ -544,7 +544,6 @@ async def _prepare_action(
         EscrowWalletAction.FUND_DEAL: {"awaiting_buyer_funds"},
         EscrowWalletAction.ACCEPT_DEAL: {"funded_review"},
         EscrowWalletAction.OPEN_DISPUTE: {"funded_review", "delivered_dispute_window"},
-        EscrowWalletAction.REFUND: {"disputed"},
     }
     if action in seller_states:
         if deal.seller_id != user.id or deal.status != seller_states[action]:
@@ -658,10 +657,11 @@ async def prepare_unsold_nft_withdrawal(
 @router.post("/wallet-references", status_code=503)
 async def submit_wallet_reference(
     payload: EscrowWalletReferenceInput, user: CurrentUser, session: DbSession,
+    idempotency_key: IdempotencyKey,
 ):
     # No prepared action IDs exist until the ABI adapter can create an audited
     # operation record. A client hash/BOC is never accepted as proof or state.
-    del payload, user, session
+    del payload, user, session, idempotency_key
     raise HTTPException(status_code=503, detail={"code": "contract_abi_pending"})
 
 
@@ -680,6 +680,9 @@ async def list_seller_withdrawals(user: CurrentUser, session: DbSession):
 
 
 @router.post("/withdrawals", status_code=503)
-async def blocked_legacy_withdrawal(payload: EscrowWithdrawalCreate, user: CurrentUser, session: DbSession):
-    del payload, user, session
+async def blocked_legacy_withdrawal(
+    payload: EscrowWithdrawalCreate, user: CurrentUser, session: DbSession,
+    idempotency_key: IdempotencyKey,
+):
+    del payload, user, session, idempotency_key
     raise HTTPException(status_code=503, detail={"code": "contract_abi_pending"})
