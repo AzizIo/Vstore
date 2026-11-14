@@ -111,6 +111,46 @@ def test_state_init_is_deterministic_and_address_is_state_init_hash() -> None:
     assert first.data_boc
 
 
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"network_id": -239}, "network_id must be TON testnet"),
+        ({"seller_address": "not-an-address"}, "seller_address"),
+        ({"item_address": "1:" + "44" * 32}, "item_address must be a basechain"),
+        ({"deal_salt": "01" * 31}, "deal_salt must be exactly 32 bytes"),
+        ({"deal_salt": "00" * 32}, "deal_salt must be non-zero"),
+        ({"principal_nanotons": 0}, "principal_nanotons"),
+        ({"seller_deployment_refund_nanotons": 10_000_000}, "seller deployment refund"),
+        ({"nft_transfer_value_nanotons": 151_000_000}, "NFT transfer value"),
+        ({"activation_query_id": 0}, "activation_query_id"),
+        ({"fund_query_id": 1000}, "query IDs must be unique"),
+        ({"resolver_key_b": 1}, "globally unique"),
+        ({"contract_state": 14}, "contract_state is not defined"),
+        ({"dispute_phase": 3}, "dispute_phase is not defined"),
+    ],
+)
+def test_snapshot_rejects_mutated_or_incomplete_chain_terms(
+    changes: dict[str, object], message: str
+) -> None:
+    with pytest.raises(TONABIError, match=message):
+        derive_deployment(load_pinned_code_boc(), replace(snapshot(), **changes))
+
+
+def test_deployment_snapshot_requires_all_immutable_fields() -> None:
+    with pytest.raises(TypeError, match="required positional arguments"):
+        DealEscrowDeploymentSnapshot(network="testnet")  # type: ignore[call-arg]
+
+
+def test_invalid_or_tampered_compiled_code_boc_fails_closed() -> None:
+    with pytest.raises(TONABIError, match="DealEscrow code BOC is malformed"):
+        verify_compiled_code("not-a-valid-base64-boc")
+
+    valid_boc = load_pinned_code_boc()
+    tampered_boc = ("A" if valid_boc[0] != "A" else "B") + valid_boc[1:]
+    with pytest.raises(TONABIError, match="DealEscrow code BOC"):
+        verify_compiled_code(tampered_boc)
+
+
 def test_snapshot_is_immutable_and_testnet_only() -> None:
     deal = snapshot()
     with pytest.raises(FrozenInstanceError):
@@ -205,6 +245,32 @@ async def test_buyer_funding_is_exact_principal_plus_execution_reserve() -> None
     assert boc_sha256(payload.messages[0].payload) == (
         "ed4ce8f9f3d78815d72e2ecfbecbc9f38aa6d4863a55b4a777a1459449819db6"
     )
+
+
+@pytest.mark.asyncio
+async def test_wallet_network_and_actor_state_must_match_deal() -> None:
+    adapter = PinnedTONEscrowContractAdapter()
+    deal = snapshot(contract_state=2, nft_in_escrow=True, deadline_unix=1_800_000_000)
+    wrong_network = SimpleNamespace(
+        address=deal.buyer_address, network="mainnet", is_verified=True
+    )
+    with pytest.raises(EscrowContractABIUnavailable, match="testnet wallet"):
+        await adapter.prepare_transaction(
+            EscrowWalletAction.FUND_DEAL,
+            actor_wallet=wrong_network,  # type: ignore[arg-type]
+            resource_id="deal-1",
+            deal_snapshot=deal,
+            valid_until=1_800_000_000,
+        )
+
+    with pytest.raises(EscrowContractABIUnavailable, match="bound buyer"):
+        await adapter.prepare_transaction(
+            EscrowWalletAction.FUND_DEAL,
+            actor_wallet=wallet(deal.seller_address),  # type: ignore[arg-type]
+            resource_id="deal-1",
+            deal_snapshot=deal,
+            valid_until=1_800_000_000,
+        )
 
 
 @pytest.mark.asyncio
