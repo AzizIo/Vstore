@@ -465,6 +465,9 @@ async def process_due_refunds(
     also reconciles first; it never causes an automatic second refund request.
     """
 
+    # Enforce the same safety boundary even if this orchestration function is
+    # called directly instead of through the module entry point.
+    _validate_worker_runtime()
     settings = get_settings()
     current_time = now or datetime.now(UTC)
     claims = await claim_due_refunds(session, now=current_time, limit=limit)
@@ -634,7 +637,11 @@ def _validate_worker_runtime() -> str:
     if settings.telegram_stars_test_bot_token is None:
         raise RuntimeError("A dedicated Telegram Stars test bot token is required")
     token = settings.telegram_stars_test_bot_token.get_secret_value()
-    if settings.bot_token and token == settings.bot_token:
+    if not settings.bot_token:
+        raise RuntimeError(
+            "BOT_TOKEN must be configured so the test token can be checked as distinct"
+        )
+    if token == settings.bot_token:
         raise RuntimeError("The test refund worker must not use the production bot token")
 
     try:
