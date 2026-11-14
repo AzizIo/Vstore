@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 from uuid import uuid4
@@ -9,8 +10,10 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 from sqlalchemy.pool import NullPool
 
 from app.auth.dependencies import get_current_user
@@ -25,26 +28,62 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture(scope="module")
 def admin_user_database() -> str:
-    """Use only the explicitly named disposable test DB provided by CI.
+    """Create a disposable DB so immutable audit rows cannot leak into other tests."""
+    source_url = make_url(
+        require_test_database_url("Admin user-management integration tests")
+    )
+    database_name = f"admin_user_{uuid4().hex[:12]}_test"
+    temporary_url = source_url.set(database=database_name)
+    maintenance_url = source_url.set(database="postgres")
 
-    Audit records are intentionally append-only, so this test leaves its randomly
-    identified actor/target rows in the ephemeral test DB rather than bypassing
-    immutability to clean them up. Never point TEST_DATABASE_URL at production.
-    """
-    database_url = require_test_database_url("Admin user-management integration tests")
+    async def create_database() -> None:
+        engine = create_async_engine(
+            maintenance_url,
+            poolclass=NullPool,
+            isolation_level="AUTOCOMMIT",
+        )
+        try:
+            async with engine.connect() as connection:
+                await connection.execute(
+                    text(f'CREATE DATABASE "{database_name}"')
+                )
+        finally:
+            await engine.dispose()
+
+    async def drop_database() -> None:
+        engine = create_async_engine(
+            maintenance_url,
+            poolclass=NullPool,
+            isolation_level="AUTOCOMMIT",
+        )
+        try:
+            async with engine.connect() as connection:
+                await connection.execute(
+                    text(f'DROP DATABASE IF EXISTS "{database_name}" WITH (FORCE)')
+                )
+        finally:
+            await engine.dispose()
+
     previous_url = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = database_url
-    get_settings.cache_clear()
+    created = False
     try:
+        asyncio.run(create_database())
+        created = True
+        os.environ["DATABASE_URL"] = temporary_url.render_as_string(
+            hide_password=False
+        )
+        get_settings.cache_clear()
         config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
         command.upgrade(config, "head")
-        yield database_url
+        yield temporary_url.render_as_string(hide_password=False)
     finally:
         if previous_url is None:
             os.environ.pop("DATABASE_URL", None)
         else:
             os.environ["DATABASE_URL"] = previous_url
         get_settings.cache_clear()
+        if created:
+            asyncio.run(drop_database())
 
 @pytest.mark.asyncio
 async def test_block_unblock_idempotency_audit_and_immutability(
