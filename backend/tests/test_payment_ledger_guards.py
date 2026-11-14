@@ -23,7 +23,7 @@ from app.db.models import (
     PriceCurrency,
     User,
 )
-from app.db.payments import PaymentEvent, PaymentIntent, PaymentTransaction
+from app.db.payments import PaymentEvent, PaymentIntent, PaymentRefund, PaymentTransaction
 from tests.database_safety import require_test_database_url
 
 pytestmark = pytest.mark.integration
@@ -149,6 +149,15 @@ async def test_payment_snapshots_and_evidence_cannot_be_rewritten_or_removed(
                     )
                 )
                 await session.flush()
+                session.add(
+                    PaymentRefund(
+                        payment_transaction_id=transaction_id,
+                        status="queued",
+                        reason_code="ledger_guard_test",
+                        next_attempt_at=now,
+                    )
+                )
+                await session.flush()
 
                 async def assert_rejected(statement, params=None) -> None:
                     with pytest.raises(DBAPIError):
@@ -170,6 +179,27 @@ async def test_payment_snapshots_and_evidence_cannot_be_rewritten_or_removed(
                     text("DELETE FROM payment_transactions WHERE id = :id"),
                     {"id": transaction_id},
                 )
+                await assert_rejected(
+                    text(
+                        "DELETE FROM payment_refunds "
+                        "WHERE payment_transaction_id = :id"
+                    ),
+                    {"id": transaction_id},
+                )
+                delete_trigger_installed = await session.scalar(
+                    text(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM pg_trigger
+                            WHERE tgrelid = 'payment_refunds'::regclass
+                              AND tgname = 'trg_payment_refunds_no_delete'
+                              AND NOT tgisinternal
+                        )
+                        """
+                    )
+                )
+                assert delete_trigger_installed is True
                 for table in (
                     "payment_intents",
                     "payment_transactions",
