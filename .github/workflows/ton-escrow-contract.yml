@@ -77,4 +77,4 @@ jobs:
             contracts/ton-escrow-poc/contracts/**
             contracts/ton-escrow-poc/tests/**
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90
