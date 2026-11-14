@@ -129,6 +129,9 @@ struct DealProgress {
     pendingAction: uint8
     nftInEscrow: bool
     principalLocked: bool
+    // Monotonic, per-deal nonce for all oracle-attested outbound actions.
+    // It is also used as the outbound TON message query_id.
+    oracleAttemptId: uint64
     evidence: Cell<DealEvidence>
     recovery: Cell<DealRecovery>
 }
