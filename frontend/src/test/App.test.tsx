@@ -160,7 +160,7 @@ describe("marketplace catalog", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Аккаунт ограничен администратором.");
     expect(screen.getByRole("button", { name: "Заказы" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Разделы маркетплейса" }).querySelectorAll(".navigation-icon svg")).toHaveLength(5);
-    expect(screen.getByRole("button", { name: "Admin" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /admin|админ/i })).not.toBeInTheDocument();
   });
 
   it("shows an empty state when the API returns no listings", async () => {
