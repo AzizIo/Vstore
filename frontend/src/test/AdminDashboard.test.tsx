@@ -12,8 +12,6 @@ const api = vi.hoisted(() => ({
   fetchCombinedAdminAuditLog: vi.fn(),
   submitUserAccessDecision: vi.fn(),
 }));
-const moderation = vi.hoisted(() => ({ active: vi.fn() }));
-
 vi.mock("../admin/api", () => api);
 vi.mock("../admin/AdminCenter", () => ({
   AdminCenter: ({ active }: { active: boolean }) =>
@@ -157,7 +155,7 @@ describe("AdminDashboard", () => {
     const { container } = render(<AdminDashboard accessToken="test-token" />);
     fireEvent.click(screen.getByRole("button", { name: "Users" }));
 
-    expect(await screen.findByText("123456789")).toBeInTheDocument();
+    expect(await screen.findAllByText("123456789")).not.toHaveLength(0);
     fireEvent.change(screen.getByLabelText("Поиск по username или Telegram ID"), {
       target: { value: "@beta_user" },
     });
@@ -175,7 +173,7 @@ describe("AdminDashboard", () => {
     expect(await screen.findByRole("heading", { name: "Карточка пользователя" })).toBeInTheDocument();
     expect(await screen.findByText("0:abcdef…123456")).toBeInTheDocument();
     expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
-    expect(screen.getByText("Сделки")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Сделки" })).toBeInTheDocument();
     expect(screen.getByText(/Доставка: Проверяется/)).toBeInTheDocument();
   });
 
@@ -207,7 +205,7 @@ describe("AdminDashboard", () => {
     render(<AdminDashboard accessToken="test-token" />);
     fireEvent.click(screen.getByRole("button", { name: "Orders" }));
 
-    expect(await screen.findByText("Moon Lantern")).toBeInTheDocument();
+    expect(await screen.findAllByText("Moon Lantern")).not.toHaveLength(0);
     expect(screen.getByText("Проверка перевода")).toBeInTheDocument();
     expect(screen.getByText("Проверяется")).toBeInTheDocument();
     expect(screen.getByText("Только чтение · резервирование не является оплатой")).toBeInTheDocument();
