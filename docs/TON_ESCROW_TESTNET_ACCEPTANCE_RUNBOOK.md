@@ -106,6 +106,12 @@ Each manifest must identify the exact source commit and artifact digest. Redact 
 - Do not delete or rewrite evidence. Record corrections as append-only follow-up evidence.
 - A failed deployment/test uses only disposable testnet wallets and assets. Never compensate from real funds.
 
+## Marketplace listing reservation
+
+The escrow deal-creation path must lock the same marketplace `Listing` row used by ordinary Orders and change `Listing.status` to `reserved` in the same database transaction that reserves the escrow intent. Reserving only the escrow projection is insufficient: ordinary Orders checks `Listing.status == active` and could otherwise create a competing order for the same NFT.
+
+The current implementation now shares this row-level reservation boundary. A terminal escrow outcome must **not** automatically reopen the listing: the contract may have returned, released, or left the NFT in manual recovery. Reopening requires a separate reconciliation step that verifies the finalized terminal trace, contract getters and current NFT owner. Until that release/relist workflow is implemented and tested, the listing remains reserved (safe but unavailable).
+
 ## Current acceptance status
 
 The PR #193 Sandbox suite is useful contract-level evidence, but it is not live testnet evidence. As of this runbook revision, no independent audit, valueless testnet deployment, finalized transaction trace bundle, independent oracle/resolver operator evidence, or live provider finality/getter reconciliation has been supplied. Gate B is therefore **closed**. Signing must remain disabled.
