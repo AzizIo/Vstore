@@ -44,6 +44,7 @@ from app.escrow.models import (
     EscrowDispute,
     EscrowIdempotencyRecord,
     EscrowListingIntent,
+    EscrowWalletActionRecord,
 )
 from app.escrow.service import (
     EscrowActionConflict,
@@ -711,6 +712,61 @@ async def _prepare_action(
         field: getattr(deal, field) for field in immutable_snapshot_fields
     }
     ownership_check: tuple[str, str] | None = None
+
+    # Idempotency replay precedes current-state eligibility checks. Once an
+    # action exists, a retry must resolve to that same durable action even if
+    # the deal has since moved to another state.
+    existing_action = await session.scalar(
+        select(EscrowWalletActionRecord)
+        .where(
+            EscrowWalletActionRecord.actor_id == user.id,
+            EscrowWalletActionRecord.action_type == action.value,
+            EscrowWalletActionRecord.idempotency_key == idempotency_key,
+        )
+        .with_for_update()
+    )
+    if existing_action is not None:
+        intent_for_replay = await session.get(EscrowListingIntent, deal.listing_intent_id)
+        if intent_for_replay is None:
+            raise HTTPException(status_code=404, detail="Escrow listing intent not found")
+        replay_wallet_id = (
+            intent_for_replay.seller_wallet_id
+            if user.id == deal.seller_id
+            else deal.buyer_wallet_id
+        )
+        replay_wallet_address = (
+            deal.seller_address_snapshot
+            if user.id == deal.seller_id
+            else deal.buyer_address_snapshot
+        )
+        replay_hash = canonical_request_sha256({
+            "actor_id": str(user.id),
+            "deal_id": str(deal.id),
+            "action_type": action.value,
+            "network": deal.network,
+            "wallet_id": str(replay_wallet_id),
+            "wallet_address": replay_wallet_address,
+            "listing_key": deal.listing_key_snapshot,
+            "item_address": deal.item_address,
+            "collection_address": deal.collection_address_snapshot,
+            "seller_address": deal.seller_address_snapshot,
+            "buyer_address": deal.buyer_address_snapshot,
+            "principal_nanotons": str(deal.principal_nanotons),
+            "deal_salt": deal.deal_salt,
+            "context": request_context or {},
+        })
+        if (
+            existing_action.deal_id != deal.id
+            or existing_action.request_sha256 != replay_hash
+        ):
+            await session.rollback()
+            raise HTTPException(status_code=409, detail={"code": "idempotency_payload_conflict"})
+        raise HTTPException(status_code=503, detail={
+            "code": "contract_abi_pending",
+            "action_id": str(existing_action.id),
+            "action_status": existing_action.status,
+            "message": "The same durable action already exists; no duplicate action was created",
+        })
 
     seller_states = {
         EscrowWalletAction.CREATE_DEAL_ESCROW: "intent_created",
