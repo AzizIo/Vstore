@@ -17,6 +17,7 @@ The Backend/contract team must publish and version:
 1. Exact API paths, HTTP methods, query parameters, pagination/cursor format, request DTOs, response DTOs and participant-scoped authorization for public marketplace listings, seller listings, buyer deals, seller deals, withdrawal history, listing/deal detail, action preparation and wallet-reference submission.
 2. Canonical field names and nullability. Current TypeScript examples use snake_case and these provisional snapshots:
    - Listing: `id`, `seller_id`, `state`, `network`, `nft`, `contract_address`, `seller_wallet_address`, `price_ton`, `platform_fee_ton`.
+   - Seller deposit preparation accepts the asking `price_ton` as a decimal string. Backend must validate precision/range and return the canonical order amount plus separate platform/network fees; the browser never rounds or calculates money.
    - Deal: buyer/seller IDs and wallet addresses, immutable listing/NFT/price snapshots, `seller_claimable_ton`, confirmation/dispute deadlines and optional dispute.
    - Withdrawal: listing/deal, kind, state, amount/destination, optional transaction reference.
    - Prepared wallet action: unique operation ID, `testnet`, exact contract and NFT addresses, value-bearing messages, explicit amounts, fee fields and `valid_until`.
