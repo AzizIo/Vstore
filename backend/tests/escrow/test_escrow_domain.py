@@ -5,7 +5,7 @@ import pytest
 from app.escrow.domain import (
     DealEvidenceSnapshot,
     EscrowChainEventType,
-    EscrowEscrowDealStatus,
+    EscrowDealStatus,
     EscrowDomainError,
     NormalizedEventEvidence,
     transition_for_verified_event,
@@ -26,7 +26,7 @@ def deal() -> DealEvidenceSnapshot:
 
 
 def evidence(
-    *, event_type: EventType = EventType.NFT_DEPOSITED, **overrides: object
+    *, event_type: EscrowChainEventType = EscrowChainEventType.NFT_DEPOSITED, **overrides: object
 ) -> NormalizedEventEvidence:
     values: dict[str, object] = {
         "network": "testnet",
@@ -44,27 +44,27 @@ def evidence(
 
 
 def test_state_machine_accepts_only_the_defined_onchain_path() -> None:
-    state = transition_for_verified_event(DealStatus.INTENT_CREATED, EventType.CONTRACT_ACTIVATED)
-    assert state is DealStatus.AWAITING_NFT
-    state = transition_for_verified_event(state, EventType.NFT_DEPOSITED)
-    assert state is DealStatus.AWAITING_BUYER_FUNDS
-    state = transition_for_verified_event(state, EventType.BUYER_PAYMENT_CONFIRMED)
-    assert state is DealStatus.FUNDED_REVIEW
-    state = transition_for_verified_event(state, EventType.NFT_RELEASE_STARTED)
-    assert state is DealStatus.NFT_RELEASE_PENDING
-    state = transition_for_verified_event(state, EventType.NFT_TRANSFER_CONFIRMED)
-    assert state is DealStatus.DELIVERED_DISPUTE_WINDOW
-    state = transition_for_verified_event(state, EventType.SELLER_PAYOUT_STARTED)
-    assert state is DealStatus.SELLER_PAYOUT_PENDING
-    state = transition_for_verified_event(state, EventType.SELLER_PAYOUT_CONFIRMED)
-    assert state is DealStatus.SETTLED
+    state = transition_for_verified_event(EscrowDealStatus.INTENT_CREATED, EscrowChainEventType.CONTRACT_ACTIVATED)
+    assert state is EscrowDealStatus.AWAITING_NFT
+    state = transition_for_verified_event(state, EscrowChainEventType.NFT_DEPOSITED)
+    assert state is EscrowDealStatus.AWAITING_BUYER_FUNDS
+    state = transition_for_verified_event(state, EscrowChainEventType.BUYER_PAYMENT_CONFIRMED)
+    assert state is EscrowDealStatus.FUNDED_REVIEW
+    state = transition_for_verified_event(state, EscrowChainEventType.NFT_RELEASE_STARTED)
+    assert state is EscrowDealStatus.NFT_RELEASE_PENDING
+    state = transition_for_verified_event(state, EscrowChainEventType.NFT_TRANSFER_CONFIRMED)
+    assert state is EscrowDealStatus.DELIVERED_DISPUTE_WINDOW
+    state = transition_for_verified_event(state, EscrowChainEventType.SELLER_PAYOUT_STARTED)
+    assert state is EscrowDealStatus.SELLER_PAYOUT_PENDING
+    state = transition_for_verified_event(state, EscrowChainEventType.SELLER_PAYOUT_CONFIRMED)
+    assert state is EscrowDealStatus.SETTLED
 
 
 def test_replay_or_out_of_order_event_cannot_advance_state() -> None:
     with pytest.raises(EscrowDomainError):
-        transition_for_verified_event(DealStatus.FUNDED_REVIEW, EventType.NFT_DEPOSITED)
+        transition_for_verified_event(EscrowDealStatus.FUNDED_REVIEW, EscrowChainEventType.NFT_DEPOSITED)
     with pytest.raises(EscrowDomainError):
-        transition_for_verified_event(DealStatus.SETTLED, EventType.SELLER_PAYOUT_CONFIRMED)
+        transition_for_verified_event(EscrowDealStatus.SETTLED, EscrowChainEventType.SELLER_PAYOUT_CONFIRMED)
 
 
 def test_exact_nft_deposit_evidence_is_accepted(deal: DealEvidenceSnapshot) -> None:
@@ -91,7 +91,7 @@ def test_bad_or_nonfinal_nft_deposit_is_rejected(
 
 def test_payment_requires_exact_buyer_and_principal(deal: DealEvidenceSnapshot) -> None:
     correct = evidence(
-        event_type=EventType.BUYER_PAYMENT_CONFIRMED,
+        event_type=EscrowChainEventType.BUYER_PAYMENT_CONFIRMED,
         source_address=deal.buyer_address,
         item_address=None,
         amount_nanotons=deal.principal_nanotons,
@@ -100,7 +100,7 @@ def test_payment_requires_exact_buyer_and_principal(deal: DealEvidenceSnapshot) 
     with pytest.raises(EscrowDomainError):
         validate_event_against_deal(
             evidence(
-                event_type=EventType.BUYER_PAYMENT_CONFIRMED,
+                event_type=EscrowChainEventType.BUYER_PAYMENT_CONFIRMED,
                 source_address=deal.buyer_address,
                 amount_nanotons=deal.principal_nanotons - 1,
                 item_address=None,
@@ -110,7 +110,7 @@ def test_payment_requires_exact_buyer_and_principal(deal: DealEvidenceSnapshot) 
     with pytest.raises(EscrowDomainError):
         validate_event_against_deal(
             evidence(
-                event_type=EventType.BUYER_PAYMENT_CONFIRMED,
+                event_type=EscrowChainEventType.BUYER_PAYMENT_CONFIRMED,
                 source_address=deal.seller_address,
                 amount_nanotons=deal.principal_nanotons,
                 item_address=None,
@@ -121,7 +121,7 @@ def test_payment_requires_exact_buyer_and_principal(deal: DealEvidenceSnapshot) 
 
 def test_client_cannot_invent_a_chain_transition() -> None:
     with pytest.raises(EscrowDomainError):
-        transition_for_verified_event(DealStatus.INTENT_CREATED, "client_paid")
+        transition_for_verified_event(EscrowDealStatus.INTENT_CREATED, "client_paid")
 
 
 def test_missing_contract_binding_fails_closed(deal: DealEvidenceSnapshot) -> None:
@@ -139,17 +139,17 @@ def test_missing_contract_binding_fails_closed(deal: DealEvidenceSnapshot) -> No
 
 
 def test_refund_requires_finalized_nft_return_then_exact_refund(deal: DealEvidenceSnapshot) -> None:
-    state = transition_for_verified_event(DealStatus.FUNDED_REVIEW, EventType.NFT_RETURN_STARTED)
-    assert state is DealStatus.NFT_RETURN_PENDING
-    state = transition_for_verified_event(state, EventType.NFT_RETURN_CONFIRMED)
-    assert state is DealStatus.BUYER_REFUND_PENDING
-    state = transition_for_verified_event(state, EventType.BUYER_REFUND_STARTED)
-    assert state is DealStatus.BUYER_REFUND_PENDING
-    state = transition_for_verified_event(state, EventType.BUYER_REFUND_CONFIRMED)
-    assert state is DealStatus.REFUNDED
+    state = transition_for_verified_event(EscrowDealStatus.FUNDED_REVIEW, EscrowChainEventType.NFT_RETURN_STARTED)
+    assert state is EscrowDealStatus.NFT_RETURN_PENDING
+    state = transition_for_verified_event(state, EscrowChainEventType.NFT_RETURN_CONFIRMED)
+    assert state is EscrowDealStatus.BUYER_REFUND_PENDING
+    state = transition_for_verified_event(state, EscrowChainEventType.BUYER_REFUND_STARTED)
+    assert state is EscrowDealStatus.BUYER_REFUND_PENDING
+    state = transition_for_verified_event(state, EscrowChainEventType.BUYER_REFUND_CONFIRMED)
+    assert state is EscrowDealStatus.REFUNDED
 
     valid_refund = evidence(
-        event_type=EventType.BUYER_REFUND_CONFIRMED,
+        event_type=EscrowChainEventType.BUYER_REFUND_CONFIRMED,
         source_address=deal.contract_address,
         destination_address=deal.buyer_address,
         item_address=None,
@@ -159,7 +159,7 @@ def test_refund_requires_finalized_nft_return_then_exact_refund(deal: DealEviden
     with pytest.raises(EscrowDomainError):
         validate_event_against_deal(
             evidence(
-                event_type=EventType.BUYER_REFUND_CONFIRMED,
+                event_type=EscrowChainEventType.BUYER_REFUND_CONFIRMED,
                 source_address=deal.seller_address,
                 destination_address=deal.buyer_address,
                 item_address=None,
@@ -171,7 +171,7 @@ def test_refund_requires_finalized_nft_return_then_exact_refund(deal: DealEviden
 
 def test_postdelivery_buyer_return_requires_exact_direction(deal: DealEvidenceSnapshot) -> None:
     returned = evidence(
-        event_type=EventType.NFT_RETURN_TO_ESCROW_CONFIRMED,
+        event_type=EscrowChainEventType.NFT_RETURN_TO_ESCROW_CONFIRMED,
         source_address=deal.buyer_address,
         destination_address=deal.contract_address,
     )
@@ -179,7 +179,7 @@ def test_postdelivery_buyer_return_requires_exact_direction(deal: DealEvidenceSn
     with pytest.raises(EscrowDomainError):
         validate_event_against_deal(
             evidence(
-                event_type=EventType.NFT_RETURN_TO_ESCROW_CONFIRMED,
+                event_type=EscrowChainEventType.NFT_RETURN_TO_ESCROW_CONFIRMED,
                 source_address=deal.seller_address,
                 destination_address=deal.contract_address,
             ),
@@ -187,6 +187,6 @@ def test_postdelivery_buyer_return_requires_exact_direction(deal: DealEvidenceSn
         )
 
     state = transition_for_verified_event(
-        DealStatus.DISPUTED, EventType.NFT_RETURN_TO_ESCROW_CONFIRMED
+        EscrowDealStatus.DISPUTED, EscrowChainEventType.NFT_RETURN_TO_ESCROW_CONFIRMED
     )
-    assert state is DealStatus.NFT_RETURN_PENDING
+    assert state is EscrowDealStatus.NFT_RETURN_PENDING
