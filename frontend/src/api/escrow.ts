@@ -187,6 +187,7 @@ export interface EscrowHttpContract {
   marketplaceListings: () => string;
   sellerListings: () => string;
   buyerDeals: () => string;
+  sellerDeals: () => string;
   sellerWithdrawals: () => string;
   listingDetails: (listingId: string) => string;
   dealDetails: (dealId: string) => string;
@@ -194,6 +195,7 @@ export interface EscrowHttpContract {
   preparePurchase: (input: EscrowPreparePurchaseInput) => EscrowHttpOperation;
   prepareBuyerConfirmation: (input: EscrowPrepareWalletActionInput) => EscrowHttpOperation;
   prepareDispute: (input: EscrowOpenDisputeInput) => EscrowHttpOperation;
+  prepareBuyerNftReturn: (input: EscrowPrepareBuyerNftReturnInput) => EscrowHttpOperation;
   prepareUnsoldNftWithdrawal: (input: EscrowPrepareUnsoldNftWithdrawalInput) => EscrowHttpOperation;
   prepareSellerProceedsWithdrawal: (input: EscrowPrepareSellerWithdrawalInput) => EscrowHttpOperation;
   submitWalletReference: (input: EscrowWalletReferenceInput) => EscrowHttpOperation;
