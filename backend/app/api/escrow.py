@@ -499,13 +499,25 @@ async def create_deal_intent(payload: EscrowDealCreate, user: CurrentUser, sessi
             raise HTTPException(status_code=404, detail="Escrow listing intent not found")
         if intent.seller_id == user.id:
             raise HTTPException(status_code=409, detail="A seller cannot buy their own listing")
-        listing = await session.get(Listing, intent.marketplace_listing_id)
+        listing = await session.scalar(
+            select(Listing)
+            .where(Listing.id == intent.marketplace_listing_id)
+            .with_for_update()
+        )
         if (
             listing is None
             or listing.status is not ListingStatus.ACTIVE
             or listing.asset_id != intent.asset_id
         ):
             raise HTTPException(status_code=409, detail="Underlying listing is no longer active")
+        if (
+            listing.price_currency is not PriceCurrency.TON
+            or listing.price_amount != intent.price_amount
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Active listing price/currency changed after the escrow intent",
+            )
         buyer_wallet, buyer_address = await _verified_wallet(session, user_id=user.id,
             wallet_id=payload.buyer_wallet_id)
         await _verify_current_nft_owner(verifier, item_address=intent.item_address,
