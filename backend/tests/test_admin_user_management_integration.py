@@ -14,7 +14,6 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
-from sqlalchemy.pool import NullPool
 
 from app.auth.dependencies import get_current_user
 from app.core.config import get_settings
