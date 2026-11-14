@@ -150,6 +150,7 @@ class EscrowDeal(TimestampMixin, EscrowBase):
         String(32), server_default="intent_created", nullable=False
     )
     last_chain_seqno: Mapped[int | None] = mapped_column(BigInteger)
+    last_chain_logical_time: Mapped[int | None] = mapped_column(BigInteger)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
 
 
