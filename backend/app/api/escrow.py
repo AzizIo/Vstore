@@ -552,7 +552,10 @@ async def prepare_receipt_confirmation(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "contract_abi_pending", "message": str(exc)},
         ) from exc
-    raise HTTPException(status_code=503, detail="No approved escrow transaction adapter is configured")
+    raise HTTPException(
+        status_code=503,
+        detail="No approved escrow transaction adapter is configured",
+    )
 
 
 @router.post("/deals/{deal_id}/disputes", response_model=EscrowDisputeResponse, status_code=202)
