@@ -45,6 +45,10 @@ from app.escrow.models import (
     EscrowIdempotencyRecord,
     EscrowListingIntent,
 )
+from app.escrow.reservation import (
+    EscrowListingReservationConflict,
+    reserve_listing_for_escrow,
+)
 from app.escrow.schemas import (
     EscrowDealCreate,
     EscrowDealResponse,
@@ -575,11 +579,6 @@ async def create_deal_intent(
         )
         # Ordinary Orders locks and checks this same Listing row. Reserve both
         # projections in this transaction to exclude a parallel marketplace order.
-        from app.escrow.reservation import (
-            EscrowListingReservationConflict,
-            reserve_listing_for_escrow,
-        )
-
         try:
             reserve_listing_for_escrow(listing, intent)
         except EscrowListingReservationConflict as exc:
