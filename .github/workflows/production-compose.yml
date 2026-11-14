@@ -16,6 +16,8 @@ on:
       - "frontend/Dockerfile.production"
       - "frontend/nginx.production.conf"
       - ".github/workflows/production-compose.yml"
+      - "scripts/production_backup.sh"
+      - "scripts/production_restore_drill.sh"
 
 permissions:
   contents: read
