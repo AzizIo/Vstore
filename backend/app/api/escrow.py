@@ -710,6 +710,7 @@ async def _prepare_action(
     validated_snapshot = {
         field: getattr(deal, field) for field in immutable_snapshot_fields
     }
+    ownership_check: tuple[str, str] | None = None
 
     seller_states = {
         EscrowWalletAction.CREATE_DEAL_ESCROW: "intent_created",
@@ -735,17 +736,12 @@ async def _prepare_action(
             raise HTTPException(status_code=409,
                 detail="Verified seller wallet snapshot has changed")
         if action in {EscrowWalletAction.CREATE_DEAL_ESCROW, EscrowWalletAction.DEPOSIT_NFT}:
-            await _verify_current_nft_owner(
-                verifier, item_address=deal.item_address,
-                    seller_address=deal.seller_address_snapshot,
-            )
+            ownership_check = (deal.item_address, deal.seller_address_snapshot)
         if action is EscrowWalletAction.WITHDRAW_UNSOLD_NFT:
             if not deal.contract_address:
                 raise HTTPException(status_code=503,
                     detail={"code": "contract_address_unavailable"})
-            await _verify_current_nft_owner(
-                verifier, item_address=deal.item_address, seller_address=deal.contract_address,
-            )
+            ownership_check = (deal.item_address, deal.contract_address)
     elif action in buyer_states:
         if deal.buyer_id != user.id or deal.status not in buyer_states[action]:
             raise HTTPException(status_code=409,
@@ -766,9 +762,7 @@ async def _prepare_action(
         if wallet_address != deal.buyer_address_snapshot:
             raise HTTPException(status_code=409,
                 detail="Verified buyer wallet snapshot has changed")
-        await _verify_current_nft_owner(
-            verifier, item_address=deal.item_address, seller_address=deal.buyer_address_snapshot,
-        )
+        ownership_check = (deal.item_address, deal.buyer_address_snapshot)
     else:
         raise HTTPException(status_code=409, detail="Unsupported escrow action")
 
@@ -777,6 +771,18 @@ async def _prepare_action(
     intent = await session.get(EscrowListingIntent, deal.listing_intent_id)
     if intent is None:
         raise HTTPException(status_code=404, detail="Escrow listing intent not found")
+    validated_wallet_id = wallet.id
+    validated_wallet_address = wallet_address
+    if ownership_check is not None:
+        # End the read transaction before external provider I/O. No writes have
+        # happened yet; both deal and wallet are revalidated after the call.
+        await session.rollback()
+        await _verify_current_nft_owner(
+            verifier,
+            item_address=ownership_check[0],
+            seller_address=ownership_check[1],
+        )
+
     # Reacquire the deal lock only after external ownership checks have finished.
     locked_deal = await session.scalar(
         select(EscrowDeal)
@@ -801,6 +807,14 @@ async def _prepare_action(
             status_code=409, detail={"code": "escrow_deal_snapshot_changed"}
         )
     deal = locked_deal
+    wallet, wallet_address = await _verified_wallet(
+        session, user_id=user.id, wallet_id=validated_wallet_id
+    )
+    if wallet_address != validated_wallet_address:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409, detail={"code": "escrow_wallet_changed_during_validation"}
+        )
     deal_snapshot = DealEscrowDeploymentSnapshot(
         network=deal.network, listing_key=deal.listing_key_snapshot,
         seller_address=deal.seller_address_snapshot, buyer_address=deal.buyer_address_snapshot,
