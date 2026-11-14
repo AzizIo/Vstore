@@ -315,3 +315,27 @@ get fun `test observed NFT transfer alone never settles a deal`() {
     expect(nftItem.getOwner()).toEqual(buyer.address);
     expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
 }
+
+get fun `test contract rejects activation on mainnet global id`() {
+    val (escrow, _, seller, _) = createFixture(0xA11D6);
+
+    var mainnetConfig = testing.getConfig();
+    mainnetConfig.setParamRaw(19, beginCell().storeInt(-239, 32).endCell());
+    assert (testing.setConfig(mainnetConfig)) throw Errors.NotTestnet;
+
+    val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
+    expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
+
+    val activation = escrow.sendActivateDeal(
+        seller.address,
+        1,
+        0xA11D6,
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(activation).toHaveFailedTx<ActivateDeal>({
+        from: seller.address,
+        to: escrow.address,
+        exitCode: Errors.NotTestnet,
+    });
+    expect(escrow.getState()).toEqual(STATE_INTENT_CREATED);
+}
