@@ -145,8 +145,12 @@ async def _persist_event(
     existing.masterchain_seqno = max(existing.masterchain_seqno, event.masterchain_seqno)
     existing.evidence_sha256 = _stored_evidence_hash(event)
     existing.payload_json = payload
-    existing.observed_contract_state = event.observed_contract_state or existing.observed_contract_state
-    existing.contract_state_reconciled = existing.contract_state_reconciled or event.contract_state_reconciled
+    existing.observed_contract_state = (
+        event.observed_contract_state or existing.observed_contract_state
+    )
+    existing.contract_state_reconciled = (
+        existing.contract_state_reconciled or event.contract_state_reconciled
+    )
     existing.account_address = event.account_address or existing.account_address
     existing.deal_id = deal_id or existing.deal_id
     existing.status = status
@@ -223,7 +227,11 @@ async def _apply_one_event(
         await _persist_event(session, event, status="pending",
             reason_code="deal_reference_missing", deal_id=None, existing=existing)
         return "unmatched"
-    deal = await session.scalar(select(EscrowDeal).where(EscrowDeal.id == deal_uuid).with_for_update())
+    deal = await session.scalar(
+        select(EscrowDeal)
+        .where(EscrowDeal.id == deal_uuid)
+        .with_for_update()
+    )
     if deal is None:
         await _persist_event(session, event, status="pending",
             reason_code="deal_not_found", deal_id=deal_uuid, existing=existing)
