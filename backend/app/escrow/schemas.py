@@ -8,13 +8,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class EscrowListingIntentCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    listing_id: UUID
+    asset_id: UUID
     seller_wallet_id: UUID
+    price_nano: str = Field(pattern=r"^[1-9][0-9]*$", min_length=1, max_length=30)
 
 
 class EscrowDealCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    listing_intent_id: UUID
+    listing_id: UUID
     buyer_wallet_id: UUID
 
 
@@ -30,7 +31,7 @@ class EscrowWithdrawalCreate(BaseModel):
 
 
 class EscrowNftProjection(BaseModel):
-    asset_id: UUID
+    asset_id: UUID | None
     title: str
     image_url: str | None
     item_address: str
@@ -116,10 +117,20 @@ class EscrowDisputeResponse(BaseModel):
 
 class EscrowWithdrawalResponse(BaseModel):
     id: UUID
-    network: Literal["testnet"] = "testnet"
-    recipient_address: str
-    amount_nanotons: None = None
-    status: Literal["blocked_abi_unavailable"] = "blocked_abi_unavailable"
-    reason_code: Literal["contract_abi_pending"] = "contract_abi_pending"
-    transaction_payload: None = None
+    deal_id: UUID
+    kind: Literal["unsold_nft"] = "unsold_nft"
+    status: Literal["prepared", "submitted", "observing", "confirmed", "failed", "manual_review"]
+    destination_address: str | None
+    transaction_hash: str | None
     created_at: datetime
+    updated_at: datetime
+
+
+class EscrowWalletReferenceInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action_id: UUID
+    action: Literal[
+        "create_deal_escrow", "deposit_nft", "fund_deal", "accept_deal",
+        "open_dispute", "return_nft_to_escrow", "withdraw_unsold_nft"
+    ]
+    reference: str = Field(min_length=1, max_length=512)
