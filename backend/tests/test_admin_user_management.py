@@ -50,8 +50,14 @@ def test_non_admin_cannot_block_or_unblock_a_user(client: TestClient) -> None:
     user_id = str(uuid4())
     headers = {"Idempotency-Key": "user-access-001"}
     payload = {"reason": "Policy review required"}
-    assert client.post(f"/api/admin/users/{user_id}/block", headers=headers, json=payload).status_code == 403
-    assert client.post(f"/api/admin/users/{user_id}/unblock", headers=headers, json=payload).status_code == 403
+    block_response = client.post(
+        f"/api/admin/users/{user_id}/block", headers=headers, json=payload
+    )
+    unblock_response = client.post(
+        f"/api/admin/users/{user_id}/unblock", headers=headers, json=payload
+    )
+    assert block_response.status_code == 403
+    assert unblock_response.status_code == 403
 
 
 def test_access_decision_requires_reason_and_rejects_client_actor() -> None:
