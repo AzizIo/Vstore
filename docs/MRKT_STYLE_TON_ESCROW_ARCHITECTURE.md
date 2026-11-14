@@ -181,18 +181,17 @@ Use unique constraints for chain event identity and operation IDs. Keep an appen
 
 ## 8. Frontend / TON Connect
 
-The Mini App should expose explicit wallet actions:
+For the isolated testnet PoC harness, wallet actions follow the single-deal lifecycle:
 
-- Create a deal and deposit NFT into escrow
-- Wait for finalized NFT-deposit evidence
-- Fund the deal with exact TON
-- Review the locked deal and accept or open a dispute
-- View NFT transfer / oracle confirmation / dispute-window progress
-- Return NFT to escrow when required by post-delivery dispute resolution
-- View payout/refund pending and finalized states
-- Withdraw the NFT only on a valid pre-funding cancellation/expiry path
+- Seller prepares a deal, deposits the exact NFT into DealEscrow and waits for finalized deposit acceptance
+- Buyer funds the deal with the exact TON principal plus the published execution reserve
+- Buyer reviews the locked assets and accepts or opens a dispute before the review deadline
+- Buyer may open a dispute during the oracle-attested post-delivery dispute window
+- Buyer returns the NFT to escrow only when the post-delivery buyer-favourable dispute path requires it
+- Both parties see pending vs finalized payout/refund states separately
+- Seller withdraws an unsold NFT only through the valid pre-funding expiry/cancellation path
 
-Before every wallet signature, show the exact network, contract address, NFT item, amount, fee, recipient and action. No seed phrase or private key collection. Wallet connection alone is not proof of ownership; continue to use the existing TON Proof verification for account binding.
+**Do not mount a TON purchase CTA in the public Telegram Mini App** until Issue #155's written platform ruling and qualified legal/compliance review clear that exact in-app P2P NFT resale flow. A testnet UI prototype is not permission to expose a purchase flow to users. For a testnet wallet-action screen, show the exact network, contract address, NFT item, every outgoing message destination and amount, fee/reserve, recipient and action before signature. Enforce action-specific destination checks; a backend summary string alone is not enough. No seed phrase or private key collection. Wallet connection alone is not proof of ownership; continue to use the existing TON Proof verification for account binding.
 
 ## 9. Contract and integration testing
 
