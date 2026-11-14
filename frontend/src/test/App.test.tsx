@@ -368,6 +368,26 @@ describe("marketplace catalog", () => {
     const sellerProfile = await screen.findByRole("region", { name: "Профиль продавца" });
     expect(sellerProfile).toHaveTextContent("Ari");
     expect(sellerProfile).toHaveTextContent("@collector");
+    const contactLink = screen.getByRole("link", { name: "Написать продавцу в Telegram" });
+    expect(contactLink).toHaveAttribute("href", "https://t.me/collector");
+    expect(contactLink).toHaveAttribute("target", "_blank");
+    expect(contactLink).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("does not create a Telegram contact link for malformed seller usernames", async () => {
+    const unsafeUsername = {
+      ...listing,
+      seller: { ...listing.seller, username: "collector?start=attacker" },
+    };
+    vi.mocked(fetch).mockImplementation(async (input) =>
+      String(input).endsWith("/api/listings/listing-1") ? jsonResponse(unsafeUsername) : jsonResponse(page),
+    );
+    renderMarketplace();
+    fireEvent.click(await screen.findByRole("button", { name: /Moon Lantern/ }));
+
+    await screen.findByRole("heading", { name: "Moon Lantern" });
+    expect(screen.getByRole("region", { name: "Профиль продавца" })).toHaveTextContent("collector?start=attacker");
+    expect(screen.queryByRole("link", { name: "Написать продавцу в Telegram" })).not.toBeInTheDocument();
   });
 
   it("shows the collection and item address on the listing detail view", async () => {

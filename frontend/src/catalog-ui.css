@@ -644,3 +644,34 @@
     transition: none;
   }
 }
+
+
+.seller-contact-link {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: -6px;
+  padding: 9px 13px;
+  border: 1px solid rgb(208 220 112 / 34%);
+  border-radius: 10px;
+  background: rgb(208 220 112 / 6%);
+  color: var(--mini-accent);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.seller-contact-link:hover {
+  border-color: rgb(208 220 112 / 62%);
+  background: rgb(208 220 112 / 11%);
+}
+.seller-contact-link:focus-visible {
+  outline: 2px solid var(--mini-accent);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .seller-contact-link { transition: none; }
+}
