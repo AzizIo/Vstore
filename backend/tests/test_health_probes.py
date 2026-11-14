@@ -91,11 +91,19 @@ def configure_redis(monkeypatch, *, ping_side_effect=None, close_side_effect=Non
     return redis, from_url
 
 
+def test_expected_migration_heads_resolve_repository_migrations() -> None:
+    assert health._expected_migration_heads()
+
+
 @pytest.mark.asyncio
 async def test_migration_probe_returns_true_when_database_matches_all_heads(monkeypatch) -> None:
     connection = FakeConnection(result=FakeRows([("head-a",), ("head-b",)]))
     monkeypatch.setattr(health, "engine", FakeEngine(connection))
-    monkeypatch.setattr(health, "_expected_migration_heads", lambda: frozenset({"head-a", "head-b"}))
+    monkeypatch.setattr(
+        health,
+        "_expected_migration_heads",
+        lambda: frozenset({"head-a", "head-b"}),
+    )
 
     assert await health._database_migrations_ready() is True
     assert connection.executed is True
@@ -120,7 +128,7 @@ async def test_migration_probe_returns_false_when_migration_table_is_missing(mon
 
 
 @pytest.mark.asyncio
-async def test_migration_probe_returns_false_when_expected_heads_cannot_be_resolved(monkeypatch) -> None:
+async def test_migration_probe_returns_false_without_expected_heads(monkeypatch) -> None:
     connection = FakeConnection(result=FakeRows([("current-head",)]))
     monkeypatch.setattr(health, "engine", FakeEngine(connection))
     monkeypatch.setattr(health, "_expected_migration_heads", lambda: frozenset())
