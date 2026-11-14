@@ -587,3 +587,15 @@ async def test_mismatched_finality_proof_is_not_accepted() -> None:
     result = await run_observer_pass(factory, provider, now=now, limit=5)  # type: ignore[arg-type]
     assert result.pending == 1
     assert checkpoint.cursor == "cursor-before"
+
+
+@pytest.mark.asyncio
+async def test_finalized_event_without_finality_proof_remains_pending() -> None:
+    event = make_event(finality_proof_sha256=None)
+    session = FakeSession(None)
+    result = await _apply_one_event(session, event, provider_verified=True)
+    assert result == "pending"
+    stored = session.added[0]
+    assert isinstance(stored, EscrowChainEvent)
+    assert stored.status == "pending"
+    assert stored.reason_code == "finality_proof_missing"
