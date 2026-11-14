@@ -5,8 +5,8 @@ import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from uuid import uuid4
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 import pytest
 from alembic import command
