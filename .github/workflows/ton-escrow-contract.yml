@@ -32,6 +32,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify frozen artifact verifier tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+
       - name: Set up Acton
         shell: bash
         run: |
