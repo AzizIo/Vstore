@@ -14,7 +14,12 @@ from alembic import command
 from alembic.config import Config
 from pydantic import SecretStr
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.core.config import Settings, get_settings
 from app.db.models import (
@@ -33,7 +38,11 @@ from app.db.payments import PaymentIntent, PaymentRefundJob, PaymentTransaction
 from app.orders import payment_service, refund_worker
 from app.orders.payment_service import PaymentConflict, record_stars_success
 from app.orders.refund_worker import run_refund_worker_pass
-from app.orders.service import _invalidate_lost_ownership, cancel_order, expire_pending_orders
+from app.orders.service import (
+    _invalidate_lost_ownership,
+    cancel_order,
+    expire_pending_orders,
+)
 
 pytestmark = pytest.mark.integration
 ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
