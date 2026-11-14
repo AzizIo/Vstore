@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "e20261115_escrow_actions"
-down_revision: tuple[str, str] = ("e20261114_ton_escrow", "0016_refund_evidence_delete_guard")
+down_revision: tuple[str, str] = ("e20261114_ton_escrow", "0016_refund_evidence")
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | None = None
 
