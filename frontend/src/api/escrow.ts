@@ -146,8 +146,7 @@ export interface EscrowPrepareWalletActionInput {
 
 export interface EscrowOpenDisputeInput {
   deal_id: string;
-  reason_code: string;
-  details?: string;
+  reason: string;
 }
 
 export interface EscrowPrepareUnsoldNftWithdrawalInput {
