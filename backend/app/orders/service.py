@@ -33,7 +33,7 @@ from app.db.models import (
     User,
     Wallet,
 )
-from app.db.payments import PaymentEvent, PaymentIntent, PaymentTransaction
+from app.db.payments import PaymentEvent, PaymentIntent, PaymentRefundJob, PaymentTransaction
 
 
 class OrderConflict(Exception):
@@ -492,6 +492,14 @@ async def _request_stars_refund_for_order(
         transaction.status = "refund_pending"
         transaction.refund_requested_at = now
         transaction.last_error_code = reason
+        session.add(
+            PaymentRefundJob(
+                payment_transaction_id=transaction.id,
+                status="pending",
+                next_attempt_at=now,
+                last_error_code=reason,
+            )
+        )
         session.add(
             PaymentEvent(
                 payment_intent_id=intent.id,
