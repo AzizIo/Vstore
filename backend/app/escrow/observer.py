@@ -133,9 +133,21 @@ async def _persist_event(
     immutable_fields = (
         "transaction_hash",
         "event_index",
-        "event_type", "contract_address", "deal_id", "source_address", "destination_address",
-        "item_address", "amount_nanotons", "message_hash", "trace_id", "logical_time", "phase",
-        "attempt_id", "query_id", "operation_id", "deal_salt",
+        "event_type",
+        "contract_address",
+        "deal_id",
+        "source_address",
+        "destination_address",
+        "item_address",
+        "amount_nanotons",
+        "message_hash",
+        "trace_id",
+        "logical_time",
+        "phase",
+        "attempt_id",
+        "query_id",
+        "operation_id",
+        "deal_salt",
     )
     if any(old.get(field) not in (None, payload.get(field)) for field in immutable_fields):
         existing.status = "manual_review"
