@@ -1,11 +1,13 @@
 # ADR-0001: Compliant payments and escrow architecture
 
-- **Status:** Proposed — awaiting maintainer review
+- **Status:** Proposed — awaiting maintainer review; testnet escrow direction recorded, not production approval
 - **Date:** 2026-11-10
 - **Review date for external references:** 2026-11-10
 - **Issue:** https://github.com/AzizIo/Vstore/issues/30
 - **Supersedes:** none
 - **Companion design document:** [`docs/PAYMENTS_ESCROW_DESIGN.md`](../PAYMENTS_ESCROW_DESIGN.md)
+- **Selected testnet architecture:** [MRKT-style TON escrow](../MRKT_STYLE_TON_ESCROW_ARCHITECTURE.md)
+- **Shared integration contract:** [TON escrow shared interface](../TON_ESCROW_SHARED_INTERFACE.md)
 
 ## 1. Context
 
@@ -63,6 +65,8 @@ the product/payment decision below. In particular:
 
 The implementation facts above do not change the ADR's approval status or grant
 permission for live payments, refunds, custody, seller settlement or mainnet use.
+The maintainer-selected MRKT-like direction below is a testnet PoC scope only and
+does not amend the Stars-only in-app checkout decision.
 
 ## 2. Decision
 
@@ -125,6 +129,22 @@ eligibility, KYC/AML, tax and consumer-protection obligations are production
 blockers in §8 of the design document. This ADR is a technical decision, not legal
 advice.
 
+### Maintainer-selected testnet PoC direction (2026-11-14; not a production decision)
+
+The maintainer has selected a **MRKT-like escrow product direction for technical evaluation**: the seller deposits the NFT into a per-listing escrow contract, the buyer's native TON is locked by that escrow, the contract initiates NFT delivery, and the funds become claimable only after the reviewed confirmation/dispute path completes. The chosen architecture and shared interface are recorded in the companion documents linked above.
+
+This records the direction for an isolated testnet PoC; it does not supersede D1–D6, approve live TON checkout, or authorize production custody or settlement:
+
+- The PoC is limited to testnet, valueless test NFTs and test TON. There is no mainnet deployment, real-value sale, production wallet, or public checkout.
+- D1 remains unchanged: where the transaction is classified as a digital-goods/services sale inside a Telegram bot or Mini App, Telegram's current terms require Telegram Stars (XTR). The fact that Mini Apps with crypto-wallet functionality must use TON and TON Connect does not itself create an exception to the digital-goods payment rule.
+- No TON purchase CTA may be enabled inside the Mini App until the platform's written ruling on the P2P NFT resale classification (Issue #155) and qualified legal/compliance review are recorded.
+- The existing Stars ledger remains independent. It is not a TON escrow balance, does not fund a contract and does not prove NFT delivery.
+- Existing orders and direct non-custodial delivery remain untouched on main. Escrow uses separate contracts, backend projection records and API/UI boundaries.
+- The contract must not release seller proceeds merely because an outbound NFT transfer message was emitted. The conservative PoC default starts the buyer confirmation window only after explicit buyer receipt confirmation; if the buyer never confirms, funds remain locked pending a reviewed recovery/resolution path.
+- A buyer-favourable dispute after NFT delivery requires the same NFT to be returned to escrow and verified before a refund can become claimable. The contract cannot seize an NFT from a buyer wallet.
+
+The direction may be revised after contract threat modelling, testnet evidence and independent review. The term "MRKT-like" describes the product flow (NFT and TON held by escrow); it does not assert that VILTARA copies MRKT's private implementation.
+
 ## 3. Considered alternatives
 
 ### A. Telegram Stars checkout + separately reviewed seller settlement (candidate)
@@ -173,9 +193,9 @@ Chosen front end of decision D1: listings may exist in `TON`, but only `XTR`
 listings are purchasable in-app at launch. This preserves the catalog for
 TON-priced assets without implementing a non-compliant checkout.
 
-## 4. Official Telegram policy references (reviewed 2026-11-10)
+## 4. Official Telegram policy references (re-checked 2026-11-14)
 
-> Verification note: live official pages were checked on 2026-11-10. Telegram
+> Verification note: the official pages were re-checked on 2026-11-14. Telegram
 > describes digital-goods transactions in bots and Mini Apps as Stars-only; its
 > developer terms also specify the current reward value and delay, require
 > payment-support handling, and warn against real-time sales of irreversible
