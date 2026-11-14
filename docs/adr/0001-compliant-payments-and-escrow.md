@@ -9,13 +9,24 @@
 
 ## 1. Context
 
-Issue #19 and PR for it added only the buyer order reservation lifecycle:
-`pending_payment -> cancelled | expired`, an append-only `order_events` log, an
-`Idempotency-Key` header, and a `PaymentAdapter` protocol
-(`backend/app/orders/payment.py`) that is **not wired to any provider**. No code in
-the repository collects funds, holds custody, refunds, pays sellers, or transfers
-NFTs, and the `orders` table check constraint deliberately forbids `paid`,
-`completed`, `failed` and `refunded` statuses.
+The original Issue #19 reservation design has since been superseded by
+the current order/delivery lifecycle on `main`:
+`reserved -> awaiting_transfer -> observing_transfer -> completed`, with
+`cancelled` and `expired` terminal paths. The TON delivery observer is the
+authority for NFT completion; the order table deliberately has no `paid` state.
+
+As of 2026-11-14, main also contains migration `0012_telegram_stars_payments`
+and a separate Stars intent/transaction/append-only event ledger, plus a strictly
+test-only Telegram bot and synthetic-order seeder. The test bot uses Telegram's
+dedicated test API namespace and a local test database. It is not a public checkout,
+does not authorize live charges, and a successful test payment does not complete
+NFT delivery. See `docs/TELEGRAM_STARS_TEST_RUNBOOK.md`.
+
+The durable refund worker and migration 0013 are still proposed in Draft PR #173,
+not merged. No live refund capability, seller payout, funds custody or escrow
+contract is available on main. The order table's check constraint continues to
+forbid payment states such as `paid` and `refunded`; payment status remains a
+separate domain.
 
 A real marketplace must eventually answer four separate questions:
 
@@ -33,6 +44,25 @@ reviewed explicitly. The previous audit
 ([`docs/ASSET_INTEGRATION_AUDIT.md`](../ASSET_INTEGRATION_AUDIT.md)) established
 the asset and platform constraints; this ADR records the resulting architectural
 decision before any real-value code is written.
+
+### Implementation status (snapshot: 2026-11-14)
+
+This ADR remains **Proposed — awaiting maintainer review**. The merged Stars
+ledger and isolated test bot are technical test infrastructure, not approval of
+the product/payment decision below. In particular:
+
+- Telegram test-environment invoice and payment handling exists on `main`;
+  manual live test-environment acceptance is still tracked by Issue #152.
+- Public checkout remains disabled pending the written platform ruling in Issue
+  #155 and qualified legal/compliance review.
+- Refund worker/migration 0013 are not merged; see Draft PR #173.
+- The order delivery lifecycle in Issue #46 is implemented on `main`, but live
+  testnet/Tonkeeper acceptance remains outstanding.
+- TON escrow remains design-only in PR #172; Issue #153 still requires accepted
+  architecture, threat model and independent contract-review plan.
+
+The implementation facts above do not change the ADR's approval status or grant
+permission for live payments, refunds, custody, seller settlement or mainnet use.
 
 ## 2. Decision
 

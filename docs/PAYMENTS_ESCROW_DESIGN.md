@@ -1,39 +1,69 @@
 # Compliant Payments and Escrow — Technical Design
 
-**Status:** design for review; no implementation.
+**Status:** historical technical proposal; implementation snapshot updated 2026-11-14.
 **Issue:** https://github.com/AzizIo/Vstore/issues/30
 **Decision record:** [`docs/adr/0001-compliant-payments-and-escrow.md`](adr/0001-compliant-payments-and-escrow.md)
-**Review date for external references:** 2026-11-10
-**Non-goal:** live payment credentials, mainnet contracts, custody of funds or
-secrets, enabled paid/completed transitions. This document does not implement
-anything and is not legal advice.
+**External policy review date:** 2026-11-10 (re-check before any launch).
+**Non-goal:** live payment credentials, production checkout/refunds, mainnet contracts,
+custody of funds or secrets, and any claim of guaranteed NFT delivery. This document
+is not legal advice.
 
-## 1. What exists today (baseline)
+## 1. What exists today (verified on `main` 2026-11-14)
 
-From `backend/app/orders/`, `backend/app/db/models.py` and
-`backend/migrations/versions/0003_orders.py` on `main`:
+The original baseline and state-machine proposal below predate the merged order
+delivery lifecycle and Telegram Stars test harness. Do not implement the historical
+proposal verbatim.
 
-- `OrderStatus` = `pending_payment | cancelled | expired`; the DB check constraint
-  rejects any other value. `paid`, `completed`, `failed`, `refunded` are
-  intentionally absent.
-- `Order` snapshots `price_amount`, `price_currency` (`TON` or `XTR`), `listing_id`,
-  `buyer_id`, `seller_id`, `idempotency_key`, `expires_at` and a unique partial
-  index `uq_orders_pending_listing` (one open order per listing).
-- `OrderEvent` is append-only with `from_status`, `to_status`, `actor_type`
-  (`buyer | system`) and `actor_id`.
-- Creating an order atomically reserves the listing (`active -> reserved`);
-  cancelling or expiring releases it. An in-process worker expires pending orders
-  with `SKIP LOCKED` row locks.
-- `PriceCurrency` already includes `XTR`, but no Stars code exists.
-- `app/orders/payment.PaymentAdapter` defines `create_intent(order_id)` and
-  `verify_notification(payload, signature)` returning `PaymentIntent` /
-  `VerifiedPayment` dataclasses. It has no implementation, is not imported by
-  routes, and stores no provider data.
+- **Order lifecycle:** current `OrderStatus` is `reserved`,
+  `awaiting_transfer`, `observing_transfer`, `completed`, `cancelled` and
+  `expired`. Delivery attempts separately represent ambiguous/manual-review
+  outcomes. The server-side TON observer, not a payment callback or client claim,
+  is the authority for NFT delivery completion. See Issue #46.
+- **Order snapshots:** orders persist listing, buyer/seller, amount/currency,
+  idempotency key and expiry. The order state machine does not have a `paid`
+  state; payment state is a separate domain.
+- **Stars ledger:** migration `0012_telegram_stars_payments` and
+  `backend/app/db/payments.py` provide payment intents, provider transactions and
+  append-only payment events. Provider charge/event identifiers are unique.
+- **Test-only integration:** the isolated Telegram Stars test bot, support
+  handlers, `/whoami`, and synthetic-order seeder are on `main`. The bot uses
+  Telegram's dedicated test API namespace and requires a distinct test token plus
+  a local test-named PostgreSQL database. See
+  [the test runbook](TELEGRAM_STARS_TEST_RUNBOOK.md).
+- **Safety boundary:** a confirmed Stars test payment is not proof of NFT delivery
+  and does not set an order to `completed`. The synthetic NFT fixture has no
+  item address and cannot be transferred. No public Mini App checkout CTA or
+  production payment credentials are enabled.
+- **Refund worker:** durable refund workflow and migration
+  `0013_payment_refund_workflow` remain in Draft PR #173 and are not on `main`.
+  Do not assume automated refunds are available.
+- **Escrow:** PR #172 contains architecture/threat-model documentation only.
+  There is no deployed escrow contract, no testnet PoC acceptance and no mainnet
+  escrow or custody.
 
-Everything below is a proposal that extends this baseline **without changing the
-meanings** of the existing three states.
+### Current implementation gates
 
-## 2. Proposed order and payment state machine
+1. Complete manual Telegram test-environment acceptance for Issue #152
+   (`invoice -> pre_checkout_query -> successful_payment`).
+2. Obtain the written Telegram policy ruling tracked by Issue #155 before any
+   public paid purchase flow.
+3. Review and approve the refund schema/worker proposal before migration 0013.
+4. Complete live testnet/Tonkeeper acceptance for the non-custodial delivery
+   observer in Issue #46.
+5. Accept ADR-0001 and the escrow threat model before starting a testnet escrow
+   contract PoC under Issue #153.
+
+
+## 2. Historical proposal — not the current order state machine
+
+> **Important:** The state names and transitions in this section and its diagrams
+> were drafted before the current `reserved -> awaiting_transfer ->
+> observing_transfer -> completed` lifecycle and the separate Stars ledger were
+> merged. They are retained as design history only. Do not add `pending_payment`,
+> `paid`, `delivery_pending` or `disputed` to the current `orders` table based
+> solely on this section. Any future payment/dispute model must be designed as a
+> separate state machine and reconciled with the current order/delivery model
+> through an approved ADR and migration.
 
 ### 2.1 Proposed `OrderStatus` additions
 
