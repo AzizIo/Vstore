@@ -164,9 +164,13 @@ def upgrade() -> None:
             RETURN NEW;
         END;
         $escrow$ LANGUAGE plpgsql;
+        """
+    )
+    op.execute(
+        """
         CREATE TRIGGER escrow_deal_terms_immutable
         BEFORE UPDATE ON escrow_deals
-        FOR EACH ROW EXECUTE FUNCTION prevent_escrow_deal_terms_mutation();
+        FOR EACH ROW EXECUTE FUNCTION prevent_escrow_deal_terms_mutation()
         """
     )
 
