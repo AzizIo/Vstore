@@ -710,7 +710,7 @@ async def test_retryable_provider_failure_uses_backoff_without_immediate_repeat(
         _, charge_id = await _make_refund_pending(session_factory, ids)
         provider = FakeRefundProvider(
             outcome=RefundCallOutcome.RETRYABLE_FAILURE,
-            retry_after_seconds=20,
+            retry_after_seconds=120,
         )
         now = datetime.now(UTC)
         async with session_factory() as session:
@@ -733,7 +733,7 @@ async def test_retryable_provider_failure_uses_backoff_without_immediate_repeat(
             assert provider.refund_calls == 1
             assert transaction is not None and transaction.status == "refund_pending"
             assert job is not None and job.status == "retry_wait"
-            assert job.next_attempt_at >= now + timedelta(seconds=20)
+            assert job.next_attempt_at >= now + timedelta(seconds=120)
     finally:
         await _cleanup(session_factory, ids)
         await engine.dispose()
