@@ -420,6 +420,7 @@ fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
     assert (context.evidenceHash == progress.evidence.load().disputeReasonHash)
         throw Errors.InvalidAttestation;
     assert (context.attemptId > 0) throw Errors.InvalidAttestation;
+    assert (context.attemptId == progress.disputeAttemptId) throw Errors.InvalidAttestation;
 
     val digest = msg.data.hash();
     val resolverKeys = security.resolverKeys.load();
@@ -564,6 +565,9 @@ fun onInternalMessage(in: InMessage) {
                 throw Errors.InvalidState;
             }
 
+            assert (progress.disputeAttemptId < 0xffffffffffffffff)
+                throw Errors.InvalidAttestation;
+            progress.disputeAttemptId += 1;
             progress.state = STATE_DISPUTED;
             var evidence = progress.evidence.load();
             evidence.disputeReasonHash = msg.reasonHash;
