@@ -182,6 +182,7 @@ class EscrowChainEvent(TimestampMixin, EscrowBase):
     deal_salt: Mapped[str | None] = mapped_column(String(128))
     account_address: Mapped[str | None] = mapped_column(String(128))
     observed_contract_state: Mapped[str | None] = mapped_column(String(64))
+    contract_state_reconciled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     contract_address: Mapped[str] = mapped_column(String(128), nullable=False)
     deal_id: Mapped[uuid.UUID | None] = mapped_column(
