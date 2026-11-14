@@ -636,7 +636,7 @@ fun onInternalMessage(in: InMessage) {
             assert (recovery.unexpectedItemAddress != null) throw Errors.NothingToRecover;
             assert (recovery.unexpectedPreviousOwner != null) throw Errors.NothingToRecover;
             assert (progress.nftInEscrow) throw Errors.NothingToRecover;
-            val previousOwner = recovery.unexpectedPreviousOwner!;
+            val previousOwner = recovery.unexpectedPreviousOwner;
             assert (in.senderAddress == previousOwner) throw Errors.NotAuthorized;
             val unexpectedItem = recovery.unexpectedItemAddress;
             sendNftTo(
