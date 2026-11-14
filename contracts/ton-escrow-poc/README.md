@@ -56,13 +56,13 @@ Acton's generated `DealEscrow.fromStorage(...)` wrapper calculates StateInit and
 ## Amounts and wallet transaction rules
 
 - `principalNanotons` is the seller's exact ask.
-- `executionReserve` is separate from principal and seller proceeds. It is not a platform fee or extra payment to the seller.
-- `nftTransferValue` is the fixed TON value attached by escrow to each outbound TEP-62 transfer. It is funded by execution reserve.
+- `executionReserve` is separate from principal and seller proceeds. It is not a platform fee. On terminal payout/refund, the contract returns the unused execution balance to the buyer; it retains only the fixed terminal storage reserve. A separately snapshotted `sellerDeploymentRefundNanotons` is returned to the seller. On expiry before buyer funding, the NFT and remaining deal balance go back to the seller.
+- `nftTransferValue` is the fixed TON value attached by escrow to each outbound TEP-62 transfer. It is funded by execution reserve. The immutable seller deployment refund allowance is validated against the balance present before seller activation.
 - Seller's deposit transaction targets the snapshotted NFT item and sets `new_owner = escrowAddress`, `response_destination = sellerAddress`, `forward_amount > 0`, and inline payload containing the fixed magic + deal salt. It must use the stored `nftDepositQueryId`.
-- Buyer funding targets the escrow address, carries exactly `principalNanotons + executionReserve`, and uses `fundQueryId`.
+- Buyer funding targets the escrow address, carries exactly `principalNanotons + executionReserve`, and uses `fundQueryId`. The buyer does not pay the seller's separate deployment allowance.
 - Buyer acceptance and dispute messages target the escrow address with operation query ID and deal salt; they do not attach principal again. For outbound NFT releases/returns and TON payout/refund, the contract ignores the static operation query IDs and uses the next persisted `oracleAttemptId` as the message query ID.
 - No frontend or backend callback can mark delivery/settlement successful. The observer must provide finalized transaction and trace evidence to the separate oracle quorum.
-- Payout and refund are contract-initiated to the fixed seller/buyer addresses. A client cannot choose or replace recipient or amount.
+- Payout and refund are contract-initiated to the fixed seller/buyer addresses. A client cannot choose or replace recipient or amount. After the principal message and fixed seller deployment refund, the contract reserves `TERMINAL_STORAGE_RESERVE` and sends its entire remaining balance to the buyer (or to the seller on pre-funding expiry). These outgoing reserve-refund messages use carry-all-balance mode and are covered by emulator assertions; they are not client-selected withdrawals.
 
 ## Default testnet timing fixtures
 
