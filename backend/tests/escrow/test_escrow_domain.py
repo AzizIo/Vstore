@@ -37,6 +37,7 @@ def evidence(
         "source_address": "0:" + "c" * 64,
         "destination_address": "0:" + "a" * 64,
         "item_address": "0:" + "b" * 64,
+        "collection_address": "0:" + "f" * 64,
         "amount_nanotons": None,
         "masterchain_seqno": 123,
         "finalized": True,
