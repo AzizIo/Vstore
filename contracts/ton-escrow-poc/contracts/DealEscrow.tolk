@@ -385,7 +385,7 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
             progress.pendingAction = PENDING_NONE;
             progress.principalLocked = false;
             progress.deadlineUnix = 0;
-            settleExpiredBalanceForSeller(progress, roles, asset);
+            settleExpiredBalanceForSeller(mutate progress, roles, asset);
         } else if (progress.pendingAction == PENDING_REFUND_AFTER_NFT_RETURN) {
             val refundAttemptId = progress.startOracleAttempt();
             sendBuyerRefund(roles, asset, money, refundAttemptId);
@@ -405,7 +405,7 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         progress.pendingAction = PENDING_NONE;
         progress.principalLocked = false;
         progress.deadlineUnix = 0;
-        settleRemainingBalanceForBuyer(progress, roles, asset, money);
+        settleRemainingBalanceForBuyer(mutate progress, roles, asset, money);
     } else if (context.action == ORACLE_ACTION_BUYER_REFUND) {
         assert (progress.state == STATE_BUYER_REFUND_PENDING) throw Errors.InvalidState;
         assert (progress.pendingAction == PENDING_REFUND_RECONCILIATION) throw Errors.InvalidState;
@@ -416,7 +416,7 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         progress.pendingAction = PENDING_NONE;
         progress.principalLocked = false;
         progress.deadlineUnix = 0;
-        settleRemainingBalanceForBuyer(progress, roles, asset, money);
+        settleRemainingBalanceForBuyer(mutate progress, roles, asset, money);
     } else if (context.action == ORACLE_ACTION_UNEXPECTED_NFT_RECOVERED) {
         assert (progress.state == STATE_NFT_RETURN_PENDING) throw Errors.InvalidState;
         assert (progress.pendingAction == PENDING_UNEXPECTED_RECOVERY) throw Errors.InvalidState;
@@ -653,7 +653,7 @@ fun onInternalMessage(in: InMessage) {
             if (progress.state == STATE_AWAITING_NFT) {
                 progress.state = STATE_EXPIRED;
                 progress.deadlineUnix = 0;
-                settleExpiredBalanceForSeller(progress, roles, asset);
+                settleExpiredBalanceForSeller(mutate progress, roles, asset);
             } else if (progress.state == STATE_AWAITING_BUYER_FUNDS) {
                 assert (progress.nftInEscrow) throw Errors.InvalidNft;
                 val returnAttemptId = progress.startOracleAttempt();
