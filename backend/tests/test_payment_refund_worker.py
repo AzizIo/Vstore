@@ -283,6 +283,7 @@ class FakeStarsProvider:
         self.history = [
             SimpleNamespace(
                 id=charge_id,
+                amount=25,
                 source=SimpleNamespace(
                     type="user",
                     transaction_type="invoice_payment",
@@ -324,7 +325,7 @@ async def _make_store(url: str) -> tuple[AsyncEngine, async_sessionmaker[AsyncSe
     return engine, factory
 
 
-@pytest.mark.parametrize("mismatch", ["amount", "payer"])
+@pytest.mark.parametrize("mismatch", ["amount", "payer", "currency"])
 async def test_mismatched_successful_payment_is_queued_without_completing_order(
     refund_test_database: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -349,7 +350,7 @@ async def test_mismatched_successful_payment_is_queued_without_completing_order(
                     else int(ids["buyer_telegram_id"])
                 ),
                 total_amount=26 if mismatch == "amount" else 25,
-                currency="XTR",
+                currency="USD" if mismatch == "currency" else "XTR",
                 telegram_payment_charge_id=f"bad-charge-{uuid4()}",
                 provider_payment_charge_id=None,
                 provider_event_id=f"bad-update-{uuid4()}",
@@ -579,6 +580,125 @@ async def test_valid_payment_does_not_complete_nft_delivery(
             order = await session.get(Order, ids["order_id"])
             assert order is not None
             assert order.status is OrderStatus.RESERVED
+    finally:
+        await _cleanup(factory, ids)
+        await engine.dispose()
+
+
+async def test_second_charge_for_same_invoice_is_queued_once_and_update_replay_is_idempotent(
+    refund_test_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_test_settings(monkeypatch)
+    engine, factory = await _make_store(refund_test_database)
+    ids = await _seed_payment(
+        factory,
+        intent_status="pending",
+        transaction_status=None,
+    )
+    first_charge = f"first-charge-{uuid4()}"
+    first_update = f"first-update-{uuid4()}"
+    second_charge = f"second-charge-{uuid4()}"
+    now = datetime.now(UTC)
+
+    try:
+        evidence = {
+            "invoice_payload": str(ids["invoice_payload"]),
+            "payer_telegram_id": int(ids["buyer_telegram_id"]),
+            "total_amount": 25,
+            "currency": "XTR",
+            "telegram_payment_charge_id": first_charge,
+            "provider_payment_charge_id": None,
+            "provider_event_id": first_update,
+            "now": now,
+        }
+        async with factory() as session:
+            assert await record_stars_success(session, **evidence) == "captured"
+        async with factory() as session:
+            # Exact replay of the same provider event must not create a second charge.
+            assert await record_stars_success(session, **evidence) == "captured"
+
+        second_evidence = dict(evidence)
+        second_evidence["telegram_payment_charge_id"] = second_charge
+        second_evidence["provider_event_id"] = f"second-update-{uuid4()}"
+        async with factory() as session:
+            assert await record_stars_success(session, **second_evidence) == "refund_pending"
+
+        async with factory() as session:
+            transactions = (
+                await session.scalars(
+                    select(PaymentTransaction).where(
+                        PaymentTransaction.payment_intent_id == ids["intent_id"]
+                    )
+                )
+            ).all()
+            jobs = (
+                await session.scalars(
+                    select(PaymentRefundJob).where(
+                        PaymentRefundJob.payment_transaction_id.in_(
+                            [transaction.id for transaction in transactions]
+                        )
+                    )
+                )
+            ).all()
+            order = await session.get(Order, ids["order_id"])
+            intent = await session.get(PaymentIntent, ids["intent_id"])
+            assert len(transactions) == 2
+            assert sorted(transaction.status for transaction in transactions) == [
+                "captured", "refund_pending"
+            ]
+            assert len(jobs) == 1 and jobs[0].status == "pending"
+            assert intent is not None and intent.status == "paid"
+            assert order is not None and order.status is OrderStatus.RESERVED
+    finally:
+        await _cleanup(factory, ids)
+        await engine.dispose()
+
+
+async def test_successful_payment_after_expiry_is_queued_for_refund(
+    refund_test_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_test_settings(monkeypatch)
+    engine, factory = await _make_store(refund_test_database)
+    ids = await _seed_payment(
+        factory,
+        intent_status="pending",
+        transaction_status=None,
+        expires_in=timedelta(seconds=-10),
+    )
+    try:
+        async with factory() as session:
+            result = await record_stars_success(
+                session,
+                invoice_payload=str(ids["invoice_payload"]),
+                payer_telegram_id=int(ids["buyer_telegram_id"]),
+                total_amount=25,
+                currency="XTR",
+                telegram_payment_charge_id=f"late-charge-{uuid4()}",
+                provider_payment_charge_id=None,
+                provider_event_id=f"late-update-{uuid4()}",
+            )
+        assert result == "refund_pending"
+        async with factory() as session:
+            transaction = await session.scalar(
+                select(PaymentTransaction).where(
+                    PaymentTransaction.payment_intent_id == ids["intent_id"]
+                )
+            )
+            job = (
+                await session.scalar(
+                    select(PaymentRefundJob).where(
+                        PaymentRefundJob.payment_transaction_id == transaction.id
+                    )
+                )
+                if transaction is not None
+                else None
+            )
+            order = await session.get(Order, ids["order_id"])
+            assert transaction is not None and transaction.status == "refund_pending"
+            assert job is not None and job.status == "pending"
+            assert order is not None and order.status is OrderStatus.RESERVED
     finally:
         await _cleanup(factory, ids)
         await engine.dispose()
