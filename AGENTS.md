@@ -23,7 +23,9 @@ The current application-code baseline was reviewed on **2026-11-13**, commit **9
 | Public seller profiles and verified reviews | Implemented; only safe public seller fields and reviews backed by completed, independently verified NFT delivery are exposed |
 | Private seller overview | Implemented; authenticated user-scoped counts, recent activity and currency-separated price snapshots, including `pending_review` |
 | Operations diagnostics | Implemented; read-only outbox health CLI and inventory discrepancy diagnostic; neither retries notifications nor mutates inventory |
-| Payments, checkout, Stars settlement, escrow, custody, refunds, commissions and seller payouts | Not implemented |
+| Telegram Stars payment ledger and isolated test bot | Implemented on main for Telegram's dedicated test environment only; internal test flow, not public/live checkout. See `docs/TELEGRAM_STARS_TEST_RUNBOOK.md`. |
+| Durable Stars refund worker | Draft PR #173 only; CI passes, but migration `0013_payment_refund_workflow` and `payment_refunds` schema require payment-schema owner approval. Not available on main. |
+| Public checkout, live refunds, escrow/custody, commissions and seller payouts | Not implemented or approved. ADR-0001 remains Proposed; platform/legal and operational gates remain open. |
 | Telegram Gifts transfer integration and deal chat | Not implemented |
 
 **Reservation is not payment.** Orders snapshot the listing price and currency, but no funds are collected or settled. The marketplace does not hold NFTs, request private keys, sign transactions for users, or guarantee a transaction.
@@ -68,6 +70,7 @@ The moderation center is not a general-purpose dispute, payment, escrow or payou
     │   ├── DEMO_PREFLIGHT.md
     │   ├── API_BACKED_E2E.md
     │   ├── TELEGRAM_NOTIFICATIONS.md
+    │   ├── TELEGRAM_STARS_TEST_RUNBOOK.md
     │   └── adr/
     ├── backend/
     │   ├── app/main.py
@@ -75,9 +78,13 @@ The moderation center is not a general-purpose dispute, payment, escrow or payou
     │   ├── app/admin/               # admin moderation and audit API
     │   ├── app/auth/                # Telegram initData, JWT sessions and dependencies
     │   ├── app/assets/ton_nft/      # TON Center provider, TEP-62 verifier and evidence adapter
-    │   ├── app/orders/              # reservation lifecycle, delivery observer, state/event rules
+    │   ├── app/orders/              # reservation lifecycle, delivery observer, payment service and state/event rules
+    │   ├── app/payments_test_bot.py # isolated Telegram Stars test polling entry point
+    │   ├── app/payments_bot_handlers.py # Stars test invoice/support handlers only
+    │   ├── app/orders/telegram_stars_test.py # XTR test invoice adapter
     │   ├── app/notifications/       # durable outbox, read-only health diagnostics and Telegram worker
     │   ├── app/db/models.py
+    │   ├── app/db/payments.py         # payment intent/transaction/event ledger on main
     │   ├── scripts/                 # read-only outbox/inventory diagnostics and Preview safety tools
     │   └── migrations/versions/
     └── frontend/
@@ -143,7 +150,7 @@ The B2 migration renames legacy pending_payment rows/events to reserved in place
 5. **Orders:** reservations snapshot price and currency but do not deduct funds or lock an NFT on-chain. Never add fake payment, delivery or completion success states.
 6. **Delivery:** the seller signs directly in their own wallet. Preserve the immutable transfer-intent snapshot, observer lease/fencing, finality policy, idempotency and independent evidence checks. Never trust a submitted wallet reference as proof.
 7. **Product domains:** TON NFT and Telegram Gifts need separate adapters. Telegram Business API rights constrain any future gift operations.
-8. **Payment/escrow:** no checkout, custody, refund, commission, seller payout or buyer-protection feature is approved for the current MVP. ADRs/design docs are proposals unless separately approved.
+8. **Payment/escrow:** main contains a test-only Telegram Stars ledger, dedicated test Bot API runner, and synthetic-order seeder. This is not public checkout or live settlement. The durable refund worker remains Draft in PR #173 pending schema approval; no live refunds, custody, escrow, commissions, seller payouts or buyer-protection feature is approved. ADRs/design docs are proposals unless separately approved.
 9. **Admin:** every protected request must derive the actor from the verified bearer session and check the server allowlist. Keep audit snapshots minimal and the PostgreSQL audit log append-only.
 10. **Fail closed:** provider outage, ambiguous ownership, invalid proof or incomplete chain evidence must never be represented as success.
 11. **Concurrency/idempotency:** preserve unique constraints, idempotency keys, lock order, SKIP LOCKED workers, order events, observer leases and outbox guarantees.
@@ -205,6 +212,15 @@ This status snapshot describes main at 9593f1a003a4f976cf3e6b3b20cb1d3830d83018.
 - **Seller profiles and reviews:** public profile API exposes safe seller details and only delivery-verified reviews; private seller overview is scoped to the authenticated user and separates TON/XTR price snapshots.
 - **Operations:** PR #139 added read-only outbox health diagnostics; PR #142 restricted push CI to main, enabled manual CI dispatch and added a dry-run-by-default stale queue cleanup workflow. The cleanup workflow has not been executed.
 - **Open PRs:** no open PRs remained at the time of this snapshot. Check live GitHub before acting; features are shipped only after merge to main.
+
+### Payment implementation update — 2026-11-14
+
+- PR #159 merged the Stars intent/transaction/event ledger and Alembic migration 0012.
+- PRs #170 and #171 merged the isolated Telegram test bot and PostgreSQL-backed payment/delivery safety tests. The bot requires a dedicated Telegram test bot, a local test-named database and Telegram's `/test/` Bot API namespace.
+- PR #175 merged the test-account setup runbook. PR #176 added `/whoami` and a guarded synthetic XTR-order seeder; the fixture NFT is unverified, has no item address and cannot be transferred.
+- Issue #152 remains open until a real test-environment invoice → pre-checkout → successful-payment round trip is manually accepted. CI uses isolated fixtures and is not that live Telegram test.
+- PR #173 is still Draft: durable refunds and migration 0013 are not in main pending payment-schema owner approval. PR #172 is design-only; ADR-0001, Telegram policy ruling in Issue #155, live testnet acceptance in Issue #46, and oracle/resolver decisions remain blockers.
+- No production payment/refund calls, production DB migrations, VPS deployments or mainnet actions were performed.
 
 The Preview runbooks and CI prove isolated test behavior, not a publicly deployed and manually accepted Telegram Mini App. Do not claim production deployment, live testnet transfer acceptance or live Tonkeeper success without recorded evidence.
 
