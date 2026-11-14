@@ -647,9 +647,9 @@ function WorkspaceBody({
 
           <section className="escrow-section" aria-labelledby="escrow-seller-deals-title">
             <div className="escrow-section-heading"><div><p className="eyebrow">РАСЧЁТЫ</p><h2 id="escrow-seller-deals-title">Выплаты по сделкам</h2></div></div>
-            {buyerDeals.filter((deal) => deal.seller_id === currentUserId).length ? (
+            {ownedSellerDeals.length ? (
               <div className="escrow-list">
-                {buyerDeals.filter((deal) => deal.seller_id === currentUserId).map((deal) => {
+                {ownedSellerDeals.map((deal) => {
                   const claimable = isPositiveTonAmount(deal.seller_claimable_ton);
                   const signer = sellerWalletForDeal(deal);
                   return (
@@ -762,10 +762,10 @@ function WorkspaceBody({
                     <button
                       className="escrow-button escrow-button-danger"
                       type="button"
-                      disabled={!api || busy || disputeReason.trim().length < 8}
-                      onClick={() => void prepareAction(
+                      disabled={!api || busy || !selectedDealBuyerWallet || disputeReason.trim().length < 8}
+                      onClick={() => selectedDealBuyerWallet && void prepareAction(
                         () => api!.prepareDispute({ deal_id: selectedDeal.id, reason: disputeReason.trim() }),
-                        expectedWalletForAddress(selectedDeal.buyer_wallet_address),
+                        selectedDealBuyerWallet,
                       )}
                     >Открыть спор</button>
                   </div>
