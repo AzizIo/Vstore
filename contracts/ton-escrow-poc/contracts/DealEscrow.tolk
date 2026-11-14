@@ -13,7 +13,7 @@ fun assertTestnet(terms: DealTerms) {
     assert (terms.protocolVersion == PROTOCOL_VERSION) throw Errors.InvalidDeal;
     assert (contract.getAddress().getWorkchain() == BASECHAIN) throw Errors.NotTestnet;
 
-    val globalIdCell = blockchain.configParam(0);
+    val globalIdCell = blockchain.configParam(19);
     assert (globalIdCell != null) throw Errors.NotTestnet;
     val globalId = globalIdCell.beginParse().loadInt(32);
     assert (globalId == TESTNET_GLOBAL_ID) throw Errors.NotTestnet;
