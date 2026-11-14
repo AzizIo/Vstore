@@ -251,7 +251,7 @@ describe("TON Escrow workspace", () => {
     renderWorkspace(api);
 
     expect(await screen.findByRole("heading", { name: "Moon Lantern" })).toBeInTheDocument();
-    expect(screen.getByText("2.5 TON")).toBeInTheDocument();
+    expect(screen.getAllByText("2.5 TON").length).toBeGreaterThan(0);
     expect(screen.getByText(/Это ещё не оплата/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Создать сделку" }));
@@ -447,6 +447,45 @@ describe("TON Escrow workspace", () => {
       deal_id: "deal-1",
       wallet_id: "wallet-testnet",
     });
+  });
+
+  it("shows a buyer refund as pending until observer finality and offers no manual refund button", async () => {
+    const api = makeApi({
+      buyerDeals: [deal({
+        state: "buyer_refund_pending",
+        available_actions: [],
+      })],
+    });
+    renderWorkspace(api);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
+    expect(await screen.findByText(/Контракт инициировал refund/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /refund|вернуть деньги/i })).not.toBeInTheDocument();
+  });
+
+  it("shows dispute information in the seller participant feed", async () => {
+    const api = makeApi({
+      sellerDeals: [deal({
+        buyer_id: "buyer-2",
+        seller_id: "seller-1",
+        state: "disputed",
+        dispute: {
+          id: "dispute-seller-1",
+          status: "under_review",
+          reason_code: "transfer_mismatch",
+          summary: "Нужно проверить соответствие NFT",
+          opened_at: "2026-11-14T10:00:00Z",
+          resolved_at: null,
+          resolution_note: null,
+        },
+        available_actions: [],
+      })],
+    });
+    renderWorkspace(api, "seller-1");
+    fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
+
+    expect(await screen.findByText("Нужно проверить соответствие NFT")).toBeInTheDocument();
+    expect(screen.getByText("Спор · На рассмотрении")).toBeInTheDocument();
   });
 
   it("shows payout as pending and never exposes a manual seller claim", async () => {
