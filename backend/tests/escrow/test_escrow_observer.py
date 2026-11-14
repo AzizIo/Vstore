@@ -20,6 +20,7 @@ from app.escrow.observer import (
 from app.escrow.provider import (
     ChainEventBatch,
     EscrowProviderUnavailable,
+    FinalityVerification,
     NormalizedChainEvent,
     UnconfiguredTONTestnetEscrowProvider,
 )
@@ -53,6 +54,9 @@ def make_event(**overrides: object) -> NormalizedChainEvent:
         "observed_contract_state": None,
         "attestation_accepted": False,
         "contract_state_reconciled": False,
+        "masterchain_block_hash": "a" * 64,
+        "finality_proof_sha256": "b" * 64,
+        "finality_provider": "fixture-masterchain-verifier",
     }
     values.update(overrides)
     return NormalizedChainEvent(**values)
@@ -229,8 +233,20 @@ class BatchProvider(UnconfiguredTONTestnetEscrowProvider):
         self.received_cursors.append(cursor)
         return ChainEventBatch(events=(self.event,), next_cursor="cursor-after-event")
 
-    async def verify_event(self, event: NormalizedChainEvent) -> bool:
-        return True
+    async def verify_event(self, event: NormalizedChainEvent) -> FinalityVerification:
+        return FinalityVerification(
+            network=event.network,
+            transaction_hash=event.transaction_hash,
+            masterchain_seqno=event.masterchain_seqno,
+            masterchain_block_hash="a" * 64,
+            message_hash=event.message_hash or "",
+            trace_id=event.trace_id or "",
+            proof_sha256="b" * 64,
+            provider_id="fixture-masterchain-verifier",
+            finalized=event.finalized,
+            masterchain_inclusion_verified=event.finalized,
+            trace_binding_verified=event.finalized,
+        )
 
 
 class OutageProvider(UnconfiguredTONTestnetEscrowProvider):
@@ -511,3 +527,63 @@ async def test_replay_with_conflicting_final_masterchain_seqno_requires_review()
     assert await _apply_one_event(session, replay, provider_verified=True) == "rejected"
     assert existing.status == "manual_review"
     assert existing.reason_code == "event_correlation_conflict"
+
+
+@pytest.mark.asyncio
+async def test_boolean_indexer_finality_claim_is_not_accepted() -> None:
+    now = datetime(2026, 11, 14, tzinfo=UTC)
+    checkpoint = EscrowObserverCheckpoint(
+        checkpoint_id=CHECKPOINT_ID, network="testnet", cursor="cursor-before",
+        last_masterchain_seqno=99, lease_token=None, lease_until=now - timedelta(seconds=1),
+        next_scan_at=None, last_error_code=None,
+    )
+
+    class BooleanOnlyProvider(BatchProvider):
+        async def verify_event(self, event: NormalizedChainEvent) -> bool:
+            return True
+
+    sessions = [FakeEscrowSession(checkpoint), FakeEscrowSession(checkpoint, None)]
+    provider = BooleanOnlyProvider(make_event())
+
+    def factory() -> FakeEscrowSession:
+        return sessions.pop(0)
+
+    result = await run_observer_pass(factory, provider, now=now, limit=5)  # type: ignore[arg-type]
+    assert result.pending == 1
+    assert checkpoint.cursor == "cursor-before"
+
+
+@pytest.mark.asyncio
+async def test_mismatched_finality_proof_is_not_accepted() -> None:
+    now = datetime(2026, 11, 14, tzinfo=UTC)
+    checkpoint = EscrowObserverCheckpoint(
+        checkpoint_id=CHECKPOINT_ID, network="testnet", cursor="cursor-before",
+        last_masterchain_seqno=99, lease_token=None, lease_until=now - timedelta(seconds=1),
+        next_scan_at=None, last_error_code=None,
+    )
+
+    class MismatchedProofProvider(BatchProvider):
+        async def verify_event(self, event: NormalizedChainEvent) -> FinalityVerification:
+            return FinalityVerification(
+                network=event.network,
+                transaction_hash="different-transaction",
+                masterchain_seqno=event.masterchain_seqno,
+                masterchain_block_hash="a" * 64,
+                message_hash=event.message_hash or "",
+                trace_id=event.trace_id or "",
+                proof_sha256="b" * 64,
+                provider_id="fixture-masterchain-verifier",
+                finalized=True,
+                masterchain_inclusion_verified=True,
+                trace_binding_verified=True,
+            )
+
+    sessions = [FakeEscrowSession(checkpoint), FakeEscrowSession(checkpoint, None)]
+    provider = MismatchedProofProvider(make_event())
+
+    def factory() -> FakeEscrowSession:
+        return sessions.pop(0)
+
+    result = await run_observer_pass(factory, provider, now=now, limit=5)  # type: ignore[arg-type]
+    assert result.pending == 1
+    assert checkpoint.cursor == "cursor-before"
