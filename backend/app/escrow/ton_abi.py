@@ -2,7 +2,8 @@
 
 The codec intentionally accepts the compiled code BOC as an injected, immutable
 build artifact. It verifies it against the checked-in provenance manifest before
-deriving an address or creating a wallet payload.
+deriving an address or creating a wallet payload. StateInit and message BOC hashes
+are pinned against generated Acton/@ton-core vectors in backend tests.
 """
 from __future__ import annotations
 
