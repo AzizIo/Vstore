@@ -523,13 +523,10 @@ async def process_due_refunds(
                 )
                 succeeded += int(persisted)
             elif lookup is RefundLookupResult.NOT_REFUNDED:
-                if claim.attempt_count >= settings.payment_refund_max_attempts:
-                    target = "manual_review"
-                    next_at = None
-                    manual_review += 1
-                elif claim.reconciliation_count < 2:
+                if claim.reconciliation_count < 2:
                     # Transaction history may lag the refund side effect. Require
-                    # two separated complete scans that show no refund before retry.
+                    # two separated complete scans before deciding whether it can
+                    # be escalated; negative scans never authorize a second refund.
                     target = "reconciliation_required"
                     next_at = result_time + timedelta(
                         seconds=max(
@@ -539,14 +536,12 @@ async def process_due_refunds(
                     )
                     reconciliations += 1
                 else:
-                    target = "retry_wait"
-                    next_at = result_time + timedelta(
-                        seconds=max(
-                            settings.payment_refund_reconcile_delay_seconds,
-                            _retry_delay(claim.attempt_count),
-                        )
-                    )
-                    retried += 1
+                    # We cannot prove that Telegram did not accept the prior call.
+                    # Keep the funds/customer state for human resolution rather than
+                    # risk issuing a second refund against the same charge.
+                    target = "manual_review"
+                    next_at = None
+                    manual_review += 1
                 await _persist_claim_result(
                     session,
                     claim,
