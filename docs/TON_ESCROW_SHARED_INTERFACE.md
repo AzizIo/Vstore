@@ -133,51 +133,62 @@ The threat-model proposal assigns two distinct roles: the backend observer indep
 
 TON contracts do not produce EVM-style receipt logs. The backend observer must parse relevant account transactions and inbound/outbound messages, correlate the complete message trace where necessary, and reconcile the contract's current state/getters. The normalized event names below are an application-level projection, not a claim that TON emits Solidity logs.
 
-### 6.1 Normalized event vocabulary
+### 6.1 Two evidence layers — never conflate them
 
-Use stable semantic names across backend and frontend:
+The backend observer and the escrow contract have different authority:
 
-- escrow_created
-- nft_deposit_observed
-- listing_activated
-- buyer_payment_observed
-- nft_delivery_requested
-- nft_delivery_bounced
-- buyer_receipt_confirmed
-- dispute_opened
-- dispute_resolved_seller
-- dispute_resolved_buyer
-- nft_return_observed
-- seller_proceeds_claimed
-- treasury_fee_claimed
-- buyer_refund_claimed
-- listing_cancelled
-- unsold_nft_withdrawn
-- delivery_exception_opened
-- escrow_reconciled
+**Layer A — observed external evidence (off-chain).** The observer finds and validates the exact TEP-62 item transaction/message trace, buyer payment message, NFT return, or payout/refund transaction. These observations are evidence candidates. They do not, by themselves, change the canonical escrow deal state or release funds.
 
-An observer may emit more than one normalized event for one transaction trace. Event consumers must be idempotent.
+**Layer B — contract-accepted evidence (on-chain).** The configured oracle/quorum submits a domain-separated attestation to DealEscrow. The contract validates the oracle authority, deal/phase/attempt, evidence hash, finalized masterchain checkpoint and replay key, then updates its own state. The backend may project the state transition only after it independently observes/reconciles the resulting contract transaction/getter state. For example, an off-chain NFT transfer observation must not directly move the DB projection to DELIVERED_DISPUTE_WINDOW; only the accepted oracle attestation reflected in contract state may do so.
+
+The dispute resolver is a third role. It chooses a constrained commercial outcome; it must not attest chain facts or replace the evidence oracle.
+
+Use stable semantic event names:
+
+- Evidence observations (off-chain; not state transitions): `nft_deposit_evidence_observed`, `buyer_payment_evidence_observed`, `nft_delivery_evidence_observed`, `nft_return_evidence_observed`, `seller_payout_evidence_observed`, `buyer_refund_evidence_observed`.
+- Contract state observations (authoritative after reconciliation): `contract_activated`, `nft_deposit_accepted`, `buyer_payment_accepted`, `buyer_acceptance_recorded`, `oracle_delivery_attestation_accepted`, `dispute_opened_onchain`, `dispute_resolution_accepted`, `oracle_nft_return_attestation_accepted`, `seller_payout_reconciled`, `buyer_refund_reconciled`, `deal_expired`, `manual_review_required`.
+
+Event consumers must be idempotent. Preserve the original evidence observation and the later contract-accepted state transition as separate records linked by evidence hash/attempt ID.
 
 ### 6.2 Minimum observation record
 
-Every persisted chain observation must carry enough evidence to be independently replayed:
+Every persisted evidence observation must carry enough information to independently replay and correlate it:
 
 | Field | Purpose |
 |---|---|
-| network | Explicit testnet in this PoC |
-| account_address | Contract/item account whose transaction is observed |
-| transaction_hash and logical_time | Transaction identity and ordering |
-| message_hash | Exact inbound/outbound message identity when available |
-| source_address, destination_address, attached_value_nano | Message routing and value |
-| query_id / operation_id | Correlation and replay detection |
-| listing_key | Listing identity |
-| normalized_event_type | Semantic event type |
-| observed_state, contract_state | Observed and reconciled state |
-| raw_evidence_hash | Hash/reference for retained raw trace evidence |
-| finality_status | Provider/chain finality classification used by observer |
-| observed_at | Backend UTC timestamp; not a chain deadline |
+| `network` | Explicit `testnet` in this PoC |
+| `account_address` | NFT item, escrow or recipient account whose transaction is observed |
+| `transaction_hash` and `logical_time` | Transaction identity and ordering |
+| `message_hash` | Exact inbound/outbound message identity where available |
+| `trace_id` / `trace_hash` | Complete message trace identity/evidence |
+| `source_address`, `destination_address`, `attached_value_nano` | Message routing and value |
+| `query_id`, `operation_id`, `attempt_id` | Correlation and replay detection |
+| `deal_salt` / `deal_id` | Exact deal identity |
+| `normalized_event_type` | Evidence-observation or contract-state event |
+| `observed_contract_state` | Contract getter/state snapshot after reconciliation |
+| `raw_evidence_hash` | Hash/reference for retained raw trace evidence |
+| `finality_status`, `masterchain_seqno` | Provider/chain finality classification and checkpoint |
+| `observed_at` | Backend UTC timestamp; not a chain deadline |
 
-Use a unique chain-event key such as (network, account_address, transaction_hash, message_hash) where available. Do not deduplicate solely by query ID. Store enough raw or content-addressed evidence to replay a decision. A provider outage, incomplete message trace, inconsistent getter result or non-final transaction must leave the projection pending/exceptional, never successful.
+Use a unique chain-event key such as `(network, account_address, transaction_hash, message_hash)` where available. Do not deduplicate solely by query ID. Store enough raw or content-addressed evidence to replay a decision. A provider outage, incomplete message trace, inconsistent getter result or non-final transaction must leave the projection pending/exceptional, never successful.
+
+The database needs to preserve both evidence observations and contract-accepted state transitions. A single normalized `NFT_TRANSFER_CONFIRMED` event is not enough to tell whether the observer saw an NFT item transaction or the contract accepted the oracle attestation. Use distinct event types/records or an equally explicit evidence-layer field.
+
+### 6.3 Backend state projection rule
+
+The backend projection must reconcile the exact DealEscrow state/getters after contract transactions. It must not advance a canonical deal state merely because an external NFT item or wallet transaction was observed.
+
+Examples:
+
+- NFT item transaction observed, but no valid escrow ownership notification/state update: remain AWAITING_NFT / MANUAL_REVIEW.
+- Buyer payment message observed, but DealEscrow has not accepted the exact principal: remain AWAITING_BUYER_FUNDS.
+- Outbound NFT transfer observed at finality, but oracle has not submitted an accepted delivery attestation: remain NFT_RELEASE_PENDING.
+- Oracle attestation message submitted but not finalized/accepted by DealEscrow: remain pending.
+- Accepted oracle attestation is finalized and contract state is DELIVERED_DISPUTE_WINDOW: only then start the projected post-delivery dispute timer.
+- Seller payout/refund transfer observed, but contract reconciliation has not finalized it: remain SELLER_PAYOUT_PENDING / BUYER_REFUND_PENDING.
+- Provider or oracle disagreement: do not guess; mark the evidence conflict and preserve assets in MANUAL_REVIEW.
+
+The observer may write evidence rows before the contract state changes. This is not a violation of append-only event history; it is required to preserve the chain of evidence.
 
 ### 6.3 Backend/frontend view model
 
