@@ -617,3 +617,62 @@ class ModerationAuditLog(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+
+class AdminUserAuditLog(Base):
+    """Append-only, privacy-safe audit records for user access decisions."""
+
+    __tablename__ = "admin_user_audit_log"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('blocked', 'unblocked')",
+            name="ck_admin_user_audit_action",
+        ),
+        CheckConstraint(
+            "length(reason) BETWEEN 5 AND 500",
+            name="ck_admin_user_audit_reason_length",
+        ),
+        CheckConstraint(
+            "length(idempotency_key) BETWEEN 8 AND 128",
+            name="ck_admin_user_audit_idempotency_key_length",
+        ),
+        CheckConstraint(
+            "actor_id <> target_user_id",
+            name="ck_admin_user_audit_not_self",
+        ),
+        UniqueConstraint(
+            "actor_id",
+            "idempotency_key",
+            name="uq_admin_user_audit_actor_idempotency",
+        ),
+        Index(
+            "ix_admin_user_audit_target_time",
+            "target_user_id",
+            "occurred_at",
+        ),
+        Index(
+            "ix_admin_user_audit_actor_time",
+            "actor_id",
+            "occurred_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    actor_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    target_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    before_snapshot: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    after_snapshot: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    request_id: Mapped[str | None] = mapped_column(String(100))
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
