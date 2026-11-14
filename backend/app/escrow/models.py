@@ -112,7 +112,9 @@ class EscrowDeal(TimestampMixin, Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     listing_intent_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("escrow_listing_intents.id", ondelete="RESTRICT"), nullable=False
+        Uuid(as_uuid=True),
+        ForeignKey("escrow_listing_intents.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     marketplace_listing_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("listings.id", ondelete="RESTRICT"), nullable=False
@@ -256,7 +258,10 @@ class EscrowWithdrawal(TimestampMixin, Base):
 class EscrowIdempotencyRecord(TimestampMixin, Base):
     __tablename__ = "escrow_idempotency_records"
     __table_args__ = (
-        CheckConstraint("length(idempotency_key) BETWEEN 8 AND 128", name="ck_escrow_idem_key_length"),
+        CheckConstraint(
+            "length(idempotency_key) BETWEEN 8 AND 128",
+            name="ck_escrow_idem_key_length",
+        ),
         CheckConstraint("length(request_sha256) = 64", name="ck_escrow_idem_request_hash"),
         UniqueConstraint(
             "actor_id", "operation", "idempotency_key", name="uq_escrow_idempotency_actor_operation"
