@@ -73,6 +73,7 @@ class EscrowListingIntent(TimestampMixin, EscrowBase):
     network: Mapped[str] = mapped_column(String(16), server_default="testnet", nullable=False)
     item_address: Mapped[str] = mapped_column(String(128), nullable=False)
     listing_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    collection_address_snapshot: Mapped[str | None] = mapped_column(String(128))
     seller_address_snapshot: Mapped[str] = mapped_column(String(128), nullable=False)
     price_amount: Mapped[Decimal] = mapped_column(Numeric(24, 9), nullable=False)
     price_currency: Mapped[str] = mapped_column(String(8), server_default="TON", nullable=False)
@@ -100,6 +101,7 @@ class EscrowDeal(TimestampMixin, EscrowBase):
         ),
         CheckConstraint("buyer_id <> seller_id", name="ck_escrow_deal_not_self_trade"),
         UniqueConstraint("buyer_id", "idempotency_key", name="uq_escrow_deal_buyer_idem"),
+        UniqueConstraint("network", "deal_salt", name="uq_escrow_deal_network_salt"),
         Index(
             "uq_escrow_deal_open_listing_intent",
             "listing_intent_id",
@@ -135,6 +137,7 @@ class EscrowDeal(TimestampMixin, EscrowBase):
     )
     network: Mapped[str] = mapped_column(String(16), server_default="testnet", nullable=False)
     deal_salt: Mapped[str] = mapped_column(String(128), nullable=False)
+    collection_address_snapshot: Mapped[str | None] = mapped_column(String(128))
     contract_address: Mapped[str | None] = mapped_column(String(128))
     contract_abi_version: Mapped[str | None] = mapped_column(String(64))
     item_address: Mapped[str] = mapped_column(String(128), nullable=False)
