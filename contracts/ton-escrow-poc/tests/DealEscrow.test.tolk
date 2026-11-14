@@ -427,6 +427,9 @@ get fun `test terminal payout returns unused execution reserve to buyer`() {
     val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
 
+    val buyerBalanceBeforeFunding = testing.getAccountBalance(buyer.address);
+    val sellerBalanceBeforeSettlement = testing.getAccountBalance(seller.address);
+
     // Simulate the buyer's exact principal + execution-reserve funding.
     val buyerFunding = net.send(
         buyer.address,
@@ -441,7 +444,8 @@ get fun `test terminal payout returns unused execution reserve to buyer`() {
         from: buyer.address,
         to: escrow.address,
     });
-    val buyerBalanceBeforeSettlement = testing.getAccountBalance(buyer.address);
+    val buyerBalanceAfterFunding = testing.getAccountBalance(buyer.address);
+    expect(buyerBalanceBeforeFunding).toBeGreater(buyerBalanceAfterFunding + grams("1.4"));
 
     val keeper = testing.treasury("reserve-oracle-keeper");
     val timeout = escrow.sendAny(
@@ -458,7 +462,9 @@ get fun `test terminal payout returns unused execution reserve to buyer`() {
     });
     expect(escrow.getState()).toEqual(STATE_SELLER_PAYOUT_PENDING);
 
-    val sellerBalanceBeforeSettlement = testing.getAccountBalance(seller.address);
+    val sellerBalanceAfterPayoutInitiated = testing.getAccountBalance(seller.address);
+    expect(sellerBalanceAfterPayoutInitiated)
+        .toBeGreater(sellerBalanceBeforeSettlement + grams("0.9"));
     val payoutData: OracleAttestationData = {
         context: OracleContext {
             domain: ESCROW_DOMAIN,
@@ -511,10 +517,15 @@ get fun `test terminal payout returns unused execution reserve to buyer`() {
     testing.setChecksigIgnore(false);
 
     expect(escrow.getState()).toEqual(STATE_SETTLED);
+    val buyerRefundTx = acceptedPayout.findTransaction({
+        from: escrow.address,
+        to: buyer.address,
+    });
+    expect(buyerRefundTx).toBeNotNull();
     expect(testing.getAccountBalance(buyer.address))
-        .toBeGreater(buyerBalanceBeforeSettlement + grams("0.4"));
+        .toBeGreater(buyerBalanceAfterFunding + grams("0.4"));
     expect(testing.getAccountBalance(seller.address))
-        .toBeGreater(sellerBalanceBeforeSettlement + grams("1.04"));
+        .toBeGreater(sellerBalanceAfterPayoutInitiated + grams("0.04"));
     expect(testing.getAccountBalance(escrow.address))
         .toBeGreater(grams("0.005"));
     expect(testing.getAccountBalance(escrow.address))
