@@ -26,12 +26,17 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from app.db.models import Base, TimestampMixin
+from app.db.models import Listing, NFTAsset, TimestampMixin, User, Wallet
 
 
-class EscrowListingIntent(TimestampMixin, Base):
+class EscrowBase(DeclarativeBase):
+    """Keep escrow table metadata isolated from the marketplace model registry."""
+
+
+
+class EscrowListingIntent(TimestampMixin, EscrowBase):
     __tablename__ = "escrow_listing_intents"
     __table_args__ = (
         CheckConstraint("network = 'testnet'", name="ck_escrow_listing_network_testnet"),
@@ -55,16 +60,16 @@ class EscrowListingIntent(TimestampMixin, Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     marketplace_listing_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("listings.id", ondelete="RESTRICT"), nullable=False
+        Uuid(as_uuid=True), ForeignKey(Listing.__table__.c.id, ondelete="RESTRICT"), nullable=False
     )
     asset_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("nft_assets.id", ondelete="RESTRICT"), nullable=False
+        Uuid(as_uuid=True), ForeignKey(NFTAsset.__table__.c.id, ondelete="RESTRICT"), nullable=False
     )
     seller_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Uuid(as_uuid=True), ForeignKey(User.__table__.c.id, ondelete="RESTRICT"), nullable=False
     )
     seller_wallet_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("wallets.id", ondelete="RESTRICT"), nullable=False
+        Uuid(as_uuid=True), ForeignKey(Wallet.__table__.c.id, ondelete="RESTRICT"), nullable=False
     )
     network: Mapped[str] = mapped_column(String(16), server_default="testnet", nullable=False)
     item_address: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -79,7 +84,7 @@ class EscrowListingIntent(TimestampMixin, Base):
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
 
 
-class EscrowDeal(TimestampMixin, Base):
+class EscrowDeal(TimestampMixin, EscrowBase):
     __tablename__ = "escrow_deals"
     __table_args__ = (
         CheckConstraint("network = 'testnet'", name="ck_escrow_deal_network_testnet"),
@@ -144,7 +149,7 @@ class EscrowDeal(TimestampMixin, Base):
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
 
 
-class EscrowChainEvent(TimestampMixin, Base):
+class EscrowChainEvent(TimestampMixin, EscrowBase):
     __tablename__ = "escrow_chain_events"
     __table_args__ = (
         CheckConstraint("network = 'testnet'", name="ck_escrow_event_network_testnet"),
@@ -184,7 +189,7 @@ class EscrowChainEvent(TimestampMixin, Base):
     reason_code: Mapped[str | None] = mapped_column(String(64))
 
 
-class EscrowDispute(TimestampMixin, Base):
+class EscrowDispute(TimestampMixin, EscrowBase):
     __tablename__ = "escrow_disputes"
     __table_args__ = (
         CheckConstraint(
@@ -222,7 +227,7 @@ class EscrowDispute(TimestampMixin, Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
-class EscrowWithdrawal(TimestampMixin, Base):
+class EscrowWithdrawal(TimestampMixin, EscrowBase):
     __tablename__ = "escrow_withdrawals"
     __table_args__ = (
         CheckConstraint("network = 'testnet'", name="ck_escrow_withdrawal_network_testnet"),
@@ -255,7 +260,7 @@ class EscrowWithdrawal(TimestampMixin, Base):
     transaction_hash: Mapped[str | None] = mapped_column(String(128))
 
 
-class EscrowIdempotencyRecord(TimestampMixin, Base):
+class EscrowIdempotencyRecord(TimestampMixin, EscrowBase):
     __tablename__ = "escrow_idempotency_records"
     __table_args__ = (
         CheckConstraint(
@@ -279,7 +284,7 @@ class EscrowIdempotencyRecord(TimestampMixin, Base):
     resource_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
 
 
-class EscrowObserverCheckpoint(Base):
+class EscrowObserverCheckpoint(EscrowBase):
     __tablename__ = "escrow_observer_checkpoints"
     __table_args__ = (
         CheckConstraint("network = 'testnet'", name="ck_escrow_checkpoint_network_testnet"),
