@@ -67,7 +67,9 @@ def _ton_nano(value: Decimal) -> str:
     return str(int(amount))
 
 
-def _listing_actions(intent: EscrowListingIntent) -> list[str]:
+def _listing_actions(intent: EscrowListingIntent, actor_id: UUID) -> list[str]:
+    if actor_id == intent.seller_id:
+        return []
     return ["create_deal_intent"] if intent.status in {"intent_only", "active"} else []
 
 
@@ -95,6 +97,7 @@ def _deal_actions(deal: EscrowDeal, actor_id: UUID) -> list[str]:
 async def _listing_projection(
     session: AsyncSession,
     intent: EscrowListingIntent,
+    actor_id: UUID,
 ) -> EscrowListingIntentResponse:
     asset = await session.get(NFTAsset, intent.asset_id)
     return EscrowListingIntentResponse(
@@ -109,7 +112,7 @@ async def _listing_projection(
             collection_address=intent.collection_address_snapshot,
         ),
         seller_wallet_address=intent.seller_address_snapshot,
-        price_nano=_ton_nano(intent.price_amount), available_actions=_listing_actions(intent),
+        price_nano=_ton_nano(intent.price_amount), available_actions=_listing_actions(intent, actor_id),
         created_at=intent.created_at, updated_at=intent.updated_at,
     )
 
@@ -431,7 +434,7 @@ async def create_listing_intent(
             resource_type="listing_intent", resource_id=intent.id)
         await session.commit()
         await session.refresh(intent)
-        return await _listing_projection(session, intent)
+        return await _listing_projection(session, intent, user.id)
     except IntegrityError:
         replay = await _idempotency_race_replay(session, actor_id=user.id,
             operation="create_listing_intent", key=idempotency_key,
@@ -454,7 +457,7 @@ async def discover_listing_intents(user: CurrentUser, session: DbSession, limit:
         .order_by(EscrowListingIntent.created_at.desc(), EscrowListingIntent.id.desc())
         .offset(max(offset, 0)).limit(min(max(limit, 1), 50))
     )).all())
-    return EscrowPageResponse(items=[await _listing_projection(session, row) for row in rows],
+    return EscrowPageResponse(items=[await _listing_projection(session, row, user.id) for row in rows],
         total=len(rows))
 
 
@@ -511,6 +514,11 @@ async def create_deal_intent(
             raise HTTPException(status_code=404, detail="Escrow listing intent not found")
         if intent.seller_id == user.id:
             raise HTTPException(status_code=409, detail="A seller cannot buy their own listing")
+        if not intent.listing_key or not intent.collection_address_snapshot:
+            raise HTTPException(
+                status_code=409,
+                detail="Escrow listing is missing immutable collection or listing identity",
+            )
         listing = await session.scalar(
             select(Listing)
             .where(Listing.id == intent.marketplace_listing_id)
