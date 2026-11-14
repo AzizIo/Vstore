@@ -33,7 +33,6 @@ from app.notifications.diagnostics import (
     NotificationOutboxHealth,
     inspect_notification_outbox,
 )
-
 from tests.database_safety import require_test_database_url
 
 
