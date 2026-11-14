@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -32,9 +31,11 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture(scope="module")
 def ledger_guard_database() -> str:
+    import os
+
     url = require_test_database_url("Payment ledger guard integration tests")
-    previous = __import__("os").environ.get("DATABASE_URL")
-    __import__("os").environ["DATABASE_URL"] = url
+    previous = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = url
     from app.core.config import get_settings
 
     get_settings.cache_clear()
@@ -44,9 +45,9 @@ def ledger_guard_database() -> str:
         yield url
     finally:
         if previous is None:
-            __import__("os").environ.pop("DATABASE_URL", None)
+            os.environ.pop("DATABASE_URL", None)
         else:
-            __import__("os").environ["DATABASE_URL"] = previous
+            os.environ["DATABASE_URL"] = previous
         get_settings.cache_clear()
 
 
@@ -63,7 +64,8 @@ async def test_payment_snapshots_and_evidence_cannot_be_rewritten_or_removed(
 
     try:
         async with factory() as session:
-            async with session.begin():
+            transaction = await session.begin()
+            try:
                 session.add_all(
                     [
                         User(id=seller_id, telegram_id=telegram_id + 1, first_name="Seller"),
@@ -158,7 +160,10 @@ async def test_payment_snapshots_and_evidence_cannot_be_rewritten_or_removed(
                     {"id": intent_id},
                 )
                 await assert_rejected(
-                    text("UPDATE payment_transactions SET telegram_payment_charge_id = 'rewritten' WHERE id = :id"),
+                    text(
+                        "UPDATE payment_transactions SET telegram_payment_charge_id = "
+                        "'rewritten' WHERE id = :id"
+                    ),
                     {"id": transaction_id},
                 )
                 await assert_rejected(
@@ -167,9 +172,12 @@ async def test_payment_snapshots_and_evidence_cannot_be_rewritten_or_removed(
                 )
                 await assert_rejected(text("TRUNCATE payment_events"))
 
-                # Lifecycle changes remain possible; the guards protect evidence, not state.
+                # Lifecycle changes remain possible; only the evidence snapshot is frozen.
                 await session.execute(
-                    text("UPDATE payment_transactions SET status = 'refund_pending' WHERE id = :id"),
+                    text(
+                        "UPDATE payment_transactions SET status = 'refund_pending' "
+                        "WHERE id = :id"
+                    ),
                     {"id": transaction_id},
                 )
                 status = await session.scalar(
@@ -177,7 +185,7 @@ async def test_payment_snapshots_and_evidence_cannot_be_rewritten_or_removed(
                     {"id": transaction_id},
                 )
                 assert status == "refund_pending"
-            # Roll back all synthetic financial evidence and fixture rows.
-            await session.rollback()
+            finally:
+                await transaction.rollback()
     finally:
         await engine.dispose()
