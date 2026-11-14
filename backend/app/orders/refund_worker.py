@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Protocol
+from urllib.parse import urlsplit
 
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from sqlalchemy import or_, select
@@ -64,6 +65,31 @@ class RefundWorkerResult:
 class RefundLeaseLost(RuntimeError):
     """A different worker owns the refund job now."""
 
+
+
+def assert_test_refund_worker_config() -> None:
+    """Fail closed unless this worker has a disposable PostgreSQL database and test bot."""
+
+    settings = get_settings()
+    if not settings.telegram_stars_refund_worker_enabled:
+        raise PaymentConflict("Telegram Stars refund worker is disabled")
+    if not settings.telegram_stars_test_enabled:
+        raise PaymentConflict("Telegram Stars test payments are disabled")
+    if settings.environment.lower() not in {"local", "development", "test"}:
+        raise PaymentConflict(
+            "Telegram Stars refund worker is unavailable outside test environments"
+        )
+    if settings.telegram_stars_test_bot_token is None:
+        raise PaymentConflict("A dedicated Telegram Stars test bot token is required")
+
+    parsed_database_url = urlsplit(settings.database_url)
+    database_name = parsed_database_url.path.lstrip("/").split("?", maxsplit=1)[0]
+    if parsed_database_url.scheme != "postgresql+asyncpg" or not database_name or not (
+        database_name.startswith("test_") or database_name.endswith("_test")
+    ):
+        raise PaymentConflict(
+            "Telegram Stars refund worker requires a disposable PostgreSQL test database"
+        )
 
 def _retry_delay(attempt_count: int) -> int:
     settings = get_settings()
@@ -539,17 +565,7 @@ async def run_refund_worker_pass(
 ) -> RefundWorkerResult:
     """Run one bounded refund batch using independent short DB transactions."""
 
-    settings = get_settings()
-    if not settings.telegram_stars_refund_worker_enabled:
-        raise PaymentConflict("Telegram Stars refund worker is disabled")
-    if not settings.telegram_stars_test_enabled:
-        raise PaymentConflict("Telegram Stars test payments are disabled")
-    if settings.environment.lower() not in {"local", "development", "test"}:
-        raise PaymentConflict(
-            "Telegram Stars refund worker is unavailable outside test environments"
-        )
-    if settings.telegram_stars_test_bot_token is None:
-        raise PaymentConflict("A dedicated Telegram Stars test bot token is required")
+    assert_test_refund_worker_config()
 
     current_time = now or datetime.now(UTC)
     async with session_factory() as session:
