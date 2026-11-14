@@ -92,12 +92,15 @@ def _deal_actions(deal: EscrowDeal, actor_id: UUID) -> list[str]:
     return []
 
 
-async def _listing_projection(session: AsyncSession,
-    intent: EscrowListingIntent) -> EscrowListingIntentResponse:
+async def _listing_projection(
+    session: AsyncSession,
+    intent: EscrowListingIntent,
+) -> EscrowListingIntentResponse:
     asset = await session.get(NFTAsset, intent.asset_id)
     return EscrowListingIntentResponse(
-        id=intent.marketplace_listing_id, listing_key=intent.listing_key,
-            seller_id=intent.seller_id,
+        id=intent.marketplace_listing_id,
+        listing_key=intent.listing_key,
+        seller_id=intent.seller_id,
         state=intent.status, network="testnet",
         nft=EscrowNftProjection(
             asset_id=intent.asset_id,
@@ -111,14 +114,18 @@ async def _listing_projection(session: AsyncSession,
     )
 
 
-async def _deal_projection(session: AsyncSession, deal: EscrowDeal,
-    actor_id: UUID) -> EscrowDealResponse:
+async def _deal_projection(
+    session: AsyncSession,
+    deal: EscrowDeal,
+    actor_id: UUID,
+) -> EscrowDealResponse:
     intent = await session.get(EscrowListingIntent, deal.listing_intent_id)
     asset = await session.get(NFTAsset, intent.asset_id) if intent else None
     dispute = await session.scalar(select(EscrowDispute).where(EscrowDispute.deal_id == deal.id))
     return EscrowDealResponse(
-        id=deal.id, listing_id=deal.marketplace_listing_id,
-            listing_key=intent.listing_key if intent else "",
+        id=deal.id,
+        listing_id=deal.marketplace_listing_id,
+        listing_key=deal.listing_key_snapshot,
         buyer_id=deal.buyer_id, seller_id=deal.seller_id, state=deal.status, network="testnet",
         nft=EscrowNftProjection(
             asset_id=intent.asset_id if intent else None,
@@ -128,9 +135,10 @@ async def _deal_projection(session: AsyncSession, deal: EscrowDeal,
         ),
         escrow_address=deal.contract_address, seller_wallet_address=deal.seller_address_snapshot,
         buyer_wallet_address=deal.buyer_address_snapshot,
-            price_nano=str(int(deal.principal_nanotons)),
-        buyer_review_deadline=None, dispute_deadline=None, available_actions=_deal_actions(deal,
-            actor_id),
+        price_nano=str(int(deal.principal_nanotons)),
+        buyer_review_deadline=None,
+        dispute_deadline=None,
+        available_actions=_deal_actions(deal, actor_id),
         created_at=deal.created_at, updated_at=deal.updated_at,
         dispute=({
             "id": str(dispute.id),
@@ -146,7 +154,6 @@ async def _deal_projection(session: AsyncSession, deal: EscrowDeal,
             "resolution_note": None,
         } if dispute else None),
     )
-
 
 
 router = APIRouter(prefix="/escrow", tags=["ton-escrow"])
@@ -481,8 +488,13 @@ async def get_listing_intent(intent_id: UUID, user: CurrentUser, session: DbSess
     return await _listing_projection(session, intent)
 
 @router.post("/deals", response_model=EscrowDealResponse, status_code=201)
-async def create_deal_intent(payload: EscrowDealCreate, user: CurrentUser, session: DbSession,
-    verifier: Verifier, idempotency_key: IdempotencyKey) -> EscrowDealResponse:
+async def create_deal_intent(
+    payload: EscrowDealCreate,
+    user: CurrentUser,
+    session: DbSession,
+    verifier: Verifier,
+    idempotency_key: IdempotencyKey,
+) -> EscrowDealResponse:
     _require_testnet()
     request_hash = _request_hash(_payload_dict(payload))
     try:
@@ -526,18 +538,27 @@ async def create_deal_intent(payload: EscrowDealCreate, user: CurrentUser, sessi
         if principal <= 0 or principal != principal.to_integral_value():
             raise HTTPException(status_code=409, detail="TON principal precision is invalid")
         deal = EscrowDeal(
-            id=uuid4(), listing_intent_id=intent.id,
+            id=uuid4(),
+            listing_intent_id=intent.id,
             marketplace_listing_id=intent.marketplace_listing_id,
             listing_key_snapshot=intent.listing_key,
-            seller_id=intent.seller_id, buyer_id=user.id, buyer_wallet_id=buyer_wallet.id,
-            network="testnet", deal_salt=secrets.token_hex(32),
-            collection_address_snapshot=intent.collection_address_snapshot, contract_address=None,
-            contract_abi_version=None, item_address=intent.item_address,
+            seller_id=intent.seller_id,
+            buyer_id=user.id,
+            buyer_wallet_id=buyer_wallet.id,
+            network="testnet",
+            deal_salt=secrets.token_hex(32),
+            collection_address_snapshot=intent.collection_address_snapshot,
+            contract_address=None,
+            contract_abi_version=None,
+            item_address=intent.item_address,
             seller_address_snapshot=intent.seller_address_snapshot,
-                buyer_address_snapshot=buyer_address,
-            price_amount=intent.price_amount, price_currency="TON", principal_nanotons=principal,
-            status=EscrowDealStatus.INTENT_CREATED.value, last_chain_seqno=None,
-                idempotency_key=idempotency_key,
+            buyer_address_snapshot=buyer_address,
+            price_amount=intent.price_amount,
+            price_currency="TON",
+            principal_nanotons=principal,
+            status=EscrowDealStatus.INTENT_CREATED.value,
+            last_chain_seqno=None,
+            idempotency_key=idempotency_key,
         )
         intent.status = "reserved"
         session.add(deal)
