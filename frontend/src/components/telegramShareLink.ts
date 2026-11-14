@@ -28,6 +28,7 @@ export function buildTelegramListingShareUrl(
     directLink.port !== "" ||
     directLink.username !== "" ||
     directLink.password !== "" ||
+    directLink.search !== "" ||
     directLink.hash !== "" ||
     pathSegments.length !== 2 ||
     !TELEGRAM_USERNAME_PATTERN.test(pathSegments[0]) ||
