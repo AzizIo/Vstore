@@ -664,7 +664,8 @@ async def test_legacy_reservation_rows_are_renamed_without_losing_order_history(
                 )
             ).one()
             revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0012_telegram_stars_payments"
+            expected_head = ScriptDirectory.from_config(Config(ALEMBIC_CONFIG_PATH)).get_current_head()
+            assert revision == expected_head
             assert order.status == "reserved"
             assert order.price_amount == Decimal("12.500000000")
             assert order.price_currency == "TON"
