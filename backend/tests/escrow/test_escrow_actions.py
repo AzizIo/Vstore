@@ -65,3 +65,65 @@ def test_wallet_reference_requires_prepared_unsigned_payload() -> None:
     )
     with pytest.raises(EscrowActionConflict, match="action_not_prepared"):
         record_submission_reference(action, reference="client-supplied-hash")
+
+
+class FakeActionSession:
+    def __init__(self, *results: object) -> None:
+        self.results = list(results)
+        self.added: list[object] = []
+        self.flushed = 0
+
+    async def scalar(self, statement: object) -> object:
+        return self.results.pop(0) if self.results else None
+
+    def add(self, value: object) -> None:
+        self.added.append(value)
+
+    async def flush(self) -> None:
+        self.flushed += 1
+
+
+@pytest.mark.asyncio
+async def test_create_or_replay_action_persists_new_intent_before_side_effect() -> None:
+    from app.escrow.service import create_or_replay_action
+
+    session = FakeActionSession()
+    actor_id, deal_id = uuid4(), uuid4()
+    digest = canonical_request_sha256({"actor_id": str(actor_id), "deal_id": str(deal_id)})
+    action, created = await create_or_replay_action(
+        session, actor_id=actor_id, deal_id=deal_id, action_type="fund_deal",
+        idempotency_key="action-key-1", request_sha256=digest,
+    )
+    assert created is True
+    assert action.status == "pending"
+    assert session.added == [action]
+    assert session.flushed == 1
+
+
+@pytest.mark.asyncio
+async def test_create_or_replay_action_reuses_exact_identity_and_rejects_payload_change() -> None:
+    from app.escrow.service import create_or_replay_action
+
+    actor_id, deal_id = uuid4(), uuid4()
+    digest = canonical_request_sha256({"deal_id": str(deal_id)})
+    existing = EscrowWalletActionRecord(
+        id=uuid4(), actor_id=actor_id, deal_id=deal_id, action_type="fund_deal",
+        network="testnet", idempotency_key="action-key-1", request_sha256=digest,
+        status="blocked_abi", attempt_count=0,
+    )
+    session = FakeActionSession(existing)
+    replay, created = await create_or_replay_action(
+        session, actor_id=actor_id, deal_id=deal_id, action_type="fund_deal",
+        idempotency_key="action-key-1", request_sha256=digest,
+    )
+    assert replay is existing
+    assert created is False
+    assert session.added == []
+
+    conflict_session = FakeActionSession(existing)
+    with pytest.raises(EscrowActionConflict, match="idempotency_payload_conflict"):
+        await create_or_replay_action(
+            conflict_session, actor_id=actor_id, deal_id=deal_id, action_type="fund_deal",
+            idempotency_key="action-key-1",
+            request_sha256=canonical_request_sha256({"deal_id": "different"}),
+        )
