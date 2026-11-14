@@ -135,6 +135,7 @@ export interface PreparedEscrowTransaction {
 export interface EscrowPrepareNftDepositInput {
   asset_id: string;
   seller_wallet_id: string;
+  price_ton: string;
 }
 
 export interface EscrowPreparePurchaseInput {
