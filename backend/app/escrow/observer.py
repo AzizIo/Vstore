@@ -379,21 +379,26 @@ async def run_observer_pass(
                 if checkpoint is None or checkpoint.lease_token != lease_token:
                     return EscrowObserverPassResult(scanned=len(batch.events), lease_lost=True)
                 cursor_safe = True
+                processed_events: list[tuple[NormalizedChainEvent, bool]] = []
                 for event, verified in verified_events:
                     applied_result = await _apply_one_event(session, event, provider_verified=verified)
                     result_counts[applied_result] += 1
+                    processed_events.append((event, verified))
                     if applied_result in {"pending", "unmatched"}:
                         cursor_safe = False
+                        # Later messages may depend on this one. Leave them on the
+                        # same page and replay them after the earlier event is final.
+                        break
                 # A pending/non-final/unmatched event pins the cursor at the batch
                 # start. The same page is rescanned until it can be promoted safely.
                 if batch.next_cursor is not None and cursor_safe:
                     checkpoint.cursor = batch.next_cursor
-                if verified_events:
+                if cursor_safe and processed_events:
                     latest_seqno = max(
                         (
                             event.masterchain_seqno
-                            for event, verified in verified_events
-                            if verified
+                            for event, verified in processed_events
+                            if verified and event.finalized
                         ),
                         default=None,
                     )
