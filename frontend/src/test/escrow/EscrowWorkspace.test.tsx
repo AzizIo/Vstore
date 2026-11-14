@@ -18,7 +18,7 @@ vi.mock("@tonconnect/ui-react", () => ({
 import type {
   EscrowApiClient,
   EscrowDeal,
-  EscrowListing,
+  EscrowListingIntent,
   EscrowPage,
   EscrowWithdrawal,
   PreparedEscrowTransaction,
@@ -28,6 +28,7 @@ import { EscrowWorkspace } from "../../escrow/EscrowWorkspace";
 const sellerAddress = "0:" + "1".repeat(64);
 const itemAddress = "0:" + "2".repeat(64);
 const escrowAddress = "0:" + "3".repeat(64);
+const factoryAddress = "0:" + "4".repeat(64);
 
 const testWallet = {
   id: "wallet-testnet",
@@ -36,15 +37,13 @@ const testWallet = {
   is_verified: true,
   is_primary: true,
 };
-
 const ignoredMainnetWallet = {
   id: "wallet-mainnet",
-  address: "0:" + "4".repeat(64),
+  address: "0:" + "5".repeat(64),
   network: "mainnet",
   is_verified: true,
   is_primary: false,
 };
-
 const inventoryAsset = {
   id: "asset-1",
   asset_type: "ton_nft" as const,
@@ -58,11 +57,12 @@ const inventoryAsset = {
   eligible_for_listing: true,
 };
 
-function listing(overrides: Partial<EscrowListing> = {}): EscrowListing {
+function listing(overrides: Partial<EscrowListingIntent> = {}): EscrowListingIntent {
   return {
     id: "listing-1",
+    listing_key: "listing-key-1",
     seller_id: "seller-1",
-    state: "listed",
+    state: "intent_only",
     network: "testnet",
     nft: {
       asset_id: "asset-1",
@@ -71,10 +71,9 @@ function listing(overrides: Partial<EscrowListing> = {}): EscrowListing {
       item_address: itemAddress,
       collection_address: null,
     },
-    contract_address: escrowAddress,
     seller_wallet_address: sellerAddress,
-    price_ton: "2.5",
-    platform_fee_ton: "0.1",
+    price_nano: "2500000000",
+    fee_bps: 0,
     created_at: "2026-11-14T10:00:00Z",
     updated_at: "2026-11-14T10:00:00Z",
     ...overrides,
@@ -85,19 +84,20 @@ function deal(overrides: Partial<EscrowDeal> = {}): EscrowDeal {
   return {
     id: "deal-1",
     listing_id: "listing-1",
+    listing_key: "listing-key-1",
     buyer_id: "buyer-1",
     seller_id: "seller-1",
-    state: "buyer_confirmation_window",
+    state: "funded_review",
     network: "testnet",
     nft: listing().nft,
-    contract_address: escrowAddress,
+    escrow_address: escrowAddress,
     seller_wallet_address: sellerAddress,
     buyer_wallet_address: sellerAddress,
-    price_ton: "2.5",
-    platform_fee_ton: "0.1",
-    seller_claimable_ton: null,
-    buyer_confirmation_deadline: "2026-11-15T10:00:00Z",
+    price_nano: "2500000000",
+    fee_bps: 0,
+    buyer_review_deadline: "2026-11-15T10:00:00Z",
     dispute_deadline: "2026-11-16T10:00:00Z",
+    available_actions: ["accept_deal", "open_dispute"],
     created_at: "2026-11-14T10:00:00Z",
     updated_at: "2026-11-14T10:00:00Z",
     dispute: null,
@@ -108,11 +108,9 @@ function deal(overrides: Partial<EscrowDeal> = {}): EscrowDeal {
 function withdrawal(): EscrowWithdrawal {
   return {
     id: "withdrawal-1",
-    listing_id: "listing-1",
-    deal_id: null,
+    deal_id: "deal-1",
     kind: "unsold_nft",
     status: "observing",
-    amount_ton: null,
     destination_address: sellerAddress,
     transaction_hash: null,
     created_at: "2026-11-14T10:00:00Z",
@@ -121,20 +119,24 @@ function withdrawal(): EscrowWithdrawal {
 }
 
 function prepared(action: PreparedEscrowTransaction["action"]): PreparedEscrowTransaction {
+  const isFactoryAction = action === "create_deal_escrow";
+  const nftAction = action === "deposit_nft" || action === "return_nft_to_escrow";
+  const destination = isFactoryAction ? factoryAddress : nftAction ? itemAddress : escrowAddress;
   return {
-    id: "operation-" + action,
+    action_id: "operation-" + action,
     action,
     network: "testnet",
-    contract_address: escrowAddress,
+    factory_address: isFactoryAction ? factoryAddress : null,
+    escrow_address: isFactoryAction ? null : escrowAddress,
     nft_item_address: itemAddress,
-    amount_ton: "2.5",
-    fee_ton: "0.1",
-    network_fee_ton: "0.02",
+    price_nano: "2500000000",
+    fee_bps: 0,
+    execution_reserve_nano: "20000000",
     valid_until: "2099-01-01T00:00:00Z",
-    display_summary: "Проверьте параметры операции перед отправкой.",
+    display_purpose: "Проверьте параметры операции перед отправкой.",
     messages: [{
-      address: escrowAddress,
-      amount_nanotons: "2620000000",
+      address: destination,
+      amount_nano: "2520000000",
       payload_boc: "server-prepared-payload",
       state_init_boc: null,
     }],
@@ -146,27 +148,29 @@ function page<T>(items: T[]): EscrowPage<T> {
 }
 
 function makeApi(options: {
-  marketplace?: EscrowListing[];
-  sellerListings?: EscrowListing[];
+  marketplace?: EscrowListingIntent[];
+  sellerListings?: EscrowListingIntent[];
   buyerDeals?: EscrowDeal[];
   sellerDeals?: EscrowDeal[];
-  listMarketplaceListings?: () => Promise<EscrowPage<EscrowListing>>;
+  listMarketplaceListings?: () => Promise<EscrowPage<EscrowListingIntent>>;
 } = {}): EscrowApiClient {
   return {
-    listMarketplaceListings: vi.fn(options.listMarketplaceListings ?? (() => Promise.resolve(page(options.marketplace ?? [listing()])))),
+    listMarketplaceListings: vi.fn(options.listMarketplaceListings ?? (() => Promise.resolve(page(options.marketplace ?? [listing()]))),
     listSellerListings: vi.fn(async () => page(options.sellerListings ?? [])),
     listBuyerDeals: vi.fn(async () => page(options.buyerDeals ?? [])),
     listSellerDeals: vi.fn(async () => page(options.sellerDeals ?? [])),
     listSellerWithdrawals: vi.fn(async () => page([withdrawal()])),
     getListing: vi.fn(async () => listing()),
     getDeal: vi.fn(async () => deal()),
-    prepareNftDeposit: vi.fn(async () => prepared("nft_deposit")),
-    preparePurchase: vi.fn(async () => prepared("purchase")),
-    prepareBuyerConfirmation: vi.fn(async () => prepared("buyer_confirmation")),
-    prepareDispute: vi.fn(async () => prepared("dispute")),
-    prepareBuyerNftReturn: vi.fn(async () => prepared("buyer_nft_return")),
-    prepareUnsoldNftWithdrawal: vi.fn(async () => prepared("unsold_nft_withdrawal")),
-    prepareSellerProceedsWithdrawal: vi.fn(async () => prepared("seller_proceeds_withdrawal")),
+    createListingIntent: vi.fn(async () => listing()),
+    createBuyerDealIntent: vi.fn(async () => deal({ state: "intent_created", available_actions: [] })),
+    prepareDealEscrow: vi.fn(async () => prepared("create_deal_escrow")),
+    prepareNftDeposit: vi.fn(async () => prepared("deposit_nft")),
+    prepareBuyerFunding: vi.fn(async () => prepared("fund_deal")),
+    prepareBuyerAcceptance: vi.fn(async () => prepared("accept_deal")),
+    prepareDispute: vi.fn(async () => prepared("open_dispute")),
+    prepareBuyerNftReturn: vi.fn(async () => prepared("return_nft_to_escrow")),
+    prepareUnsoldNftWithdrawal: vi.fn(async () => prepared("withdraw_unsold_nft")),
     submitWalletReference: vi.fn(async () => undefined),
   };
 }
@@ -201,13 +205,14 @@ function installInventoryApi() {
   return fetchMock;
 }
 
-function renderWorkspace(api: EscrowApiClient, currentUserId = "buyer-1") {
+function renderWorkspace(api: EscrowApiClient, currentUserId = "buyer-1", allowTestnetSigning = false) {
   return render(
     <EscrowWorkspace
       accessToken="session-token"
       currentUserId={currentUserId}
       api={api}
       manifestUrl="https://miniapp.example/tonconnect-manifest.json"
+      allowTestnetSigning={allowTestnetSigning}
     />,
   );
 }
@@ -237,99 +242,87 @@ describe("TON Escrow workspace", () => {
     );
 
     expect(await screen.findByText(/Escrow Backend API пока не подключён/)).toBeInTheDocument();
-    expect(screen.getByText("Только TON testnet.")).toBeInTheDocument();
+    expect(screen.getByText(/Listing intent, отдельная сделка/)).toBeInTheDocument();
     expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
   });
 
-  it("lets a buyer review the exact server-prepared purchase without signing by default", async () => {
+  it("lets a buyer create a deal intent without pretending TON has been paid", async () => {
     const api = makeApi();
     renderWorkspace(api);
 
     expect(await screen.findByRole("heading", { name: "Moon Lantern" })).toBeInTheDocument();
-    expect(screen.getAllByText("2.5 TON").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("0.1 TON").length).toBeGreaterThan(0);
+    expect(screen.getByText("2.5 TON")).toBeInTheDocument();
+    expect(screen.getByText(/Это ещё не оплата/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Купить за TON" }));
+    fireEvent.click(screen.getByRole("button", { name: "Создать сделку" }));
 
-    expect(await screen.findByRole("dialog", { name: "Параметры TON-транзакции" })).toBeInTheDocument();
-    expect(screen.getAllByText(escrowAddress).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(itemAddress).length).toBeGreaterThan(0);
-    expect(screen.getByText("0.02 TON")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Подписать в TON Connect" })).toBeDisabled();
-    expect(api.preparePurchase).toHaveBeenCalledWith({
+    expect(await screen.findByText(/Deal intent создан/)).toBeInTheDocument();
+    expect(api.createBuyerDealIntent).toHaveBeenCalledWith({
       listing_id: "listing-1",
       buyer_wallet_id: "wallet-testnet",
     });
+    expect(api.prepareBuyerFunding).not.toHaveBeenCalled();
     expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
   });
 
-  it("filters seller inventory to verified testnet wallets and prepares an NFT deposit", async () => {
+  it("shows the exact prepared TON funding details but keeps signing disabled by default", async () => {
     const api = makeApi({
-      sellerListings: [listing({ seller_id: "seller-1" })],
-    });
-    renderWorkspace(api, "seller-1");
-    fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
-
-    expect(await screen.findByRole("button", { name: "Проверить условия депозита" })).toBeDisabled();
-    expect(screen.getByText("Подтверждённый кошелёк · 0:11111111…11111111")).toBeInTheDocument();
-    expect(screen.queryByText(ignoredMainnetWallet.address)).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Цена лота · TON testnet"), { target: { value: "2.5" } });
-    expect(screen.getByRole("button", { name: "Проверить условия депозита" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Проверить условия депозита" }));
-
-    expect(await screen.findByRole("dialog", { name: "Параметры TON-транзакции" })).toBeInTheDocument();
-    expect(api.prepareNftDeposit).toHaveBeenCalledWith({
-      asset_id: "asset-1",
-      seller_wallet_id: "wallet-testnet",
-      price_ton: "2.5",
-    });
-    expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
-  });
-
-  it("does not prepare an NFT deposit for an empty, zero or malformed price", async () => {
-    const api = makeApi();
-    renderWorkspace(api, "seller-1");
-    fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
-
-    expect(await screen.findByLabelText("Цена лота · TON testnet")).toBeInTheDocument();
-    const priceInput = screen.getByLabelText("Цена лота · TON testnet");
-    const prepareButton = screen.getByRole("button", { name: "Проверить условия депозита" });
-
-    expect(prepareButton).toBeDisabled();
-    fireEvent.change(priceInput, { target: { value: "0" } });
-    expect(prepareButton).toBeDisabled();
-    fireEvent.change(priceInput, { target: { value: "2,5" } });
-    expect(prepareButton).toBeDisabled();
-    fireEvent.change(priceInput, { target: { value: "2.5" } });
-    expect(prepareButton).toBeEnabled();
-
-    expect(api.prepareNftDeposit).not.toHaveBeenCalled();
-  });
-
-  it("shows seller claimable proceeds only from the seller-scoped Backend deal feed", async () => {
-    const api = makeApi({
-      sellerDeals: [deal({
-        buyer_id: "buyer-2",
-        seller_id: "seller-1",
-        seller_claimable_ton: "5.25",
-        state: "settled",
+      buyerDeals: [deal({
+        state: "awaiting_buyer_funds",
+        available_actions: ["fund_deal"],
       })],
-      buyerDeals: [],
     });
-    renderWorkspace(api, "seller-1");
-    fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
+    renderWorkspace(api);
 
-    expect(await screen.findByText("5.25 TON")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Получить выплату / Claim" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Внести TON" }));
 
-    expect(await screen.findByRole("dialog", { name: "Параметры TON-транзакции" })).toBeInTheDocument();
-    expect(api.prepareSellerProceedsWithdrawal).toHaveBeenCalledWith({
+    expect(await screen.findByRole("dialog", { name: /Внести TON/ })).toBeInTheDocument();
+    expect(screen.getAllByText(escrowAddress).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(itemAddress).length).toBeGreaterThan(0);
+    expect(screen.getByText(/20\.0?\d* TON|0\.02 TON/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Подписать в TON Connect" })).toBeDisabled();
+    expect(api.prepareBuyerFunding).toHaveBeenCalledWith({
       deal_id: "deal-1",
-      seller_wallet_id: "wallet-testnet",
+      wallet_id: "wallet-testnet",
+    });
+    expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("allows buyer acceptance only when Backend exposes accept_deal", async () => {
+    const api = makeApi({
+      buyerDeals: [deal({ state: "funded_review", available_actions: ["accept_deal"] })],
+    });
+    renderWorkspace(api);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Принять условия и передать NFT" }));
+
+    expect(await screen.findByRole("dialog", { name: /Принять условия/ })).toBeInTheDocument();
+    expect(api.prepareBuyerAcceptance).toHaveBeenCalledWith({
+      deal_id: "deal-1",
+      wallet_id: "wallet-testnet",
     });
   });
 
-  it("shows dispute/refund states and prepares buyer NFT return before a refund", async () => {
+  it("opens a dispute only when Backend exposes open_dispute", async () => {
+    const api = makeApi({
+      buyerDeals: [deal({ state: "delivered_dispute_window", available_actions: ["open_dispute"] })],
+    });
+    renderWorkspace(api);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
+    fireEvent.change(screen.getByLabelText("Причина спора"), { target: { value: "NFT не совпадает с описанием" } });
+    fireEvent.click(screen.getByRole("button", { name: "Открыть спор" }));
+
+    expect(await screen.findByRole("dialog", { name: /Открыть спор/ })).toBeInTheDocument();
+    expect(api.prepareDispute).toHaveBeenCalledWith({
+      deal_id: "deal-1",
+      reason: "NFT не совпадает с описанием",
+    });
+  });
+
+  it("shows a seller dispute and prepares a buyer NFT return only when Backend allows it", async () => {
     const disputed = deal({
       id: "deal-disputed",
       state: "disputed",
@@ -342,38 +335,144 @@ describe("TON Escrow workspace", () => {
         resolved_at: null,
         resolution_note: null,
       },
+      available_actions: [],
     });
-    const refundPending = deal({
-      id: "deal-refund",
-      state: "refund_pending_nft_return",
+    const returnPending = deal({
+      id: "deal-return",
+      state: "nft_return_pending",
+      available_actions: ["return_nft_to_escrow"],
     });
-    const api = makeApi({ buyerDeals: [disputed, refundPending] });
+    const api = makeApi({ buyerDeals: [disputed, returnPending] });
     renderWorkspace(api);
 
     expect(await screen.findByText("Открыт спор")).toBeInTheDocument();
     expect(screen.getByText("Покупатель не получил NFT")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Открыть сделку Moon Lantern, Ожидается возврат NFT/ }));
-    expect(await screen.findByText(/необходимо сначала вернуть предмет в escrow/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Открыть сделку Moon Lantern, Возврат NFT/ }));
+    expect(await screen.findByText(/вернуть именно этот NFT в escrow/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Вернуть NFT в escrow" }));
 
-    expect(await screen.findByRole("dialog", { name: "Параметры TON-транзакции" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: /Вернуть NFT в escrow/ })).toBeInTheDocument();
     expect(api.prepareBuyerNftReturn).toHaveBeenCalledWith({
-      deal_id: "deal-refund",
-      buyer_wallet_id: "wallet-testnet",
+      deal_id: "deal-return",
+      wallet_id: "wallet-testnet",
     });
   });
 
-  it("blocks purchase of the current user's own listing", async () => {
-    const api = makeApi({
-      marketplace: [listing({ seller_id: "buyer-1" })],
+  it("creates a seller listing intent from verified testnet inventory and nanotons price", async () => {
+    const api = makeApi();
+    renderWorkspace(api, "seller-1");
+    fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
+
+    expect(await screen.findByLabelText("Цена предложения · TON testnet")).toBeInTheDocument();
+    expect(screen.queryByText(ignoredMainnetWallet.address)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Цена предложения · TON testnet"), { target: { value: "2.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Создать listing intent" }));
+
+    expect(await screen.findByText(/Listing intent создан/)).toBeInTheDocument();
+    expect(api.createListingIntent).toHaveBeenCalledWith({
+      asset_id: "asset-1",
+      seller_wallet_id: "wallet-testnet",
+      price_nano: "2500000000",
     });
+    expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("does not create a listing intent for zero or malformed prices", async () => {
+    const api = makeApi();
+    renderWorkspace(api, "seller-1");
+    fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
+
+    const priceInput = await screen.findByLabelText("Цена предложения · TON testnet");
+    fireEvent.change(priceInput, { target: { value: "0" } });
+    expect(screen.getByRole("button", { name: "Создать listing intent" })).toBeDisabled();
+    fireEvent.change(priceInput, { target: { value: "2,5" } });
+    expect(screen.getByRole("button", { name: "Создать listing intent" })).toBeDisabled();
+    fireEvent.change(priceInput, { target: { value: "2.5" } });
+    expect(screen.getByRole("button", { name: "Создать listing intent" })).toBeEnabled();
+    expect(api.createListingIntent).not.toHaveBeenCalled();
+  });
+
+  it("lets the seller prepare DealEscrow only when the incoming deal action allows it", async () => {
+    const incoming = deal({
+      buyer_id: "buyer-2",
+      seller_id: "seller-1",
+      state: "intent_created",
+      available_actions: ["create_deal_escrow"],
+    });
+    const api = makeApi({ sellerDeals: [incoming] });
+    renderWorkspace(api, "seller-1");
+    fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Создать DealEscrow" }));
+    expect(await screen.findByRole("dialog", { name: /Создать DealEscrow/ })).toBeInTheDocument();
+    expect(api.prepareDealEscrow).toHaveBeenCalledWith({
+      deal_id: "deal-1",
+      wallet_id: "wallet-testnet",
+    });
+  });
+
+  it("lets the seller deposit NFT after the deal reaches awaiting_nft", async () => {
+    const incoming = deal({
+      buyer_id: "buyer-2",
+      seller_id: "seller-1",
+      state: "awaiting_nft",
+      available_actions: ["deposit_nft"],
+    });
+    const api = makeApi({ sellerDeals: [incoming] });
+    renderWorkspace(api, "seller-1");
+    fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Внести NFT в DealEscrow" }));
+    expect(await screen.findByRole("dialog", { name: /Внести NFT/ })).toBeInTheDocument();
+    expect(api.prepareNftDeposit).toHaveBeenCalledWith({
+      deal_id: "deal-1",
+      wallet_id: "wallet-testnet",
+    });
+  });
+
+  it("lets the seller return an unsold NFT only when Backend exposes that action", async () => {
+    const incoming = deal({
+      buyer_id: "buyer-2",
+      seller_id: "seller-1",
+      state: "awaiting_buyer_funds",
+      available_actions: ["withdraw_unsold_nft"],
+    });
+    const api = makeApi({ sellerDeals: [incoming] });
+    renderWorkspace(api, "seller-1");
+    fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Вернуть непроданный NFT" }));
+    expect(await screen.findByRole("dialog", { name: /Вернуть непроданный NFT/ })).toBeInTheDocument();
+    expect(api.prepareUnsoldNftWithdrawal).toHaveBeenCalledWith({
+      deal_id: "deal-1",
+      wallet_id: "wallet-testnet",
+    });
+  });
+
+  it("shows payout as pending and never exposes a manual seller claim", async () => {
+    const incoming = deal({
+      buyer_id: "buyer-2",
+      seller_id: "seller-1",
+      state: "seller_payout_pending",
+      available_actions: [],
+    });
+    const api = makeApi({ sellerDeals: [incoming] });
+    renderWorkspace(api, "seller-1");
+    fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
+
+    expect(await screen.findByText(/Контракт инициировал seller payout/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /claim|получить выплату/i })).not.toBeInTheDocument();
+  });
+
+  it("blocks a buyer from creating a deal on their own listing", async () => {
+    const api = makeApi({ marketplace: [listing({ seller_id: "buyer-1" })] });
     renderWorkspace(api, "buyer-1");
 
-    expect(await screen.findByText("Доступных лотов пока нет")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Купить за TON" })).not.toBeInTheDocument();
+    expect(await screen.findByText("Предложений пока нет")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Создать сделку" })).not.toBeInTheDocument();
   });
 
-  it("shows API errors and allows retry without changing to a false success state", async () => {
+  it("shows API errors and allows retry without reporting a false success", async () => {
     const api = makeApi({
       listMarketplaceListings: vi.fn()
         .mockRejectedValueOnce(new Error("Indexer temporarily unavailable"))
@@ -387,52 +486,37 @@ describe("TON Escrow workspace", () => {
     expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
   });
 
-  it("allows preparing a purchase but keeps signing disabled without explicit testnet opt-in", async () => {
-    const api = makeApi();
-    renderWorkspace(api);
-    expect(await screen.findByRole("button", { name: "Купить за TON" })).toBeEnabled();
-    expect(screen.getByText(/Кошелёк подключён/)).not.toBeInTheDocument();
-    expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
-  });
-
-
   it("blocks duplicate action preparation when the user taps twice", async () => {
     let resolvePrepared: ((value: PreparedEscrowTransaction) => void) | undefined;
-    const api = makeApi();
-    vi.mocked(api.preparePurchase).mockImplementationOnce(() => new Promise((resolve) => {
+    const api = makeApi({
+      buyerDeals: [deal({ state: "awaiting_buyer_funds", available_actions: ["fund_deal"] })],
+    });
+    vi.mocked(api.prepareBuyerFunding).mockImplementationOnce(() => new Promise((resolve) => {
       resolvePrepared = resolve;
     }));
     renderWorkspace(api);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Купить за TON" }));
-    const purchaseButton = screen.getByRole("button", { name: "Купить за TON" });
-    fireEvent.click(purchaseButton);
-    fireEvent.click(purchaseButton);
-
-    expect(api.preparePurchase).toHaveBeenCalledTimes(1);
-    resolvePrepared?.(prepared("purchase"));
-    expect(await screen.findByRole("dialog", { name: "Параметры TON-транзакции" })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
+    const fundButton = screen.getByRole("button", { name: "Внести TON" });
+    fireEvent.click(fundButton);
+    fireEvent.click(fundButton);
+    expect(api.prepareBuyerFunding).toHaveBeenCalledTimes(1);
+    resolvePrepared?.(prepared("fund_deal"));
+    expect(await screen.findByRole("dialog", { name: /Внести TON/ })).toBeInTheDocument();
   });
 
   it("surfaces a rejected TON Connect request without reporting payment or delivery success", async () => {
     vi.stubEnv("VITE_ESCROW_TESTNET_SIGNING_ENABLED", "true");
     tonConnectMocks.wallet = { account: { address: sellerAddress, chain: "-3" } };
     tonConnectMocks.sendTransaction.mockRejectedValueOnce({ code: 300, message: "User rejected" });
-    const api = makeApi();
-    render(
-      <EscrowWorkspace
-        accessToken="session-token"
-        currentUserId="buyer-1"
-        api={api}
-        manifestUrl="https://miniapp.example/tonconnect-manifest.json"
-        allowTestnetSigning
-      />,
-    );
+    const api = makeApi({
+      buyerDeals: [deal({ state: "awaiting_buyer_funds", available_actions: ["fund_deal"] })],
+    });
+    renderWorkspace(api, "buyer-1", true);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Купить за TON" }));
-    const signButton = await screen.findByRole("button", { name: "Подписать в TON Connect" });
-    expect(signButton).toBeEnabled();
-    fireEvent.click(signButton);
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Внести TON" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Подписать в TON Connect" }));
 
     expect(await screen.findByText(/Запрос кошелька отклонён/)).toBeInTheDocument();
     expect(screen.queryByText("Оплата получена")).not.toBeInTheDocument();
@@ -440,45 +524,34 @@ describe("TON Escrow workspace", () => {
     expect(tonConnectMocks.sendTransaction).toHaveBeenCalledTimes(1);
   });
 
-  it("locks the pending action after an ambiguous TON Connect result", async () => {
+  it("locks the action after an ambiguous TON Connect result", async () => {
     vi.stubEnv("VITE_ESCROW_TESTNET_SIGNING_ENABLED", "true");
     tonConnectMocks.wallet = { account: { address: sellerAddress, chain: "-3" } };
     tonConnectMocks.sendTransaction.mockRejectedValueOnce(new Error("Wallet connection dropped"));
-    render(
-      <EscrowWorkspace
-        accessToken="session-token"
-        currentUserId="buyer-1"
-        api={makeApi()}
-        manifestUrl="https://miniapp.example/tonconnect-manifest.json"
-        allowTestnetSigning
-      />,
-    );
+    const api = makeApi({
+      buyerDeals: [deal({ state: "awaiting_buyer_funds", available_actions: ["fund_deal"] })],
+    });
+    renderWorkspace(api, "buyer-1", true);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Купить за TON" }));
-    const signButton = await screen.findByRole("button", { name: "Подписать в TON Connect" });
-    fireEvent.click(signButton);
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Внести TON" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Подписать в TON Connect" }));
 
     expect(await screen.findByText(/Результат запроса кошелька неизвестен/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Подписать в TON Connect" })).toBeDisabled();
     expect(tonConnectMocks.sendTransaction).toHaveBeenCalledTimes(1);
   });
 
-  it("retains a mobile-readable layout at a narrow WebView viewport", async () => {
+  it("retains a mobile-readable layout at a 320px WebView viewport", async () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 320 });
-    const mobileListing = listing({
-      nft: {
-        ...listing().nft,
-        item_address: "0:" + "a".repeat(64),
-      },
-    });
-    const api = makeApi({ marketplace: [mobileListing] });
+    const api = makeApi();
     renderWorkspace(api);
 
     expect(await screen.findByRole("heading", { name: "TON Escrow" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Покупатель" })).toBeVisible();
     expect(screen.getByRole("tab", { name: "Продавец" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Обновить" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Купить за TON" })).toBeVisible();
-    expect(screen.getByText(/Blockchain-транзакции могут быть необратимыми/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Создать сделку" })).toBeVisible();
+    expect(screen.getByText(/TON testnet/i)).toBeInTheDocument();
   });
 });
