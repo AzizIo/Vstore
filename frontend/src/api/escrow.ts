@@ -229,9 +229,9 @@ function isNullableString(value: unknown): value is string | null {
 }
 
 function isNonNegativeTonAmount(value: unknown): value is string {
-  if (typeof value !== "string" || !/^\\d+(?:\\.\\d+)?$/.test(value)) return false;
+  if (typeof value !== "string" || !/^\d+(?:\.\d+)?$/.test(value)) return false;
   const [whole, fraction = ""] = value.split(".");
-  return BigInt(whole) >= 0n && (fraction.length === 0 || /^\\d+$/.test(fraction));
+  return BigInt(whole) >= 0n && (fraction.length === 0 || /^\d+$/.test(fraction));
 }
 
 function isPositiveTonAmountValue(value: unknown): value is string {
