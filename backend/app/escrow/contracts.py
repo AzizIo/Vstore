@@ -13,6 +13,7 @@ from app.escrow.ton_abi import (
     encode_dispute_action,
     encode_nft_transfer,
     encode_simple_action,
+    load_pinned_code_boc,
     parse_basechain_address,
     validate_snapshot,
     verify_compiled_code,
@@ -156,8 +157,8 @@ class PinnedTONEscrowContractAdapter:
 
     def __init__(self, *, compiled_code_boc_base64: str | None = None) -> None:
         try:
-            self._artifacts = verify_compiled_code(compiled_code_boc_base64)
-            self._compiled_code_boc_base64 = compiled_code_boc_base64
+            self._compiled_code_boc_base64 = compiled_code_boc_base64 or load_pinned_code_boc()
+            self._artifacts = verify_compiled_code(self._compiled_code_boc_base64)
         except TONABIError as exc:
             raise EscrowContractABIUnavailable(str(exc)) from exc
 
@@ -180,12 +181,7 @@ class PinnedTONEscrowContractAdapter:
             raise EscrowContractABIUnavailable("resource_id is required and must be bounded")
         try:
             seller, buyer, _collection, item, salt = validate_snapshot(deal_snapshot)
-            deployment = derive_deployment(
-                self._compiled_code_boc_base64 or __import__(
-                    "app.escrow.ton_abi", fromlist=["load_pinned_code_boc"]
-                ).load_pinned_code_boc(),
-                deal_snapshot,
-            )
+            deployment = derive_deployment(self._compiled_code_boc_base64, deal_snapshot)
             wallet_address = parse_basechain_address(actor_wallet.address, "actor_wallet.address")
         except (TONABIError, AttributeError) as exc:
             raise EscrowContractABIUnavailable(str(exc)) from exc
