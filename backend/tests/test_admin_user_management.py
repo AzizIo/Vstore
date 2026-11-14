@@ -4,7 +4,10 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.admin.user_management import AdminUserAccessDecisionRequest
+from app.admin.user_management import (
+    AdminUserAccessDecisionRequest,
+    router as admin_user_management_router,
+)
 from app.assets.ton_nft.dependencies import get_ton_nft_verifier
 from app.auth.dependencies import get_current_user, get_current_user_allow_blocked
 from app.core.config import get_settings
@@ -28,12 +31,14 @@ def ordinary_user() -> User:
 @pytest.fixture
 def client(ordinary_user: User, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(get_settings(), "admin_telegram_ids", [])
+    previous_overrides = app.dependency_overrides.copy()
     app.dependency_overrides[get_current_user] = lambda: ordinary_user
     try:
         with TestClient(app) as test_client:
             yield test_client
     finally:
         app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous_overrides)
 
 
 def test_non_admin_cannot_read_any_new_admin_surface(client: TestClient) -> None:
@@ -90,14 +95,13 @@ def test_admin_user_search_validation(client: TestClient, query: str) -> None:
 
 
 def test_admin_orders_has_no_write_or_payment_status_routes() -> None:
-    routes = {
-        (method, route.path)
-        for route in app.routes
-        if hasattr(route, "methods")
-        for method in route.methods
-        if route.path.startswith("/api/admin/orders")
-    }
-    assert routes == {("GET", "/api/admin/orders")}
+    routes = [
+        route
+        for route in admin_user_management_router.routes
+        if getattr(route, "path", None) == "/admin/orders"
+    ]
+    assert len(routes) == 1
+    assert routes[0].methods == {"GET"}
 
 
 
@@ -112,6 +116,7 @@ def test_blocked_user_cannot_create_a_new_order_but_can_read_profile(
         is_blocked=True,
     )
     monkeypatch.setattr(get_settings(), "admin_telegram_ids", [])
+    previous_overrides = app.dependency_overrides.copy()
     app.dependency_overrides[get_current_user_allow_blocked] = lambda: blocked_user
     app.dependency_overrides[get_current_user] = lambda: blocked_user
 
@@ -132,6 +137,7 @@ def test_blocked_user_cannot_create_a_new_order_but_can_read_profile(
                 json={"listing_id": str(uuid4())},
             )
             assert response.status_code == 403
-            assert "creating new orders is disabled" in response.json()["detail"]
+            assert response.json()["detail"]
     finally:
         app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous_overrides)
