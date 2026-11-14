@@ -1,0 +1,65 @@
+name: Monitoring configuration
+
+on:
+  pull_request:
+    paths:
+      - "docs/monitoring/**"
+      - ".github/workflows/monitoring.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/monitoring/**"
+      - ".github/workflows/monitoring.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  monitoring-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate YAML syntax
+        run: |
+          ruby -e 'require "yaml"; ARGV.each { |path| YAML.safe_load_file(path, aliases: false) }' \
+            docs/monitoring/prometheus.yml.example \
+            docs/monitoring/blackbox.yml.example \
+            docs/monitoring/rules/alerts.yml \
+            docs/monitoring/alertmanager.yml.example
+      - name: Install pinned Prometheus validators
+        env:
+          PROMETHEUS_VERSION: "3.16.0"
+          PROMETHEUS_SHA256: "68727009472a2c02e1ff7f062fd5b3e637285bffc8fc2d340c76fb449d6e0f34"
+          ALERTMANAGER_VERSION: "0.35.0"
+          ALERTMANAGER_SHA256: "6c7752a903c40c8a749e0b29df9240437e4fbb8228068d0af8807377db32addd"
+        run: |
+          set -euo pipefail
+          curl -fsSLo "$RUNNER_TEMP/prometheus.tar.gz" "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
+          echo "${PROMETHEUS_SHA256}  $RUNNER_TEMP/prometheus.tar.gz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/prometheus"
+          tar -xzf "$RUNNER_TEMP/prometheus.tar.gz" -C "$RUNNER_TEMP/prometheus" --strip-components=1
+          curl -fsSLo "$RUNNER_TEMP/alertmanager.tar.gz" "https://github.com/prometheus/alertmanager/releases/download/v${ALERTMANAGER_VERSION}/alertmanager-${ALERTMANAGER_VERSION}.linux-amd64.tar.gz"
+          echo "${ALERTMANAGER_SHA256}  $RUNNER_TEMP/alertmanager.tar.gz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/alertmanager"
+          tar -xzf "$RUNNER_TEMP/alertmanager.tar.gz" -C "$RUNNER_TEMP/alertmanager" --strip-components=1
+      - name: Validate Prometheus config and alert rules
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/viltara-prometheus/rules"
+          cp docs/monitoring/rules/alerts.yml "$RUNNER_TEMP/viltara-prometheus/rules/alerts.yml"
+          sed "s|/etc/prometheus/rules/alerts.yml|$RUNNER_TEMP/viltara-prometheus/rules/alerts.yml|" docs/monitoring/prometheus.yml.example > "$RUNNER_TEMP/viltara-prometheus/prometheus.yml"
+          "$RUNNER_TEMP/prometheus/promtool" check config "$RUNNER_TEMP/viltara-prometheus/prometheus.yml"
+          "$RUNNER_TEMP/prometheus/promtool" check rules docs/monitoring/rules/alerts.yml
+          "$RUNNER_TEMP/alertmanager/amtool" check-config docs/monitoring/alertmanager.yml.example
+      - name: Validate rules and alert recovery simulation
+        run: python docs/monitoring/scripts/check_monitoring.py --simulate
+      - name: Run endpoint probe safety tests
+        run: python -m unittest discover -s docs/monitoring/tests -v
+      - name: Compile monitoring scripts
+        run: python -m py_compile docs/monitoring/scripts/*.py

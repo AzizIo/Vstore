@@ -1,0 +1,36 @@
+global:
+  resolve_timeout: 5m
+route:
+  receiver: sink
+  group_by: ["alertname", "service", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: ['severity="critical"']
+      receiver: critical-sink
+      group_wait: 10s
+      repeat_interval: 1h
+    - matchers: ['severity="warning"']
+      receiver: warning-sink
+      repeat_interval: 8h
+receivers:
+  - name: sink
+  - name: critical-sink
+  - name: warning-sink
+
+# Safe default: there is no externally delivering receiver configured.
+# Deployment-owned receivers must set send_resolved: true and load URL/tokens
+# from a secret manager or protected files. Never commit destination values.
+
+# Receiver adapter template. Render only in deployment tooling after approval.
+# Replace the sink with:
+#   webhook_configs:
+#     - url: ${ALERT_WEBHOOK_URL}
+#       send_resolved: true
+#       http_config:
+#         authorization:
+#           type: Bearer
+#           credentials_file: /run/secrets/alert_webhook_token
+# Alertmanager itself does not expand environment variables in YAML. Render the
+# URL from the secret manager before startup; never commit the rendered file.

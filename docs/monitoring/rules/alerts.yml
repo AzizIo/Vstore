@@ -1,0 +1,170 @@
+groups:
+  - name: viltara.infrastructure.availability
+    interval: 30s
+    rules:
+      - alert: ViltaraApiUnavailable
+        expr: probe_success{job="viltara-api-probe"} == 0 or up{job="viltara-api-probe"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: "VILTARA API readiness probe is failing"
+          description: "Probe has failed for at least 2 minutes."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraMiniAppUnavailable
+        expr: probe_success{job="viltara-miniapp-probe"} == 0 or up{job="viltara-miniapp-probe"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          service: miniapp
+        annotations:
+          summary: "VILTARA Mini App is unavailable"
+          description: "HTTPS probe has failed for at least 3 minutes."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraBotUnhealthy
+        expr: container_health_status{container="bot"} == 0 or increase(container_restart_count{container="bot"}[15m]) >= 3
+        for: 2m
+        labels:
+          severity: critical
+          service: bot
+        annotations:
+          summary: "Bot container is unhealthy or repeatedly restarting"
+          description: "Container health failed or at least 3 restarts were observed in 15 minutes; verify separate polling heartbeat."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraNodeExporterUnavailable
+        expr: up{job="node"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: node-exporter
+        annotations:
+          summary: "Node exporter is unavailable"
+          description: "Host disk and filesystem metrics are no longer being collected."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraContainerMetricsUnavailable
+        expr: up{job="containers"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: container-metrics
+        annotations:
+          summary: "Container metrics exporter is unavailable"
+          description: "Bot health and restart metrics are no longer being collected."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraBackupExporterUnavailable
+        expr: up{job="backup"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: backup-exporter
+        annotations:
+          summary: "Backup metadata exporter is unavailable"
+          description: "Backup freshness and backup-job status metrics are no longer being collected."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraPostgresUnavailable
+        expr: pg_up == 0 or up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: postgres
+        annotations:
+          summary: "PostgreSQL exporter cannot reach database"
+          description: "Database availability check failed for at least 1 minute."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraRedisUnavailable
+        expr: redis_up == 0 or up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis is unavailable"
+          description: "Redis exporter reports instance unavailable for at least 1 minute."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+  - name: viltara.infrastructure.capacity
+    interval: 1m
+    rules:
+      - alert: ViltaraHostDiskHigh
+        expr: (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          service: host
+        annotations:
+          summary: "Host filesystem usage above 80%"
+          description: "Investigate growth before critical threshold."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraHostDiskCritical
+        expr: (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+          service: host
+        annotations:
+          summary: "Host filesystem usage above 90%"
+          description: "Urgent capacity risk; do not delete database volumes or unverified backups."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraPostgresStorageHigh
+        expr: viltara_postgres_volume_used_ratio > 0.80
+        for: 10m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "PostgreSQL storage usage above 80%"
+          description: "Persistent-volume usage ratio is above the warning threshold."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraPostgresStorageCritical
+        expr: viltara_postgres_volume_used_ratio > 0.90
+        for: 5m
+        labels:
+          severity: critical
+          service: postgres
+        annotations:
+          summary: "PostgreSQL storage usage above 90%"
+          description: "Persistent-volume usage ratio is above the critical threshold."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+  - name: viltara.infrastructure.recovery
+    interval: 1m
+    rules:
+      - alert: ViltaraBackupStale
+        expr: time() - viltara_backup_last_success_timestamp_seconds > 26 * 3600
+        for: 5m
+        labels:
+          severity: critical
+          service: backup
+        annotations:
+          summary: "No verified backup within 26 hours"
+          description: "Backup metadata exporter exposes verified timestamp only."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraBackupJobFailed
+        expr: viltara_backup_last_run_success == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: backup
+        annotations:
+          summary: "Latest backup job failed"
+          description: "Exporter exposes bounded success gauge; no filenames or labels."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraTlsCertificateExpiring
+        expr: (probe_ssl_earliest_cert_expiry{job="viltara-tls-probe"} - time()) / 86400 < 21
+        for: 15m
+        labels:
+          severity: warning
+          service: tls
+        annotations:
+          summary: "TLS certificate expires within 21 days"
+          description: "Renew and verify external HTTPS endpoint."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"
+      - alert: ViltaraTlsCertificateCritical
+        expr: (probe_ssl_earliest_cert_expiry{job="viltara-tls-probe"} - time()) / 86400 < 7
+        for: 5m
+        labels:
+          severity: critical
+          service: tls
+        annotations:
+          summary: "TLS certificate expires within 7 days"
+          description: "Urgent renewal required; verify public HTTPS after renewal."
+          runbook: "docs/monitoring/README.md#incident-response-and-rollback"

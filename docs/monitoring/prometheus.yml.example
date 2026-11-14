@@ -1,0 +1,61 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  scrape_timeout: 10s
+rule_files:
+  - /etc/prometheus/rules/alerts.yml
+scrape_configs:
+  - job_name: viltara-api-probe
+    metrics_path: /probe
+    params:
+      module: [http_2xx_no_redirect]
+    static_configs:
+      - targets: ["https://viltara.example.invalid/api/health/ready"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+      - source_labels: [__param_target]
+        target_label: instance
+  - job_name: viltara-miniapp-probe
+    metrics_path: /probe
+    params:
+      module: [http_2xx_no_redirect]
+    static_configs:
+      - targets: ["https://viltara.example.invalid/"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+      - source_labels: [__param_target]
+        target_label: instance
+  - job_name: viltara-tls-probe
+    metrics_path: /probe
+    params:
+      module: [https_2xx]
+    static_configs:
+      - targets: ["https://viltara.example.invalid/"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+      - source_labels: [__param_target]
+        target_label: instance
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+  - job_name: containers
+    static_configs:
+      - targets: ["container-metrics:8080"]
+  - job_name: backup
+    static_configs:
+      - targets: ["backup-metadata-exporter:9200"]
