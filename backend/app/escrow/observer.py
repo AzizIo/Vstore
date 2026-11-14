@@ -66,7 +66,8 @@ def _payload(event: NormalizedChainEvent) -> dict[str, Any]:
 
 
 def _sha256_json(value: object) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
+        default=str).encode()).hexdigest()
 
 
 def _stored_evidence_hash(event: NormalizedChainEvent) -> str:
@@ -110,12 +111,15 @@ async def _persist_event(
         row = EscrowChainEvent(
             id=uuid.uuid4(), network=event.network, event_key=event.event_key,
             transaction_hash=event.transaction_hash, event_index=event.event_index,
-            message_hash=event.message_hash, trace_id=event.trace_id, logical_time=event.logical_time,
+            message_hash=event.message_hash, trace_id=event.trace_id,
+                logical_time=event.logical_time,
             phase=event.phase, attempt_id=event.attempt_id, query_id=event.query_id,
             operation_id=event.operation_id, deal_salt=event.deal_salt,
-            account_address=event.account_address, observed_contract_state=event.observed_contract_state,
+            account_address=event.account_address,
+                observed_contract_state=event.observed_contract_state,
             contract_state_reconciled=event.contract_state_reconciled,
-            event_type=event.event_type.value, contract_address=event.contract_address, deal_id=deal_id,
+            event_type=event.event_type.value, contract_address=event.contract_address,
+                deal_id=deal_id,
             source_address=event.source_address, destination_address=event.destination_address,
             item_address=event.item_address, amount_nanotons=event.amount_nanotons,
             masterchain_seqno=event.masterchain_seqno, finalized=event.finalized,
@@ -156,11 +160,16 @@ async def _apply_one_event(
     existing = await session.scalar(select(EscrowChainEvent).where(
         EscrowChainEvent.network == event.network, EscrowChainEvent.event_key == event.event_key,
     ))
-    if existing is not None and existing.status in {"applied", "manual_review", "unmatched", "rejected"}:
+    if (
+        existing is not None
+        and existing.status in {"applied",
+        "manual_review", "unmatched", "rejected"}
+    ):
         if existing.status == "applied":
             old = existing.payload_json or {}
             new = _payload(event)
-            stable = ("event_type", "contract_address", "deal_id", "source_address", "destination_address",
+            stable = ("event_type", "contract_address", "deal_id", "source_address",
+                "destination_address",
                       "item_address", "amount_nanotons", "message_hash", "trace_id", "logical_time",
                       "phase", "attempt_id", "query_id", "operation_id", "deal_salt")
             if any(old.get(k) != new.get(k) for k in stable):
@@ -391,7 +400,8 @@ async def run_observer_pass(
                 cursor_safe = True
                 processed_events: list[tuple[NormalizedChainEvent, bool]] = []
                 for event, verified in verified_events:
-                    applied_result = await _apply_one_event(session, event, provider_verified=verified)
+                    applied_result = await _apply_one_event(session, event,
+                        provider_verified=verified)
                     result_counts[applied_result] += 1
                     processed_events.append((event, verified))
                     if applied_result in {"pending", "unmatched"}:
@@ -418,7 +428,9 @@ async def run_observer_pass(
                         )
                 checkpoint.lease_token = None
                 checkpoint.lease_until = None
-                checkpoint.next_scan_at = current_time + (timedelta(seconds=10) if not cursor_safe else timedelta(0))
+                checkpoint.next_scan_at = current_time + (
+                    timedelta(seconds=10) if not cursor_safe else timedelta(0)
+                )
                 checkpoint.last_error_code = None
     except Exception:
         # The event writes and cursor are one transaction; on any DB failure the
