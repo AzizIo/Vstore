@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -165,3 +166,49 @@ class PaymentEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class PaymentRefundJob(TimestampMixin, Base):
+    """Durable, leased work item for a single Telegram Stars refund."""
+
+    __tablename__ = "payment_refund_jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'processing', 'reconciling', 'succeeded', 'manual_review')",
+            name="ck_payment_refund_jobs_status",
+        ),
+        CheckConstraint("attempt_count >= 0", name="ck_payment_refund_jobs_attempt_count"),
+        CheckConstraint(
+            "(status = 'processing' AND claim_token IS NOT NULL AND lease_expires_at IS NOT NULL) "
+            "OR (status <> 'processing' AND claim_token IS NULL AND lease_expires_at IS NULL)",
+            name="ck_payment_refund_jobs_lease",
+        ),
+        UniqueConstraint(
+            "payment_transaction_id", name="uq_payment_refund_jobs_transaction"
+        ),
+        Index("ix_payment_refund_jobs_status_next", "status", "next_attempt_at"),
+        Index("ix_payment_refund_jobs_status_lease", "status", "lease_expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    payment_transaction_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("payment_transactions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="pending", server_default="pending"
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    claim_token: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    request_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    provider_refund_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(64))
