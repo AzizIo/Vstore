@@ -219,6 +219,15 @@ If the resolver does not decide within seven days, the default is buyer-favourin
 
 If the resolver does not decide within seven days after a valid post-delivery return, default to buyer refund plus NFT return to seller. No refund may be sent while the buyer still owns the NFT.
 
+**Important guarantee limitation:** after the NFT has been transferred to the buyer, the escrow contract cannot force the buyer (or a later holder) to transfer it back. If the buyer moves the NFT to another wallet or contract before opening a dispute, the 24-hour return requirement may become impossible. Under the current proposal, that path does **not** permit a buyer refund; settlement may proceed to the seller after the dispute deadline. Therefore the 48-hour post-delivery window is a conditional return-and-arbitration mechanism, not an unconditional chargeback, reversible delivery, or guaranteed buyer refund.
+
+Before a runnable PoC, maintainers must explicitly choose between two different product guarantees:
+
+- **Conditional recourse (current design):** release the NFT to the buyer, allow 48 hours to dispute, and require the buyer to return the NFT to escrow within 24 hours to qualify for a refund. This preserves earlier access but cannot recover an NFT transferred onward.
+- **Stronger asset-backed protection (alternative):** keep the NFT inside escrow for the full dispute window after the buyer accepts; only after the window closes without a dispute transfer the NFT to the buyer and the TON principal to the seller. A dispute is then resolved while both assets are still held by the contract. This delays the buyer's ability to use or transfer the NFT, but avoids relying on voluntary return after delivery and requires a different state machine and test matrix.
+
+The UI and terms must describe whichever model is chosen accurately. Do not call the current conditional-recourse variant an unconditional guarantee or chargeback-equivalent protection.
+
 ### 5.5 Timeout is not proof
 
 A deadline only makes an action eligible. It does not prove that an asynchronous NFT transfer failed. Before retry/refund/expiry, the oracle must establish a finalized canonical state that is consistent with the intended branch: exact NFT owner, relevant transfer trace, query ID, and no contradictory in-flight or finalized transfer evidence. If the provider is unavailable, a trace is incomplete, or providers disagree, remain pending/manual review.
@@ -310,6 +319,7 @@ The backend must persist an immutable escrow intent snapshot and observed eviden
 | E16 | Gas griefing or storage depletion | State transitions become unexecutable | Bounded message/trace parsing, minimum reserve, explicit gas budget, no unbounded loops, adversarial gas tests |
 | E17 | Accidental mainnet deployment | Real assets could be locked | Build/deploy guard asserts testnet chain ID and testnet endpoint; no mainnet endpoint/key in PoC CI; independent release approval |
 | E18 | Telegram policy/payment misclassification | Platform enforcement or non-compliant checkout | Keep contract out of Mini App purchase flow until Issue #155 has written ruling and ADR-0001 is accepted |
+| E19 | Buyer transfers NFT onward before a post-delivery dispute and cannot return it to escrow | Buyer refund path is unavailable even though the 48-hour dispute window is open | Explicitly treat the current window as conditional recourse, not a guaranteed refund; alternatively retain NFT in escrow until the dispute window closes; test onward-transfer and failed-return cases |
 
 ## 10. Test scenarios
 
