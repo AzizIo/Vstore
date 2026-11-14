@@ -18,6 +18,7 @@ def deal() -> DealEvidenceSnapshot:
     return DealEvidenceSnapshot(
         network="testnet",
         contract_address="0:" + "a" * 64,
+        collection_address="0:" + "f" * 64,
         item_address="0:" + "b" * 64,
         seller_address="0:" + "c" * 64,
         buyer_address="0:" + "d" * 64,
@@ -176,6 +177,7 @@ def test_missing_contract_binding_fails_closed(deal: DealEvidenceSnapshot) -> No
     unbound = DealEvidenceSnapshot(
         network=deal.network,
         contract_address=None,
+        collection_address=deal.collection_address,
         item_address=deal.item_address,
         seller_address=deal.seller_address,
         buyer_address=deal.buyer_address,
