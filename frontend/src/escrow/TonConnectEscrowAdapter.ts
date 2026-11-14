@@ -81,13 +81,18 @@ export function createTonConnectEscrowAdapter(options: {
         throw new Error("Подключённый кошелёк не совпадает с подтверждённым кошельком участника.");
       }
 
+      // Validate every destination before handing the request to the wallet UI.
+      // The adapter does not decide what a message means; it only rejects malformed TON addresses.
+      normalizedAddress(transaction.contract_address);
+      if (transaction.nft_item_address) normalizedAddress(transaction.nft_item_address);
+
       const validUntil = Math.floor(Date.parse(transaction.valid_until) / 1000);
       if (!Number.isFinite(validUntil) || validUntil <= Math.floor(now() / 1000)) {
         throw new Error("Срок подготовки escrow-транзакции истёк. Обновите данные перед подписанием.");
       }
 
       const messages = transaction.messages.map((message) => ({
-        address: message.address,
+        address: Address.parse(message.address).toString(),
         amount: message.amount_nanotons,
         ...(message.payload_boc ? { payload: message.payload_boc } : {}),
         ...(message.state_init_boc ? { stateInit: message.state_init_boc } : {}),
