@@ -279,7 +279,7 @@ get fun `buyer acceptance is pre-delivery and participant scoped`() {
         to: escrow.address,
     });
     expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
-    expect(nftItem.get_owner()).toEqual(buyer.address);
+    expect(nftItem.getOwner()).toEqual(buyer.address);
 }
 
 get fun `observed NFT transfer alone never settles a deal`() {
@@ -293,6 +293,6 @@ get fun `observed NFT transfer alone never settles a deal`() {
     escrow.sendFundDeal(buyer.address, 1001, 0xA11CE, { value: grams("1.5"), bounce: true });
     escrow.sendAcceptDeal(buyer.address, 1003, 0xA11CE, { value: grams("0.03"), bounce: true });
 
-    expect(nftItem.get_owner()).toEqual(buyer.address);
+    expect(nftItem.getOwner()).toEqual(buyer.address);
     expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
 }
