@@ -43,6 +43,12 @@ function formatVerificationStatus(status: string) {
   return labels[status] ?? "Неизвестно";
 }
 
+function telegramProfileUrl(username: string | null): string | null {
+  const normalized = username?.replace(/^@/, "") ?? "";
+  if (!/^[A-Za-z0-9_]{5,32}$/.test(normalized)) return null;
+  return `https://t.me/${normalized}`;
+}
+
 function formatPrice(amount: string, currency: string) {
   const numericAmount = Number(amount);
   const formattedAmount = Number.isFinite(numericAmount)
@@ -183,6 +189,7 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
 
   const title = listing.title || listing.asset.name || "Без названия";
   const seller = listing.seller.first_name || listing.seller.username || "Продавец";
+  const sellerTelegramUrl = telegramProfileUrl(listing.seller.username);
   const canOrder = session.status === "authenticated" && session.user.id !== listing.seller.id;
 
   async function handleOrder() {
@@ -245,6 +252,17 @@ function ListingDetail({ listingId, onBack, onOrders }: { listingId: string; onB
               <span>{listing.seller.username ? `@${listing.seller.username}` : "Продавец в Telegram"}</span>
             </div>
           </section>
+          {sellerTelegramUrl && (
+            <a
+              className="seller-contact-link"
+              href={sellerTelegramUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Написать продавцу в Telegram"
+            >
+              Написать продавцу в Telegram <span aria-hidden="true">↗</span>
+            </a>
+          )}
           {canOrder ? (
             <div className="order-action">
               <button ref={reserveTriggerRef} className="primary-button" type="button" disabled={ordering || orderCreated} onClick={() => { setOrderError(""); setConfirmationOpen(true); }}>
