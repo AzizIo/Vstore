@@ -23,7 +23,6 @@ import {
   createTonConnectEscrowAdapter,
   walletBocReference,
   type EscrowWalletAdapter,
-  type EscrowTonConnectRequest,
 } from "./TonConnectEscrowAdapter";
 import { fetchEscrowTestnetInventory, type EscrowOwnedNft } from "./inventory";
 import {
@@ -397,6 +396,10 @@ function WorkspaceBody({
     ) ?? null;
   }
 
+  const selectedDealBuyerWallet = selectedDeal
+    ? expectedWalletForAddress(selectedDeal.buyer_wallet_address)
+    : null;
+
   async function prepareAction(
     prepare: () => Promise<PreparedEscrowTransaction>,
     expectedWallet: WalletRecord | null,
@@ -749,10 +752,10 @@ function WorkspaceBody({
                     <button
                       className="escrow-button escrow-button-primary"
                       type="button"
-                      disabled={!api || busy || !selectedBuyerWallet}
-                      onClick={() => selectedBuyerWallet && void prepareAction(
+                      disabled={!api || busy || !selectedDealBuyerWallet}
+                      onClick={() => selectedDealBuyerWallet && void prepareAction(
                         () => api!.prepareBuyerConfirmation({ deal_id: selectedDeal.id }),
-                        expectedWalletForAddress(selectedDeal.buyer_wallet_address),
+                        selectedDealBuyerWallet,
                       )}
                     >Подтвердить получение</button>
                     <label className="escrow-dispute-reason"><span>Причина спора</span><textarea rows={3} value={disputeReason} onChange={(event) => setDisputeReason(event.target.value)} placeholder="Опишите проблему с оплатой или передачей NFT." /></label>
@@ -773,13 +776,13 @@ function WorkspaceBody({
                     <button
                       className="escrow-button escrow-button-primary"
                       type="button"
-                      disabled={!api || busy || !expectedWalletForAddress(selectedDeal.buyer_wallet_address)}
-                      onClick={() => void prepareAction(
+                      disabled={!api || busy || !selectedDealBuyerWallet}
+                      onClick={() => selectedDealBuyerWallet && void prepareAction(
                         () => api!.prepareBuyerNftReturn({
                           deal_id: selectedDeal.id,
-                          buyer_wallet_id: expectedWalletForAddress(selectedDeal.buyer_wallet_address)!.id,
+                          buyer_wallet_id: selectedDealBuyerWallet.id,
                         }),
-                        expectedWalletForAddress(selectedDeal.buyer_wallet_address),
+                        selectedDealBuyerWallet,
                       )}
                     >Вернуть NFT в escrow</button>
                   </div>
@@ -794,7 +797,7 @@ function WorkspaceBody({
       )}
 
       {!walletConnected && manifestConfigured && (
-        <button className="escrow-button escrow-button-secondary escrow-connect-button" type="button" onClick={() => onConnectWallet?.()}>
+        <button className="escrow-button escrow-button-secondary escrow-connect-button" type="button" onClick={() => { void onConnectWallet?.(); }}>
           Подключить testnet-кошелёк
         </button>
       )}
