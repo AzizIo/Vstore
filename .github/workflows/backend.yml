@@ -140,6 +140,17 @@ jobs:
           assert "stars_test_data" in config["volumes"]
           '
 
+      - name: Verify migration upgrade from the previous release revision
+        env:
+          PGPASSWORD: viltara_test
+          DATABASE_URL: postgresql+asyncpg://viltara:viltara_test@localhost:5432/viltara_upgrade_test
+        run: |
+          createdb --host=localhost --username=viltara viltara_upgrade_test
+          python -m alembic upgrade 0014_admin_user_management
+          python -m alembic upgrade head
+          psql --host=localhost --username=viltara --dbname=viltara_upgrade_test --tuples-only --no-align \
+            --command="SELECT version_num FROM alembic_version" | grep -qx e20261114_ton_escrow
+
       - name: Lint
         run: ruff check app tests migrations scripts
 
