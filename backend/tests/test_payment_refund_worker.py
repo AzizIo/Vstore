@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -84,7 +85,7 @@ async def _seed_payment(
     intent_status: str = "refund_pending",
     transaction_status: str | None = "refund_pending",
     expires_in: timedelta = timedelta(minutes=15),
-) -> dict[str, object]:
+) -> dict[str, Any]:
     suffix = uuid4().int % 900_000_000
     seller_id, buyer_id = uuid4(), uuid4()
     listing_id, asset_id, order_id = uuid4(), uuid4(), uuid4()
@@ -212,7 +213,7 @@ async def _seed_payment(
     }
 
 
-async def _cleanup(session_factory: async_sessionmaker[AsyncSession], ids: dict[str, object]) -> None:
+async def _cleanup(session_factory: async_sessionmaker[AsyncSession], ids: dict[str, Any]) -> None:
     async with session_factory.begin() as session:
         order_id = ids["order_id"]
         await session.execute(
@@ -293,7 +294,7 @@ class FakeStarsProvider:
             )
         ]
 
-    async def get_star_transactions(self, *, offset: int, limit: int):
+    async def get_star_transactions(self, *, offset: int, limit: int) -> SimpleNamespace:
         return SimpleNamespace(transactions=self.history[offset : offset + limit])
 
     async def refund_star_payment(self, *, user_id: int, telegram_payment_charge_id: str):
@@ -602,7 +603,7 @@ async def test_second_charge_for_same_invoice_is_queued_once_and_update_replay_i
     now = datetime.now(UTC)
 
     try:
-        evidence = {
+        evidence: dict[str, Any] = {
             "invoice_payload": str(ids["invoice_payload"]),
             "payer_telegram_id": int(ids["buyer_telegram_id"]),
             "total_amount": 25,
@@ -618,7 +619,7 @@ async def test_second_charge_for_same_invoice_is_queued_once_and_update_replay_i
             # Exact replay of the same provider event must not create a second charge.
             assert await record_stars_success(session, **evidence) == "captured"
 
-        second_evidence = dict(evidence)
+        second_evidence: dict[str, Any] = dict(evidence)
         second_evidence["telegram_payment_charge_id"] = second_charge
         second_evidence["provider_event_id"] = f"second-update-{uuid4()}"
         async with factory() as session:
