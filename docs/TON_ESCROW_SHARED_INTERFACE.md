@@ -204,6 +204,40 @@ The backend read model should expose, at minimum:
 
 The frontend must render this read model as observed facts, not local optimistic success. Unknown states must render as a safe pending/error state rather than falling through to success.
 
+### 6.4 Frontend state mapping
+
+Keep listing-intent state separate from deal state. Never use one enum for both.
+
+**Listing intent** (seller preparation only):
+- `intent_only`: backend intent exists; no on-chain NFT lock is proven.
+- `active`: the exact NFT is locked in the associated deal/escrow according to reconciled contract state and it may be eligible for a buyer deal.
+- `reserved`: a deal is already in progress; do not present the asset as available to another buyer.
+- `cancelled`: seller cancelled before buyer funds were accepted, and any NFT return is reconciled.
+- `manual_review`: do not allow new buyer actions.
+
+**Deal status** — use the backend's snake_case values as stable transport values, with human-readable labels in the frontend:
+
+| Backend status | Frontend meaning | User action |
+|---|---|---|
+| `intent_created` | Сделка подготовлена, контракт ещё не подтверждён | None |
+| `awaiting_nft` | Ожидается депозит NFT продавцом | Seller deposits exact NFT |
+| `awaiting_buyer_funds` | NFT зафиксирован, ожидается TON покупателя | Buyer funds exact principal |
+| `funded_review` | NFT и TON заблокированы; идёт окно проверки до передачи | Buyer accepts or opens dispute |
+| `nft_release_pending` | Запрошена передача NFT; финальность ещё не подтверждена | Wait / open allowed dispute path |
+| `delivered_dispute_window` | Oracle-attested delivery at finality; dispute window running | Buyer may dispute before deadline |
+| `disputed` | Спор активен, settlement frozen | Wait for resolver / return requirements |
+| `nft_return_pending` | NFT возврат/повторная доставка выполняется | Wait; do not promise refund yet |
+| `seller_payout_pending` | Выплата продавцу отправлена, но ещё не финализирована | Wait / show pending |
+| `buyer_refund_pending` | Возврат покупателю отправлен, но ещё не финализирован | Wait / show pending |
+| `settled` | Финализированный payout подтверждён | Read-only |
+| `refunded` | Финализированный refund подтверждён и условия возврата NFT выполнены | Read-only |
+| `expired` | Сделка завершилась до принятия средств; NFT не остаётся в escrow | Read-only |
+| `manual_review` | Конфликт/неполная цепочка доказательств; активы удерживаются | Read-only; show support/escalation |
+
+Do not expose a post-delivery `confirm_receipt` button as a state transition in this model. Buyer acceptance happens in `funded_review` before NFT release. The post-delivery timer begins only after the evidence oracle/quorum attestation is accepted by the contract and its state is reconciled.
+
+Payout is contract-initiated after the dispute window or authorized seller-favourable resolution. The buyer/seller UI should display `seller_payout_pending` and `buyer_refund_pending` as waiting states; do not add manual "claim proceeds" buttons unless a future ABI explicitly implements claimable balances.
+
 ## 7. Wallet action preparation contract
 
 The backend may prepare an unsigned TON Connect transaction request. It must not sign it or infer that it succeeded.
@@ -217,7 +251,7 @@ Minimum semantic response:
 - messages[]: destination address, amount in nanotons as a string, and exact payload/state-init bytes needed by TON Connect;
 - display: human-readable network, contract, NFT, price, fee, recipient and purpose shown before signature.
 
-The exact TypeScript/Pydantic transport schema may be adapted to the current TON Connect SDK, but both teams must preserve these semantics. Bind the action to the authenticated user and server-verified wallet. Never trust client-submitted seller/buyer addresses, amount, fee, contract address or state transition. A returned wallet hash is a lookup hint only; observer evidence is authoritative.
+The exact TypeScript/Pydantic transport schema may be adapted to the current TON Connect SDK, but both teams must preserve these semantics. Bind the action to the authenticated user and server-verified wallet. The frontend must validate each message destination against an action-specific allowlist (e.g. NFT item for a seller TEP-62 deposit, DealEscrow for buyer funding/accept/dispute) and show each message destination and amount before signing; a backend-provided summary string alone is insufficient. Never trust client-submitted seller/buyer addresses, amount, fee, contract address or state transition. A returned wallet/BOC hash is a lookup hint only; observer evidence is authoritative. Payout/refund in the PoC are contract-initiated and are not arbitrary frontend-signed withdrawals.
 
 ## 8. Shared end-to-end acceptance scenarios
 
