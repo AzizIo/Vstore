@@ -131,27 +131,27 @@ async def _cleanup(session_factory, *, listing_id, intent_id, asset_id, wallet_i
     async with session_factory.begin() as session:
         await session.execute(
             text("DELETE FROM escrow_wallet_actions WHERE deal_id IN "
-                 "(SELECT id FROM escrow_deals WHERE marketplace_listing_id = :listing_id)"),
-            {"listing_id": listing_id},
+                 "(SELECT id FROM escrow_deals WHERE listing_intent_id = :intent_id)"),
+            {"intent_id": intent_id},
         )
         await session.execute(
             text("DELETE FROM escrow_idempotency_records WHERE resource_id IN "
-                 "(SELECT id FROM escrow_deals WHERE marketplace_listing_id = :listing_id)"),
-            {"listing_id": listing_id},
+                 "(SELECT id FROM escrow_deals WHERE listing_intent_id = :intent_id)"),
+            {"intent_id": intent_id},
         )
         await session.execute(
             text("DELETE FROM escrow_chain_events WHERE deal_id IN "
-                 "(SELECT id FROM escrow_deals WHERE marketplace_listing_id = :listing_id)"),
-            {"listing_id": listing_id},
+                 "(SELECT id FROM escrow_deals WHERE listing_intent_id = :intent_id)"),
+            {"intent_id": intent_id},
         )
         await session.execute(
             text("DELETE FROM escrow_disputes WHERE deal_id IN "
-                 "(SELECT id FROM escrow_deals WHERE marketplace_listing_id = :listing_id)"),
-            {"listing_id": listing_id},
+                 "(SELECT id FROM escrow_deals WHERE listing_intent_id = :intent_id)"),
+            {"intent_id": intent_id},
         )
         await session.execute(
-            text("DELETE FROM escrow_deals WHERE marketplace_listing_id = :listing_id"),
-            {"listing_id": listing_id},
+            text("DELETE FROM escrow_deals WHERE listing_intent_id = :intent_id"),
+            {"intent_id": intent_id},
         )
         await session.execute(
             text("DELETE FROM escrow_listing_intents WHERE id = :intent_id"),
@@ -160,15 +160,15 @@ async def _cleanup(session_factory, *, listing_id, intent_id, asset_id, wallet_i
         await session.execute(
             text("DELETE FROM order_events WHERE order_id IN "
                  "(SELECT id FROM orders WHERE listing_id = :listing_id)"),
-            {"listing_id": listing_id},
+            {"intent_id": intent_id},
         )
         await session.execute(
             text("DELETE FROM telegram_notification_outbox WHERE order_id IN "
                  "(SELECT id FROM orders WHERE listing_id = :listing_id)"),
-            {"listing_id": listing_id},
+            {"intent_id": intent_id},
         )
         await session.execute(text("DELETE FROM orders WHERE listing_id = :listing_id"),
-                              {"listing_id": listing_id})
+                              {"intent_id": intent_id})
         await session.execute(Listing.__table__.delete().where(Listing.id == listing_id))
         await session.execute(NFTAsset.__table__.delete().where(NFTAsset.id == asset_id))
         await session.execute(Wallet.__table__.delete().where(Wallet.id == wallet_id))
