@@ -69,6 +69,14 @@ def _sha256_json(value: object) -> str:
     ).hexdigest()
 
 
+def _stored_evidence_hash(event: NormalizedChainEvent) -> str:
+    """Return a valid digest even when the provider supplies malformed metadata."""
+    supplied = event.evidence_sha256
+    if len(supplied) == 64 and all(char in "0123456789abcdef" for char in supplied.lower()):
+        return supplied.lower()
+    return _sha256_json(_payload(event))
+
+
 def _event_snapshot(event: NormalizedChainEvent) -> NormalizedEventEvidence:
     return NormalizedEventEvidence(
         network=event.network,
@@ -112,7 +120,7 @@ async def _persist_unapplied_event(
         )
     )
     if existing is not None:
-        if existing.evidence_sha256 != event.evidence_sha256:
+        if existing.evidence_sha256 != _stored_evidence_hash(event):
             existing.status = "manual_review"
             existing.reason_code = "event_evidence_conflict"
         return
@@ -130,7 +138,7 @@ async def _persist_unapplied_event(
             amount_nanotons=event.amount_nanotons,
             masterchain_seqno=event.masterchain_seqno,
             finalized=event.finalized,
-            evidence_sha256=event.evidence_sha256,
+            evidence_sha256=_stored_evidence_hash(event),
             payload_json=_payload(event),
             status=status,
             reason_code=reason_code,
