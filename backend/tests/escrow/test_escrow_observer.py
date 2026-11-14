@@ -194,3 +194,52 @@ def test_observer_checkpoint_table_is_durable_and_testnet_scoped() -> None:
     assert EscrowObserverCheckpoint.__table__.c.cursor is not None
     assert EscrowObserverCheckpoint.__table__.c.lease_token is not None
     assert EscrowObserverCheckpoint.__table__.c.lease_until is not None
+
+
+
+class ResumeProvider(UnconfiguredTONTestnetEscrowProvider):
+    def __init__(self) -> None:
+        self.received_cursors: list[str | None] = []
+
+    async def scan_events(self, *, cursor: str | None, limit: int) -> ChainEventBatch:
+        del limit
+        self.received_cursors.append(cursor)
+        return ChainEventBatch(events=(), next_cursor=None)
+
+    async def verify_event(self, event: NormalizedChainEvent) -> bool:
+        del event
+        return True
+
+
+@pytest.mark.asyncio
+async def test_observer_restart_resumes_from_durable_cursor_after_outage() -> None:
+    now = datetime(2026, 11, 14, tzinfo=UTC)
+    checkpoint = EscrowObserverCheckpoint(
+        checkpoint_id=CHECKPOINT_ID,
+        network="testnet",
+        cursor="durable-cursor-before-outage",
+        last_masterchain_seqno=99,
+        lease_token=None,
+        lease_until=None,
+        next_scan_at=None,
+        last_error_code=None,
+    )
+
+    def factory() -> FakeEscrowSession:
+        return FakeEscrowSession(checkpoint)
+
+    outage_result = await run_observer_pass(
+        factory, OutageProvider(), now=now, limit=5  # type: ignore[arg-type]
+    )
+    assert outage_result.provider_unavailable
+
+    provider = ResumeProvider()
+    resumed_result = await run_observer_pass(
+        factory, provider, now=now.replace(second=20), limit=5
+    )
+
+    assert resumed_result.scanned == 0
+    assert provider.received_cursors == ["durable-cursor-before-outage"]
+    assert checkpoint.cursor == "durable-cursor-before-outage"
+    assert checkpoint.lease_token is None
+    assert checkpoint.lease_until is None
