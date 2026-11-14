@@ -31,7 +31,7 @@ from app.db.models import (
 )
 from app.db.payments import PaymentIntent, PaymentRefundJob, PaymentTransaction
 from app.orders import payment_service, refund_worker
-from app.orders.payment_service import record_stars_success
+from app.orders.payment_service import PaymentConflict, record_stars_success
 from app.orders.refund_worker import run_refund_worker_pass
 from app.orders.service import _invalidate_lost_ownership, cancel_order, expire_pending_orders
 
@@ -758,5 +758,5 @@ async def test_refund_worker_refuses_production_environment_before_provider_io(
         async def refund_star_payment(self, *, user_id: int, telegram_payment_charge_id: str):
             raise AssertionError("provider must not be called in production")
 
-    with pytest.raises(Exception, match="outside test environments"):
+    with pytest.raises(PaymentConflict, match="outside test environments"):
         await run_refund_worker_pass(None, ProviderMustNotRun())  # type: ignore[arg-type]
