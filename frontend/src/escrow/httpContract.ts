@@ -1,15 +1,17 @@
 import type { EscrowHttpContract, EscrowHttpOperation } from "../api/escrow";
 import { API_BASE_URL } from "../api/config";
 
-function idempotencyHeaders(): Record<string, string> {
-  return { "Idempotency-Key": crypto.randomUUID() };
-}
-
-function post(url: string, body?: unknown): EscrowHttpOperation {
+function post(url: string, body?: unknown, keys?: Map<string, string>): EscrowHttpOperation {
+  const fingerprint = `${url}:${JSON.stringify(body ?? null)}`;
+  let key = keys?.get(fingerprint);
+  if (!key) {
+    key = crypto.randomUUID();
+    keys?.set(fingerprint, key);
+  }
   return {
     url,
     method: "POST",
-    headers: idempotencyHeaders(),
+    headers: { "Idempotency-Key": key },
     ...(body === undefined ? {} : { body }),
   };
 }
@@ -17,6 +19,8 @@ function post(url: string, body?: unknown): EscrowHttpOperation {
 /** Concrete testnet-only HTTP mapping for the backend escrow router. */
 export function createEscrowHttpContract(baseUrl = API_BASE_URL): EscrowHttpContract {
   const root = `${baseUrl}/api/escrow`;
+  const idempotencyKeys = new Map<string, string>();
+  const write = (url: string, body?: unknown) => post(url, body, idempotencyKeys);
   const deal = (id: string) => `${root}/deals/${encodeURIComponent(id)}`;
   const listing = (id: string) => `${root}/listing-intents/${encodeURIComponent(id)}`;
 
@@ -28,15 +32,15 @@ export function createEscrowHttpContract(baseUrl = API_BASE_URL): EscrowHttpCont
     sellerWithdrawals: () => `${root}/seller/withdrawals`,
     listingDetails: listing,
     dealDetails: deal,
-    createListingIntent: (input) => post(`${root}/listing-intents`, input),
-    createBuyerDealIntent: (input) => post(`${root}/deals`, input),
-    prepareDealEscrow: ({ deal_id }) => post(`${deal(deal_id)}/prepare/create-deal-escrow`),
-    prepareNftDeposit: ({ deal_id }) => post(`${deal(deal_id)}/prepare/deposit-nft`),
-    prepareBuyerFunding: ({ deal_id }) => post(`${deal(deal_id)}/prepare/funding`),
-    prepareBuyerAcceptance: ({ deal_id }) => post(`${deal(deal_id)}/prepare/accept`),
-    prepareDispute: ({ deal_id, reason }) => post(`${deal(deal_id)}/prepare/dispute`, { reason }),
-    prepareBuyerNftReturn: ({ deal_id }) => post(`${deal(deal_id)}/prepare/nft-return`),
-    prepareUnsoldNftWithdrawal: ({ deal_id }) => post(`${deal(deal_id)}/prepare/withdraw-unsold-nft`),
-    submitWalletReference: (input) => post(`${root}/wallet-references`, input),
+    createListingIntent: (input) => write(`${root}/listing-intents`, input),
+    createBuyerDealIntent: (input) => write(`${root}/deals`, input),
+    prepareDealEscrow: ({ deal_id }) => write(`${deal(deal_id)}/prepare/create-deal-escrow`),
+    prepareNftDeposit: ({ deal_id }) => write(`${deal(deal_id)}/prepare/deposit-nft`),
+    prepareBuyerFunding: ({ deal_id }) => write(`${deal(deal_id)}/prepare/funding`),
+    prepareBuyerAcceptance: ({ deal_id }) => write(`${deal(deal_id)}/prepare/accept`),
+    prepareDispute: ({ deal_id, reason }) => write(`${deal(deal_id)}/prepare/dispute`, { reason }),
+    prepareBuyerNftReturn: ({ deal_id }) => write(`${deal(deal_id)}/prepare/nft-return`),
+    prepareUnsoldNftWithdrawal: ({ deal_id }) => write(`${deal(deal_id)}/prepare/withdraw-unsold-nft`),
+    submitWalletReference: (input) => write(`${root}/wallet-references`, input),
   };
 }
