@@ -38,7 +38,7 @@ jobs:
       PROD_POSTGRES_VOLUME_NAME: viltara-ci-volume
       PROD_HTTP_PORT: "8081"
       PROD_TON_CENTER_API_KEY: ""
-  steps:
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Validate Compose interpolation and private service exposure
