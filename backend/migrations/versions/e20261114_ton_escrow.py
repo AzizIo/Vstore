@@ -88,6 +88,7 @@ def upgrade() -> None:
         sa.Column("principal_nanotons", sa.Numeric(30, 0), nullable=False),
         sa.Column("status", sa.String(32), server_default="intent_created", nullable=False),
         sa.Column("last_chain_seqno", sa.BigInteger(), nullable=True),
+        sa.Column("last_chain_logical_time", sa.BigInteger(), nullable=True),
         sa.Column("idempotency_key", sa.String(128), nullable=False),
         sa.Column(
             "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
