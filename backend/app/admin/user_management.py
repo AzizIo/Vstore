@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import String, case, cast, func, or_, select
+from sqlalchemy import String, case, cast, func, literal, or_, select, union_all
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -165,6 +165,28 @@ class AdminUserAuditDTO(BaseModel):
 
 class AdminUserAuditPageDTO(BaseModel):
     items: list[AdminUserAuditDTO]
+    total: int
+    limit: int
+    offset: int
+
+
+class AdminAuditLogItemDTO(BaseModel):
+    id: UUID
+    target_type: Literal["listing", "user"]
+    target_id: UUID
+    actor_id: UUID
+    action: str
+    reason_code: str | None
+    reason: str
+    before_snapshot: dict[str, object]
+    after_snapshot: dict[str, object]
+    request_id: str | None
+    idempotency_key: str
+    occurred_at: datetime
+
+
+class AdminAuditLogPageDTO(BaseModel):
+    items: list[AdminAuditLogItemDTO]
     total: int
     limit: int
     offset: int
@@ -664,34 +686,102 @@ async def get_admin_user_orders(
     )
 
 
-@router.get("/users/{user_id}/audit", response_model=AdminUserAuditPageDTO)
+def _audit_union(user_id: UUID | None = None):
+    listing_events = select(
+        ModerationAuditLog.id.label("id"),
+        literal("listing").label("target_type"),
+        ModerationAuditLog.target_id.label("target_id"),
+        ModerationAuditLog.actor_id.label("actor_id"),
+        ModerationAuditLog.action.label("action"),
+        ModerationAuditLog.reason_code.label("reason_code"),
+        ModerationAuditLog.reason.label("reason"),
+        ModerationAuditLog.before_snapshot.label("before_snapshot"),
+        ModerationAuditLog.after_snapshot.label("after_snapshot"),
+        ModerationAuditLog.request_id.label("request_id"),
+        ModerationAuditLog.idempotency_key.label("idempotency_key"),
+        ModerationAuditLog.occurred_at.label("occurred_at"),
+    )
+    if user_id is not None:
+        listing_events = listing_events.join(
+            Listing, Listing.id == ModerationAuditLog.target_id
+        ).where(Listing.seller_id == user_id)
+
+    user_events = select(
+        AdminUserAuditLog.id.label("id"),
+        literal("user").label("target_type"),
+        AdminUserAuditLog.target_user_id.label("target_id"),
+        AdminUserAuditLog.actor_id.label("actor_id"),
+        AdminUserAuditLog.action.label("action"),
+        literal(None, type_=String()).label("reason_code"),
+        AdminUserAuditLog.reason.label("reason"),
+        AdminUserAuditLog.before_snapshot.label("before_snapshot"),
+        AdminUserAuditLog.after_snapshot.label("after_snapshot"),
+        AdminUserAuditLog.request_id.label("request_id"),
+        AdminUserAuditLog.idempotency_key.label("idempotency_key"),
+        AdminUserAuditLog.occurred_at.label("occurred_at"),
+    )
+    if user_id is not None:
+        user_events = user_events.where(AdminUserAuditLog.target_user_id == user_id)
+    return union_all(listing_events, user_events).subquery("admin_audit_union")
+
+
+@router.get("/audit-log", response_model=AdminAuditLogPageDTO)
+async def get_combined_admin_audit_log(
+    admin: AdminUser,
+    session: DbSession,
+    target_type: Annotated[Literal["listing", "user"] | None, Query()] = None,
+    action: Annotated[
+        str | None,
+        Query(pattern="^(approved|rejected|suspended|restored|blocked|unblocked)$"),
+    ] = None,
+    limit: PageLimit = 25,
+    offset: PageOffset = 0,
+) -> AdminAuditLogPageDTO:
+    del admin
+    events = _audit_union()
+    statement = select(events)
+    count_statement = select(func.count()).select_from(events)
+    if target_type is not None:
+        statement = statement.where(events.c.target_type == target_type)
+        count_statement = count_statement.where(events.c.target_type == target_type)
+    if action is not None:
+        statement = statement.where(events.c.action == action)
+        count_statement = count_statement.where(events.c.action == action)
+    rows = await session.execute(
+        statement.order_by(events.c.occurred_at.desc(), events.c.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    total = int(await session.scalar(count_statement) or 0)
+    return AdminAuditLogPageDTO(
+        items=[AdminAuditLogItemDTO.model_validate(row) for row in rows.mappings().all()],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/users/{user_id}/audit", response_model=AdminAuditLogPageDTO)
 async def get_admin_user_audit(
     user_id: UUID,
     admin: AdminUser,
     session: DbSession,
     limit: PageLimit = 25,
     offset: PageOffset = 0,
-) -> AdminUserAuditPageDTO:
+) -> AdminAuditLogPageDTO:
     del admin
     if await session.scalar(select(User.id).where(User.id == user_id)) is None:
         raise HTTPException(status_code=404, detail="User not found")
-    rows = await session.scalars(
-        select(AdminUserAuditLog)
-        .where(AdminUserAuditLog.target_user_id == user_id)
-        .order_by(AdminUserAuditLog.occurred_at.desc(), AdminUserAuditLog.id.desc())
+    events = _audit_union(user_id)
+    rows = await session.execute(
+        select(events)
+        .order_by(events.c.occurred_at.desc(), events.c.id.desc())
         .limit(limit)
         .offset(offset)
     )
-    total = int(
-        await session.scalar(
-            select(func.count(AdminUserAuditLog.id)).where(
-                AdminUserAuditLog.target_user_id == user_id
-            )
-        )
-        or 0
-    )
-    return AdminUserAuditPageDTO(
-        items=[AdminUserAuditDTO.model_validate(row) for row in rows.all()],
+    total = int(await session.scalar(select(func.count()).select_from(events)) or 0)
+    return AdminAuditLogPageDTO(
+        items=[AdminAuditLogItemDTO.model_validate(row) for row in rows.mappings().all()],
         total=total,
         limit=limit,
         offset=offset,
