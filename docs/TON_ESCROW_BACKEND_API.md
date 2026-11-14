@@ -88,7 +88,7 @@ Normalized event identity includes transaction hash, message hash (or transactio
 
 ## Migration and compatibility
 
-Revision `e20261114_ton_escrow` is chained after the current payment migration head `0013_payment_refund_workflow`. It creates escrow-only tables and does not alter Stars payment ledger tables, `OrderStatus`, orders or the existing non-custodial delivery workflow. Migration tests must use a disposable test database only; never run this migration on production/VPS.
+Revision `e20261114_ton_escrow` is chained after the current main Alembic head `0014_admin_user_management`, which itself follows the existing Stars refund migration `0013_payment_refund_workflow`. It creates escrow-only tables and does not alter Stars payment ledger tables, `OrderStatus`, orders or the existing non-custodial delivery workflow. Migration tests must use a disposable test database only; never run this migration on production/VPS.
 
 ## Explicit blockers
 
