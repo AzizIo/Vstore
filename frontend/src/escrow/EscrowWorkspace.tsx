@@ -735,6 +735,15 @@ function WorkspaceBody({
                         <div><dt>DealEscrow</dt><dd><code>{deal.escrow_address ?? "Ещё не создан"}</code></dd></div>
                         <div><dt>NFT item</dt><dd><code>{shortAddress(deal.nft.item_address)}</code></dd></div>
                       </dl>
+                      {deal.state === "seller_payout_pending" && (
+                        <p className="escrow-inline-message" role="status">Контракт инициировал seller payout. Ручного claim нет; ждём подтверждение финальности observer.</p>
+                      )}
+                      {deal.state === "buyer_refund_pending" && (
+                        <p className="escrow-warning" role="status">Контракт инициировал buyer refund. Ожидается финальное подтверждение observer.</p>
+                      )}
+                      {deal.state === "manual_review" && (
+                        <p className="escrow-warning" role="status">Сделка требует reconciliation. Не отправляйте повторные транзакции до обновления состояния Backend.</p>
+                      )}
                       {deal.dispute && (
                         <div className="escrow-dispute-card" role="status">
                           <strong>Спор · {ESCROW_DISPUTE_LABELS[deal.dispute.status]}</strong>
