@@ -221,3 +221,26 @@ def test_nft_return_attestation_requires_buyer_to_escrow_direction(
             source_address=deal.seller_address,
             destination_address=deal.contract_address,
         ), deal)
+
+
+def test_buyer_acceptance_attestation_requires_the_bound_buyer(
+    deal: DealEvidenceSnapshot,
+) -> None:
+    accepted = evidence(
+        event_type=EscrowChainEventType.BUYER_ACCEPTANCE_RECORDED,
+        source_address=deal.buyer_address,
+        destination_address=deal.contract_address,
+        item_address=None,
+    )
+    validate_event_against_deal(accepted, deal)
+
+    with pytest.raises(EscrowDomainError):
+        validate_event_against_deal(
+            evidence(
+                event_type=EscrowChainEventType.BUYER_ACCEPTANCE_RECORDED,
+                source_address=deal.seller_address,
+                destination_address=deal.contract_address,
+                item_address=None,
+            ),
+            deal,
+        )
