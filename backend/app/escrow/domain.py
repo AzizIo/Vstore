@@ -196,6 +196,21 @@ def validate_event_against_deal(
     ):
         raise EscrowDomainError("NFT source or destination does not match the deal")
 
+    if event.event_type is EscrowChainEventType.NFT_RETURN_TO_ESCROW_CONFIRMED and (
+        event.source_address != deal.buyer_address
+        or event.destination_address != deal.contract_address
+    ):
+        raise EscrowDomainError("NFT return must be from buyer to the configured escrow")
+
+    if event.event_type in {
+        EscrowChainEventType.NFT_RETURN_STARTED,
+        EscrowChainEventType.NFT_RETURN_CONFIRMED,
+    } and (
+        event.source_address != deal.contract_address
+        or event.destination_address != deal.seller_address
+    ):
+        raise EscrowDomainError("NFT return to seller must use the fixed escrow and seller")
+
     if event.event_type is EscrowChainEventType.SELLER_PAYOUT_CONFIRMED and (
         event.source_address != deal.contract_address
         or event.destination_address != deal.seller_address
