@@ -35,6 +35,7 @@ export interface EscrowWalletAdapter {
   sendPreparedTransaction(
     transaction: PreparedEscrowTransaction,
     expectedVerifiedWalletAddress: string,
+    onWalletRequest?: () => void,
   ): Promise<{ boc: string }>;
 }
 
@@ -129,6 +130,7 @@ export function createTonConnectEscrowAdapter(options: {
 
       // Payloads and values are forwarded exactly as prepared by the reviewed Backend.
       // The adapter never invents opcodes, message bodies or amounts.
+      onWalletRequest?.();
       return options.sendTransaction({
         validUntil,
         network: TON_TESTNET_CHAIN_ID,
