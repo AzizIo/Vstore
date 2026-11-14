@@ -474,3 +474,22 @@ async def test_replay_cannot_remove_previously_accepted_attestation() -> None:
     assert await _apply_one_event(session, event, provider_verified=True) == "rejected"
     assert existing.status == "manual_review"
     assert existing.reason_code == "event_correlation_conflict"
+
+
+def test_event_identity_survives_pending_metadata_enrichment() -> None:
+    pending = make_event(
+        logical_time=None,
+        deal_salt=None,
+        observed_contract_state=None,
+        account_address=None,
+    )
+    finalized = replace(
+        pending,
+        logical_time=987654,
+        deal_salt="f" * 64,
+        observed_contract_state="awaiting_nft",
+        account_address="0:" + "a" * 64,
+    )
+
+    assert pending.event_key == finalized.event_key
+    assert len(pending.event_key) == 64
