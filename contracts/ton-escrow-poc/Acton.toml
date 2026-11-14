@@ -21,6 +21,7 @@ output-dir = "wrappers"
 output-dir = "wrappers-ts"
 
 [import-mappings]
+acton = ".acton"
 contracts = "contracts"
 wrappers = "wrappers"
 tests = "tests"
