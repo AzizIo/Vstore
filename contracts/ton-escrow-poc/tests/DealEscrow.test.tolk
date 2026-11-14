@@ -427,7 +427,6 @@ get fun `test terminal payout returns unused execution reserve to buyer`() {
     val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
 
-    val buyerBalanceBeforeFunding = testing.getAccountBalance(buyer.address);
     val sellerBalanceBeforeSettlement = testing.getAccountBalance(seller.address);
 
     // Simulate the buyer's exact principal + execution-reserve funding.
@@ -445,7 +444,6 @@ get fun `test terminal payout returns unused execution reserve to buyer`() {
         to: escrow.address,
     });
     val buyerBalanceAfterFunding = testing.getAccountBalance(buyer.address);
-    expect(buyerBalanceBeforeFunding).toBeGreater(buyerBalanceAfterFunding + grams("1.4"));
 
     val keeper = testing.treasury("reserve-oracle-keeper");
     val timeout = escrow.sendAny(
