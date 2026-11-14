@@ -283,6 +283,7 @@ function WorkspaceBody({
   const [selectedDealId, setSelectedDealId] = useState("");
   const [selectedNftId, setSelectedNftId] = useState("");
   const [selectedBuyerWalletId, setSelectedBuyerWalletId] = useState("");
+  const [sellerPriceTon, setSellerPriceTon] = useState("");
   const [disputeReason, setDisputeReason] = useState("");
   const [loading, setLoading] = useState(true);
   const [inventoryLoading, setInventoryLoading] = useState(true);
@@ -594,6 +595,21 @@ function WorkspaceBody({
             {selectedNft && (
               <div className="escrow-deposit-preview">
                 <h3>Условия депозита</h3>
+                <label className="escrow-wallet-select" htmlFor="escrow-seller-price">
+                  <span>Цена лота · TON testnet</span>
+                  <input
+                    id="escrow-seller-price"
+                    name="price_ton"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    placeholder="Например, 2.5"
+                    value={sellerPriceTon}
+                    onChange={(event) => setSellerPriceTon(event.target.value)}
+                    aria-describedby="escrow-seller-price-help"
+                  />
+                  <small id="escrow-seller-price-help">Введите положительную сумму в TON. Backend проверит точность, допустимый диапазон и вернёт точные параметры депозита и комиссии до подписи.</small>
+                </label>
                 <dl className="escrow-facts">
                   <div><dt>Сеть</dt><dd>TON testnet</dd></div>
                   <div><dt>NFT item address</dt><dd><code>{selectedNft.asset.item_address}</code></dd></div>
@@ -604,9 +620,13 @@ function WorkspaceBody({
                 <button
                   className="escrow-button escrow-button-primary"
                   type="button"
-                  disabled={!api || busy || loading || !selectedNft}
+                  disabled={!api || busy || loading || !selectedNft || !isPositiveTonAmount(sellerPriceTon)}
                   onClick={() => void prepareAction(
-                    () => api!.prepareNftDeposit({ asset_id: selectedNft.asset.id, seller_wallet_id: selectedNft.wallet.id }),
+                    () => api!.prepareNftDeposit({
+                      asset_id: selectedNft.asset.id,
+                      seller_wallet_id: selectedNft.wallet.id,
+                      price_ton: sellerPriceTon.trim(),
+                    }),
                     selectedNft.wallet,
                   )}
                 >
@@ -663,6 +683,14 @@ function WorkspaceBody({
                   return (
                     <article className="escrow-row-card" key={deal.id}>
                       <div className="escrow-row-main"><NftArtwork src={deal.nft.image_url} title={titleForNft(deal.nft)} /><div><strong>{titleForNft(deal.nft)}</strong><EscrowStateBadge state={deal.state} /><StateGuidance state={deal.state} /></div></div>
+                      {deal.dispute && (
+                        <div className="escrow-dispute-card" role="status">
+                          <strong>Спор · {ESCROW_DISPUTE_LABELS[deal.dispute.status]}</strong>
+                          <p>{deal.dispute.summary || deal.dispute.reason_code}</p>
+                          <span>Открыт: {formatEscrowDate(deal.dispute.opened_at)}</span>
+                          {deal.dispute.resolution_note && <p>Решение: {deal.dispute.resolution_note}</p>}
+                        </div>
+                      )}
                       <div className="escrow-payout-line"><span>Доступно по данным Backend</span><strong>{displayTon(deal.seller_claimable_ton)}</strong></div>
                       {claimable && (
                         <button
