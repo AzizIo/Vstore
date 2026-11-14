@@ -600,7 +600,13 @@ async def test_cancelling_paid_order_queues_refund_and_does_not_duplicate_the_jo
                 order_id=ids["order_id"],
                 buyer_id=ids["buyer_id"],
             )
-            jobs = (await session.scalars(select(PaymentRefund).join(PaymentTransaction, PaymentRefund.payment_transaction_id == PaymentTransaction.id).where(PaymentTransaction.payment_intent_id == intent.id))).all()
+            jobs = (
+                await session.scalars(
+                    select(PaymentRefund)
+                    .join(PaymentTransaction, PaymentRefund.payment_transaction_id == PaymentTransaction.id)
+                    .where(PaymentTransaction.payment_intent_id == intent.id)
+                )
+            ).all()
             transaction = await session.scalar(
                 select(PaymentTransaction).where(
                     PaymentTransaction.payment_intent_id == intent.id
@@ -643,7 +649,15 @@ async def test_lost_seller_ownership_queues_refund_for_paid_reserved_order(
                     current_time=datetime.now(UTC),
                 )
         async with session_factory() as session:
-            job = await session.scalar(select(PaymentRefund).where(PaymentRefund.payment_transaction_id.in_(select(PaymentTransaction.id).where(PaymentTransaction.payment_intent_id == intent.id))))
+            job = await session.scalar(
+                select(PaymentRefund).where(
+                    PaymentRefund.payment_transaction_id.in_(
+                        select(PaymentTransaction.id).where(
+                            PaymentTransaction.payment_intent_id == intent.id
+                        )
+                    )
+                )
+            )
             transaction = await session.scalar(
                 select(PaymentTransaction).where(
                     PaymentTransaction.payment_intent_id == intent.id
@@ -982,7 +996,14 @@ async def test_stale_refund_job_never_calls_provider_for_captured_transaction(
         async with session_factory() as session:
             result = await process_due_refunds(session, provider)
         async with session_factory() as session:
-            job = await session.scalar(select(PaymentRefund).join(PaymentTransaction, PaymentRefund.payment_transaction_id == PaymentTransaction.id).where(PaymentTransaction.telegram_payment_charge_id == evidence["telegram_payment_charge_id"]))
+            job = await session.scalar(
+                select(PaymentRefund)
+                .join(PaymentTransaction, PaymentRefund.payment_transaction_id == PaymentTransaction.id)
+                .where(
+                    PaymentTransaction.telegram_payment_charge_id
+                    == evidence["telegram_payment_charge_id"]
+                )
+            )
             transaction = await session.scalar(
                 select(PaymentTransaction).where(
                     PaymentTransaction.telegram_payment_charge_id
