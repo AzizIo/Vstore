@@ -277,6 +277,8 @@ async def _apply_one_event(
         or not event.finality_provider
         or len(event.masterchain_block_hash) != 64
         or len(event.finality_proof_sha256) != 64
+        or any(char not in "0123456789abcdef" for char in event.masterchain_block_hash.lower())
+        or any(char not in "0123456789abcdef" for char in event.finality_proof_sha256.lower())
         or not event.message_hash
         or not event.trace_id
     ):
