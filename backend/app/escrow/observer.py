@@ -152,7 +152,15 @@ async def _persist_event(
         "operation_id",
         "deal_salt",
     )
-    if any(old.get(field) not in (None, payload.get(field)) for field in immutable_fields):
+    if (
+        any(old.get(field) not in (None, payload.get(field)) for field in immutable_fields)
+        or (old.get("finalized") and not event.finalized)
+        or (
+            old.get("finalized")
+            and event.finalized
+            and old.get("masterchain_seqno") != event.masterchain_seqno
+        )
+    ):
         existing.status = "manual_review"
         existing.reason_code = "event_correlation_conflict"
         return existing
