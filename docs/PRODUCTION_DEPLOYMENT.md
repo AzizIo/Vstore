@@ -139,9 +139,11 @@ custom-format dump into the new production database before applying migrations:
 
 ```bash
 docker compose -f docker-compose.production.yml exec -T db sh -c \
-  'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' \
+  'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner --no-acl' \
   < /root/backups/viltara-before-production.dump
 ```
+
+The `--no-owner --no-acl` flags are intentional: the source development database and the new production database use different PostgreSQL roles. Restored objects become owned by the production database user, and source-role grants are not replayed. Do not create or reuse the development `viltara` role in production just to make the restore command work.
 
 Run this restore only against the new, dedicated production database. Verify
 users, listings, orders and the current Alembic revision before proceeding.
