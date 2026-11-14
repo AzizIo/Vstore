@@ -191,6 +191,7 @@ fun handleNftOwnershipNotification(
         progress.state == STATE_AWAITING_NFT
         && msg.oldOwnerAddress == roles.seller
         && msg.queryId == money.nftDepositQueryId
+        && blockchain.now() <= progress.deadlineUnix
     );
     val isExpectedBuyerReturn = (
         progress.state == STATE_DISPUTED
@@ -198,6 +199,7 @@ fun handleNftOwnershipNotification(
         && !progress.nftInEscrow
         && msg.oldOwnerAddress == roles.buyer
         && msg.queryId == money.nftReturnToEscrowQueryId
+        && blockchain.now() <= progress.deadlineUnix
     );
 
     if (
@@ -299,7 +301,13 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
     assert (context.attemptId > 0) throw Errors.InvalidAttestation;
     assert (context.attemptId == progress.oracleAttemptId) throw Errors.InvalidAttestation;
     assert (route.queryId == progress.oracleAttemptId) throw Errors.InvalidAttestation;
-    assert (route.itemAddress == asset.itemAddress) throw Errors.InvalidAttestation;
+    if (context.action == ORACLE_ACTION_UNEXPECTED_NFT_RECOVERED) {
+        val recovery = progress.recovery.load();
+        assert (recovery.unexpectedItemAddress != null) throw Errors.InvalidAttestation;
+        assert (route.itemAddress == recovery.unexpectedItemAddress) throw Errors.InvalidAttestation;
+    } else {
+        assert (route.itemAddress == asset.itemAddress) throw Errors.InvalidAttestation;
+    }
     assert (position.masterchainSeqno > 0) throw Errors.InvalidAttestation;
     assert (position.logicalTime > 0) throw Errors.InvalidAttestation;
     assert (hashes.messageHash != 0 && hashes.traceHash != 0 && hashes.evidenceHash != 0)
