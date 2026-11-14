@@ -146,7 +146,7 @@ get fun `deployment address is derived from immutable StateInit`() {
     expect(escrowA.address).toEqual(escrowB.address);
     val deployResult = escrowA.deploy(seller.address, { value: grams("0.2"), bounce: false });
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrowA.address });
-    expect(escrowA.get_state()).toEqual(STATE_INTENT_CREATED);
+    expect(escrowA.state()).toEqual(STATE_INTENT_CREATED);
 }
 
 get fun `seller activates a per-deal escrow`() {
