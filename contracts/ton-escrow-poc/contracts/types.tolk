@@ -12,6 +12,8 @@ const ORACLE_ACTION_NFT_RETURNED_TO_SELLER = 2
 const ORACLE_ACTION_SELLER_PAYOUT = 3
 const ORACLE_ACTION_BUYER_REFUND = 4
 const ORACLE_ACTION_UNEXPECTED_NFT_RECOVERED = 5
+const ORACLE_ACTION_EXECUTION_RESERVE_REFUND = 6
+const ORACLE_ACTION_SELLER_DEPLOYMENT_REFUND = 7
 
 const RESOLUTION_BUYER_WINS = 1
 const RESOLUTION_SELLER_WINS = 2
@@ -51,6 +53,7 @@ const POST_DELIVERY_DISPUTE_WINDOW_SECONDS = 172800
 const POST_DELIVERY_NFT_RETURN_WINDOW_SECONDS = 86400
 const ARBITRATION_WINDOW_SECONDS = 604800
 const SETTLEMENT_RECONCILIATION_GRACE_SECONDS = 1800
+const TERMINAL_STORAGE_RESERVE = grams("0.01")
 
 enum Errors {
     NotTestnet = 700
@@ -82,6 +85,7 @@ struct DealAsset {
 struct DealMoney {
     principalNanotons: coins
     executionReserve: coins
+    sellerDeploymentRefundNanotons: coins
     nftTransferValue: coins
     fundQueryId: uint64
     nftDepositQueryId: uint64
