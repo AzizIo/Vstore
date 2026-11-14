@@ -80,8 +80,31 @@ def test_escrow_models_use_separate_metadata_registry() -> None:
     assert escrow_tables.isdisjoint(marketplace_tables)
 
 
-def test_deal_deployment_terms_cannot_be_mutated_after_creation() -> None:
+@pytest.mark.parametrize(
+    "field",
+    [
+        "id",
+        "listing_intent_id",
+        "marketplace_listing_id",
+        "listing_key_snapshot",
+        "seller_id",
+        "buyer_id",
+        "buyer_wallet_id",
+        "network",
+        "deal_salt",
+        "collection_address_snapshot",
+        "item_address",
+        "seller_address_snapshot",
+        "buyer_address_snapshot",
+        "price_amount",
+        "price_currency",
+        "principal_nanotons",
+        "idempotency_key",
+    ],
+)
+def test_deal_deployment_terms_cannot_be_mutated_after_creation(field: str) -> None:
     deal = EscrowDeal(
+        id=uuid4(),
         listing_intent_id=uuid4(),
         marketplace_listing_id=uuid4(),
         listing_key_snapshot="k" * 64,
@@ -101,15 +124,81 @@ def test_deal_deployment_terms_cannot_be_mutated_after_creation() -> None:
     )
     from sqlalchemy.orm.attributes import set_committed_value
 
-    for field in (
-        "listing_intent_id", "marketplace_listing_id", "listing_key_snapshot",
-        "seller_id", "buyer_id",
-        "buyer_wallet_id", "network", "deal_salt", "collection_address_snapshot",
-        "item_address", "seller_address_snapshot", "buyer_address_snapshot",
-        "price_amount", "price_currency", "principal_nanotons", "idempotency_key",
+    for immutable_field in (
+        "id",
+        "listing_intent_id",
+        "marketplace_listing_id",
+        "listing_key_snapshot",
+        "seller_id",
+        "buyer_id",
+        "buyer_wallet_id",
+        "network",
+        "deal_salt",
+        "collection_address_snapshot",
+        "item_address",
+        "seller_address_snapshot",
+        "buyer_address_snapshot",
+        "price_amount",
+        "price_currency",
+        "principal_nanotons",
+        "idempotency_key",
     ):
-        set_committed_value(deal, field, getattr(deal, field))
-    deal.buyer_address_snapshot = "0:" + "f" * 64
+        set_committed_value(
+            deal, immutable_field, getattr(deal, immutable_field)
+        )
+
+    replacements = {
+        "id": uuid4(),
+        "listing_intent_id": uuid4(),
+        "marketplace_listing_id": uuid4(),
+        "listing_key_snapshot": "l" * 64,
+        "seller_id": uuid4(),
+        "buyer_id": uuid4(),
+        "buyer_wallet_id": uuid4(),
+        "network": "mainnet",
+        "deal_salt": "f" * 64,
+        "collection_address_snapshot": "0:" + "f" * 64,
+        "item_address": "0:" + "f" * 64,
+        "seller_address_snapshot": "0:" + "f" * 64,
+        "buyer_address_snapshot": "0:" + "f" * 64,
+        "price_amount": Decimal("2.6"),
+        "price_currency": "XTR",
+        "principal_nanotons": 2_600_000_000,
+        "idempotency_key": "deal-create-2",
+    }
+    setattr(deal, field, replacements[field])
+
+    with pytest.raises(ValueError, match="Immutable DealEscrow terms"):
+        assert_deal_terms_immutable(deal)
+
+
+def test_deployed_contract_address_cannot_be_replaced() -> None:
+    deal = EscrowDeal(
+        id=uuid4(),
+        listing_intent_id=uuid4(),
+        marketplace_listing_id=uuid4(),
+        listing_key_snapshot="k" * 64,
+        seller_id=uuid4(),
+        buyer_id=uuid4(),
+        buyer_wallet_id=uuid4(),
+        network="testnet",
+        deal_salt="a" * 64,
+        collection_address_snapshot="0:" + "b" * 64,
+        item_address="0:" + "c" * 64,
+        seller_address_snapshot="0:" + "d" * 64,
+        buyer_address_snapshot="0:" + "e" * 64,
+        price_amount=Decimal("2.5"),
+        price_currency="TON",
+        principal_nanotons=2_500_000_000,
+        contract_address="0:" + "a" * 64,
+        contract_abi_version="abi-v1",
+        idempotency_key="deal-create-1",
+    )
+    from sqlalchemy.orm.attributes import set_committed_value
+
+    set_committed_value(deal, "contract_address", deal.contract_address)
+    set_committed_value(deal, "contract_abi_version", deal.contract_abi_version)
+    deal.contract_address = "0:" + "f" * 64
 
     with pytest.raises(ValueError, match="Immutable DealEscrow terms"):
         assert_deal_terms_immutable(deal)
