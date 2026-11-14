@@ -515,11 +515,23 @@ get fun `test terminal payout returns unused execution reserve to buyer`() {
     testing.setChecksigIgnore(false);
 
     expect(escrow.getState()).toEqual(STATE_SETTLED);
+    val sellerDeploymentRefundTx = acceptedPayout.findTransaction({
+        from: escrow.address,
+        to: seller.address,
+    });
     val buyerRefundTx = acceptedPayout.findTransaction({
         from: escrow.address,
         to: buyer.address,
     });
+    expect(sellerDeploymentRefundTx).toBeNotNull();
     expect(buyerRefundTx).toBeNotNull();
+
+    val sellerDeploymentRefund = sellerDeploymentRefundTx!.loadBody<SettlementMessage>();
+    val buyerReserveRefund = buyerRefundTx!.loadBody<SettlementMessage>();
+    expect(sellerDeploymentRefund.action).toEqual(SETTLEMENT_ACTION_SELLER_DEPLOYMENT_REFUND);
+    expect(buyerReserveRefund.action).toEqual(SETTLEMENT_ACTION_EXECUTION_RESERVE_REFUND);
+    expect(sellerDeploymentRefund.queryId).toBeLess(buyerReserveRefund.queryId);
+
     expect(testing.getAccountBalance(buyer.address))
         .toBeGreater(buyerBalanceAfterFunding + grams("0.4"));
     expect(testing.getAccountBalance(seller.address))
