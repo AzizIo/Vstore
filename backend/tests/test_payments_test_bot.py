@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import SecretStr
 
-from app.core.config import Settings
 from app import payments_test_bot
+from app.core.config import Settings
 
 
 def _settings(**overrides: object) -> Settings:
