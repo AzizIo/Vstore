@@ -135,3 +135,58 @@ def test_missing_contract_binding_fails_closed(deal: DealEvidenceSnapshot) -> No
     )
     with pytest.raises(EscrowDomainError):
         validate_event_against_deal(evidence(), unbound)
+
+
+
+def test_refund_requires_finalized_nft_return_then_exact_refund(deal: DealEvidenceSnapshot) -> None:
+    state = transition_for_verified_event(DealStatus.FUNDED_REVIEW, EventType.NFT_RETURN_STARTED)
+    assert state is DealStatus.NFT_RETURN_PENDING
+    state = transition_for_verified_event(state, EventType.NFT_RETURN_CONFIRMED)
+    assert state is DealStatus.BUYER_REFUND_PENDING
+    state = transition_for_verified_event(state, EventType.BUYER_REFUND_STARTED)
+    assert state is DealStatus.BUYER_REFUND_PENDING
+    state = transition_for_verified_event(state, EventType.BUYER_REFUND_CONFIRMED)
+    assert state is DealStatus.REFUNDED
+
+    valid_refund = evidence(
+        event_type=EventType.BUYER_REFUND_CONFIRMED,
+        source_address=deal.contract_address,
+        destination_address=deal.buyer_address,
+        item_address=None,
+        amount_nanotons=deal.principal_nanotons,
+    )
+    validate_event_against_deal(valid_refund, deal)
+    with pytest.raises(EscrowDomainError):
+        validate_event_against_deal(
+            evidence(
+                event_type=EventType.BUYER_REFUND_CONFIRMED,
+                source_address=deal.seller_address,
+                destination_address=deal.buyer_address,
+                item_address=None,
+                amount_nanotons=deal.principal_nanotons,
+            ),
+            deal,
+        )
+
+
+def test_postdelivery_buyer_return_requires_exact_direction(deal: DealEvidenceSnapshot) -> None:
+    returned = evidence(
+        event_type=EventType.NFT_RETURN_TO_ESCROW_CONFIRMED,
+        source_address=deal.buyer_address,
+        destination_address=deal.contract_address,
+    )
+    validate_event_against_deal(returned, deal)
+    with pytest.raises(EscrowDomainError):
+        validate_event_against_deal(
+            evidence(
+                event_type=EventType.NFT_RETURN_TO_ESCROW_CONFIRMED,
+                source_address=deal.seller_address,
+                destination_address=deal.contract_address,
+            ),
+            deal,
+        )
+
+    state = transition_for_verified_event(
+        DealStatus.DISPUTED, EventType.NFT_RETURN_TO_ESCROW_CONFIRMED
+    )
+    assert state is DealStatus.NFT_RETURN_PENDING
