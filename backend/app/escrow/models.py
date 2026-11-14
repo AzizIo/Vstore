@@ -35,7 +35,6 @@ class EscrowBase(DeclarativeBase):
     """Keep escrow table metadata isolated from the marketplace model registry."""
 
 
-
 class EscrowListingIntent(TimestampMixin, EscrowBase):
     __tablename__ = "escrow_listing_intents"
     __table_args__ = (
