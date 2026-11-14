@@ -47,10 +47,19 @@ fun validateTerms(terms: DealTerms) {
     assert (asset.collectionAddress.getWorkchain() == BASECHAIN) throw Errors.InvalidDeal;
     assert (money.principalNanotons > 0) throw Errors.InvalidValue;
     assert (money.executionReserve >= grams("0.5")) throw Errors.InvalidValue;
+    assert (money.sellerDeploymentRefundNanotons >= grams("0.02"))
+        throw Errors.InvalidValue;
+    assert (money.sellerDeploymentRefundNanotons <= grams("0.1"))
+        throw Errors.InvalidValue;
     assert (money.nftTransferValue >= grams("0.05")) throw Errors.InvalidValue;
     assert (money.nftTransferValue <= grams("0.15")) throw Errors.InvalidValue;
-    assert (money.executionReserve >= money.nftTransferValue * 3 + grams("0.1"))
-        throw Errors.InvalidValue;
+    assert (
+        money.executionReserve
+        >= money.nftTransferValue * 3
+            + money.sellerDeploymentRefundNanotons
+            + TERMINAL_STORAGE_RESERVE
+            + grams("0.1")
+    ) throw Errors.InvalidValue;
     assert (money.fundQueryId != 0) throw Errors.InvalidDeal;
     assert (money.nftDepositQueryId != 0) throw Errors.InvalidDeal;
     assert (money.nftReleaseQueryId != 0) throw Errors.InvalidDeal;
@@ -164,6 +173,76 @@ fun sendBuyerRefund(
         },
     });
     refund.send(SEND_MODE_PAY_FEES_SEPARATELY + SEND_MODE_BOUNCE_ON_ACTION_FAIL);
+}
+
+fun sendSellerDeploymentRefund(
+    roles: DealRoles,
+    asset: DealAsset,
+    money: DealMoney,
+    queryId: uint64,
+) {
+    val refund = createMessage({
+        bounce: BounceMode.RichBounce,
+        value: money.sellerDeploymentRefundNanotons,
+        dest: roles.seller,
+        body: SettlementMessage {
+            queryId,
+            dealSalt: asset.dealSalt,
+            action: ORACLE_ACTION_SELLER_DEPLOYMENT_REFUND,
+        },
+    });
+    refund.send(SEND_MODE_PAY_FEES_SEPARATELY + SEND_MODE_BOUNCE_ON_ACTION_FAIL);
+}
+
+fun sendRemainingBalanceTo(
+    recipient: address,
+    asset: DealAsset,
+    queryId: uint64,
+) {
+    val refund = createMessage({
+        bounce: BounceMode.NoBounce,
+        value: 0,
+        dest: recipient,
+        body: SettlementMessage {
+            queryId,
+            dealSalt: asset.dealSalt,
+            action: ORACLE_ACTION_EXECUTION_RESERVE_REFUND,
+        },
+    });
+    refund.send(
+        SEND_MODE_CARRY_ALL_BALANCE
+        + SEND_MODE_PAY_FEES_SEPARATELY
+        + SEND_MODE_BOUNCE_ON_ACTION_FAIL
+    );
+}
+
+// The principal is settled separately. Return the seller-funded deployment
+// allowance, keep a small amount for terminal getters/storage, and send every
+// other remaining nanotons (including unused buyer execution reserve) to buyer.
+fun settleRemainingBalanceForBuyer(
+    progress: DealProgress,
+    roles: DealRoles,
+    asset: DealAsset,
+    money: DealMoney,
+) {
+    val sellerRefundId = progress.startOracleAttempt();
+    sendSellerDeploymentRefund(roles, asset, money, sellerRefundId);
+
+    reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, RESERVE_MODE_REGULAR);
+    val buyerRefundId = progress.startOracleAttempt();
+    sendRemainingBalanceTo(roles.buyer, asset, buyerRefundId);
+}
+
+// If the buyer never funded the deal, the NFT and the remaining TON are returned
+// to the seller. Keep only the fixed terminal storage reserve.
+fun settleExpiredBalanceForSeller(
+    progress: DealProgress,
+    roles: DealRoles,
+    asset: DealAsset,
+) {
+    reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, RESERVE_MODE_REGULAR);
+    val sellerRefundId = progress.startOracleAttempt();
+    sendRemainingBalanceTo(roles.seller, asset, sellerRefundId);
 }
 
 fun handleNftOwnershipNotification(
@@ -349,6 +428,7 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
             progress.pendingAction = PENDING_NONE;
             progress.principalLocked = false;
             progress.deadlineUnix = 0;
+            settleExpiredBalanceForSeller(progress, roles, asset);
         } else if (progress.pendingAction == PENDING_REFUND_AFTER_NFT_RETURN) {
             val refundAttemptId = progress.startOracleAttempt();
             sendBuyerRefund(roles, asset, money, refundAttemptId);
@@ -368,6 +448,7 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         progress.pendingAction = PENDING_NONE;
         progress.principalLocked = false;
         progress.deadlineUnix = 0;
+        settleRemainingBalanceForBuyer(progress, roles, asset, money);
     } else if (context.action == ORACLE_ACTION_BUYER_REFUND) {
         assert (progress.state == STATE_BUYER_REFUND_PENDING) throw Errors.InvalidState;
         assert (progress.pendingAction == PENDING_REFUND_RECONCILIATION) throw Errors.InvalidState;
@@ -378,6 +459,7 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         progress.pendingAction = PENDING_NONE;
         progress.principalLocked = false;
         progress.deadlineUnix = 0;
+        settleRemainingBalanceForBuyer(progress, roles, asset, money);
     } else if (context.action == ORACLE_ACTION_UNEXPECTED_NFT_RECOVERED) {
         assert (progress.state == STATE_NFT_RETURN_PENDING) throw Errors.InvalidState;
         assert (progress.pendingAction == PENDING_UNEXPECTED_RECOVERY) throw Errors.InvalidState;
@@ -485,7 +567,11 @@ fun onInternalMessage(in: InMessage) {
             validateTerms(terms);
             val roles = terms.roles.load();
             val asset = terms.asset.load();
+            val money = terms.money.load();
             checkDealSalt(asset, msg.dealSalt);
+            assert (contract.getOriginalBalance() >= (
+                in.valueCoins + money.sellerDeploymentRefundNanotons + TERMINAL_STORAGE_RESERVE
+            )) throw Errors.InvalidValue;
             assert (in.senderAddress == roles.seller) throw Errors.NotSeller;
             assert (progress.state == STATE_INTENT_CREATED) throw Errors.InvalidState;
             progress.state = STATE_AWAITING_NFT;
@@ -610,6 +696,7 @@ fun onInternalMessage(in: InMessage) {
             if (progress.state == STATE_AWAITING_NFT) {
                 progress.state = STATE_EXPIRED;
                 progress.deadlineUnix = 0;
+                settleExpiredBalanceForSeller(progress, roles, asset);
             } else if (progress.state == STATE_AWAITING_BUYER_FUNDS) {
                 assert (progress.nftInEscrow) throw Errors.InvalidNft;
                 val returnAttemptId = progress.startOracleAttempt();
