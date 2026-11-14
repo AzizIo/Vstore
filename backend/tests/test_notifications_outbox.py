@@ -33,16 +33,14 @@ from app.notifications.service import (
 )
 from app.orders.service import cancel_order, create_order, expire_pending_orders
 
+from tests.database_safety import require_test_database_url
+
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(scope="session")
 def migrated_notifications_database() -> str:
-    url = os.getenv("TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("TEST_DATABASE_URL is not configured")
-    if not url.startswith("postgresql+asyncpg://"):
-        pytest.fail("Notification integration tests require PostgreSQL")
+    url = require_test_database_url("Notification integration tests")
     previous_url = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = url
     get_settings.cache_clear()
