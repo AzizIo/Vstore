@@ -624,8 +624,12 @@ async def process_due_refunds(
                 manual_review += 1
             else:
                 target = "retry_wait"
-                delay = result.retry_after_seconds or _retry_delay(claim.attempt_count)
-                delay = max(1, min(delay, settings.payment_refund_retry_max_seconds))
+                if result.retry_after_seconds is not None:
+                    # Never retry before a provider-specified Retry-After, even if
+                    # it exceeds our configured exponential-backoff cap.
+                    delay = max(1, result.retry_after_seconds)
+                else:
+                    delay = _retry_delay(claim.attempt_count)
                 next_at = result_time + timedelta(seconds=delay)
                 retried += 1
             await _persist_claim_result(
