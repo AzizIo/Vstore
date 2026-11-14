@@ -50,6 +50,10 @@ from app.escrow.service import (
     canonical_request_sha256,
     create_or_replay_action,
 )
+from app.escrow.reservation import (
+    EscrowListingReservationConflict,
+    reserve_listing_for_escrow,
+)
 from app.escrow.schemas import (
     EscrowDealCreate,
     EscrowDealResponse,
@@ -578,7 +582,12 @@ async def create_deal_intent(
             last_chain_seqno=None,
             idempotency_key=idempotency_key,
         )
-        intent.status = "reserved"
+        # The normal Order path locks this same Listing row. Reserve both
+        # projections in the same transaction so one NFT cannot be sold twice.
+        try:
+            reserve_listing_for_escrow(listing, intent)
+        except EscrowListingReservationConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         session.add(deal)
         _add_idempotency_record(session, actor_id=user.id, operation="create_deal_intent",
             key=idempotency_key,
