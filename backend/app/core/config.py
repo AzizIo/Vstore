@@ -14,6 +14,15 @@ class Settings(BaseSettings):
     # Isolated Telegram Stars test bot; never reuse the production bot token.
     telegram_stars_test_enabled: bool = False
     telegram_stars_test_bot_token: SecretStr | None = None
+    telegram_stars_refund_worker_enabled: bool = False
+    telegram_stars_refund_poll_seconds: int = Field(default=10, gt=0)
+    telegram_stars_refund_batch_size: int = Field(default=10, gt=0, le=100)
+    telegram_stars_refund_lease_seconds: int = Field(default=300, gt=30)
+    telegram_stars_refund_retry_base_seconds: int = Field(default=5, gt=0)
+    telegram_stars_refund_retry_max_seconds: int = Field(default=300, gt=0)
+    telegram_stars_refund_max_attempts: int = Field(default=20, gt=0)
+    telegram_stars_refund_history_page_size: int = Field(default=100, gt=0, le=100)
+    telegram_stars_refund_history_max_pages: int = Field(default=100, gt=0, le=1000)
     auth_secret_key: str | None = None
     auth_token_ttl_seconds: int = 3600
     # Server-side allowlist; an empty list disables admin access.
