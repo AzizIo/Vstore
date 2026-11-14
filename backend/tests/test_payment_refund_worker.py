@@ -43,7 +43,6 @@ from app.orders.refund_worker import (
     process_due_refunds,
 )
 from app.orders.service import _invalidate_lost_ownership, cancel_order
-
 from tests.database_safety import require_test_database_url
 
 pytestmark = pytest.mark.integration
