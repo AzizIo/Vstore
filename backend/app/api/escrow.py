@@ -5,8 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -36,32 +36,24 @@ from app.db.session import get_db_session
 from app.escrow.contracts import (
     EscrowContractABIUnavailable, EscrowWalletAction, UnconfiguredTONEscrowContractAdapter,
 )
-from app.escrow.domain import EscrowChainEventType, EscrowDealStatus
+from app.escrow.domain import EscrowDealStatus
 from app.escrow.models import (
-    EscrowChainEvent,
     EscrowDeal,
     EscrowDispute,
     EscrowIdempotencyRecord,
     EscrowListingIntent,
-    EscrowWithdrawal,
 )
 from app.escrow.schemas import (
     EscrowDealCreate,
     EscrowDealResponse,
     EscrowDisputeCreate,
-    EscrowDisputeResponse,
     EscrowListingIntentCreate,
     EscrowListingIntentResponse, EscrowNftProjection, EscrowPageResponse,
     EscrowSellerBalanceResponse,
     EscrowTransactionPreparationResponse,
     EscrowWithdrawalCreate,
-    EscrowWithdrawalResponse,
     EscrowWalletReferenceInput,
 )
-def _listing_key(intent: EscrowListingIntent | None) -> str | None:
-    return None
-
-
 def _ton_nano(value: Decimal) -> str:
     amount = value * _NANOTON
     if amount <= 0 or amount != amount.to_integral_value():
@@ -129,7 +121,13 @@ async def _deal_projection(session: AsyncSession, deal: EscrowDeal, actor_id: UU
         buyer_review_deadline=None, dispute_deadline=None, available_actions=_deal_actions(deal, actor_id),
         created_at=deal.created_at, updated_at=deal.updated_at,
         dispute=({
-            "id": str(dispute.id), "status": dispute.status, "reason_code": dispute.reason_code,
+            "id": str(dispute.id),
+            "status": (
+                "open" if dispute.status in {"requested", "confirmed"}
+                else "under_review" if dispute.status == "manual_review"
+                else dispute.status
+            ),
+            "reason_code": dispute.reason_code,
             "summary": dispute.reason, "opened_at": dispute.created_at.isoformat(),
             "resolved_at": dispute.resolved_at.isoformat() if dispute.resolved_at else None,
             "resolution_note": None,
@@ -339,14 +337,15 @@ async def create_listing_intent(
         except AddressError as exc:
             raise HTTPException(status_code=409, detail="Stored NFT item address is invalid") from exc
         await _verify_current_nft_owner(verifier, item_address=item_address, seller_address=seller_address)
-        collection_address = None
-        if asset.collection_id is not None:
-            collection = await session.get(NFTCollection, asset.collection_id)
-            if collection is not None and collection.network == "testnet":
-                try:
-                    collection_address = normalize_address(collection.address)
-                except AddressError as exc:
-                    raise HTTPException(status_code=409, detail="Stored NFT collection address is invalid") from exc
+        if asset.collection_id is None:
+            raise HTTPException(status_code=409, detail="A verified testnet NFT collection is required for DealEscrow")
+        collection = await session.get(NFTCollection, asset.collection_id)
+        if collection is None or collection.network != "testnet":
+            raise HTTPException(status_code=409, detail="NFT collection is not verified for TON testnet escrow")
+        try:
+            collection_address = normalize_address(collection.address)
+        except AddressError as exc:
+            raise HTTPException(status_code=409, detail="Stored NFT collection address is invalid") from exc
 
         price_nano = Decimal(payload.price_nano)
         price_amount = price_nano / _NANOTON
