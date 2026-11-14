@@ -353,7 +353,11 @@ async def run_observer_pass(
                 checkpoint.cursor = batch.next_cursor
                 if verified_events:
                     latest_seqno = max(
-                        (event.masterchain_seqno for event, verified in verified_events if verified),
+                        (
+                            event.masterchain_seqno
+                            for event, verified in verified_events
+                            if verified
+                        ),
                         default=None,
                     )
                     if latest_seqno is not None:
