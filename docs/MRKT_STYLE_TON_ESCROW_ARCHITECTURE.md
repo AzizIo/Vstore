@@ -213,15 +213,16 @@ The testnet PoC must include deterministic local sandbox tests and end-to-end te
 - NFT transfer success path;
 - bounced NFT transfer request;
 - failed buyer notification;
-- duplicate confirmation;
+- duplicate buyer acceptance and duplicate oracle attestation;
 - confirmation after deadline;
 - dispute before deadline;
 - dispute after settlement;
 - seller-favourable resolution;
-- buyer-favourable resolution with NFT returned;
-- buyer-favourable resolution without NFT return (must not pay refund);
+- buyer-favourable pre-delivery resolution with NFT returned to seller and buyer refund after finality;
+- buyer-favourable post-delivery resolution only after buyer returns the exact NFT to escrow, followed by return to seller and refund after finality;
+- buyer-favourable post-delivery resolution without NFT return (must not pay refund);
 - duplicate seller claim;
-- fee calculation and rounding;
+- zero-fee configuration enforcement; nonzero commission must be rejected until a separate reviewed design;
 - insufficient gas / storage reserve;
 - unexpected messages and unsolicited TON;
 - replay, stale operation ID and wrong sender;
@@ -254,7 +255,7 @@ The testnet PoC must include deterministic local sandbox tests and end-to-end te
 
 To avoid file conflicts, implementation should be split only after the ABI and state machine are frozen.
 
-- **Contract workstream:** `contracts/escrow/**`, `contracts/tests/escrow/**`. Owns factory, ListingEscrow, ABI, contract tests and local sandbox.
+- **Contract workstream:** `contracts/escrow/**`, `contracts/tests/escrow/**`. Owns factory, DealEscrow, ABI, evidence-oracle/resolver checks, contract tests and local sandbox.
 - **Backend workstream:** `backend/app/escrow/**`, `backend/app/api/escrow.py`, `backend/tests/escrow/**`, escrow-specific migrations. Must not edit existing order/payment modules without coordinator approval.
 - **Coordinator / architecture:** this document, ADR amendment, [shared interface contract](TON_ESCROW_SHARED_INTERFACE.md), end-to-end scenarios and cross-workstream review. Owns no overlapping implementation files.
 
