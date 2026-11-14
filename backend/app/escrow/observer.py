@@ -174,9 +174,6 @@ async def _persist_event(
     existing.observed_contract_state = (
         event.observed_contract_state or existing.observed_contract_state
     )
-    existing.contract_state_reconciled = (
-        existing.contract_state_reconciled or event.contract_state_reconciled
-    )
     existing.account_address = event.account_address or existing.account_address
     existing.deal_id = deal_id or existing.deal_id
     existing.status = status
