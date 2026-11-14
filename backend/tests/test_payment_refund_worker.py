@@ -603,7 +603,10 @@ async def test_cancelling_paid_order_queues_refund_and_does_not_duplicate_the_jo
             jobs = (
                 await session.scalars(
                     select(PaymentRefund)
-                    .join(PaymentTransaction, PaymentRefund.payment_transaction_id == PaymentTransaction.id)
+                    .join(
+                        PaymentTransaction,
+                        PaymentRefund.payment_transaction_id == PaymentTransaction.id,
+                    )
                     .where(PaymentTransaction.payment_intent_id == intent.id)
                 )
             ).all()
@@ -998,7 +1001,10 @@ async def test_stale_refund_job_never_calls_provider_for_captured_transaction(
         async with session_factory() as session:
             job = await session.scalar(
                 select(PaymentRefund)
-                .join(PaymentTransaction, PaymentRefund.payment_transaction_id == PaymentTransaction.id)
+                .join(
+                    PaymentTransaction,
+                    PaymentRefund.payment_transaction_id == PaymentTransaction.id,
+                )
                 .where(
                     PaymentTransaction.telegram_payment_charge_id
                     == evidence["telegram_payment_charge_id"]
