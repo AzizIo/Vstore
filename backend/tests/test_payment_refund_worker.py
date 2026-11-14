@@ -44,20 +44,15 @@ from app.orders.refund_worker import (
 )
 from app.orders.service import _invalidate_lost_ownership, cancel_order
 
+from tests.database_safety import require_test_database_url
+
 pytestmark = pytest.mark.integration
 ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 
 @pytest.fixture(scope="session")
 def refund_database() -> str:
-    url = os.getenv("TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("TEST_DATABASE_URL is not configured")
-    if not url.startswith("postgresql+asyncpg://"):
-        pytest.fail("Refund integration tests require PostgreSQL")
-    database_name = url.rsplit("/", maxsplit=1)[-1].split("?", maxsplit=1)[0]
-    if not (database_name.startswith("test_") or database_name.endswith("_test")):
-        pytest.fail("Refund tests require a dedicated test-named database")
+    url = require_test_database_url("Refund integration tests")
 
     previous_url = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = url
