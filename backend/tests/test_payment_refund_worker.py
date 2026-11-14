@@ -190,9 +190,15 @@ async def _seed_payment(
                 status=transaction_status,
                 captured_at=now,
             )
-        session.add_all([
-            seller, buyer, asset, seller_wallet, buyer_wallet, listing, order, intent,
-        ])
+        session.add_all([seller, buyer])
+        await session.flush()
+        session.add_all([asset, seller_wallet, buyer_wallet])
+        await session.flush()
+        session.add(listing)
+        await session.flush()
+        session.add(order)
+        await session.flush()
+        session.add(intent)
         if transaction is not None:
             session.add(transaction)
         await session.flush()
