@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import secrets
 from decimal import Decimal
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -31,12 +33,11 @@ from app.db.models import (
 )
 from app.db.session import get_db_session
 from app.escrow.contracts import (
-    EscrowContractABIUnavailable,
-    EscrowWalletAction,
-    UnconfiguredTONEscrowContractAdapter,
+    EscrowContractABIUnavailable, EscrowWalletAction, UnconfiguredTONEscrowContractAdapter,
 )
-from app.escrow.domain import EscrowDealStatus
+from app.escrow.domain import EscrowChainEventType, EscrowDealStatus
 from app.escrow.models import (
+    EscrowChainEvent,
     EscrowDeal,
     EscrowDispute,
     EscrowIdempotencyRecord,
@@ -49,12 +50,83 @@ from app.escrow.schemas import (
     EscrowDisputeCreate,
     EscrowDisputeResponse,
     EscrowListingIntentCreate,
-    EscrowListingIntentResponse,
+    EscrowListingIntentResponse, EscrowNftProjection, EscrowPageResponse,
     EscrowSellerBalanceResponse,
     EscrowTransactionPreparationResponse,
     EscrowWithdrawalCreate,
     EscrowWithdrawalResponse,
 )
+def _listing_key(intent: EscrowListingIntent | None) -> str | None:
+    return None
+
+
+def _ton_nano(value: Decimal) -> str:
+    amount = value * _NANOTON
+    if amount <= 0 or amount != amount.to_integral_value():
+        raise HTTPException(status_code=409, detail="TON principal precision is invalid")
+    return str(int(amount))
+
+
+def _listing_actions(intent: EscrowListingIntent) -> list[str]:
+    return ["create_deal_intent"] if intent.status in {"intent_only", "active"} else []
+
+
+def _deal_actions(deal: EscrowDeal, actor_id: UUID) -> list[str]:
+    if actor_id == deal.seller_id:
+        return ["create_deal_escrow", "deposit_nft"] if deal.status == "intent_created" else []
+    if actor_id == deal.buyer_id:
+        if deal.status == "awaiting_buyer_funds":
+            return ["fund_deal"]
+        if deal.status == "funded_review":
+            return ["accept_deal", "open_dispute"]
+        if deal.status == "delivered_dispute_window":
+            return ["open_dispute"]
+    return []
+
+
+async def _listing_projection(session: AsyncSession, intent: EscrowListingIntent) -> EscrowListingIntentResponse:
+    asset = await session.get(NFTAsset, intent.asset_id)
+    return EscrowListingIntentResponse(
+        id=intent.id, listing_key=_listing_key(intent), seller_id=intent.seller_id,
+        state=intent.status, network="testnet",
+        nft=EscrowNftProjection(
+            asset_id=intent.asset_id,
+            title=asset.name if asset and asset.name else "TON NFT",
+            image_url=asset.image_url if asset else None, item_address=intent.item_address,
+            collection_address=None,
+        ),
+        seller_wallet_address=intent.seller_address_snapshot,
+        price_nano=_ton_nano(intent.price_amount), available_actions=_listing_actions(intent),
+        created_at=intent.created_at, updated_at=intent.updated_at,
+    )
+
+
+async def _deal_projection(session: AsyncSession, deal: EscrowDeal, actor_id: UUID) -> EscrowDealResponse:
+    intent = await session.get(EscrowListingIntent, deal.listing_intent_id)
+    asset = await session.get(NFTAsset, intent.asset_id) if intent else None
+    dispute = await session.scalar(select(EscrowDispute).where(EscrowDispute.deal_id == deal.id))
+    return EscrowDealResponse(
+        id=deal.id, listing_id=deal.marketplace_listing_id, listing_key=_listing_key(intent) or "",
+        buyer_id=deal.buyer_id, seller_id=deal.seller_id, state=deal.status, network="testnet",
+        nft=EscrowNftProjection(
+            asset_id=intent.asset_id if intent else UUID(int=0),
+            title=asset.name if asset and asset.name else "TON NFT",
+            image_url=asset.image_url if asset else None, item_address=deal.item_address,
+            collection_address=None,
+        ),
+        escrow_address=deal.contract_address, seller_wallet_address=deal.seller_address_snapshot,
+        buyer_wallet_address=deal.buyer_address_snapshot, price_nano=str(int(deal.principal_nanotons)),
+        buyer_review_deadline=None, dispute_deadline=None, available_actions=_deal_actions(deal, actor_id),
+        created_at=deal.created_at, updated_at=deal.updated_at,
+        dispute=({
+            "id": str(dispute.id), "status": dispute.status, "reason_code": dispute.reason_code,
+            "summary": dispute.reason, "opened_at": dispute.created_at.isoformat(),
+            "resolved_at": dispute.resolved_at.isoformat() if dispute.resolved_at else None,
+            "resolution_note": None,
+        } if dispute else None),
+    )
+
+
 
 router = APIRouter(prefix="/escrow", tags=["ton-escrow"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
@@ -353,211 +425,171 @@ async def create_listing_intent(
         raise
 
 
+@router.get("/marketplace/listing-intents", response_model=EscrowPageResponse)
+async def discover_listing_intents(user: CurrentUser, session: DbSession, limit: int = 20, offset: int = 0):
+    _require_testnet()
+    rows = list((await session.scalars(
+        select(EscrowListingIntent).join(Listing, Listing.id == EscrowListingIntent.marketplace_listing_id)
+        .where(EscrowListingIntent.status.in_(("intent_only", "active")),
+               Listing.status == ListingStatus.ACTIVE, EscrowListingIntent.seller_id != user.id)
+        .order_by(EscrowListingIntent.created_at.desc(), EscrowListingIntent.id.desc())
+        .offset(max(offset, 0)).limit(min(max(limit, 1), 50))
+    )).all())
+    return EscrowPageResponse(items=[await _listing_projection(session, row) for row in rows], total=len(rows))
+
+
+@router.get("/listing-intents", response_model=EscrowPageResponse)
+async def list_seller_listing_intents(user: CurrentUser, session: DbSession, limit: int = 20, offset: int = 0):
+    rows = list((await session.scalars(
+        select(EscrowListingIntent).where(EscrowListingIntent.seller_id == user.id)
+        .order_by(EscrowListingIntent.created_at.desc(), EscrowListingIntent.id.desc())
+        .offset(max(offset, 0)).limit(min(max(limit, 1), 50))
+    )).all())
+    return EscrowPageResponse(items=[await _listing_projection(session, row) for row in rows], total=len(rows))
+
+
 @router.get("/listing-intents/{intent_id}", response_model=EscrowListingIntentResponse)
-async def get_listing_intent(
-    intent_id: UUID,
-    user: CurrentUser,
-    session: DbSession,
-) -> EscrowListingIntent:
-    intent = await session.scalar(
-        select(EscrowListingIntent).where(
-            EscrowListingIntent.id == intent_id,
-            EscrowListingIntent.seller_id == user.id,
-        )
-    )
+async def get_listing_intent(intent_id: UUID, user: CurrentUser, session: DbSession):
+    intent = await session.scalar(select(EscrowListingIntent).where(
+        EscrowListingIntent.id == intent_id, EscrowListingIntent.seller_id == user.id,
+    ))
     if intent is None:
         raise HTTPException(status_code=404, detail="Escrow listing intent not found")
-    return intent
+    return await _listing_projection(session, intent)
 
 
 @router.post("/deals", response_model=EscrowDealResponse, status_code=201)
-async def create_deal_intent(
-    payload: EscrowDealCreate,
-    user: CurrentUser,
-    session: DbSession,
-    verifier: Verifier,
-    idempotency_key: IdempotencyKey,
-) -> EscrowDeal:
-    """Create a deal intent only; no contract is deployed and no funds are collected."""
+async def create_deal_intent(payload: EscrowDealCreate, user: CurrentUser, session: DbSession,
+    verifier: Verifier, idempotency_key: IdempotencyKey) -> EscrowDealResponse:
     _require_testnet()
     request_hash = _request_hash(_payload_dict(payload))
     try:
-        replay = await _load_idempotent_resource(
-            session,
-            actor_id=user.id,
-            operation="create_deal_intent",
-            key=idempotency_key,
-            request_sha256=request_hash,
-            model=EscrowDeal,
-        )
+        replay = await _load_idempotent_resource(session, actor_id=user.id, operation="create_deal_intent",
+            key=idempotency_key, request_sha256=request_hash, model=EscrowDeal)
         if replay is not None:
-            deal = replay
-            if deal.buyer_id != user.id:  # type: ignore[attr-defined]
+            if replay.buyer_id != user.id:
                 raise HTTPException(status_code=404, detail="Escrow deal not found")
-            return deal  # type: ignore[return-value]
-
-        intent = await session.scalar(
-            select(EscrowListingIntent)
-            .where(EscrowListingIntent.id == payload.listing_intent_id)
-            .with_for_update()
-        )
+            return await _deal_projection(session, replay, user.id)
+        intent = await session.scalar(select(EscrowListingIntent).where(
+            EscrowListingIntent.id == payload.listing_intent_id).with_for_update())
         if intent is None or intent.status not in {"intent_only", "active"}:
             raise HTTPException(status_code=404, detail="Escrow listing intent not found")
         if intent.seller_id == user.id:
             raise HTTPException(status_code=409, detail="A seller cannot buy their own listing")
         listing = await session.get(Listing, intent.marketplace_listing_id)
-        if (
-            listing is None
-            or listing.status is not ListingStatus.ACTIVE
-            or listing.asset_id != intent.asset_id
-        ):
+        if listing is None or listing.status is not ListingStatus.ACTIVE or listing.asset_id != intent.asset_id:
             raise HTTPException(status_code=409, detail="Underlying listing is no longer active")
-        buyer_wallet, buyer_address = await _verified_wallet(
-            session, user_id=user.id, wallet_id=payload.buyer_wallet_id
-        )
-        await _verify_current_nft_owner(
-            verifier,
-            item_address=intent.item_address,
-            seller_address=intent.seller_address_snapshot,
-        )
+        buyer_wallet, buyer_address = await _verified_wallet(session, user_id=user.id, wallet_id=payload.buyer_wallet_id)
+        await _verify_current_nft_owner(verifier, item_address=intent.item_address, seller_address=intent.seller_address_snapshot)
         principal = intent.price_amount * _NANOTON
-        integral_principal = principal.to_integral_value()
-        if principal != integral_principal or integral_principal <= 0:
+        if principal <= 0 or principal != principal.to_integral_value():
             raise HTTPException(status_code=409, detail="TON principal precision is invalid")
-
         deal = EscrowDeal(
-            id=uuid4(),
-            listing_intent_id=intent.id,
-            marketplace_listing_id=intent.marketplace_listing_id,
-            seller_id=intent.seller_id,
-            buyer_id=user.id,
-            buyer_wallet_id=buyer_wallet.id,
-            network="testnet",
-            contract_address=None,
-            contract_abi_version=None,
-            item_address=intent.item_address,
-            seller_address_snapshot=intent.seller_address_snapshot,
-            buyer_address_snapshot=buyer_address,
-            price_amount=intent.price_amount,
-            price_currency="TON",
-            principal_nanotons=integral_principal,
-            status=EscrowDealStatus.INTENT_CREATED.value,
-            last_chain_seqno=None,
-            idempotency_key=idempotency_key,
+            id=uuid4(), listing_intent_id=intent.id, marketplace_listing_id=intent.marketplace_listing_id,
+            seller_id=intent.seller_id, buyer_id=user.id, buyer_wallet_id=buyer_wallet.id,
+            network="testnet", deal_salt=secrets.token_hex(32), contract_address=None,
+            contract_abi_version=None, item_address=intent.item_address,
+            seller_address_snapshot=intent.seller_address_snapshot, buyer_address_snapshot=buyer_address,
+            price_amount=intent.price_amount, price_currency="TON", principal_nanotons=principal,
+            status=EscrowDealStatus.INTENT_CREATED.value, last_chain_seqno=None, idempotency_key=idempotency_key,
         )
+        intent.status = "reserved"
         session.add(deal)
-        _add_idempotency_record(
-            session,
-            actor_id=user.id,
-            operation="create_deal_intent",
-            key=idempotency_key,
-            request_sha256=request_hash,
-            resource_type="deal",
-            resource_id=deal.id,
-        )
+        _add_idempotency_record(session, actor_id=user.id, operation="create_deal_intent", key=idempotency_key,
+            request_sha256=request_hash, resource_type="deal", resource_id=deal.id)
         await session.commit()
         await session.refresh(deal)
-        return deal
+        return await _deal_projection(session, deal, user.id)
     except IntegrityError:
-        replay = await _idempotency_race_replay(
-            session,
-            actor_id=user.id,
-            operation="create_deal_intent",
-            key=idempotency_key,
-            request_sha256=request_hash,
-            model=EscrowDeal,
-        )
-        if replay.buyer_id != user.id:  # type: ignore[attr-defined]
-            raise HTTPException(
-                status_code=404, detail="Escrow deal not found"
-            ) from None
-        return replay  # type: ignore[return-value]
+        replay = await _idempotency_race_replay(session, actor_id=user.id, operation="create_deal_intent",
+            key=idempotency_key, request_sha256=request_hash, model=EscrowDeal)
+        if replay.buyer_id != user.id:
+            raise HTTPException(status_code=404, detail="Escrow deal not found") from None
+        return await _deal_projection(session, replay, user.id)
     except HTTPException:
         await session.rollback()
         raise
 
 
 @router.get("/deals/{deal_id}", response_model=EscrowDealResponse)
-async def get_deal_status(
-    deal_id: UUID,
-    user: CurrentUser,
-    session: DbSession,
-) -> EscrowDeal:
-    deal = await session.scalar(
-        select(EscrowDeal).where(
-            EscrowDeal.id == deal_id,
-            (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id),
-        )
-    )
+async def get_deal_status(deal_id: UUID, user: CurrentUser, session: DbSession):
+    deal = await session.scalar(select(EscrowDeal).where(deal_id == EscrowDeal.id,
+        (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id)))
     if deal is None:
         raise HTTPException(status_code=404, detail="Escrow deal not found")
-    return deal
+    return await _deal_projection(session, deal, user.id)
 
 
-@router.post(
-    "/listing-intents/{intent_id}/transaction",
-    response_model=EscrowTransactionPreparationResponse,
-)
-async def prepare_listing_transaction(
-    intent_id: UUID,
-    user: CurrentUser,
-    session: DbSession,
-    idempotency_key: IdempotencyKey,
-) -> EscrowTransactionPreparationResponse:
-    del idempotency_key  # No state is changed; key is still required for client consistency.
+@router.get("/buyer/deals", response_model=EscrowPageResponse)
+async def list_buyer_deals(user: CurrentUser, session: DbSession, limit: int = 20, offset: int = 0):
+    rows = list((await session.scalars(select(EscrowDeal).where(EscrowDeal.buyer_id == user.id)
+        .order_by(EscrowDeal.created_at.desc(), EscrowDeal.id.desc()).offset(max(offset, 0))
+        .limit(min(max(limit, 1), 50)))).all())
+    return EscrowPageResponse(items=[await _deal_projection(session, row, user.id) for row in rows], total=len(rows))
+
+
+@router.get("/seller/deals", response_model=EscrowPageResponse)
+async def list_seller_deals(user: CurrentUser, session: DbSession, limit: int = 20, offset: int = 0):
+    rows = list((await session.scalars(select(EscrowDeal).where(EscrowDeal.seller_id == user.id)
+        .order_by(EscrowDeal.created_at.desc(), EscrowDeal.id.desc()).offset(max(offset, 0))
+        .limit(min(max(limit, 1), 50)))).all())
+    return EscrowPageResponse(items=[await _deal_projection(session, row, user.id) for row in rows], total=len(rows))
+
+
+async def _prepare_action(deal_id: UUID, action: EscrowWalletAction, user: User, session: AsyncSession):
     _require_testnet()
-    intent = await session.scalar(
-        select(EscrowListingIntent).where(
-            EscrowListingIntent.id == intent_id,
-            EscrowListingIntent.seller_id == user.id,
-        )
-    )
-    if intent is None:
-        raise HTTPException(status_code=404, detail="Escrow listing intent not found")
-    wallet, _ = await _verified_wallet(session, user_id=user.id, wallet_id=intent.seller_wallet_id)
-    try:
-        await _contract_adapter.prepare_transaction(
-            EscrowWalletAction.DEPLOY_LISTING, actor_wallet=wallet, resource_id=str(intent.id)
-        )
-    except EscrowContractABIUnavailable as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "contract_abi_pending", "message": str(exc)},
-        ) from exc
-    raise HTTPException(
-        status_code=503,
-        detail="No approved escrow transaction adapter is configured",
-    )
-
-
-@router.post("/deals/{deal_id}/receipt", response_model=EscrowTransactionPreparationResponse)
-async def prepare_receipt_confirmation(
-    deal_id: UUID,
-    user: CurrentUser,
-    session: DbSession,
-    idempotency_key: IdempotencyKey,
-) -> EscrowTransactionPreparationResponse:
-    del idempotency_key  # Preparation is read-only and creates no on-chain state.
-    _require_testnet()
-    deal = await session.scalar(
-        select(EscrowDeal).where(EscrowDeal.id == deal_id, EscrowDeal.buyer_id == user.id)
-    )
+    deal = await session.scalar(select(EscrowDeal).where(deal_id == EscrowDeal.id,
+        (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id)).with_for_update())
     if deal is None:
         raise HTTPException(status_code=404, detail="Escrow deal not found")
-    wallet, _ = await _verified_wallet(session, user_id=user.id, wallet_id=deal.buyer_wallet_id)
+    seller_actions = {EscrowWalletAction.CREATE_DEAL_ESCROW, EscrowWalletAction.DEPOSIT_NFT}
+    if action in seller_actions:
+        if deal.seller_id != user.id or deal.status != "intent_created":
+            raise HTTPException(status_code=409, detail="Seller action is not available for this deal")
+        intent = await session.get(EscrowListingIntent, deal.listing_intent_id)
+        if intent is None:
+            raise HTTPException(status_code=404, detail="Escrow listing intent not found")
+        wallet, _ = await _verified_wallet(session, user_id=user.id, wallet_id=intent.seller_wallet_id)
+    else:
+        if deal.buyer_id != user.id:
+            raise HTTPException(status_code=404, detail="Escrow deal not found")
+        valid_state = {EscrowWalletAction.FUND_DEAL:"awaiting_buyer_funds",
+                       EscrowWalletAction.ACCEPT_DEAL:"funded_review",
+                       EscrowWalletAction.OPEN_DISPUTE:"funded_review"}.get(action)
+        if valid_state is None or deal.status != valid_state:
+            raise HTTPException(status_code=409, detail="Buyer action is not available in the current state")
+        wallet, address = await _verified_wallet(session, user_id=user.id, wallet_id=deal.buyer_wallet_id)
+        if address != deal.buyer_address_snapshot:
+            raise HTTPException(status_code=409, detail="Verified buyer wallet snapshot has changed")
     try:
-        await _contract_adapter.prepare_transaction(
-            EscrowWalletAction.ACCEPT_RECEIPT, actor_wallet=wallet, resource_id=str(deal.id)
-        )
+        await _contract_adapter.prepare_transaction(action, actor_wallet=wallet, resource_id=str(deal.id))
     except EscrowContractABIUnavailable as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "contract_abi_pending", "message": str(exc)},
-        ) from exc
-    raise HTTPException(
-        status_code=503,
-        detail="No approved escrow transaction adapter is configured",
-    )
+        raise HTTPException(status_code=503, detail={"code":"contract_abi_pending","message":str(exc)}) from exc
+    raise HTTPException(status_code=503, detail={"code":"contract_abi_pending"})
+
+
+@router.post("/deals/{deal_id}/prepare/create-deal-escrow", response_model=EscrowTransactionPreparationResponse)
+async def prepare_deal_escrow(deal_id: UUID, user: CurrentUser, session: DbSession, idempotency_key: IdempotencyKey):
+    del idempotency_key
+    return await _prepare_action(deal_id, EscrowWalletAction.CREATE_DEAL_ESCROW, user, session)
+
+
+@router.post("/deals/{deal_id}/prepare/deposit-nft", response_model=EscrowTransactionPreparationResponse)
+async def prepare_nft_deposit(deal_id: UUID, user: CurrentUser, session: DbSession, idempotency_key: IdempotencyKey):
+    del idempotency_key
+    return await _prepare_action(deal_id, EscrowWalletAction.DEPOSIT_NFT, user, session)
+
+
+@router.post("/deals/{deal_id}/prepare/funding", response_model=EscrowTransactionPreparationResponse)
+async def prepare_buyer_funding(deal_id: UUID, user: CurrentUser, session: DbSession, idempotency_key: IdempotencyKey):
+    del idempotency_key
+    return await _prepare_action(deal_id, EscrowWalletAction.FUND_DEAL, user, session)
+
+
+@router.post("/deals/{deal_id}/prepare/accept", response_model=EscrowTransactionPreparationResponse)
+async def prepare_buyer_acceptance(deal_id: UUID, user: CurrentUser, session: DbSession, idempotency_key: IdempotencyKey):
+    del idempotency_key
+    return await _prepare_action(deal_id, EscrowWalletAction.ACCEPT_DEAL, user, session)
 
 
 @router.post("/deals/{deal_id}/disputes", response_model=EscrowDisputeResponse, status_code=202)
