@@ -343,11 +343,13 @@ export function isEscrowWithdrawal(value: unknown): value is EscrowWithdrawal {
 
 export function isPreparedEscrowTransaction(value: unknown): value is PreparedEscrowTransaction {
   if (!isRecord(value) || value.network !== "testnet" || !isAction(value.action)) return false;
-  return typeof value.action_id === "string"
-    && isNullableString(value.factory_address)
-    && isNullableString(value.escrow_address)
+  const addressTopologyValid = value.action === "create_deal_escrow"
+    ? typeof value.factory_address === "string" && isNullableString(value.escrow_address)
+    : isNullableString(value.factory_address) && typeof value.escrow_address === "string";
+  return addressTopologyValid
+    && typeof value.action_id === "string"
     && typeof value.nft_item_address === "string"
-    && (value.price_nano === null || isNonNegativeNano(value.price_nano))
+    && (value.price_nano === null || isPositiveNano(value.price_nano))
     && value.fee_bps === 0
     && (value.execution_reserve_nano === null || isNonNegativeNano(value.execution_reserve_nano))
     && typeof value.valid_until === "string"
