@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-import re
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -807,7 +806,10 @@ async def list_admin_orders(
         try:
             order_id = UUID(q)
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail="Search must be a valid order UUID") from exc
+            raise HTTPException(
+                status_code=422,
+                detail="Search must be a valid order UUID",
+            ) from exc
         statement = statement.where(Order.id == order_id)
         count_statement = count_statement.where(Order.id == order_id)
 
