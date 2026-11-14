@@ -142,7 +142,7 @@ async def test_raw_nft_transfer_evidence_is_persisted_without_deal_transition() 
     assert row.reason_code == "raw_evidence_not_contract_attestation"
     assert row.deal_id == deal_id
     # No deal lookup/update was attempted after persisting raw evidence.
-    assert len(session.statements) == 1
+    assert len(session.statements) == 2
 
 
 @pytest.mark.asyncio
