@@ -334,3 +334,18 @@ async def test_expired_observer_lease_requeries_the_durable_cursor() -> None:
     assert checkpoint.cursor == "cursor-before-expired-lease"
     assert checkpoint.lease_token is None
     assert checkpoint.lease_until is None
+
+
+@pytest.mark.asyncio
+async def test_unknown_deal_event_is_pending_without_invalid_foreign_key() -> None:
+    missing_deal_id = uuid4()
+    event = make_event(deal_id=str(missing_deal_id))
+    session = FakeSession(None, None)
+
+    assert await _apply_one_event(session, event, provider_verified=True) == "unmatched"
+    row = session.added[0]
+    assert isinstance(row, EscrowChainEvent)
+    assert row.status == "pending"
+    assert row.reason_code == "deal_not_found"
+    assert row.deal_id is None
+    assert row.payload_json["deal_id"] == str(missing_deal_id)
