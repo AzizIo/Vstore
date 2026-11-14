@@ -2,29 +2,43 @@ import { getApiErrorMessage } from "./errors";
 
 export type EscrowNetwork = "testnet";
 
-export type EscrowState =
-  | "awaiting_nft_deposit"
-  | "listed"
-  | "payment_received"
-  | "delivery_pending"
-  | "buyer_confirmation_window"
+export type EscrowListingState =
+  | "intent_only"
+  | "active"
+  | "reserved"
+  | "cancelled"
+  | "manual_review";
+
+export type EscrowDealState =
+  | "intent_created"
+  | "awaiting_nft"
+  | "awaiting_buyer_funds"
+  | "funded_review"
+  | "nft_release_pending"
+  | "delivered_dispute_window"
   | "disputed"
-  | "refund_pending_nft_return"
+  | "nft_return_pending"
+  | "seller_payout_pending"
+  | "buyer_refund_pending"
   | "settled"
   | "refunded"
-  | "seller_withdrawn"
-  | "refundable_failure";
+  | "expired"
+  | "manual_review";
 
 export type EscrowAction =
-  | "nft_deposit"
-  | "purchase"
-  | "buyer_confirmation"
-  | "dispute"
-  | "buyer_nft_return"
-  | "unsold_nft_withdrawal"
-  | "seller_proceeds_withdrawal";
+  | "create_deal_escrow"
+  | "deposit_nft"
+  | "fund_deal"
+  | "accept_deal"
+  | "open_dispute"
+  | "return_nft_to_escrow"
+  | "withdraw_unsold_nft";
 
-export type EscrowDisputeStatus = "open" | "under_review" | "resolved_buyer" | "resolved_seller";
+export type EscrowDisputeStatus =
+  | "open"
+  | "under_review"
+  | "resolved_buyer"
+  | "resolved_seller";
 
 export interface EscrowNftSnapshot {
   asset_id: string | null;
@@ -44,16 +58,16 @@ export interface EscrowDispute {
   resolution_note: string | null;
 }
 
-export interface EscrowListing {
+export interface EscrowListingIntent {
   id: string;
+  listing_key: string | null;
   seller_id: string;
-  state: EscrowState;
+  state: EscrowListingState;
   network: EscrowNetwork;
   nft: EscrowNftSnapshot;
-  contract_address: string | null;
   seller_wallet_address: string;
-  price_ton: string;
-  platform_fee_ton: string | null;
+  price_nano: string;
+  fee_bps: 0;
   created_at: string;
   updated_at: string;
 }
@@ -61,25 +75,25 @@ export interface EscrowListing {
 export interface EscrowDeal {
   id: string;
   listing_id: string;
+  listing_key: string;
   buyer_id: string;
   seller_id: string;
-  state: EscrowState;
+  state: EscrowDealState;
   network: EscrowNetwork;
   nft: EscrowNftSnapshot;
-  contract_address: string;
+  escrow_address: string | null;
   seller_wallet_address: string;
   buyer_wallet_address: string;
-  price_ton: string;
-  platform_fee_ton: string | null;
-  seller_claimable_ton: string | null;
-  buyer_confirmation_deadline: string | null;
+  price_nano: string;
+  fee_bps: 0;
+  buyer_review_deadline: string | null;
   dispute_deadline: string | null;
+  available_actions: EscrowAction[];
   created_at: string;
   updated_at: string;
   dispute: EscrowDispute | null;
 }
 
-export type EscrowWithdrawalKind = "seller_proceeds" | "unsold_nft";
 export type EscrowWithdrawalStatus =
   | "prepared"
   | "submitted"
@@ -90,11 +104,9 @@ export type EscrowWithdrawalStatus =
 
 export interface EscrowWithdrawal {
   id: string;
-  listing_id: string | null;
-  deal_id: string | null;
-  kind: EscrowWithdrawalKind;
+  deal_id: string;
+  kind: "unsold_nft";
   status: EscrowWithdrawalStatus;
-  amount_ton: string | null;
   destination_address: string | null;
   transaction_hash: string | null;
   created_at: string;
@@ -109,42 +121,40 @@ export interface EscrowPage<T> {
 
 export interface EscrowWalletMessage {
   address: string;
-  amount_nanotons: string;
+  amount_nano: string;
   payload_boc?: string | null;
   state_init_boc?: string | null;
 }
 
 export interface PreparedEscrowTransaction {
-  id: string;
+  action_id: string;
   action: EscrowAction;
   network: EscrowNetwork;
-  contract_address: string;
-  nft_item_address: string | null;
-  amount_ton: string | null;
-  fee_ton: string | null;
-  network_fee_ton?: string | null;
+  factory_address: string | null;
+  escrow_address: string | null;
+  nft_item_address: string;
+  price_nano: string | null;
+  fee_bps: 0;
+  execution_reserve_nano: string | null;
   valid_until: string;
   messages: EscrowWalletMessage[];
-  display_summary: string;
+  display_purpose: string;
 }
 
-/**
- * These request DTOs are frontend intent types, not approved backend schemas.
- * The adapter configuration below must serialize them to the final API contract.
- */
-export interface EscrowPrepareNftDepositInput {
+export interface EscrowCreateListingIntentInput {
   asset_id: string;
   seller_wallet_id: string;
-  price_ton: string;
+  price_nano: string;
 }
 
-export interface EscrowPreparePurchaseInput {
+export interface EscrowCreateBuyerDealIntentInput {
   listing_id: string;
   buyer_wallet_id: string;
 }
 
-export interface EscrowPrepareWalletActionInput {
+export interface EscrowPrepareDealActionInput {
   deal_id: string;
+  wallet_id: string;
 }
 
 export interface EscrowOpenDisputeInput {
@@ -152,38 +162,19 @@ export interface EscrowOpenDisputeInput {
   reason: string;
 }
 
-export interface EscrowPrepareBuyerNftReturnInput {
-  deal_id: string;
-  buyer_wallet_id: string;
-}
-
-export interface EscrowPrepareUnsoldNftWithdrawalInput {
-  listing_id: string;
-  seller_wallet_id: string;
-}
-
-export interface EscrowPrepareSellerWithdrawalInput {
-  deal_id: string;
-  seller_wallet_id: string;
-}
-
 export interface EscrowWalletReferenceInput {
-  target_id: string;
+  action_id: string;
   action: EscrowAction;
   reference: string;
 }
 
-/** A serializer returns the actual path and body only after the backend contract is agreed. */
+/** Endpoint paths and payload serializers are injected only after the shared API is approved. */
 export interface EscrowHttpOperation {
   url: string;
   method?: "POST";
   body?: unknown;
 }
 
-/**
- * Route and payload mapping is injected by the host after the escrow API is approved.
- * No /api/escrow endpoint, request body or response path is guessed in this module.
- */
 export interface EscrowHttpContract {
   marketplaceListings: () => string;
   sellerListings: () => string;
@@ -192,31 +183,35 @@ export interface EscrowHttpContract {
   sellerWithdrawals: () => string;
   listingDetails: (listingId: string) => string;
   dealDetails: (dealId: string) => string;
-  prepareNftDeposit: (input: EscrowPrepareNftDepositInput) => EscrowHttpOperation;
-  preparePurchase: (input: EscrowPreparePurchaseInput) => EscrowHttpOperation;
-  prepareBuyerConfirmation: (input: EscrowPrepareWalletActionInput) => EscrowHttpOperation;
+  createListingIntent: (input: EscrowCreateListingIntentInput) => EscrowHttpOperation;
+  createBuyerDealIntent: (input: EscrowCreateBuyerDealIntentInput) => EscrowHttpOperation;
+  prepareDealEscrow: (input: EscrowPrepareDealActionInput) => EscrowHttpOperation;
+  prepareNftDeposit: (input: EscrowPrepareDealActionInput) => EscrowHttpOperation;
+  prepareBuyerFunding: (input: EscrowPrepareDealActionInput) => EscrowHttpOperation;
+  prepareBuyerAcceptance: (input: EscrowPrepareDealActionInput) => EscrowHttpOperation;
   prepareDispute: (input: EscrowOpenDisputeInput) => EscrowHttpOperation;
-  prepareBuyerNftReturn: (input: EscrowPrepareBuyerNftReturnInput) => EscrowHttpOperation;
-  prepareUnsoldNftWithdrawal: (input: EscrowPrepareUnsoldNftWithdrawalInput) => EscrowHttpOperation;
-  prepareSellerProceedsWithdrawal: (input: EscrowPrepareSellerWithdrawalInput) => EscrowHttpOperation;
+  prepareBuyerNftReturn: (input: EscrowPrepareDealActionInput) => EscrowHttpOperation;
+  prepareUnsoldNftWithdrawal: (input: EscrowPrepareDealActionInput) => EscrowHttpOperation;
   submitWalletReference: (input: EscrowWalletReferenceInput) => EscrowHttpOperation;
 }
 
 export interface EscrowApiClient {
-  listMarketplaceListings(signal?: AbortSignal): Promise<EscrowPage<EscrowListing>>;
-  listSellerListings(signal?: AbortSignal): Promise<EscrowPage<EscrowListing>>;
+  listMarketplaceListings(signal?: AbortSignal): Promise<EscrowPage<EscrowListingIntent>>;
+  listSellerListings(signal?: AbortSignal): Promise<EscrowPage<EscrowListingIntent>>;
   listBuyerDeals(signal?: AbortSignal): Promise<EscrowPage<EscrowDeal>>;
   listSellerDeals(signal?: AbortSignal): Promise<EscrowPage<EscrowDeal>>;
   listSellerWithdrawals(signal?: AbortSignal): Promise<EscrowPage<EscrowWithdrawal>>;
-  getListing(listingId: string, signal?: AbortSignal): Promise<EscrowListing>;
+  getListing(listingId: string, signal?: AbortSignal): Promise<EscrowListingIntent>;
   getDeal(dealId: string, signal?: AbortSignal): Promise<EscrowDeal>;
-  prepareNftDeposit(input: EscrowPrepareNftDepositInput): Promise<PreparedEscrowTransaction>;
-  preparePurchase(input: EscrowPreparePurchaseInput): Promise<PreparedEscrowTransaction>;
-  prepareBuyerConfirmation(input: EscrowPrepareWalletActionInput): Promise<PreparedEscrowTransaction>;
+  createListingIntent(input: EscrowCreateListingIntentInput): Promise<EscrowListingIntent>;
+  createBuyerDealIntent(input: EscrowCreateBuyerDealIntentInput): Promise<EscrowDeal>;
+  prepareDealEscrow(input: EscrowPrepareDealActionInput): Promise<PreparedEscrowTransaction>;
+  prepareNftDeposit(input: EscrowPrepareDealActionInput): Promise<PreparedEscrowTransaction>;
+  prepareBuyerFunding(input: EscrowPrepareDealActionInput): Promise<PreparedEscrowTransaction>;
+  prepareBuyerAcceptance(input: EscrowPrepareDealActionInput): Promise<PreparedEscrowTransaction>;
   prepareDispute(input: EscrowOpenDisputeInput): Promise<PreparedEscrowTransaction>;
-  prepareBuyerNftReturn(input: EscrowPrepareBuyerNftReturnInput): Promise<PreparedEscrowTransaction>;
-  prepareUnsoldNftWithdrawal(input: EscrowPrepareUnsoldNftWithdrawalInput): Promise<PreparedEscrowTransaction>;
-  prepareSellerProceedsWithdrawal(input: EscrowPrepareSellerWithdrawalInput): Promise<PreparedEscrowTransaction>;
+  prepareBuyerNftReturn(input: EscrowPrepareDealActionInput): Promise<PreparedEscrowTransaction>;
+  prepareUnsoldNftWithdrawal(input: EscrowPrepareDealActionInput): Promise<PreparedEscrowTransaction>;
   submitWalletReference(input: EscrowWalletReferenceInput): Promise<void>;
 }
 
@@ -228,30 +223,48 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }
 
-function isNonNegativeTonAmount(value: unknown): value is string {
-  if (typeof value !== "string" || !/^\d+(?:\.\d+)?$/.test(value)) return false;
-  const [whole, fraction = ""] = value.split(".");
-  return BigInt(whole) >= 0n && (fraction.length === 0 || /^\d+$/.test(fraction));
+export function isNonNegativeNano(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d+$/.test(value)) return false;
+  return BigInt(value) >= 0n;
 }
 
-function isPositiveTonAmountValue(value: unknown): value is string {
-  if (!isNonNegativeTonAmount(value)) return false;
-  const [whole, fraction = ""] = value.split(".");
-  return BigInt(whole) > 0n || /[1-9]/.test(fraction);
+export function isPositiveNano(value: unknown): value is string {
+  return isNonNegativeNano(value) && BigInt(value) > 0n;
 }
 
-function isEscrowState(value: unknown): value is EscrowState {
-  return value === "awaiting_nft_deposit"
-    || value === "listed"
-    || value === "payment_received"
-    || value === "delivery_pending"
-    || value === "buyer_confirmation_window"
+function isListingState(value: unknown): value is EscrowListingState {
+  return value === "intent_only"
+    || value === "active"
+    || value === "reserved"
+    || value === "cancelled"
+    || value === "manual_review";
+}
+
+function isDealState(value: unknown): value is EscrowDealState {
+  return value === "intent_created"
+    || value === "awaiting_nft"
+    || value === "awaiting_buyer_funds"
+    || value === "funded_review"
+    || value === "nft_release_pending"
+    || value === "delivered_dispute_window"
     || value === "disputed"
-    || value === "refund_pending_nft_return"
+    || value === "nft_return_pending"
+    || value === "seller_payout_pending"
+    || value === "buyer_refund_pending"
     || value === "settled"
     || value === "refunded"
-    || value === "seller_withdrawn"
-    || value === "refundable_failure";
+    || value === "expired"
+    || value === "manual_review";
+}
+
+function isAction(value: unknown): value is EscrowAction {
+  return value === "create_deal_escrow"
+    || value === "deposit_nft"
+    || value === "fund_deal"
+    || value === "accept_deal"
+    || value === "open_dispute"
+    || value === "return_nft_to_escrow"
+    || value === "withdraw_unsold_nft";
 }
 
 function isNftSnapshot(value: unknown): value is EscrowNftSnapshot {
@@ -263,7 +276,7 @@ function isNftSnapshot(value: unknown): value is EscrowNftSnapshot {
     && isNullableString(value.collection_address);
 }
 
-function isEscrowDispute(value: unknown): value is EscrowDispute | null {
+function isDispute(value: unknown): value is EscrowDispute | null {
   if (value === null) return true;
   if (!isRecord(value)) return false;
   return typeof value.id === "string"
@@ -276,17 +289,17 @@ function isEscrowDispute(value: unknown): value is EscrowDispute | null {
     && isNullableString(value.resolution_note);
 }
 
-export function isEscrowListing(value: unknown): value is EscrowListing {
+export function isEscrowListingIntent(value: unknown): value is EscrowListingIntent {
   if (!isRecord(value)) return false;
   return typeof value.id === "string"
+    && isNullableString(value.listing_key)
     && typeof value.seller_id === "string"
-    && isEscrowState(value.state)
+    && isListingState(value.state)
     && value.network === "testnet"
     && isNftSnapshot(value.nft)
-    && isNullableString(value.contract_address)
     && typeof value.seller_wallet_address === "string"
-    && isPositiveTonAmountValue(value.price_ton)
-    && (value.platform_fee_ton === null || isNonNegativeTonAmount(value.platform_fee_ton))
+    && isPositiveNano(value.price_nano)
+    && value.fee_bps === 0
     && typeof value.created_at === "string"
     && typeof value.updated_at === "string";
 }
@@ -295,33 +308,33 @@ export function isEscrowDeal(value: unknown): value is EscrowDeal {
   if (!isRecord(value)) return false;
   return typeof value.id === "string"
     && typeof value.listing_id === "string"
+    && typeof value.listing_key === "string"
     && typeof value.buyer_id === "string"
     && typeof value.seller_id === "string"
-    && isEscrowState(value.state)
+    && isDealState(value.state)
     && value.network === "testnet"
     && isNftSnapshot(value.nft)
-    && typeof value.contract_address === "string"
+    && isNullableString(value.escrow_address)
     && typeof value.seller_wallet_address === "string"
     && typeof value.buyer_wallet_address === "string"
-    && isPositiveTonAmountValue(value.price_ton)
-    && (value.platform_fee_ton === null || isNonNegativeTonAmount(value.platform_fee_ton))
-    && (value.seller_claimable_ton === null || isNonNegativeTonAmount(value.seller_claimable_ton))
-    && isNullableString(value.buyer_confirmation_deadline)
+    && isPositiveNano(value.price_nano)
+    && value.fee_bps === 0
+    && isNullableString(value.buyer_review_deadline)
     && isNullableString(value.dispute_deadline)
+    && Array.isArray(value.available_actions)
+    && value.available_actions.every(isAction)
     && typeof value.created_at === "string"
     && typeof value.updated_at === "string"
-    && isEscrowDispute(value.dispute);
+    && isDispute(value.dispute);
 }
 
 export function isEscrowWithdrawal(value: unknown): value is EscrowWithdrawal {
   if (!isRecord(value)) return false;
   return typeof value.id === "string"
-    && isNullableString(value.listing_id)
-    && isNullableString(value.deal_id)
-    && (value.kind === "seller_proceeds" || value.kind === "unsold_nft")
+    && typeof value.deal_id === "string"
+    && value.kind === "unsold_nft"
     && (value.status === "prepared" || value.status === "submitted" || value.status === "observing"
       || value.status === "confirmed" || value.status === "failed" || value.status === "manual_review")
-    && isNullableString(value.amount_ton)
     && isNullableString(value.destination_address)
     && isNullableString(value.transaction_hash)
     && typeof value.created_at === "string"
@@ -329,23 +342,23 @@ export function isEscrowWithdrawal(value: unknown): value is EscrowWithdrawal {
 }
 
 export function isPreparedEscrowTransaction(value: unknown): value is PreparedEscrowTransaction {
-  if (!isRecord(value) || value.network !== "testnet") return false;
-  if (!["nft_deposit", "purchase", "buyer_confirmation", "dispute", "buyer_nft_return", "unsold_nft_withdrawal", "seller_proceeds_withdrawal"].includes(String(value.action))) return false;
-  return typeof value.id === "string"
-    && typeof value.contract_address === "string"
-    && isNullableString(value.nft_item_address)
-    && (value.amount_ton === null || isNonNegativeTonAmount(value.amount_ton))
-    && (value.fee_ton === null || isNonNegativeTonAmount(value.fee_ton))
-    && (value.network_fee_ton === undefined || value.network_fee_ton === null || isNonNegativeTonAmount(value.network_fee_ton))
+  if (!isRecord(value) || value.network !== "testnet" || !isAction(value.action)) return false;
+  return typeof value.action_id === "string"
+    && isNullableString(value.factory_address)
+    && isNullableString(value.escrow_address)
+    && typeof value.nft_item_address === "string"
+    && (value.price_nano === null || isNonNegativeNano(value.price_nano))
+    && value.fee_bps === 0
+    && (value.execution_reserve_nano === null || isNonNegativeNano(value.execution_reserve_nano))
     && typeof value.valid_until === "string"
     && Number.isFinite(Date.parse(value.valid_until))
-    && typeof value.display_summary === "string"
+    && typeof value.display_purpose === "string"
     && Array.isArray(value.messages)
     && value.messages.length > 0
     && value.messages.every((message) => isRecord(message)
       && typeof message.address === "string"
-      && typeof message.amount_nanotons === "string"
-      && /^\d+$/.test(message.amount_nanotons)
+      && typeof message.amount_nano === "string"
+      && /^\d+$/.test(message.amount_nano)
       && isNullableString(message.payload_boc ?? null)
       && isNullableString(message.state_init_boc ?? null));
 }
@@ -418,7 +431,7 @@ async function writeJson<T>(
   accessToken: string,
   validate: (value: unknown) => value is T,
 ): Promise<T> {
-  const response = await readJson(
+  return readJson(
     operation.url,
     accessToken,
     validate,
@@ -428,7 +441,6 @@ async function writeJson<T>(
       ...(operation.body === undefined ? {} : { body: JSON.stringify(operation.body) }),
     },
   );
-  return response;
 }
 
 export function createEscrowApiClient(
@@ -443,20 +455,22 @@ export function createEscrowApiClient(
   );
 
   return {
-    listMarketplaceListings: (signal) => readPage(contract.marketplaceListings(), accessToken, isEscrowListing, signal),
-    listSellerListings: (signal) => readPage(contract.sellerListings(), accessToken, isEscrowListing, signal),
+    listMarketplaceListings: (signal) => readPage(contract.marketplaceListings(), accessToken, isEscrowListingIntent, signal),
+    listSellerListings: (signal) => readPage(contract.sellerListings(), accessToken, isEscrowListingIntent, signal),
     listBuyerDeals: (signal) => readPage(contract.buyerDeals(), accessToken, isEscrowDeal, signal),
     listSellerDeals: (signal) => readPage(contract.sellerDeals(), accessToken, isEscrowDeal, signal),
     listSellerWithdrawals: (signal) => readPage(contract.sellerWithdrawals(), accessToken, isEscrowWithdrawal, signal),
-    getListing: (id, signal) => readJson(contract.listingDetails(id), accessToken, isEscrowListing, { signal }),
+    getListing: (id, signal) => readJson(contract.listingDetails(id), accessToken, isEscrowListingIntent, { signal }),
     getDeal: (id, signal) => readJson(contract.dealDetails(id), accessToken, isEscrowDeal, { signal }),
+    createListingIntent: (input) => writeJson(contract.createListingIntent(input), accessToken, isEscrowListingIntent),
+    createBuyerDealIntent: (input) => writeJson(contract.createBuyerDealIntent(input), accessToken, isEscrowDeal),
+    prepareDealEscrow: (input) => getPrepared(contract.prepareDealEscrow(input)),
     prepareNftDeposit: (input) => getPrepared(contract.prepareNftDeposit(input)),
-    preparePurchase: (input) => getPrepared(contract.preparePurchase(input)),
-    prepareBuyerConfirmation: (input) => getPrepared(contract.prepareBuyerConfirmation(input)),
+    prepareBuyerFunding: (input) => getPrepared(contract.prepareBuyerFunding(input)),
+    prepareBuyerAcceptance: (input) => getPrepared(contract.prepareBuyerAcceptance(input)),
     prepareDispute: (input) => getPrepared(contract.prepareDispute(input)),
     prepareBuyerNftReturn: (input) => getPrepared(contract.prepareBuyerNftReturn(input)),
     prepareUnsoldNftWithdrawal: (input) => getPrepared(contract.prepareUnsoldNftWithdrawal(input)),
-    prepareSellerProceedsWithdrawal: (input) => getPrepared(contract.prepareSellerProceedsWithdrawal(input)),
     submitWalletReference: async (input) => {
       await writeJson(contract.submitWalletReference(input), accessToken, (value): value is { accepted: boolean } =>
         isRecord(value) && value.accepted === true);
