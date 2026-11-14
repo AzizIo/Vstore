@@ -252,7 +252,9 @@ async def test_nonfinal_event_pins_durable_cursor_for_requery() -> None:
     def factory() -> FakeEscrowSession:
         return sessions.pop(0)
 
-    result = await run_observer_pass(factory, provider, now=now, limit=5)  # type: ignore[arg-type]
+    result = await run_observer_pass(
+        factory, provider, now=now, limit=5
+    )  # type: ignore[arg-type]
     assert result.pending == 1
     assert provider.received_cursors == ["cursor-before"]
     assert checkpoint.cursor == "cursor-before"
