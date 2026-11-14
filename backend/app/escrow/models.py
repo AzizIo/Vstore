@@ -182,10 +182,10 @@ def assert_deal_terms_immutable(target: "EscrowDeal") -> None:
         name for name in _IMMUTABLE_DEAL_TERMS
         if state.attrs[name].history.has_changes()
     ]
-    if target.contract_address is not None and state.attrs.contract_address.history.has_changes():
-        changed.append("contract_address")
-    if target.contract_abi_version is not None and state.attrs.contract_abi_version.history.has_changes():
-        changed.append("contract_abi_version")
+    for name in ("contract_address", "contract_abi_version"):
+        history = state.attrs[name].history
+        if history.has_changes() and any(value is not None for value in history.deleted):
+            changed.append(name)
     if changed:
         fields = ", ".join(sorted(set(changed)))
         raise ValueError(f"Immutable DealEscrow terms cannot be changed: {fields}")
