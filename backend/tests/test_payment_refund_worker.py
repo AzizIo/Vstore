@@ -13,7 +13,7 @@ from alembic import command
 from alembic.config import Config
 from pydantic import SecretStr
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import Settings, get_settings
 from app.db.models import (
@@ -318,7 +318,7 @@ class FakeStarsProvider:
         return True
 
 
-async def _make_store(url: str) -> tuple[object, async_sessionmaker[AsyncSession]]:
+async def _make_store(url: str) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
     engine = create_async_engine(url, pool_pre_ping=True)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     return engine, factory
