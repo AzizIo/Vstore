@@ -218,7 +218,18 @@ async def _apply_one_event(
         await _persist_event(session, event, status="pending",
             reason_code="contract_address_not_reconciled", deal_id=deal.id, existing=existing)
         return "rejected"
-    if deal.last_chain_seqno is not None and event.masterchain_seqno < deal.last_chain_seqno:
+    if (
+        deal.last_chain_seqno is not None
+        and (
+            event.masterchain_seqno < deal.last_chain_seqno
+            or (
+                event.masterchain_seqno == deal.last_chain_seqno
+                and event.logical_time is not None
+                and deal.last_chain_logical_time is not None
+                and event.logical_time < deal.last_chain_logical_time
+            )
+        )
+    ):
         await _persist_event(session, event, status="pending",
             reason_code="stale_chain_event", deal_id=deal.id, existing=existing)
         return "rejected"
@@ -256,6 +267,8 @@ async def _apply_one_event(
         reason_code=None, deal_id=deal.id, existing=existing)
     deal.status = next_state.value
     deal.last_chain_seqno = max(deal.last_chain_seqno or 0, event.masterchain_seqno)
+    if event.logical_time is not None:
+        deal.last_chain_logical_time = max(deal.last_chain_logical_time or 0, event.logical_time)
     return "applied"
 
 
@@ -324,7 +337,19 @@ async def run_observer_pass(
                 "A non-empty batch must provide a progressing, restartable next cursor"
             )
         verified_events: list[tuple[NormalizedChainEvent, bool]] = []
-        for event in batch.events:
+        ordered_events = sorted(
+            batch.events,
+            key=lambda item: (
+                item.masterchain_seqno,
+                item.logical_time if item.logical_time is not None else -1,
+                item.transaction_hash,
+                item.event_index,
+                item.trace_id or "",
+                item.phase or "",
+                item.attempt_id or "",
+            ),
+        )
+        for event in ordered_events:
             # Reject obvious network / hash malformation before provider work.
             if event.network != "testnet":
                 verified_events.append((event, False))
