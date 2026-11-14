@@ -21,11 +21,11 @@
 ## Security observations and changes in this branch
 
 1. Payment intent and transaction rows contain mutable lifecycle fields, but their identifying financial evidence must not be editable after capture.
-2. The event journal already blocks UPDATE and DELETE, but a database-level TRUNCATE guard was missing. The new guard extends that retention boundary to intent, charge and refund workflow tables; foreign keys keep referenced financial evidence from being deleted while its journal entries remain.
+2. The event journal already blocks UPDATE and DELETE, but a database-level TRUNCATE guard was missing. The new guards cover intent, charge, event and refund workflow tables. Row-level DELETE remains distinct: the event journal is append-only; FK dependencies prevent deletion of referenced intents/transactions, but this migration does not block DELETE of an individual payment_refunds row. Test cleanup currently removes refund workflow rows; schema ownership must decide whether this is an intentional operational record lifecycle or whether those rows require stronger retention.
 3. Migration `0015_payment_ledger_guards` adds PostgreSQL guards:
    - intent order/provider/amount/currency/payer/payload/expiry/creation snapshot cannot change;
    - transaction intent/provider/charge IDs/amount/currency/payer/capture timestamp/creation snapshot cannot change;
-   - TRUNCATE is rejected for intents, transactions, events and refund workflow rows; ordinary DELETE remains constrained by the append-only event journal and foreign keys;
+   - TRUNCATE triggers are installed for intents, transactions, events and refund workflow rows. These triggers are separate from row-level DELETE policy: payment events are append-only; transaction/intent deletion is constrained when referenced by dependent rows; ordinary DELETE of a payment_refunds workflow row is not blocked by this migration and remains an explicit retention-policy decision;
    - legitimate status, lease, retry and reconciliation fields remain mutable through the state machine.
 4. This migration is additive and follows current Alembic head `e20261114_ton_escrow`. It does not edit prior migrations or PR #198's CI/dependency files.
 
@@ -68,6 +68,6 @@ Until those answers and written reviews exist, provider selection, production cr
 
 - Existing PostgreSQL integration coverage is in `backend/tests/test_payment_core_integration.py` and `backend/tests/test_payment_refund_worker.py`; it uses a disposable local test-named PostgreSQL database.
 - Existing tests cover order/payment separation, duplicate charges, late/mismatched payment evidence, append-only event mutation, refund worker leases, ambiguous provider outcomes and reconciliation.
-- The new migration requires CI verification on disposable PostgreSQL, including attempted UPDATE/DELETE/TRUNCATE against each protected table and allowed lifecycle-field updates.
+- The latest disposable-PostgreSQL test verifies the named TRUNCATE trigger exists in `pg_trigger` for all four target tables, checks the relevant mutation/FK behavior, and confirms an allowed lifecycle-field update. A TRUNCATE rejection caused only by an unrelated FK is not sufficient evidence that the new trigger itself is installed.
 - Do not report PostgreSQL integration tests as run locally unless an isolated disposable PostgreSQL service was actually available.
 - No production credentials, production database, real payment, refund request, payout or deployment is part of this work.
