@@ -189,13 +189,14 @@ async def _scan_provider_history(
 
             source = getattr(item, "source", None)
             source_user = getattr(source, "user", None) if source is not None else None
+            amount = getattr(item, "amount", None)
             if (
                 source is not None
                 and getattr(source, "type", None) == "user"
                 and getattr(source, "transaction_type", None) == "invoice_payment"
                 and getattr(source_user, "id", None) == claim.payer_telegram_id
-                and getattr(item, "amount", None) is not None
-                and Decimal(str(getattr(item, "amount"))) == claim.amount
+                and amount is not None
+                and Decimal(str(amount)) == claim.amount
             ):
                 original_seen = True
 
@@ -386,7 +387,10 @@ async def _process_claim(
     except RefundLeaseLost:
         return "lease_lost"
     except Exception:
-        logger.exception("Could not reconcile Telegram Stars history for refund job %s", claim.job_id)
+        logger.exception(
+            "Could not reconcile Telegram Stars history for refund job %s",
+            claim.job_id,
+        )
         uncertain = claim.request_started_at is not None
         deferred, manual = await _defer(
             session,
@@ -405,7 +409,10 @@ async def _process_claim(
                 else "lease_lost"
             )
         except PaymentConflict:
-            logger.exception("Persisted refund evidence conflicts for transaction %s", claim.transaction_id)
+            logger.exception(
+                "Persisted refund evidence conflicts for transaction %s",
+                claim.transaction_id,
+            )
             changed = await _set_job_state(
                 session,
                 claim,
@@ -487,7 +494,10 @@ async def _process_claim(
             try:
                 history_after_error = await _scan_provider_history(session, provider, claim)
             except Exception:
-                logger.exception("Could not verify already-refunded charge %s", claim.telegram_payment_charge_id)
+                logger.exception(
+                    "Could not verify already-refunded charge %s",
+                    claim.telegram_payment_charge_id,
+                )
                 history_after_error = RefundHistory(False, False, False, 0)
             if history_after_error.refund_seen:
                 return (
@@ -506,7 +516,10 @@ async def _process_claim(
     except Exception:
         # The request may have reached Telegram before the connection failed.
         # Reconciliation only; the next pass will not invoke refundStarPayment again.
-        logger.exception("Telegram Stars refund result is uncertain for transaction %s", claim.transaction_id)
+        logger.exception(
+            "Telegram Stars refund result is uncertain for transaction %s",
+            claim.transaction_id,
+        )
         deferred, manual = await _defer(
             session,
             claim,
@@ -532,7 +545,9 @@ async def run_refund_worker_pass(
     if not settings.telegram_stars_test_enabled:
         raise PaymentConflict("Telegram Stars test payments are disabled")
     if settings.environment.lower() not in {"local", "development", "test"}:
-        raise PaymentConflict("Telegram Stars refund worker is unavailable outside test environments")
+        raise PaymentConflict(
+            "Telegram Stars refund worker is unavailable outside test environments"
+        )
     if settings.telegram_stars_test_bot_token is None:
         raise PaymentConflict("A dedicated Telegram Stars test bot token is required")
 
