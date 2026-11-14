@@ -176,66 +176,32 @@ async def _seed_order(
 async def _cleanup(
     session_factory: async_sessionmaker[AsyncSession], ids: dict[str, object]
 ) -> None:
-    order_id = ids["order_id"]
+    """Retain payment evidence; isolate cleanup to the disposable test DB lifecycle.
+
+    Refund jobs are durable reconciliation evidence, so this fixture must not
+    DELETE payment_refunds, payment_events, payment_transactions or payment_intents.
+    Keep their FK parents as well. Mark this test's remaining refund work for
+    manual review so later tests cannot claim it; CI tears down the disposable DB.
+    """
     async with session_factory.begin() as session:
-        transaction_ids = select(PaymentTransaction.id).join(
-            PaymentIntent, PaymentIntent.id == PaymentTransaction.payment_intent_id
-        ).where(PaymentIntent.order_id == order_id)
         await session.execute(
-            PaymentRefund.__table__.delete().where(
-                PaymentRefund.payment_transaction_id.in_(transaction_ids)
-            )
-        )
-        await session.execute(
-            text("ALTER TABLE payment_events DISABLE TRIGGER trg_payment_events_append_only")
-        )
-        try:
-            await session.execute(
-                text(
-                    "DELETE FROM payment_events WHERE payment_intent_id IN "
-                    "(SELECT id FROM payment_intents WHERE order_id = :order_id)"
-                ),
-                {"order_id": order_id},
-            )
-        finally:
-            await session.execute(
-                text("ALTER TABLE payment_events ENABLE TRIGGER trg_payment_events_append_only")
-            )
-        await session.execute(
-            PaymentTransaction.__table__.delete().where(
-                PaymentTransaction.payment_intent_id.in_(
-                    select(PaymentIntent.id).where(PaymentIntent.order_id == order_id)
+            text(
+                """
+                UPDATE payment_refunds
+                SET status = 'manual_review',
+                    lease_token = NULL,
+                    locked_until = NULL,
+                    last_error_code = 'test_fixture_retained',
+                    completed_at = COALESCE(completed_at, now())
+                WHERE payment_transaction_id IN (
+                    SELECT pt.id
+                    FROM payment_transactions AS pt
+                    JOIN payment_intents AS pi ON pi.id = pt.payment_intent_id
+                    WHERE pi.order_id = :order_id
                 )
-            )
-        )
-        await session.execute(
-            PaymentIntent.__table__.delete().where(PaymentIntent.order_id == order_id)
-        )
-        await session.execute(
-            OrderEvent.__table__.delete().where(OrderEvent.order_id == order_id)
-        )
-        await session.execute(
-            TelegramNotificationOutbox.__table__.delete().where(
-                TelegramNotificationOutbox.order_id == order_id
-            )
-        )
-        await session.execute(
-            OrderDeliveryAttempt.__table__.delete().where(
-                OrderDeliveryAttempt.order_id == order_id
-            )
-        )
-        await session.execute(Order.__table__.delete().where(Order.id == order_id))
-        await session.execute(Listing.__table__.delete().where(Listing.id == ids["listing_id"]))
-        await session.execute(NFTAsset.__table__.delete().where(NFTAsset.id == ids["asset_id"]))
-        await session.execute(
-            Wallet.__table__.delete().where(
-                Wallet.id.in_([ids["seller_wallet_id"], ids["buyer_wallet_id"]])
-            )
-        )
-        await session.execute(
-            User.__table__.delete().where(
-                User.id.in_([ids["buyer_id"], ids["seller_id"]])
-            )
+                """
+            ),
+            {"order_id": ids["order_id"]},
         )
 
 
@@ -634,7 +600,7 @@ async def test_cancelling_paid_order_queues_refund_and_does_not_duplicate_the_jo
                 order_id=ids["order_id"],
                 buyer_id=ids["buyer_id"],
             )
-            jobs = (await session.scalars(select(PaymentRefund))).all()
+            jobs = (await session.scalars(select(PaymentRefund).join(PaymentTransaction, PaymentRefund.payment_transaction_id == PaymentTransaction.id).where(PaymentTransaction.payment_intent_id == intent.id))).all()
             transaction = await session.scalar(
                 select(PaymentTransaction).where(
                     PaymentTransaction.payment_intent_id == intent.id
@@ -677,7 +643,7 @@ async def test_lost_seller_ownership_queues_refund_for_paid_reserved_order(
                     current_time=datetime.now(UTC),
                 )
         async with session_factory() as session:
-            job = await session.scalar(select(PaymentRefund))
+            job = await session.scalar(select(PaymentRefund).where(PaymentRefund.payment_transaction_id.in_(select(PaymentTransaction.id).where(PaymentTransaction.payment_intent_id == intent.id))))
             transaction = await session.scalar(
                 select(PaymentTransaction).where(
                     PaymentTransaction.payment_intent_id == intent.id
@@ -1016,7 +982,7 @@ async def test_stale_refund_job_never_calls_provider_for_captured_transaction(
         async with session_factory() as session:
             result = await process_due_refunds(session, provider)
         async with session_factory() as session:
-            job = await session.scalar(select(PaymentRefund))
+            job = await session.scalar(select(PaymentRefund).join(PaymentTransaction, PaymentRefund.payment_transaction_id == PaymentTransaction.id).where(PaymentTransaction.telegram_payment_charge_id == evidence["telegram_payment_charge_id"]))
             transaction = await session.scalar(
                 select(PaymentTransaction).where(
                     PaymentTransaction.telegram_payment_charge_id
