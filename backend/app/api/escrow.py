@@ -73,7 +73,13 @@ def _listing_actions(intent: EscrowListingIntent) -> list[str]:
 
 def _deal_actions(deal: EscrowDeal, actor_id: UUID) -> list[str]:
     if actor_id == deal.seller_id:
-        return ["create_deal_escrow", "deposit_nft"] if deal.status == "intent_created" else []
+        if deal.status == "intent_created":
+            return ["create_deal_escrow"]
+        if deal.status == "awaiting_nft":
+            return ["deposit_nft"]
+        if deal.status == "expired":
+            return ["withdraw_unsold_nft"]
+        return []
     if actor_id == deal.buyer_id:
         if deal.status == "awaiting_buyer_funds":
             return ["fund_deal"]
@@ -87,7 +93,7 @@ def _deal_actions(deal: EscrowDeal, actor_id: UUID) -> list[str]:
 async def _listing_projection(session: AsyncSession, intent: EscrowListingIntent) -> EscrowListingIntentResponse:
     asset = await session.get(NFTAsset, intent.asset_id)
     return EscrowListingIntentResponse(
-        id=intent.id, listing_key=_listing_key(intent), seller_id=intent.seller_id,
+        id=intent.marketplace_listing_id, listing_key=intent.listing_key, seller_id=intent.seller_id,
         state=intent.status, network="testnet",
         nft=EscrowNftProjection(
             asset_id=intent.asset_id,
@@ -106,7 +112,7 @@ async def _deal_projection(session: AsyncSession, deal: EscrowDeal, actor_id: UU
     asset = await session.get(NFTAsset, intent.asset_id) if intent else None
     dispute = await session.scalar(select(EscrowDispute).where(EscrowDispute.deal_id == deal.id))
     return EscrowDealResponse(
-        id=deal.id, listing_id=deal.marketplace_listing_id, listing_key=_listing_key(intent) or "",
+        id=deal.id, listing_id=deal.marketplace_listing_id, listing_key=intent.listing_key if intent else "",
         buyer_id=deal.buyer_id, seller_id=deal.seller_id, state=deal.status, network="testnet",
         nft=EscrowNftProjection(
             asset_id=intent.asset_id if intent else UUID(int=0),
@@ -302,124 +308,89 @@ async def _verify_current_nft_owner(
 
 @router.post("/listing-intents", response_model=EscrowListingIntentResponse, status_code=201)
 async def create_listing_intent(
-    payload: EscrowListingIntentCreate,
-    user: CurrentUser,
-    session: DbSession,
-    verifier: Verifier,
-    idempotency_key: IdempotencyKey,
-) -> EscrowListingIntent:
-    """Create an off-chain intent only; does not activate or reserve any on-chain asset."""
+    payload: EscrowListingIntentCreate, user: CurrentUser, session: DbSession,
+    verifier: Verifier, idempotency_key: IdempotencyKey,
+) -> EscrowListingIntentResponse:
+    """Create a seller intent over a normal draft/active TON marketplace listing."""
     _require_testnet()
     request_hash = _request_hash(_payload_dict(payload))
     try:
         replay = await _load_idempotent_resource(
-            session,
-            actor_id=user.id,
-            operation="create_listing_intent",
-            key=idempotency_key,
-            request_sha256=request_hash,
-            model=EscrowListingIntent,
+            session, actor_id=user.id, operation="create_listing_intent", key=idempotency_key,
+            request_sha256=request_hash, model=EscrowListingIntent,
         )
         if replay is not None:
-            return replay  # type: ignore[return-value]
+            return await _listing_projection(session, replay)
 
-        rows = await session.execute(
-            select(Listing, NFTAsset)
-            .join(NFTAsset, Listing.asset_id == NFTAsset.id)
-            .where(Listing.id == payload.listing_id)
-            .with_for_update(of=Listing)
-        )
-        row = rows.first()
-        if row is None:
-            raise HTTPException(status_code=404, detail="Listing not found")
-        listing, asset = row
-        if listing.seller_id != user.id:
-            raise HTTPException(status_code=404, detail="Listing not found")
-        if listing.status is not ListingStatus.ACTIVE:
-            raise HTTPException(status_code=409, detail="Listing is not active")
-        if listing.price_currency is not PriceCurrency.TON:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Escrow testnet intents require a TON-priced listing; "
-                    "XTR is a separate domain"
-                ),
-            )
-        if (
-            asset.asset_type is not AssetType.TON_NFT
-            or asset.network != "testnet"
-            or asset.verification_status is not AssetVerificationStatus.VERIFIED
-            or asset.owner_id != user.id
-            or not asset.item_address
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail="Listing asset is not a verified, seller-owned TON testnet NFT",
-            )
-        seller_wallet, seller_address = await _verified_wallet(
-            session, user_id=user.id, wallet_id=payload.seller_wallet_id
-        )
+        asset = await session.scalar(select(NFTAsset).where(
+            NFTAsset.id == payload.asset_id, NFTAsset.owner_id == user.id,
+            NFTAsset.network == "testnet", NFTAsset.asset_type == AssetType.TON_NFT,
+            NFTAsset.verification_status == AssetVerificationStatus.VERIFIED,
+        ).with_for_update())
+        if asset is None or not asset.item_address:
+            raise HTTPException(status_code=409, detail="Only verified seller-owned TON testnet NFTs are eligible")
+        wallet, seller_address = await _verified_wallet(session, user_id=user.id, wallet_id=payload.seller_wallet_id)
         try:
             item_address = normalize_address(asset.item_address)
         except AddressError as exc:
-            raise HTTPException(status_code=409, detail="Stored NFT address is invalid") from exc
-        await _verify_current_nft_owner(
-            verifier, item_address=item_address, seller_address=seller_address
-        )
+            raise HTTPException(status_code=409, detail="Stored NFT item address is invalid") from exc
+        await _verify_current_nft_owner(verifier, item_address=item_address, seller_address=seller_address)
 
-        active_intent = await session.scalar(
-            select(EscrowListingIntent).where(
-                EscrowListingIntent.marketplace_listing_id == listing.id,
-                EscrowListingIntent.status.in_(
-                    ("intent_only", "active", "reserved", "manual_review")
-                ),
-            )
-        )
-        if active_intent is not None:
-            raise HTTPException(
-                status_code=409,
-                detail="An escrow intent already exists for this listing",
-            )
+        price_nano = Decimal(payload.price_nano)
+        price_amount = price_nano / _NANOTON
+        if price_amount <= 0 or price_amount * _NANOTON != price_nano:
+            raise HTTPException(status_code=422, detail="price_nano must be a positive integer nanotons")
 
+        listing = await session.scalar(select(Listing).where(
+            Listing.asset_id == asset.id, Listing.seller_id == user.id,
+            Listing.status.in_((ListingStatus.ACTIVE, ListingStatus.DRAFT)),
+        ).order_by(Listing.status.asc()).with_for_update())
+        if listing is not None and listing.status is ListingStatus.ACTIVE:
+            if listing.price_currency is not PriceCurrency.TON or listing.price_amount != price_amount:
+                raise HTTPException(status_code=409, detail="Active listing price/currency must match the escrow intent")
+        elif listing is not None:
+            listing.price_amount = price_amount
+            listing.price_currency = PriceCurrency.TON
+            if not listing.title:
+                listing.title = asset.name
+        else:
+            conflict = await session.scalar(select(Listing.id).where(
+                Listing.asset_id == asset.id,
+                Listing.status.in_((ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW)),
+            ))
+            if conflict is not None:
+                raise HTTPException(status_code=409, detail="NFT already has a reserved or review-pending listing")
+            listing = Listing(
+                id=uuid4(), asset_id=asset.id, seller_id=user.id, status=ListingStatus.DRAFT,
+                price_amount=price_amount, price_currency=PriceCurrency.TON, title=asset.name,
+            )
+            session.add(listing)
+            await session.flush()
+
+        existing_intent = await session.scalar(select(EscrowListingIntent).where(
+            EscrowListingIntent.marketplace_listing_id == listing.id,
+        ).with_for_update())
+        if existing_intent is not None:
+            raise HTTPException(status_code=409, detail="An escrow listing intent already exists for this listing")
         intent = EscrowListingIntent(
-            id=uuid4(),
-            marketplace_listing_id=listing.id,
-            asset_id=asset.id,
-            seller_id=user.id,
-            seller_wallet_id=seller_wallet.id,
-            network="testnet",
-            item_address=item_address,
-            seller_address_snapshot=seller_address,
-            price_amount=listing.price_amount,
-            price_currency="TON",
-            status="intent_only",
-            contract_address=None,
-            contract_abi_version=None,
-            idempotency_key=idempotency_key,
+            id=uuid4(), marketplace_listing_id=listing.id, asset_id=asset.id, seller_id=user.id,
+            seller_wallet_id=wallet.id, network="testnet", item_address=item_address,
+            listing_key=secrets.token_hex(32), seller_address_snapshot=seller_address,
+            price_amount=price_amount, price_currency="TON", status="intent_only",
+            contract_address=None, contract_abi_version=None, idempotency_key=idempotency_key,
         )
         session.add(intent)
-        _add_idempotency_record(
-            session,
-            actor_id=user.id,
-            operation="create_listing_intent",
-            key=idempotency_key,
-            request_sha256=request_hash,
-            resource_type="listing_intent",
-            resource_id=intent.id,
-        )
+        _add_idempotency_record(session, actor_id=user.id, operation="create_listing_intent",
+            key=idempotency_key, request_sha256=request_hash,
+            resource_type="listing_intent", resource_id=intent.id)
         await session.commit()
         await session.refresh(intent)
-        return intent
+        return await _listing_projection(session, intent)
     except IntegrityError:
-        replay = await _idempotency_race_replay(
-            session,
-            actor_id=user.id,
-            operation="create_listing_intent",
-            key=idempotency_key,
-            request_sha256=request_hash,
-            model=EscrowListingIntent,
-        )
-        return replay  # type: ignore[return-value]
+        replay = await _idempotency_race_replay(session, actor_id=user.id,
+            operation="create_listing_intent", key=idempotency_key,
+            request_sha256=request_hash, model=EscrowListingIntent)
+        return await _listing_projection(session, replay)
     except HTTPException:
         await session.rollback()
         raise
@@ -451,7 +422,7 @@ async def list_seller_listing_intents(user: CurrentUser, session: DbSession, lim
 @router.get("/listing-intents/{intent_id}", response_model=EscrowListingIntentResponse)
 async def get_listing_intent(intent_id: UUID, user: CurrentUser, session: DbSession):
     intent = await session.scalar(select(EscrowListingIntent).where(
-        EscrowListingIntent.id == intent_id, EscrowListingIntent.seller_id == user.id,
+        EscrowListingIntent.marketplace_listing_id == intent_id, EscrowListingIntent.seller_id == user.id,
     ))
     if intent is None:
         raise HTTPException(status_code=404, detail="Escrow listing intent not found")
@@ -471,7 +442,7 @@ async def create_deal_intent(payload: EscrowDealCreate, user: CurrentUser, sessi
                 raise HTTPException(status_code=404, detail="Escrow deal not found")
             return await _deal_projection(session, replay, user.id)
         intent = await session.scalar(select(EscrowListingIntent).where(
-            EscrowListingIntent.id == payload.listing_intent_id).with_for_update())
+            EscrowListingIntent.marketplace_listing_id == payload.listing_id).with_for_update())
         if intent is None or intent.status not in {"intent_only", "active"}:
             raise HTTPException(status_code=404, detail="Escrow listing intent not found")
         if intent.seller_id == user.id:
