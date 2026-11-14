@@ -12,7 +12,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import get_settings
-from app.db.payments import PaymentIntent, PaymentRefundJob, PaymentTransaction
+from app.db.payments import PaymentRefundJob, PaymentTransaction
 from app.orders.payment_service import PaymentConflict, record_stars_refund_result
 
 logger = logging.getLogger(__name__)
