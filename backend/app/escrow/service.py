@@ -85,7 +85,9 @@ def record_submission_reference(
     if not normalized or len(normalized) > 512:
         raise EscrowActionConflict("invalid_submission_reference")
     digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-    if action.unsigned_boc_sha256 is None or action.status not in {"prepared", "submitted", "ambiguous"}:
+    if action.unsigned_boc_sha256 is None or action.status not in {
+        "prepared", "submitted", "ambiguous"
+    }:
         raise EscrowActionConflict("action_not_prepared")
     if action.submission_reference_sha256 is not None:
         if action.submission_reference_sha256 != digest:
