@@ -104,8 +104,11 @@ export function createTonConnectEscrowAdapter(options: {
 
       const expectedDestination = normalizedAddress(allowedDestination(transaction));
       normalizedAddress(transaction.nft_item_address);
-      if (transaction.escrow_address) normalizedAddress(transaction.escrow_address);
-      if (transaction.factory_address) normalizedAddress(transaction.factory_address);
+      if (transaction.action === "create_deal_escrow") {
+        normalizedAddress(transaction.factory_address!);
+      } else {
+        normalizedAddress(transaction.escrow_address!);
+      }
 
       const validUntil = Math.floor(Date.parse(transaction.valid_until) / 1000);
       if (!Number.isFinite(validUntil) || validUntil <= Math.floor(now() / 1000)) {
