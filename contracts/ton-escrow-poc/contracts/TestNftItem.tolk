@@ -5,6 +5,7 @@ import "types"
 
 struct TestNftStorage {
     ownerAddress: address
+    fixtureSalt: uint256
 }
 
 type TestNftMessage = NftTransfer
