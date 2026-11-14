@@ -27,6 +27,7 @@ from app.db.models import (
     Listing,
     ListingStatus,
     NFTAsset,
+    NFTCollection,
     PriceCurrency,
     User,
     Wallet,
@@ -99,7 +100,7 @@ async def _listing_projection(session: AsyncSession, intent: EscrowListingIntent
             asset_id=intent.asset_id,
             title=asset.name if asset and asset.name else "TON NFT",
             image_url=asset.image_url if asset else None, item_address=intent.item_address,
-            collection_address=None,
+            collection_address=intent.collection_address_snapshot,
         ),
         seller_wallet_address=intent.seller_address_snapshot,
         price_nano=_ton_nano(intent.price_amount), available_actions=_listing_actions(intent),
@@ -118,7 +119,7 @@ async def _deal_projection(session: AsyncSession, deal: EscrowDeal, actor_id: UU
             asset_id=intent.asset_id if intent else UUID(int=0),
             title=asset.name if asset and asset.name else "TON NFT",
             image_url=asset.image_url if asset else None, item_address=deal.item_address,
-            collection_address=None,
+            collection_address=deal.collection_address_snapshot,
         ),
         escrow_address=deal.contract_address, seller_wallet_address=deal.seller_address_snapshot,
         buyer_wallet_address=deal.buyer_address_snapshot, price_nano=str(int(deal.principal_nanotons)),
@@ -335,6 +336,14 @@ async def create_listing_intent(
         except AddressError as exc:
             raise HTTPException(status_code=409, detail="Stored NFT item address is invalid") from exc
         await _verify_current_nft_owner(verifier, item_address=item_address, seller_address=seller_address)
+        collection_address = None
+        if asset.collection_id is not None:
+            collection = await session.get(NFTCollection, asset.collection_id)
+            if collection is not None and collection.network == "testnet":
+                try:
+                    collection_address = normalize_address(collection.address)
+                except AddressError as exc:
+                    raise HTTPException(status_code=409, detail="Stored NFT collection address is invalid") from exc
 
         price_nano = Decimal(payload.price_nano)
         price_amount = price_nano / _NANOTON
@@ -375,7 +384,8 @@ async def create_listing_intent(
         intent = EscrowListingIntent(
             id=uuid4(), marketplace_listing_id=listing.id, asset_id=asset.id, seller_id=user.id,
             seller_wallet_id=wallet.id, network="testnet", item_address=item_address,
-            listing_key=secrets.token_hex(32), seller_address_snapshot=seller_address,
+            listing_key=secrets.token_hex(32), collection_address_snapshot=collection_address,
+            seller_address_snapshot=seller_address,
             price_amount=price_amount, price_currency="TON", status="intent_only",
             contract_address=None, contract_abi_version=None, idempotency_key=idempotency_key,
         )
@@ -458,7 +468,8 @@ async def create_deal_intent(payload: EscrowDealCreate, user: CurrentUser, sessi
         deal = EscrowDeal(
             id=uuid4(), listing_intent_id=intent.id, marketplace_listing_id=intent.marketplace_listing_id,
             seller_id=intent.seller_id, buyer_id=user.id, buyer_wallet_id=buyer_wallet.id,
-            network="testnet", deal_salt=secrets.token_hex(32), contract_address=None,
+            network="testnet", deal_salt=secrets.token_hex(32),
+            collection_address_snapshot=intent.collection_address_snapshot, contract_address=None,
             contract_abi_version=None, item_address=intent.item_address,
             seller_address_snapshot=intent.seller_address_snapshot, buyer_address_snapshot=buyer_address,
             price_amount=intent.price_amount, price_currency="TON", principal_nanotons=principal,
