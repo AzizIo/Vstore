@@ -552,6 +552,6 @@ describe("TON Escrow workspace", () => {
     expect(screen.getByRole("tab", { name: "Продавец" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Обновить" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Создать сделку" })).toBeVisible();
-    expect(screen.getByText(/TON testnet/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/TON testnet/i).length).toBeGreaterThan(0);
   });
 });
