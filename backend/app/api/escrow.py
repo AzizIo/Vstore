@@ -812,20 +812,26 @@ async def prepare_deal_escrow(deal_id: UUID, user: CurrentUser, session: DbSessi
     response_model=EscrowTransactionPreparationResponse)
 async def prepare_nft_deposit(deal_id: UUID, user: CurrentUser, session: DbSession,
     verifier: Verifier, idempotency_key: IdempotencyKey):
-    return await _prepare_action(deal_id, EscrowWalletAction.DEPOSIT_NFT, user, session, verifier, idempotency_key)
+    return await _prepare_action(
+        deal_id, EscrowWalletAction.DEPOSIT_NFT, user, session, verifier, idempotency_key
+    )
 
 
 @router.post("/deals/{deal_id}/prepare/funding",
     response_model=EscrowTransactionPreparationResponse)
 async def prepare_buyer_funding(deal_id: UUID, user: CurrentUser, session: DbSession,
     verifier: Verifier, idempotency_key: IdempotencyKey):
-    return await _prepare_action(deal_id, EscrowWalletAction.FUND_DEAL, user, session, verifier, idempotency_key)
+    return await _prepare_action(
+        deal_id, EscrowWalletAction.FUND_DEAL, user, session, verifier, idempotency_key
+    )
 
 
 @router.post("/deals/{deal_id}/prepare/accept", response_model=EscrowTransactionPreparationResponse)
 async def prepare_buyer_acceptance(deal_id: UUID, user: CurrentUser, session: DbSession,
     verifier: Verifier, idempotency_key: IdempotencyKey):
-    return await _prepare_action(deal_id, EscrowWalletAction.ACCEPT_DEAL, user, session, verifier, idempotency_key)
+    return await _prepare_action(
+        deal_id, EscrowWalletAction.ACCEPT_DEAL, user, session, verifier, idempotency_key
+    )
 
 
 @router.post("/deals/{deal_id}/prepare/dispute",
@@ -834,8 +840,10 @@ async def prepare_dispute(
     deal_id: UUID, payload: EscrowDisputeCreate, user: CurrentUser,
     session: DbSession, verifier: Verifier, idempotency_key: IdempotencyKey,
 ):
-    return await _prepare_action(deal_id, EscrowWalletAction.OPEN_DISPUTE, user, session, verifier,
-        idempotency_key, {"reason": payload.reason, "reason_code": payload.reason_code})
+    return await _prepare_action(
+        deal_id, EscrowWalletAction.OPEN_DISPUTE, user, session, verifier,
+        idempotency_key, {"reason": payload.reason, "reason_code": payload.reason_code},
+    )
 
 
 @router.post("/deals/{deal_id}/prepare/nft-return",
@@ -854,7 +862,8 @@ async def prepare_unsold_nft_withdrawal(
     deal_id: UUID, user: CurrentUser, session: DbSession, verifier: Verifier,
     idempotency_key: IdempotencyKey,
 ):
-    return await _prepare_action(deal_id, EscrowWalletAction.WITHDRAW_UNSOLD_NFT, user, session,
+    return await _prepare_action(
+        deal_id, EscrowWalletAction.WITHDRAW_UNSOLD_NFT, user, session,
         verifier, idempotency_key)
 
 
