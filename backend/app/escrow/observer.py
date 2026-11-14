@@ -220,7 +220,27 @@ async def _apply_one_event(
             "operation_id",
             "deal_salt",
         )
-        if any(old.get(key) not in (None, new.get(key)) for key in stable):
+        conflict = any(
+            old.get(key) not in (None, new.get(key)) for key in stable
+        )
+        conflict = conflict or (
+            old.get("finalized")
+            and (
+                not event.finalized
+                or (
+                    event.finalized
+                    and old.get("masterchain_seqno") != event.masterchain_seqno
+                )
+            )
+        )
+        conflict = conflict or (
+            old.get("contract_state_reconciled")
+            and not event.contract_state_reconciled
+        )
+        conflict = conflict or (
+            old.get("attestation_accepted") and not event.attestation_accepted
+        )
+        if conflict:
             existing.status = "manual_review"
             existing.reason_code = "event_correlation_conflict"
             return "rejected"
