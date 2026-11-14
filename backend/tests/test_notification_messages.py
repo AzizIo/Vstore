@@ -179,3 +179,34 @@ def test_notification_escapes_database_values_before_rendering_html(
 
     assert "<b>Сумма:</b> <code>1.25 &lt;b&gt;TON&lt;/b&gt;&amp;</code>" in message
     assert "<code>1.25 <b>TON</b>&</code>" not in message
+
+
+@pytest.mark.parametrize(
+    ("event_type", "role", "expected_next_step"),
+    [
+        ("order_created", "buyer", "Резервирование не списывает средства"),
+        ("order_created", "seller", "посмотреть детали и дальнейшие действия"),
+        ("delivery_prepared", "buyer", "Дождитесь действий продавца"),
+        ("delivery_prepared", "seller", "проверьте адрес получателя и NFT"),
+        ("delivery_submitted", "buyer", "Не отправляйте NFT повторно"),
+        ("delivery_manual_review", "seller", "Дождитесь результата проверки"),
+    ],
+)
+def test_notifications_include_role_aware_next_step(
+    monkeypatch: pytest.MonkeyPatch,
+    delivery_factory,
+    event_type: str,
+    role: str,
+    expected_next_step: str,
+) -> None:
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "app.notifications.service.get_settings",
+        lambda: SimpleNamespace(telegram_mini_app_direct_link=None),
+    )
+
+    message = build_notification_message(delivery_factory(event_type, role))
+
+    assert "➡️ <b>Следующий шаг</b>" in message
+    assert expected_next_step in message
