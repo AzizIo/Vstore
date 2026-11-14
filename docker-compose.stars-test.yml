@@ -1,0 +1,61 @@
+name: viltara-stars-test
+
+# Disposable Telegram Stars test environment.
+# No production .env, database volume, ports, or bot service are reused.
+x-stars-test-env: &stars-test-env
+  ENVIRONMENT: "test"
+  TELEGRAM_STARS_TEST_ENABLED: "true"
+  BOT_TOKEN: "not-a-real-token-used-only-by-the-test-guard"
+  TELEGRAM_STARS_TEST_BOT_TOKEN: "${TELEGRAM_STARS_TEST_BOT_TOKEN:?Export the token from Telegram Test Server}"
+  DATABASE_URL: "postgresql+asyncpg://viltara_stars_test:${STARS_TEST_DB_PASSWORD:?Export STARS_TEST_DB_PASSWORD}@db:5432/viltara_test"
+
+x-stars-test-app: &stars-test-app
+  image: viltara-stars-test-backend:local
+  build:
+    context: ./backend
+  working_dir: /app
+  environment: *stars-test-env
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: "no"
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: viltara_test
+      POSTGRES_USER: viltara_stars_test
+      POSTGRES_PASSWORD: "${STARS_TEST_DB_PASSWORD:?Export STARS_TEST_DB_PASSWORD}"
+    volumes:
+      - stars_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U viltara_stars_test -d viltara_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  migrate:
+    <<: *stars-test-app
+    command: ["alembic", "upgrade", "head"]
+    profiles: ["tools"]
+
+  tools:
+    <<: *stars-test-app
+    entrypoint: ["python"]
+    command: ["-m", "scripts.seed_stars_test_order"]
+    profiles: ["tools"]
+
+  bot:
+    <<: *stars-test-app
+    command: ["python", "-m", "app.payments_test_bot"]
+    profiles: ["bot"]
+
+  refund-worker:
+    <<: *stars-test-app
+    command: ["python", "-m", "app.orders.refund_worker"]
+    profiles: ["refund-worker"]
+
+volumes:
+  stars_test_data:
