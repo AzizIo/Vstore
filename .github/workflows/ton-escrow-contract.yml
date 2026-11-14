@@ -53,7 +53,10 @@ jobs:
           acton wrapper --all
           acton wrapper DealEscrow --ts --output wrappers-ts/DealEscrow.gen.ts
 
-      - name: Format check
+      - name: Format Tolk sources
+        run: acton fmt
+
+      - name: Verify formatted Tolk sources
         run: acton fmt --check
 
       - name: Static checks
@@ -73,5 +76,7 @@ jobs:
             contracts/ton-escrow-poc/wrappers/**
             contracts/ton-escrow-poc/wrappers-ts/**
             contracts/ton-escrow-poc/coverage/**
+            contracts/ton-escrow-poc/contracts/**
+            contracts/ton-escrow-poc/tests/**
           if-no-files-found: warn
           retention-days: 14
