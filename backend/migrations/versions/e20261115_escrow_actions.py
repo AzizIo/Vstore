@@ -99,6 +99,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP TRIGGER IF EXISTS escrow_action_identity_immutable ON escrow_wallet_actions")
+    op.execute(
+        "DROP TRIGGER IF EXISTS escrow_action_identity_immutable ON escrow_wallet_actions"
+    )
     op.execute("DROP FUNCTION IF EXISTS prevent_escrow_action_identity_mutation()")
     op.drop_table("escrow_wallet_actions")
