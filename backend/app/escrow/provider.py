@@ -52,6 +52,9 @@ class NormalizedChainEvent:
     observed_contract_state: str | None = None
     attestation_accepted: bool = False
     contract_state_reconciled: bool = False
+    masterchain_block_hash: str | None = None
+    finality_proof_sha256: str | None = None
+    finality_provider: str | None = None
 
     @property
     def event_key(self) -> str:
@@ -75,9 +78,55 @@ class ChainEventBatch:
     next_cursor: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class FinalityVerification:
+    """Provider-verified inclusion/finality result bound to one exact trace event.
+
+    Implementations must derive this result from independently verified
+    masterchain inclusion/finality evidence, not from an indexer status flag.
+    """
+
+    network: str
+    transaction_hash: str
+    masterchain_seqno: int
+    masterchain_block_hash: str
+    message_hash: str
+    trace_id: str
+    proof_sha256: str
+    provider_id: str
+    finalized: bool
+    masterchain_inclusion_verified: bool
+    trace_binding_verified: bool
+
+    def matches(self, event: NormalizedChainEvent) -> bool:
+        def is_sha256(value: str) -> bool:
+            return len(value) == 64 and all(
+                char in "0123456789abcdef" for char in value.lower()
+            )
+
+        return (
+            self.finalized
+            and self.masterchain_inclusion_verified
+            and self.trace_binding_verified
+            and event.finalized
+            and self.network == "testnet"
+            and event.network == self.network
+            and self.transaction_hash == event.transaction_hash
+            and self.masterchain_seqno == event.masterchain_seqno
+            and self.masterchain_seqno > 0
+            and bool(event.message_hash)
+            and self.message_hash == event.message_hash
+            and bool(event.trace_id)
+            and self.trace_id == event.trace_id
+            and is_sha256(self.masterchain_block_hash)
+            and is_sha256(self.proof_sha256)
+            and bool(self.provider_id.strip())
+        )
+
+
 class TONTestnetEscrowProvider(Protocol):
     async def scan_events(self, *, cursor: str | None, limit: int) -> ChainEventBatch: ...
-    async def verify_event(self, event: NormalizedChainEvent) -> bool: ...
+    async def verify_event(self, event: NormalizedChainEvent) -> FinalityVerification | None: ...
 
 
 class UnconfiguredTONTestnetEscrowProvider:
@@ -85,6 +134,6 @@ class UnconfiguredTONTestnetEscrowProvider:
         del cursor, limit
         raise EscrowProviderUnavailable("TON escrow testnet provider is not configured")
 
-    async def verify_event(self, event: NormalizedChainEvent) -> bool:
+    async def verify_event(self, event: NormalizedChainEvent) -> FinalityVerification | None:
         del event
         raise EscrowProviderUnavailable("TON testnet evidence verification is not configured")
