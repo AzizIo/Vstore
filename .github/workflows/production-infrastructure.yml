@@ -1,0 +1,35 @@
+name: Production infrastructure guardrails
+
+on:
+  pull_request:
+    paths:
+      - "docker-compose.production.yml"
+      - "frontend/nginx.production.conf"
+      - "docs/PRODUCTION_OPERATIONS_RUNBOOK.md"
+      - "scripts/validate_production_infra.sh"
+      - ".github/workflows/production-infrastructure.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docker-compose.production.yml"
+      - "frontend/nginx.production.conf"
+      - "docs/PRODUCTION_OPERATIONS_RUNBOOK.md"
+      - "scripts/validate_production_infra.sh"
+      - ".github/workflows/production-infrastructure.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  static-guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate shell syntax
+        run: bash -n scripts/validate_production_infra.sh
+      - name: Run production infrastructure guardrails
+        run: bash scripts/validate_production_infra.sh
+      - name: Verify no accidental live-system actions in guard script
+        run: |
+          ! grep -Eiq 'docker compose .* (up|down|exec|run)|ssh |scp |curl .*https?://' scripts/validate_production_infra.sh
