@@ -17,6 +17,7 @@ depends_on: str | None = None
 
 
 def upgrade() -> None:
+    # Keep the trigger in PostgreSQL itself so ORM bulk deletes cannot bypass it.
     op.execute(
         """
         CREATE FUNCTION reject_payment_refund_delete()
