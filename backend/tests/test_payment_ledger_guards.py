@@ -170,7 +170,13 @@ async def test_payment_snapshots_and_evidence_cannot_be_rewritten_or_removed(
                     text("DELETE FROM payment_transactions WHERE id = :id"),
                     {"id": transaction_id},
                 )
-                await assert_rejected(text("TRUNCATE payment_events"))
+                for table in (
+                    "payment_intents",
+                    "payment_transactions",
+                    "payment_events",
+                    "payment_refunds",
+                ):
+                    await assert_rejected(text(f"TRUNCATE {table}"))
 
                 # Lifecycle changes remain possible; only the evidence snapshot is frozen.
                 await session.execute(
