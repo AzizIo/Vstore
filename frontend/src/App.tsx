@@ -706,6 +706,10 @@ function MarketplaceApp() {
             currentUserId={session.user.id}
             api={escrowApi ?? undefined}
             allowTestnetSigning={false}
+            onManageListings={() => {
+              setListingId(null);
+              setSection("my-listings");
+            }}
           />
         </Suspense>
       ) : section === "overview" && session.status === "authenticated" ? (
