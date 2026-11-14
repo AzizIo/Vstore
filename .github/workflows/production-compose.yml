@@ -43,8 +43,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Validate Compose interpolation and private service exposure
         run: |
-          docker compose -f docker-compose.production.yml config -q
-          docker compose -f docker-compose.production.yml config --format json > /tmp/viltara-production-compose.json
+          docker compose --profile bot -f docker-compose.production.yml config -q
+          docker compose --profile bot -f docker-compose.production.yml config --format json > /tmp/viltara-production-compose.json
           python - <<'PY'
           import json
           from pathlib import Path
