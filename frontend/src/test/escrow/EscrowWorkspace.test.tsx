@@ -156,7 +156,7 @@ function makeApi(options: {
   listMarketplaceListings?: () => Promise<EscrowPage<EscrowListingIntent>>;
 } = {}): EscrowApiClient {
   return {
-    listMarketplaceListings: vi.fn(options.listMarketplaceListings ?? (() => Promise.resolve(page(options.marketplace ?? [listing()]))),
+    listMarketplaceListings: vi.fn(options.listMarketplaceListings ?? (() => Promise.resolve(page(options.marketplace ?? [listing()])))),
     listSellerListings: vi.fn(async () => page(options.sellerListings ?? [])),
     listBuyerDeals: vi.fn(async () => page(options.buyerDeals ?? [])),
     listSellerDeals: vi.fn(async () => page(options.sellerDeals ?? [])),
