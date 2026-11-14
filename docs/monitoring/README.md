@@ -80,6 +80,6 @@ Rotate a receiver credential in the secret manager, deploy replacement, verify a
 
 ## Automated checks vs live acceptance
 
-CI/local checks validate YAML parseability, required rule inventory/fields, severity and threshold values, privacy/secret denylist, alert pending/firing/recovery semantics, and endpoint probe safety through localhost fixtures. They do not prove deployment or real notification delivery.
+CI/local checks validate YAML parseability, native Prometheus config/rule semantics with `promtool`, Alertmanager config with `amtool`, required rule inventory/fields, severity and threshold values, privacy/secret denylist, alert pending/firing/recovery semantics, and endpoint probe safety through localhost fixtures. The workflow downloads pinned Prometheus 3.16.0 and Alertmanager 0.35.0 release archives and verifies their published SHA-256 checksums before running the validators. They do not prove deployment or real notification delivery.
 
 Owner-only live acceptance remains pending: approve monitoring host/failure domain, private targets/exporters and capacity thresholds; configure secret manager/receiver/on-call; verify real bot heartbeat, remote backup freshness/failure and restore drill, TLS renewal/expiry, and one real firing plus resolved notification. No production VPS, DNS, database, Telegram bot, cloud account or external receiver is accessed here.
