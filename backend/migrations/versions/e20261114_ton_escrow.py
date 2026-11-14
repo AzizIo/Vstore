@@ -199,6 +199,7 @@ def upgrade() -> None:
         sa.Column("source_address", sa.String(128), nullable=True),
         sa.Column("destination_address", sa.String(128), nullable=True),
         sa.Column("item_address", sa.String(128), nullable=True),
+        sa.Column("collection_address", sa.String(128), nullable=True),
         sa.Column("amount_nanotons", sa.Numeric(30, 0), nullable=True),
         sa.Column("masterchain_seqno", sa.BigInteger(), nullable=False),
         sa.Column("finalized", sa.Boolean(), nullable=False),
