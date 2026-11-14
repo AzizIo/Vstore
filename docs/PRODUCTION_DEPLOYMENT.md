@@ -93,6 +93,8 @@ marketplace and real TON NFTs. Use `testnet` only with a separate test bot,
 test domain, test credentials and disposable test data. Do not expose a
 testnet Preview as the production marketplace.
 
+`PROD_TELEGRAM_MINI_APP_DIRECT_LINK` is also embedded in the Mini App build for the listing-share button. Rebuild the `miniapp` image after changing it.
+
 The API readiness endpoint requires a configured Telegram bot token and an
 authentication secret of at least 32 characters, even when the polling bot
 worker is not started. The `bot` service uses the same production token and

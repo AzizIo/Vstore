@@ -675,3 +675,9 @@
 @media (prefers-reduced-motion: reduce) {
   .seller-contact-link { transition: none; }
 }
+
+
+.listing-share-button {
+  cursor: pointer;
+  font: inherit;
+}
