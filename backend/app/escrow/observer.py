@@ -93,7 +93,8 @@ def _event_snapshot(event: NormalizedChainEvent) -> NormalizedEventEvidence:
 
 def _deal_snapshot(deal: EscrowDeal) -> DealEvidenceSnapshot:
     return DealEvidenceSnapshot(
-        network=deal.network, contract_address=deal.contract_address, item_address=deal.item_address,
+        network=deal.network, contract_address=deal.contract_address,
+        collection_address=deal.collection_address_snapshot, item_address=deal.item_address,
         seller_address=deal.seller_address_snapshot, buyer_address=deal.buyer_address_snapshot,
         principal_nanotons=int(deal.principal_nanotons),
     )
