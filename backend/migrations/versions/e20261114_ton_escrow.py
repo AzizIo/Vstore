@@ -133,6 +133,42 @@ def upgrade() -> None:
     )
     op.create_index("ix_escrow_deal_buyer_created", "escrow_deals", ["buyer_id", "created_at"])
     op.create_index("ix_escrow_deal_seller_created", "escrow_deals", ["seller_id", "created_at"])
+    op.execute(
+        """
+        CREATE FUNCTION prevent_escrow_deal_terms_mutation()
+        RETURNS trigger AS $
+        BEGIN
+            IF NEW.id IS DISTINCT FROM OLD.id
+                OR NEW.listing_intent_id IS DISTINCT FROM OLD.listing_intent_id
+                OR NEW.marketplace_listing_id IS DISTINCT FROM OLD.marketplace_listing_id
+                OR NEW.seller_id IS DISTINCT FROM OLD.seller_id
+                OR NEW.buyer_id IS DISTINCT FROM OLD.buyer_id
+                OR NEW.buyer_wallet_id IS DISTINCT FROM OLD.buyer_wallet_id
+                OR NEW.network IS DISTINCT FROM OLD.network
+                OR NEW.deal_salt IS DISTINCT FROM OLD.deal_salt
+                OR NEW.collection_address_snapshot IS DISTINCT FROM OLD.collection_address_snapshot
+                OR NEW.item_address IS DISTINCT FROM OLD.item_address
+                OR NEW.seller_address_snapshot IS DISTINCT FROM OLD.seller_address_snapshot
+                OR NEW.buyer_address_snapshot IS DISTINCT FROM OLD.buyer_address_snapshot
+                OR NEW.price_amount IS DISTINCT FROM OLD.price_amount
+                OR NEW.price_currency IS DISTINCT FROM OLD.price_currency
+                OR NEW.principal_nanotons IS DISTINCT FROM OLD.principal_nanotons
+                OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key
+                OR (OLD.contract_address IS NOT NULL
+                    AND NEW.contract_address IS DISTINCT FROM OLD.contract_address)
+                OR (OLD.contract_abi_version IS NOT NULL
+                    AND NEW.contract_abi_version IS DISTINCT FROM OLD.contract_abi_version)
+            THEN
+                RAISE EXCEPTION 'Immutable DealEscrow deployment terms cannot be changed';
+            END IF;
+            RETURN NEW;
+        END;
+        $ LANGUAGE plpgsql;
+        CREATE TRIGGER escrow_deal_terms_immutable
+        BEFORE UPDATE ON escrow_deals
+        FOR EACH ROW EXECUTE FUNCTION prevent_escrow_deal_terms_mutation();
+        """
+    )
 
     op.create_table(
         "escrow_chain_events",
@@ -319,6 +355,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("DROP TRIGGER IF EXISTS escrow_deal_terms_immutable ON escrow_deals")
+    op.execute("DROP FUNCTION IF EXISTS prevent_escrow_deal_terms_mutation()")
     op.drop_table("escrow_observer_checkpoints")
     op.drop_table("escrow_idempotency_records")
     op.drop_index("ix_escrow_withdrawal_seller_created", table_name="escrow_withdrawals")
