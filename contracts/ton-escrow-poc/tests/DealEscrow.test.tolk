@@ -12,7 +12,7 @@ const TEST_KEY_B = 0x22
 const TEST_KEY_C = 0x33
 
 fun configureTestnet() {
-    val config = testing.getConfig();
+    var config = testing.getConfig();
     config.setParamRaw(19, beginCell().storeInt(TESTNET_GLOBAL_ID, 32).endCell());
     assert (testing.setConfig(config)) throw Errors.NotTestnet;
 }
