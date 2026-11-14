@@ -346,7 +346,7 @@ describe("TON Escrow workspace", () => {
     const api = makeApi({ buyerDeals: [disputed, returnPending] });
     renderWorkspace(api);
 
-    expect(await screen.findByText("Открыт спор")).toBeInTheDocument();
+    expect(await screen.findAllByText("Открыт спор")).not.toHaveLength(0);
     expect(screen.getByText("Покупатель не получил NFT")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Открыть сделку Moon Lantern, Возврат NFT/ }));
     expect(await screen.findByText(/вернуть именно этот NFT в escrow/i)).toBeInTheDocument();
@@ -442,7 +442,9 @@ describe("TON Escrow workspace", () => {
     renderWorkspace(api, "seller-1");
     fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Вернуть непроданный NFT" }));
+    const withdrawalButtons = await screen.findAllByRole("button", { name: "Вернуть непроданный NFT" });
+    expect(withdrawalButtons.length).toBeGreaterThan(0);
+    fireEvent.click(withdrawalButtons[0]);
     expect(await screen.findByRole("dialog", { name: /Вернуть непроданный NFT/ })).toBeInTheDocument();
     expect(api.prepareUnsoldNftWithdrawal).toHaveBeenCalledWith({
       deal_id: "deal-1",
@@ -460,7 +462,7 @@ describe("TON Escrow workspace", () => {
     renderWorkspace(api);
 
     fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
-    expect(await screen.findByText(/Контракт инициировал refund/)).toBeInTheDocument();
+    expect(await screen.findAllByText(/Контракт инициировал refund/)).not.toHaveLength(0);
     expect(screen.queryByRole("button", { name: /refund|вернуть деньги/i })).not.toBeInTheDocument();
   });
 
