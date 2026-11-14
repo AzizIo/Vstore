@@ -32,7 +32,6 @@ from app.notifications.service import (
     process_due_notifications,
 )
 from app.orders.service import cancel_order, create_order, expire_pending_orders
-
 from tests.database_safety import require_test_database_url
 
 pytestmark = pytest.mark.integration
