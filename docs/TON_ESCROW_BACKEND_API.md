@@ -38,7 +38,7 @@ A real TONTestnetEscrowProvider is intentionally not supplied. The accepted ABI 
 
 ## Migration
 
-Migration e20261114_ton_escrow creates only escrow-specific tables and a testnet observer checkpoint. It references existing users, wallets, listings and NFT assets, but does not change those tables or order/payment status constraints. It targets main's current payment ledger revision 0012_telegram_stars_payments; the refund-worker PR uses its own proposed 0013_payment_refund_workflow, so maintainers must resolve migration heads if both branches are accepted.
+Migration e20261114_ton_escrow creates only escrow-specific tables and a testnet observer checkpoint. It references existing users, wallets, listings and NFT assets, but does not change those tables or order/payment status constraints. It descends from the current payment/refund head 0013_payment_refund_workflow so that this branch adds a single next migration instead of creating an Alembic multi-head graph. If the payment/refund migration is reverted or replaced before integration, recheck the down_revision against the then-current main migration head.
 
 ## ABI / product decisions still required
 
