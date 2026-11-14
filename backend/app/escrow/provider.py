@@ -1,8 +1,9 @@
 """TON testnet event normalization boundary.
 
 Non-final or incomplete observations may be replayed and promoted to final. The
-provider must include stable message/trace identifiers where available. No live
-provider is enabled before ABI approval.
+provider must preserve the transaction/message/trace/phase/attempt identity tuple
+across scans; logical time and deal salt are payload facts that may be enriched.
+No live provider is enabled before ABI approval.
 """
 from __future__ import annotations
 
@@ -54,8 +55,8 @@ class NormalizedChainEvent:
 
     @property
     def event_key(self) -> str:
-        # Stable across pending -> final. Distinct traces/phases/attempts and
-        # query/operation IDs are separate attempts, not duplicates.
+        # Stable across pending -> final. Trace, phase and attempt distinguish
+        # separate messages; logical time and deal salt may be enriched later.
         identity = (
             self.network, self.transaction_hash,
             self.message_hash or f"idx-{self.event_index}",
