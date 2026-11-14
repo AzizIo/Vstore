@@ -26,6 +26,7 @@ def upgrade() -> None:
         sa.Column("network", sa.String(16), server_default="testnet", nullable=False),
         sa.Column("item_address", sa.String(128), nullable=False),
         sa.Column("listing_key", sa.String(64), nullable=False, unique=True),
+        sa.Column("collection_address_snapshot", sa.String(128), nullable=True),
         sa.Column("seller_address_snapshot", sa.String(128), nullable=False),
         sa.Column("price_amount", sa.Numeric(24, 9), nullable=False),
         sa.Column("price_currency", sa.String(8), server_default="TON", nullable=False),
@@ -76,6 +77,7 @@ def upgrade() -> None:
         sa.Column("buyer_wallet_id", sa.Uuid(), nullable=False),
         sa.Column("network", sa.String(16), server_default="testnet", nullable=False),
         sa.Column("deal_salt", sa.String(128), nullable=False),
+        sa.Column("collection_address_snapshot", sa.String(128), nullable=True),
         sa.Column("contract_address", sa.String(128), nullable=True),
         sa.Column("contract_abi_version", sa.String(64), nullable=True),
         sa.Column("item_address", sa.String(128), nullable=False),
@@ -114,6 +116,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["buyer_wallet_id"], ["wallets.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("buyer_id", "idempotency_key", name="uq_escrow_deal_buyer_idem"),
+        sa.UniqueConstraint("network", "deal_salt", name="uq_escrow_deal_network_salt"),
     )
     op.create_index(
         "uq_escrow_deal_open_listing_intent",
