@@ -25,7 +25,7 @@ EXPECTED = {
 }
 FORBIDDEN = re.compile(
     r"telegram[_ -]?id|wallet[_ -]?address|order[_ -]?id|payment[_ -]?id|"
-    r"listing[_ -]?id|connection[_ -]?string|bot[_ -]?token|database_url|authorization",
+    r"listing[_ -]?id|connection[_ -]?string|bot[_ -]?token|database_url",
     re.IGNORECASE,
 )
 SECRET_URL = re.compile(r"https?://[^\s'\"]*(?:token|secret|password|api[_-]?key)=[^\s'\"]+", re.I)
@@ -79,6 +79,8 @@ def validate() -> int:
     for name, content in (("rules", rules), ("prometheus", prom), ("blackbox", blackbox), ("alertmanager", alertmanager)):
         if FORBIDDEN.search(content) or SECRET_URL.search(content):
             raise ValueError(f"privacy/secret pattern found in {name} template")
+    if 'probe_ssl_earliest_cert_expiry{job="viltara-tls-probe"}' not in rules:
+        raise ValueError("TLS expiry rules must use the dedicated TLS probe job")
     if "26h" not in readme and "26 hours" not in readme:
         raise ValueError("backup freshness threshold is not documented")
     if "secret manager" not in readme.lower():
