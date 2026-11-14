@@ -201,7 +201,9 @@ class PinnedTONEscrowContractAdapter:
         if valid_until is None:
             valid_until = int(time.time()) + 300
         if isinstance(valid_until, bool) or not isinstance(valid_until, int) or valid_until <= int(time.time()):
-            raise EscrowContractABIUnavailable("valid_until must be a future Unix timestamp")
+            raise EscrowContractABIUnavailable(
+                "valid_until must be a future Unix timestamp"
+            )
         escrow_address = deployment.address
         is_seller = wallet_address == seller
         is_buyer = wallet_address == buyer
@@ -264,7 +266,9 @@ class PinnedTONEscrowContractAdapter:
                 body = encode_simple_action("accept_deal", deal_snapshot.nft_release_query_id, salt)
             elif action is EscrowWalletAction.OPEN_DISPUTE:
                 if not is_buyer or state not in {3, 5} or chain_time > deadline:
-                    raise TONABIError("only the buyer may dispute a live funded-review or post-delivery state")
+                    raise TONABIError(
+                    "only the buyer may dispute a live funded-review or post-delivery state"
+                )
                 if reason_hash is None:
                     raise TONABIError("reason_hash is required for an on-chain dispute")
                 target = escrow_address
@@ -285,8 +289,12 @@ class PinnedTONEscrowContractAdapter:
                     deal_salt=salt,
                 )
             elif action is EscrowWalletAction.TIMEOUT_DEAL:
-                if (not (is_buyer or is_seller) or state not in {1, 2, 3, 5}
-                        or deadline == 0 or chain_time <= deadline):
+                if (
+                    not (is_buyer or is_seller)
+                    or state not in {1, 2, 3, 5}
+                    or deadline == 0
+                    or chain_time <= deadline
+                ):
                     raise TONABIError("timeout requires a participant and an expired supported state")
                 target = escrow_address
                 amount = deal_snapshot.action_value_nanotons
@@ -297,7 +305,9 @@ class PinnedTONEscrowContractAdapter:
                     or not deal_snapshot.recovery_previous_owner
                     or not deal_snapshot.recovery_item_address
                 ):
-                    raise TONABIError("unexpected NFT recovery requires a manual-review recovery record")
+                    raise TONABIError(
+                        "unexpected NFT recovery requires a manual-review recovery record"
+                    )
                 previous_owner = parse_basechain_address(
                     deal_snapshot.recovery_previous_owner, "recovery_previous_owner"
                 )
