@@ -1,4 +1,9 @@
-import type { EscrowDisputeStatus, EscrowState, EscrowWithdrawalStatus } from "../api/escrow";
+import type {
+  EscrowDealState,
+  EscrowDisputeStatus,
+  EscrowListingState,
+  EscrowWithdrawalStatus,
+} from "../api/escrow";
 
 export interface EscrowStateMeta {
   label: string;
@@ -6,60 +11,103 @@ export interface EscrowStateMeta {
   tone: "pending" | "active" | "success" | "warning" | "danger" | "neutral";
 }
 
-export const ESCROW_STATE_META: Record<EscrowState, EscrowStateMeta> = {
-  awaiting_nft_deposit: {
-    label: "Ожидает депозита NFT",
-    guidance: "Продавец ещё не передал NFT в escrow. Лот нельзя купить до подтверждения депозита.",
+export const ESCROW_LISTING_STATE_META: Record<EscrowListingState, EscrowStateMeta> = {
+  intent_only: {
+    label: "Предложение продавца",
+    guidance: "Это off-chain listing intent. NFT ещё не подтверждён в escrow; после создания сделки продавец подготовит отдельный DealEscrow и внесёт NFT.",
     tone: "pending",
   },
-  listed: {
-    label: "Доступен для покупки",
-    guidance: "Backend observer подтвердил депозит NFT в контракте. Лот доступен покупателям.",
+  active: {
+    label: "Доступен для сделки",
+    guidance: "Backend подтвердил состояние listing intent и разрешает создание новой сделки.",
     tone: "active",
   },
-  payment_received: {
-    label: "Оплата получена",
-    guidance: "Контракт принял TON покупателя. Средства остаются заблокированными до завершения условий сделки.",
+  reserved: {
+    label: "Сделка уже создаётся",
+    guidance: "Лот привязан к сделке покупателя и не должен предлагаться второму покупателю.",
+    tone: "warning",
+  },
+  cancelled: {
+    label: "Лот отменён",
+    guidance: "Listing intent закрыт. Статус возврата NFT отображается отдельно в истории сделки.",
+    tone: "neutral",
+  },
+  manual_review: {
+    label: "Ручная проверка",
+    guidance: "Действия временно недоступны до сверки цепочки доказательств.",
+    tone: "danger",
+  },
+};
+
+export const ESCROW_DEAL_STATE_META: Record<EscrowDealState, EscrowStateMeta> = {
+  intent_created: {
+    label: "Сделка подготовлена",
+    guidance: "Buyer wallet привязан. Продавец должен создать отдельный DealEscrow.",
     tone: "pending",
   },
-  delivery_pending: {
-    label: "Передача NFT",
-    guidance: "Контракт инициировал передачу NFT. Ожидается независимое подтверждение observer.",
+  awaiting_nft: {
+    label: "Ожидается депозит NFT",
+    guidance: "Контракт сделки создан. Продавец должен внести именно этот NFT.",
     tone: "pending",
   },
-  buyer_confirmation_window: {
+  awaiting_buyer_funds: {
+    label: "Ожидается TON покупателя",
+    guidance: "Контракт подтвердил блокировку NFT. Покупатель может внести точную сумму TON и execution reserve.",
+    tone: "active",
+  },
+  funded_review: {
     label: "Проверка покупателем",
-    guidance: "Покупатель может подтвердить получение или открыть спор в пределах срока, установленного контрактом.",
+    guidance: "NFT и TON заблокированы в escrow. Покупатель может принять сделку или открыть спор до указанного срока.",
+    tone: "warning",
+  },
+  nft_release_pending: {
+    label: "Передача NFT",
+    guidance: "Escrow запросил передачу NFT. Сообщение отправлено, но финальность доставки ещё не подтверждена.",
+    tone: "pending",
+  },
+  delivered_dispute_window: {
+    label: "Окно оспаривания",
+    guidance: "Oracle подтвердил доставку NFT на финальности. Покупатель ещё может открыть спор до deadline.",
     tone: "warning",
   },
   disputed: {
     label: "Открыт спор",
-    guidance: "Выплата продавцу заморожена до разрешения спора по правилам контракта.",
+    guidance: "Settlement заморожен. Ожидайте ограниченного решения resolver и, если требуется, возврата NFT в escrow.",
     tone: "danger",
   },
-  refund_pending_nft_return: {
-    label: "Ожидается возврат NFT",
-    guidance: "Возврат TON возможен только после подтверждения, что NFT находится в escrow или вернулся в него.",
+  nft_return_pending: {
+    label: "Возврат NFT",
+    guidance: "NFT возвращается или повторно передаётся. Возврат TON пока не считается завершённым.",
     tone: "warning",
+  },
+  seller_payout_pending: {
+    label: "Выплата продавцу",
+    guidance: "Контракт инициировал выплату. Ожидается финальное подтверждение; кнопки ручного вывода нет.",
+    tone: "pending",
+  },
+  buyer_refund_pending: {
+    label: "Возврат покупателю",
+    guidance: "Контракт инициировал refund. Ожидается финальное подтверждение транзакции.",
+    tone: "pending",
   },
   settled: {
     label: "Сделка завершена",
-    guidance: "Условия расчёта выполнены. Доступность выплаты определяется подтверждёнными данными backend.",
+    guidance: "Выплата продавцу подтверждена на финальности. Сделка доступна только для просмотра.",
     tone: "success",
   },
   refunded: {
     label: "Средства возвращены",
-    guidance: "Backend подтвердил завершённый возврат покупателю.",
+    guidance: "Refund подтверждён на финальности, условия возврата NFT также выполнены.",
     tone: "neutral",
   },
-  seller_withdrawn: {
-    label: "NFT выведен продавцом",
-    guidance: "Непроданный NFT возвращён продавцу и подтверждён observer.",
+  expired: {
+    label: "Сделка истекла",
+    guidance: "Сделка завершилась до принятия buyer funds. Backend должен подтвердить, что NFT не остаётся в escrow.",
     tone: "neutral",
   },
-  refundable_failure: {
-    label: "Ошибка с возвратом",
-    guidance: "Контракт зафиксировал отказ, допускающий возврат. Дождитесь подтверждения возврата в блокчейне.",
+  manual_review: {
+    label: "Ручная проверка",
+    guidance: "Доказательства конфликтуют или неполны. Автоматические release/refund действия приостановлены.",
     tone: "danger",
   },
 };
@@ -80,21 +128,25 @@ export const ESCROW_WITHDRAWAL_LABELS: Record<EscrowWithdrawalStatus, string> = 
   manual_review: "Требуется проверка",
 };
 
-export function formatTonAmount(value: string | null | undefined): string {
-  if (value === null || value === undefined || value.trim() === "") return "Не сообщено";
+export function tonToNano(value: string): string | null {
   const normalized = value.trim();
-  if (!/^\d+(?:\.\d+)?$/.test(normalized)) return normalized;
+  if (!/^\d+(?:\.\d{1,9})?$/.test(normalized)) return null;
   const [whole, fraction = ""] = normalized.split(".");
-  const compactFraction = fraction.replace(/0+$/, "");
-  return compactFraction ? `${whole}.${compactFraction}` : whole;
+  const nano = BigInt(whole) * 1_000_000_000n
+    + BigInt((fraction + "000000000").slice(0, 9));
+  return nano > 0n ? nano.toString() : null;
 }
 
-export function isPositiveTonAmount(value: string | null | undefined): boolean {
-  if (!value) return false;
-  const normalized = value.trim();
-  if (!/^\d+(?:\.\d+)?$/.test(normalized)) return false;
-  const [whole, fraction = ""] = normalized.split(".");
-  return BigInt(whole) > 0n || /[1-9]/.test(fraction);
+export function nanoToTon(value: string | null | undefined): string {
+  if (value === null || value === undefined || !/^\d+$/.test(value)) return "Не сообщено";
+  const nano = BigInt(value);
+  const whole = nano / 1_000_000_000n;
+  const fraction = (nano % 1_000_000_000n).toString().padStart(9, "0").replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : whole.toString();
+}
+
+export function isPositiveTonDecimal(value: string | null | undefined): boolean {
+  return value !== null && value !== undefined && tonToNano(value) !== null;
 }
 
 export function formatEscrowDate(value: string | null | undefined): string {
