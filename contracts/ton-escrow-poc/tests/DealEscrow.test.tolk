@@ -611,3 +611,30 @@ get fun `test 2-of-3 Ed25519 oracle and resolver signatures use distinct signer 
     };
     expect(countValidResolverSignatures(TEST_ED25519_DIGEST, keys, duplicateResolver)).toEqual(1);
 }
+
+get fun `test bounced internal action forces manual review`() {
+    val (escrow, _, seller, _) = createFixture(
+        0xA11D9,
+        STATE_NFT_RELEASE_PENDING,
+        1,
+    );
+    val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
+    expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
+
+    val keeper = testing.treasury("bounce-recovery-keeper");
+    val bouncedMessage = createMessage({
+        bounce: false,
+        value: grams("0.03"),
+        dest: escrow.address,
+        body: TimeoutDeal {
+            queryId: 1,
+            dealSalt: 0xA11D9,
+        },
+    }).bounced();
+    val bounceResult = net.send(keeper.address, bouncedMessage);
+    expect(bounceResult).toHaveSuccessfulTx({
+        from: keeper.address,
+        to: escrow.address,
+    });
+    expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
+}
