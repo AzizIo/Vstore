@@ -1,9 +1,4 @@
-"""Typed TON escrow contract boundary.
-
-The actual contract ABI is not approved. No opcodes, cells or message layouts are
-implemented here; the default adapter refuses to fabricate a wallet transaction.
-"""
-
+"""Semantic TON escrow wallet actions; ABI payload generation remains disabled."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,15 +9,18 @@ from app.db.models import Wallet
 
 
 class EscrowContractABIUnavailable(RuntimeError):
-    """Raised until maintainers and smart-contract owners approve a versioned ABI."""
+    """ABI is not versioned/approved, so no message may be constructed."""
 
 
 class EscrowWalletAction(StrEnum):
-    DEPLOY_LISTING = "deploy_listing"
+    CREATE_DEAL_ESCROW = "create_deal_escrow"
+    DEPOSIT_NFT = "deposit_nft"
     FUND_DEAL = "fund_deal"
-    ACCEPT_RECEIPT = "accept_receipt"
+    ACCEPT_DEAL = "accept_deal"
     OPEN_DISPUTE = "open_dispute"
-    PREPARE_WITHDRAWAL = "prepare_withdrawal"
+    REFUND = "refund"
+    PAYOUT = "payout"
+    WITHDRAW_UNSOLD_NFT = "withdraw_unsold_nft"
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,34 +39,19 @@ class TONConnectTransactionPayload:
 
 
 class TONEscrowContractAdapter(Protocol):
-    """A future adapter must create unsigned requests only; it never signs them."""
-
     @property
     def abi_version(self) -> str | None: ...
-
-    async def prepare_transaction(
-        self,
-        action: EscrowWalletAction,
-        *,
-        actor_wallet: Wallet,
-        resource_id: str,
-    ) -> TONConnectTransactionPayload: ...
+    async def prepare_transaction(self, action: EscrowWalletAction, *,
+        actor_wallet: Wallet, resource_id: str) -> TONConnectTransactionPayload: ...
 
 
 class UnconfiguredTONEscrowContractAdapter:
-    """Safe default while contract ABI, code hash and message layouts are unapproved."""
-
     @property
     def abi_version(self) -> str | None:
         return None
 
-    async def prepare_transaction(
-        self,
-        action: EscrowWalletAction,
-        *,
-        actor_wallet: Wallet,
-        resource_id: str,
-    ) -> TONConnectTransactionPayload:
+    async def prepare_transaction(self, action: EscrowWalletAction, *,
+        actor_wallet: Wallet, resource_id: str) -> TONConnectTransactionPayload:
         del action, actor_wallet, resource_id
         raise EscrowContractABIUnavailable(
             "TON escrow transaction construction is disabled until the contract ABI is approved"
