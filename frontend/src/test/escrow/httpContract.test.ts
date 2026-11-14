@@ -31,7 +31,7 @@ describe("TON escrow HTTP contract", () => {
     for (const operation of operations) {
       expect(operation.method).toBe("POST");
       expect(operation.headers?.["Idempotency-Key"]).toBeTruthy();
-      expect(operation.headers?.["Idempotency-Key"].length).toBeGreaterThan(8);
+      expect((operation.headers?.["Idempotency-Key"] ?? "").length).toBeGreaterThan(8);
     }
   });
 
