@@ -51,17 +51,16 @@ export DATABASE_URL='postgresql+asyncpg://postgres:YOUR_LOCAL_PASSWORD@127.0.0.1
 
 Replace only the local database role/password and test-bot token. Keep the host local and the database name test-scoped.
 
-## 4. Apply migrations and start the bot
+## 4. Apply migrations
 
-Run these commands from `backend/` in the same terminal so the process inherits the isolated test configuration:
+Run these commands from `backend/` in the same terminal so later processes inherit the isolated test configuration:
 
 ```bash
 python -m pip install -e '.[dev]'
 alembic upgrade head
-python -m app.payments_test_bot
 ```
 
-The bot uses long polling against Telegram's test Bot API. Do not register a webhook for this bot while polling is active. If any guard fails, stop and fix the test configuration; do not weaken or bypass the runtime guard.
+The migration command must use the same local disposable test database configured above. Do not register a webhook for this test bot; it uses long polling. If any guard fails, stop and fix the test configuration; do not weaken or bypass the runtime guard.
 
 ## 5. Exercise the test flow
 
