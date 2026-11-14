@@ -1,0 +1,18 @@
+{
+  "contract": "DealEscrow",
+  "protocol_version": 1,
+  "network_scope": "TON testnet only",
+  "source_commit": "2913ea7d53ea7344f57d6503142c08e0b328bc7d",
+  "workflow_run_id": 43634396094,
+  "artifact_id": 14129775225,
+  "original_archive_sha256": "80db85f1dfc91450e6e7e47990bd89bf2ff80e0ecb99d17d8f40a07f33feba58",
+  "abi_original_sha256": "05d3bc9b7aafc7fc71889cffc6d4fea2f607ea14aa48f3854c8e432747623597",
+  "build_descriptor_original_sha256": "f38b6c867af8ed13d95bc7fed75136961eb97c21290360197ccf9520907ffc3b",
+  "compiled_code_hash": "E9358DAA6FFCC8FCEC979FBD631C7FC0BE336347D1DD44F3F06113E7B2A37548",
+  "compiled_code_boc_base64_sha256": "1dd9695f38ebc6d158866159ef796bbe8e7d4ec7558a5a2093a4b74951454e57",
+  "compiled_code_boc_sha256": "aaaa3822a52e28410589cbd11e7e81252ea8d52b07ece73a9b5dda1c07d8a167",
+  "abi_compact_sha256": "25fc5f338f45db7d7198961a75c1d5cfe04f996ae36013cca0d70f03870c3923",
+  "acton_version": "1.2.1",
+  "tolk_version": "1.5.0",
+  "warning": "Frozen build artifact only; does not prove reproducibility, address derivation, StateInit correctness, audit safety or live testnet acceptance."
+}
