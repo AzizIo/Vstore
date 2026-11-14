@@ -309,9 +309,9 @@ async def run_observer_pass(
 
     try:
         batch = await provider.scan_events(cursor=cursor, limit=limit)
-        if batch.events and not batch.next_cursor:
+        if batch.events and (not batch.next_cursor or batch.next_cursor == cursor):
             raise EscrowProviderInvalidEvidence(
-                "A non-empty batch must provide a restartable next cursor"
+                "A non-empty batch must provide a progressing, restartable next cursor"
             )
         verified_events: list[tuple[NormalizedChainEvent, bool]] = []
         for event in batch.events:
@@ -348,7 +348,10 @@ async def run_observer_pass(
                         session, event, provider_verified=verified
                     )
                     result_counts[applied_result] += 1
-                checkpoint.cursor = batch.next_cursor
+                # A no-event provider response may omit its cursor. Never erase a
+                # previously durable cursor as a side effect of an empty scan.
+                if batch.next_cursor is not None:
+                    checkpoint.cursor = batch.next_cursor
                 if verified_events:
                     latest_seqno = max(
                         (
