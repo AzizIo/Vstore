@@ -40,8 +40,10 @@ def test_escrow_tables_are_separate_from_order_and_payment_tables() -> None:
     }
     status_column = EscrowDeal.__table__.c.status
     assert status_column.default is not None or status_column.server_default is not None
-    assert EscrowDeal.__table__.c.deal_salt.unique is False
-    assert "uq_escrow_deal_network_salt" in {c.name for c in EscrowDeal.__table__.constraints}
+    assert EscrowDeal.__table__.c.deal_salt.unique is None
+    assert "uq_escrow_deal_network_salt" in {
+        constraint.name for constraint in EscrowDeal.__table__.constraints
+    }
     assert EscrowListingIntent.__table__.c.listing_key.unique is True
     assert "collection_address_snapshot" in EscrowDeal.__table__.c
     assert "listing_key_snapshot" in EscrowDeal.__table__.c
