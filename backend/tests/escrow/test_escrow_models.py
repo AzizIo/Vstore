@@ -81,22 +81,31 @@ def test_escrow_models_use_separate_metadata_registry() -> None:
 
 def test_deal_deployment_terms_cannot_be_mutated_after_creation() -> None:
     deal = EscrowDeal(
-        listing_intent_id=__import__("uuid").uuid4(),
-        marketplace_listing_id=__import__("uuid").uuid4(),
-        seller_id=__import__("uuid").uuid4(),
-        buyer_id=__import__("uuid").uuid4(),
-        buyer_wallet_id=__import__("uuid").uuid4(),
+        listing_intent_id=uuid4(),
+        marketplace_listing_id=uuid4(),
+        seller_id=uuid4(),
+        buyer_id=uuid4(),
+        buyer_wallet_id=uuid4(),
         network="testnet",
         deal_salt="a" * 64,
         collection_address_snapshot="0:" + "b" * 64,
         item_address="0:" + "c" * 64,
         seller_address_snapshot="0:" + "d" * 64,
         buyer_address_snapshot="0:" + "e" * 64,
-        price_amount=__import__("decimal").Decimal("2.5"),
+        price_amount=Decimal("2.5"),
         price_currency="TON",
         principal_nanotons=2_500_000_000,
         idempotency_key="deal-create-1",
     )
+    from sqlalchemy.orm.attributes import set_committed_value
+
+    for field in (
+        "listing_intent_id", "marketplace_listing_id", "seller_id", "buyer_id",
+        "buyer_wallet_id", "network", "deal_salt", "collection_address_snapshot",
+        "item_address", "seller_address_snapshot", "buyer_address_snapshot",
+        "price_amount", "price_currency", "principal_nanotons", "idempotency_key",
+    ):
+        set_committed_value(deal, field, getattr(deal, field))
     deal.buyer_address_snapshot = "0:" + "f" * 64
 
     with pytest.raises(ValueError, match="Immutable DealEscrow terms"):
