@@ -23,7 +23,7 @@ test -s "$TMP"
 docker compose -f "$COMPOSE_FILE" exec -T db pg_restore --list < "$TMP" >/dev/null
 
 mv "$TMP" "$FINAL"
-sha256sum "$FINAL" > "$FINAL.sha256"
+(cd "$BACKUP_DIR" && sha256sum "$(basename "$FINAL")" > "$(basename "$FINAL").sha256")
 chmod 600 "$FINAL" "$FINAL.sha256"
 printf 'Backup created and archive-validated: %s\n' "$FINAL"
 printf 'SHA-256: '
