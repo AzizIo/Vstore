@@ -29,6 +29,7 @@ describe("buildTelegramListingShareUrl", () => {
     "https://evil.example/viltara_shop_bot/shop",
     "https://t.me/viltara_shop_bot",
     "https://t.me/viltara_shop_bot/shop/extra",
+    "https://t.me/viltara_shop_bot/shop?startapp=attacker",
     "https://user:password@t.me/viltara_shop_bot/shop",
   ])("rejects an unsafe or incomplete direct link: %s", (directLink) => {
     expect(buildTelegramListingShareUrl(directLink, LISTING_ID, "Moon Lantern")).toBeNull();
