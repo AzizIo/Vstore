@@ -768,11 +768,6 @@ function WorkspaceBody({
                             Вернуть непроданный NFT
                           </button>
                         )}
-                        {allowed("withdraw_unsold_nft", deal.available_actions) && (
-                          <button className="escrow-button escrow-button-secondary" type="button" disabled={!api || busy || !signer} onClick={() => signer && void prepareWalletAction("withdraw_unsold_nft", deal, () => api!.prepareUnsoldNftWithdrawal({ deal_id: deal.id, wallet_id: signer.id }), signer)}>
-                            Вернуть непроданный NFT
-                          </button>
-                        )}
                       </div>
                     </article>
                   );
