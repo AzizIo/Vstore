@@ -78,3 +78,25 @@ def test_foreign_listing_intent_id_is_not_disclosed() -> None:
     compiled = session.statements[0].compile()
     assert "escrow_listing_intents.seller_id" in str(compiled)
     assert actor_id in compiled.params.values()
+
+
+@pytest.mark.asyncio
+async def test_wallet_reference_cannot_be_spoofed_across_accounts() -> None:
+    actor_id = uuid4()
+    foreign_wallet_id = uuid4()
+    session = MissingResourceSession()
+
+    with pytest.raises(HTTPException) as error:
+        await _verified_wallet(
+            session, user_id=actor_id, wallet_id=foreign_wallet_id
+        )
+
+    assert error.value.status_code == 404
+    compiled = session.statements[0].compile()
+    sql = str(compiled)
+    params = compiled.params.values()
+    assert "wallets.user_id" in sql
+    assert "wallets.is_verified" in sql
+    assert "wallets.network" in sql
+    assert actor_id in params
+    assert foreign_wallet_id in params
