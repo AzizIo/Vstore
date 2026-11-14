@@ -25,6 +25,20 @@ class EscrowWalletAction(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class DealEscrowDeploymentSnapshot:
+    """Immutable per-deal inputs; not a TON payload or opcode definition."""
+
+    network: str
+    listing_key: str
+    seller_address: str
+    buyer_address: str
+    collection_address: str
+    item_address: str
+    principal_nanotons: int
+    deal_salt: str
+
+
+@dataclass(frozen=True, slots=True)
 class TONConnectMessage:
     address: str
     amount: str
@@ -43,7 +57,8 @@ class TONEscrowContractAdapter(Protocol):
     @property
     def abi_version(self) -> str | None: ...
     async def prepare_transaction(self, action: EscrowWalletAction, *,
-        actor_wallet: Wallet, resource_id: str) -> TONConnectTransactionPayload: ...
+        actor_wallet: Wallet, resource_id: str,
+        deal_snapshot: DealEscrowDeploymentSnapshot) -> TONConnectTransactionPayload: ...
 
 
 class UnconfiguredTONEscrowContractAdapter:
@@ -52,8 +67,9 @@ class UnconfiguredTONEscrowContractAdapter:
         return None
 
     async def prepare_transaction(self, action: EscrowWalletAction, *,
-        actor_wallet: Wallet, resource_id: str) -> TONConnectTransactionPayload:
-        del action, actor_wallet, resource_id
+        actor_wallet: Wallet, resource_id: str,
+        deal_snapshot: DealEscrowDeploymentSnapshot) -> TONConnectTransactionPayload:
+        del action, actor_wallet, resource_id, deal_snapshot
         raise EscrowContractABIUnavailable(
             "TON escrow transaction construction is disabled until the contract ABI is approved"
         )
