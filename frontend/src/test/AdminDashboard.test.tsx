@@ -172,7 +172,7 @@ describe("AdminDashboard", () => {
 
     expect(await screen.findByRole("heading", { name: "Карточка пользователя" })).toBeInTheDocument();
     expect(await screen.findByText("0:abcdef…123456")).toBeInTheDocument();
-    expect(screen.getByText("Moon Lantern")).toBeInTheDocument();
+    expect(await screen.findAllByText("Moon Lantern")).not.toHaveLength(0);
     expect(screen.getByRole("heading", { name: "Сделки" })).toBeInTheDocument();
     expect(screen.getByText(/Доставка: Проверяется/)).toBeInTheDocument();
   });
@@ -206,7 +206,7 @@ describe("AdminDashboard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Orders" }));
 
     expect(await screen.findAllByText("Moon Lantern")).not.toHaveLength(0);
-    expect(screen.getByText("Проверка перевода")).toBeInTheDocument();
+    expect(container.querySelector(".ad-status-observing_transfer")).toHaveTextContent("Проверка перевода");
     expect(screen.getByText("Проверяется")).toBeInTheDocument();
     expect(screen.getByText("Только чтение · резервирование не является оплатой")).toBeInTheDocument();
     expect(screen.queryByText(/оплачен|payment|refund|payout/i)).not.toBeInTheDocument();
@@ -224,7 +224,7 @@ describe("AdminDashboard", () => {
     render(<AdminDashboard accessToken="test-token" />);
     fireEvent.click(screen.getByRole("button", { name: "Audit Log" }));
 
-    expect(await screen.findByText("Policy review confirmed")).toBeInTheDocument();
+    expect(await screen.findAllByText("Policy review confirmed")).not.toHaveLength(0);
     expect(api.fetchCombinedAdminAuditLog).toHaveBeenCalledWith(
       "test-token",
       expect.objectContaining({ limit: 25, offset: 0 }),
