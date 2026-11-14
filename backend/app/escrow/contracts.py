@@ -148,7 +148,8 @@ class UnconfiguredTONEscrowContractAdapter:
     ) -> TONConnectTransactionPayload:
         del action, actor_wallet, resource_id, deal_snapshot, reason_hash, query_id, valid_until
         raise EscrowContractABIUnavailable(
-            "TON escrow transaction construction is disabled until ABI/code artifacts are configured"
+            "TON escrow transaction construction is disabled until ABI/code artifacts "
+            "are configured"
         )
 
 
@@ -200,7 +201,11 @@ class PinnedTONEscrowContractAdapter:
             raise EscrowContractABIUnavailable("chain deadline/time snapshot is invalid")
         if valid_until is None:
             valid_until = int(time.time()) + 300
-        if isinstance(valid_until, bool) or not isinstance(valid_until, int) or valid_until <= int(time.time()):
+        if (
+            isinstance(valid_until, bool)
+            or not isinstance(valid_until, int)
+            or valid_until <= int(time.time())
+        ):
             raise EscrowContractABIUnavailable(
                 "valid_until must be a future Unix timestamp"
             )
@@ -215,7 +220,11 @@ class PinnedTONEscrowContractAdapter:
         def require_query_id() -> int:
             if query_id is None:
                 raise TONABIError("query_id is required for this operation")
-            if isinstance(query_id, bool) or not isinstance(query_id, int) or not 0 < query_id < (1 << 64):
+            if (
+                isinstance(query_id, bool)
+                or not isinstance(query_id, int)
+                or not 0 < query_id < (1 << 64)
+            ):
                 raise TONABIError("query_id must be a non-zero uint64")
             return query_id
 
@@ -279,7 +288,9 @@ class PinnedTONEscrowContractAdapter:
                     not is_buyer or state != 6 or deal_snapshot.dispute_phase != 2
                     or deal_snapshot.nft_in_escrow or chain_time > deadline
                 ):
-                    raise TONABIError("NFT return requires a live post-delivery dispute and buyer ownership")
+                    raise TONABIError(
+                        "NFT return requires a live post-delivery dispute and buyer ownership"
+                    )
                 target = item.to_str(is_user_friendly=False)
                 amount = deal_snapshot.nft_return_value_nanotons
                 body = encode_nft_transfer(
@@ -295,7 +306,9 @@ class PinnedTONEscrowContractAdapter:
                     or deadline == 0
                     or chain_time <= deadline
                 ):
-                    raise TONABIError("timeout requires a participant and an expired supported state")
+                    raise TONABIError(
+                        "timeout requires a participant and an expired supported state"
+                    )
                 target = escrow_address
                 amount = deal_snapshot.action_value_nanotons
                 body = encode_simple_action("timeout_deal", require_query_id(), salt)
