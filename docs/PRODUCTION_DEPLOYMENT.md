@@ -216,9 +216,9 @@ docker compose -f docker-compose.production.yml exec -T db \
 test -s "$backup_file"
 ```
 
-The wildcard check only confirms that at least one matching file exists; inspect
-the exact dump name and copy it off-host. Do not treat a backup as verified
-until a restore has succeeded against a separate database.
+The non-empty check confirms the exact dump file was written; inspect its size
+and copy it off-host. Do not treat a backup as verified until a restore has
+succeeded against a separate database.
 
 Keep the previous application image available for rollback. A schema migration
 may not be safely reversible by rolling back only the container image. Review
