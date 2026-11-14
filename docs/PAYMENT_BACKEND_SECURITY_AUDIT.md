@@ -21,11 +21,11 @@
 ## Security observations and changes in this branch
 
 1. Payment intent and transaction rows contain mutable lifecycle fields, but their identifying financial evidence must not be editable after capture.
-2. The event journal already blocks UPDATE and DELETE, but a database-level TRUNCATE guard was missing. The same retention boundary should apply to intent, charge and refund workflow evidence.
+2. The event journal already blocks UPDATE and DELETE, but a database-level TRUNCATE guard was missing. The new guard extends that retention boundary to intent, charge and refund workflow tables; foreign keys keep referenced financial evidence from being deleted while its journal entries remain.
 3. Migration `0015_payment_ledger_guards` adds PostgreSQL guards:
    - intent order/provider/amount/currency/payer/payload/expiry/creation snapshot cannot change;
    - transaction intent/provider/charge IDs/amount/currency/payer/capture timestamp/creation snapshot cannot change;
-   - DELETE and TRUNCATE are rejected for intents, transactions, events and refund workflow rows;
+   - TRUNCATE is rejected for intents, transactions, events and refund workflow rows; ordinary DELETE remains constrained by the append-only event journal and foreign keys;
    - legitimate status, lease, retry and reconciliation fields remain mutable through the state machine.
 4. This migration is additive and follows current Alembic head `e20261114_ton_escrow`. It does not edit prior migrations or PR #198's CI/dependency files.
 
