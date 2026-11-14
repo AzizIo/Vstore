@@ -987,7 +987,7 @@ def test_refund_worker_runtime_rejects_non_test_database_and_shared_bot_token(
         telegram_stars_test_bot_token=SecretStr("123456:dedicated-test-token"),
     )
     monkeypatch.setattr(refund_worker, "get_settings", lambda: unsafe_database_settings)
-    with pytest.raises(RuntimeError, match="dedicated test database"):
+    with pytest.raises(RuntimeError, match="database name must start with test_"):
         refund_worker._validate_worker_runtime()
 
 @pytest.mark.asyncio
@@ -1070,6 +1070,9 @@ async def test_late_provider_success_cannot_mark_a_captured_transaction_refunded
                 reconciliation_count=0,
                 needs_reconciliation=False,
             )
+            # SELECT statements autobegin a transaction; the worker persistence
+            # function owns its transaction boundary.
+            await session.rollback()
             persisted = await refund_worker._persist_claim_result(
                 session,
                 claim,
