@@ -11,16 +11,48 @@ from app import bot_handlers
 from app.bot import BOT_COMMANDS, create_dispatcher, register_bot_commands
 
 
+APP_URL = "https://shop.example.com/miniapp"
+
+
 @pytest.fixture(scope="module")
 def dispatcher() -> Dispatcher:
     return create_dispatcher()
 
 
-def test_dispatcher_registers_message_and_callback_handlers(
+def _settings(url: str | None = APP_URL) -> SimpleNamespace:
+    return SimpleNamespace(telegram_mini_app_url=url)
+
+
+def test_dispatcher_registers_all_user_facing_handlers(
     dispatcher: Dispatcher,
 ) -> None:
+    message_handlers = {
+        handler.callback.__name__ for handler in bot_handlers.router.message.handlers
+    }
+    callback_handlers = {
+        handler.callback.__name__
+        for handler in bot_handlers.router.callback_query.handlers
+    }
 
-    assert isinstance(dispatcher, Dispatcher)
+    assert {
+        "handle_start",
+        "handle_help",
+        "handle_app",
+        "handle_buy",
+        "handle_sell",
+        "handle_orders",
+        "handle_safety",
+        "handle_text_fallback",
+    }.issubset(message_handlers)
+    assert {
+        "handle_help_callback",
+        "handle_menu_callback",
+        "handle_buy_callback",
+        "handle_sell_callback",
+        "handle_orders_callback",
+        "handle_safety_callback",
+        "handle_about_callback",
+    }.issubset(callback_handlers)
     assert bot_handlers.router in dispatcher.sub_routers
     assert {"message", "callback_query"}.issubset(
         set(dispatcher.resolve_used_update_types())
@@ -28,82 +60,160 @@ def test_dispatcher_registers_message_and_callback_handlers(
 
 
 @pytest.mark.asyncio
-async def test_start_handler_sends_welcome_and_configured_mini_app_button(
+async def test_start_shows_premium_welcome_and_full_navigation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        bot_handlers,
-        "get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url="https://dealtime-com-badly-twice.trycloudflare.com"),
-    )
+    monkeypatch.setattr(bot_handlers, "get_settings", lambda: _settings())
     message = SimpleNamespace(answer=AsyncMock())
 
     await bot_handlers.handle_start(message)  # type: ignore[arg-type]
 
     message.answer.assert_awaited_once()
     args = message.answer.await_args
-    assert "<b>VILTARA SHOP</b>" in args.args[0]
+    assert "✨ <b>VILTARA SHOP</b>" in args.args[0]
+    assert "TON NFT marketplace" in args.args[0]
     assert args.kwargs["parse_mode"] == "HTML"
-    keyboard = args.kwargs["reply_markup"]
-    button = keyboard.inline_keyboard[0][0]
-    assert button.text == "Открыть VILTARA SHOP"
-    assert button.style == "primary"
-    assert button.url is None
-    assert button.web_app is not None
-    assert button.web_app.url == "https://dealtime-com-badly-twice.trycloudflare.com"
-    assert keyboard.inline_keyboard[1][0].callback_data == "bot:help"
+    assert args.kwargs["disable_web_page_preview"] is True
+    rows = args.kwargs["reply_markup"].inline_keyboard
+    assert rows[0][0].text == "💎 Открыть VILTARA SHOP"
+    assert rows[0][0].web_app.url == APP_URL
+    assert rows[0][0].style == "primary"
+    callbacks = {
+        button.callback_data
+        for row in rows
+        for button in row
+        if button.callback_data
+    }
+    assert callbacks == {
+        "bot:buy",
+        "bot:sell",
+        "bot:orders",
+        "bot:safety",
+        "bot:about",
+    }
 
 
 @pytest.mark.asyncio
-async def test_start_handler_works_without_optional_mini_app_url(
+async def test_start_menu_remains_useful_without_mini_app_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        bot_handlers,
-        "get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url=None),
-    )
+    monkeypatch.setattr(bot_handlers, "get_settings", lambda: _settings(None))
     message = SimpleNamespace(answer=AsyncMock())
 
     await bot_handlers.handle_start(message)  # type: ignore[arg-type]
 
-    keyboard = message.answer.await_args.kwargs["reply_markup"]
-    assert len(keyboard.inline_keyboard) == 1
-    assert keyboard.inline_keyboard[0][0].callback_data == "bot:help"
+    rows = message.answer.await_args.kwargs["reply_markup"].inline_keyboard
+    assert len(rows) == 4
+    assert rows[0][0].callback_data == "bot:buy"
+    assert rows[-1][0].callback_data == "bot:about"
 
 
 @pytest.mark.asyncio
-async def test_app_command_uses_web_app_button(
+async def test_app_command_uses_primary_web_app_button(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    mini_app_url = "https://dealtime-com-badly-twice.trycloudflare.com"
-    monkeypatch.setattr(
-        bot_handlers,
-        "get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url=mini_app_url),
-    )
+    monkeypatch.setattr(bot_handlers, "get_settings", lambda: _settings())
     message = SimpleNamespace(answer=AsyncMock())
 
     await bot_handlers.handle_app(message)  # type: ignore[arg-type]
 
     message.answer.assert_awaited_once()
-    keyboard = message.answer.await_args.kwargs["reply_markup"]
-    button = keyboard.inline_keyboard[0][0]
-    assert button.url is None
-    assert button.web_app is not None
-    assert button.web_app.url == mini_app_url
+    assert "Ваш VILTARA SHOP" in message.answer.await_args.args[0]
+    button = message.answer.await_args.kwargs["reply_markup"].inline_keyboard[0][0]
+    assert button.web_app.url == APP_URL
     assert button.style == "primary"
 
 
 @pytest.mark.asyncio
-async def test_help_callback_is_acknowledged_and_updates_the_message(
+async def test_app_command_explains_missing_or_invalid_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         bot_handlers,
         "get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url=None),
+        lambda: _settings("http://shop.example.com/miniapp"),
     )
+    message = SimpleNamespace(answer=AsyncMock())
+
+    await bot_handlers.handle_app(message)  # type: ignore[arg-type]
+
+    response = message.answer.await_args
+    assert "Приложение пока недоступно" in response.args[0]
+    assert "TELEGRAM_MINI_APP_URL" in response.args[0]
+    assert "reply_markup" not in response.kwargs
+
+
+@pytest.mark.parametrize(
+    ("screen", "expected"),
+    [
+        ("buy", "Покупка NFT"),
+        ("sell", "Продажа NFT"),
+        ("orders", "Заказы и доставка"),
+        ("safety", "Безопасность прежде всего"),
+        ("about", "О VILTARA SHOP"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_guided_screens_have_clear_copy_and_return_navigation(
+    monkeypatch: pytest.MonkeyPatch,
+    screen: str,
+    expected: str,
+) -> None:
+    monkeypatch.setattr(bot_handlers, "get_settings", lambda: _settings())
+    message = SimpleNamespace(answer=AsyncMock())
+
+    await bot_handlers._send_screen(message, screen)  # type: ignore[arg-type]
+
+    response = message.answer.await_args
+    assert expected in response.args[0]
+    assert response.kwargs["parse_mode"] == "HTML"
+    rows = response.kwargs["reply_markup"].inline_keyboard
+    assert rows[0][0].web_app.url == APP_URL
+    assert rows[-1][0].callback_data == "bot:menu"
+
+
+@pytest.mark.asyncio
+async def test_buyer_and_seller_commands_show_their_guides() -> None:
+    for handler, expected in (
+        (bot_handlers.handle_buy, "Покупка NFT"),
+        (bot_handlers.handle_sell, "Продажа NFT"),
+        (bot_handlers.handle_orders, "Заказы и доставка"),
+        (bot_handlers.handle_safety, "Безопасность прежде всего"),
+    ):
+        message = SimpleNamespace(answer=AsyncMock())
+        await handler(message)  # type: ignore[arg-type]
+        assert expected in message.answer.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_help_screen_explains_supported_assets_and_payment_limits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(bot_handlers, "get_settings", lambda: _settings())
+    message = SimpleNamespace(answer=AsyncMock())
+
+    await bot_handlers.handle_help(message)  # type: ignore[arg-type]
+
+    response = message.answer.await_args
+    assert "Центр помощи VILTARA SHOP" in response.args[0]
+    assert "TEP-62" in response.args[0]
+    assert "Telegram Gifts пока не поддерживаются" in response.args[0]
+    assert "резервирование заказа — не оплата" in response.args[0]
+    callbacks = {
+        button.callback_data
+        for row in response.kwargs["reply_markup"].inline_keyboard
+        for button in row
+        if button.callback_data
+    }
+    assert "bot:buy" in callbacks
+    assert "bot:safety" in callbacks
+
+
+@pytest.mark.asyncio
+async def test_help_callback_is_acknowledged_and_returns_to_help_menu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(bot_handlers, "get_settings", lambda: _settings())
     message = Message(
         message_id=1,
         date=datetime.now(UTC),
@@ -118,77 +228,43 @@ async def test_help_callback_is_acknowledged_and_updates_the_message(
 
     callback.answer.assert_awaited_once()
     edit_text.assert_awaited_once()
-    help_text = edit_text.await_args.args[0]
-    assert "Создание заказа резервирует объявление" in help_text
-    assert "Продавец подтверждает перевод NFT в своём TON-кошельке" in help_text
-    assert "backend отдельно проверяет передачу по данным сети" in help_text
-    assert "Платёж, escrow и гарантия сделки не реализованы" in help_text
+    assert "Центр помощи VILTARA SHOP" in edit_text.await_args.args[0]
     assert edit_text.await_args.kwargs["parse_mode"] == "HTML"
-    keyboard = edit_text.await_args.kwargs["reply_markup"]
-    assert keyboard.inline_keyboard[0][0].callback_data == "bot:menu"
+    assert edit_text.await_args.kwargs["reply_markup"].inline_keyboard[-1][0].callback_data in {
+        "bot:buy",
+        "bot:about",
+    }
 
 
 @pytest.mark.asyncio
-async def test_help_command_explains_supported_features_and_limits(
+async def test_guided_callback_edits_message_and_acknowledges_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        bot_handlers,
-        "get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url="https://dealtime-com-badly-twice.trycloudflare.com"),
-    )
-    message = SimpleNamespace(answer=AsyncMock())
-
-    await bot_handlers.handle_help(message)  # type: ignore[arg-type]
-
-    message.answer.assert_awaited_once()
-    text = message.answer.await_args.args[0]
-    assert "<b>Каталог</b>" in text
-    assert "Каталог" in text
-    assert "Объявления" in text
-    assert "Заказы" in text
-    assert "Создание заказа резервирует объявление" in text
-    assert "Продавец подтверждает перевод NFT в своём TON-кошельке" in text
-    assert "backend отдельно проверяет передачу по данным сети" in text
-    assert "Платёж, escrow и гарантия сделки не реализованы" in text
-    keyboard = message.answer.await_args.kwargs["reply_markup"]
-    assert keyboard.inline_keyboard[0][0].url is None
-    assert keyboard.inline_keyboard[0][0].web_app is not None
-    assert keyboard.inline_keyboard[0][0].web_app.url == "https://dealtime-com-badly-twice.trycloudflare.com"
-
-
-@pytest.mark.asyncio
-async def test_app_command_explains_missing_mini_app_configuration(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        bot_handlers,
-        "get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url=None),
-    )
-    message = SimpleNamespace(answer=AsyncMock())
-
-    await bot_handlers.handle_app(message)  # type: ignore[arg-type]
-
-    message.answer.assert_awaited_once()
-    text = message.answer.await_args.args[0]
-    assert "Приложение пока недоступно" in text
-    assert "TELEGRAM_MINI_APP_URL" in text
-    assert "/help" in text
-    assert "reply_markup" not in message.answer.await_args.kwargs
-
-
-@pytest.mark.asyncio
-async def test_menu_callback_acknowledges_query_and_restores_main_menu(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        bot_handlers,
-        "get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url="https://dealtime-com-badly-twice.trycloudflare.com"),
-    )
+    monkeypatch.setattr(bot_handlers, "get_settings", lambda: _settings())
     message = Message(
         message_id=2,
+        date=datetime.now(UTC),
+        chat=Chat(id=123, type="private"),
+        text="Main menu",
+    )
+    edit_text = AsyncMock()
+    monkeypatch.setattr(Message, "edit_text", edit_text)
+    callback = SimpleNamespace(answer=AsyncMock(), message=message)
+
+    await bot_handlers.handle_buy_callback(callback)  # type: ignore[arg-type]
+
+    callback.answer.assert_awaited_once()
+    assert "Покупка NFT" in edit_text.await_args.args[0]
+    assert edit_text.await_args.kwargs["reply_markup"].inline_keyboard[-1][0].callback_data == "bot:menu"
+
+
+@pytest.mark.asyncio
+async def test_menu_callback_restores_premium_start_screen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(bot_handlers, "get_settings", lambda: _settings())
+    message = Message(
+        message_id=3,
         date=datetime.now(UTC),
         chat=Chat(id=123, type="private"),
         text="Help screen",
@@ -200,37 +276,47 @@ async def test_menu_callback_acknowledges_query_and_restores_main_menu(
     await bot_handlers.handle_menu_callback(callback)  # type: ignore[arg-type]
 
     callback.answer.assert_awaited_once()
-    edit_text.assert_awaited_once()
     assert edit_text.await_args.args[0] == bot_handlers.START_MESSAGE
-    assert edit_text.await_args.kwargs["parse_mode"] == "HTML"
-    keyboard = edit_text.await_args.kwargs["reply_markup"]
-    assert keyboard.inline_keyboard[0][0].url is None
-    assert keyboard.inline_keyboard[0][0].web_app is not None
-    assert keyboard.inline_keyboard[0][0].web_app.url == "https://dealtime-com-badly-twice.trycloudflare.com"
-    assert keyboard.inline_keyboard[1][0].callback_data == "bot:help"
+    assert "✨ <b>VILTARA SHOP</b>" in edit_text.await_args.args[0]
 
 
 @pytest.mark.asyncio
-async def test_plain_text_fallback_guides_user_to_supported_actions(
+async def test_only_duplicate_message_edit_errors_are_suppressed() -> None:
+    message = Message(
+        message_id=4,
+        date=datetime.now(UTC),
+        chat=Chat(id=123, type="private"),
+        text="Existing screen",
+    )
+    callback = SimpleNamespace(answer=AsyncMock(), message=message)
+    duplicate = TelegramBadRequest(
+        method=SimpleNamespace(),
+        message="Bad Request: message is not modified",
+    )
+    edit_text = AsyncMock(side_effect=duplicate)
+    original = Message.edit_text
+    Message.edit_text = edit_text  # type: ignore[method-assign]
+    try:
+        await bot_handlers.handle_buy_callback(callback)  # type: ignore[arg-type]
+    finally:
+        Message.edit_text = original  # type: ignore[method-assign]
+
+    callback.answer.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_plain_text_fallback_points_to_new_commands(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        bot_handlers,
-        "get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url=None),
-    )
+    monkeypatch.setattr(bot_handlers, "get_settings", lambda: _settings(None))
     message = SimpleNamespace(answer=AsyncMock())
 
     await bot_handlers.handle_text_fallback(message)  # type: ignore[arg-type]
 
-    message.answer.assert_awaited_once()
-    text = message.answer.await_args.args[0]
-    assert "Не удалось распознать сообщение" in text
-    assert "/start" in text
-    assert "/app" in text
-    assert "/help" in text
-    keyboard = message.answer.await_args.kwargs["reply_markup"]
-    assert keyboard.inline_keyboard[0][0].callback_data == "bot:help"
+    response = message.answer.await_args
+    assert "не умею отвечать на свободные сообщения" in response.args[0]
+    for command in ("/start", "/app", "/buy", "/sell", "/orders", "/safety", "/help"):
+        assert command in response.args[0]
 
 
 @pytest.mark.asyncio
@@ -238,16 +324,12 @@ async def test_unknown_command_is_routed_to_fallback_without_exception(
     monkeypatch: pytest.MonkeyPatch,
     dispatcher: Dispatcher,
 ) -> None:
-    monkeypatch.setattr(
-        bot_handlers,
-        "get_settings",
-        lambda: SimpleNamespace(telegram_mini_app_url=None),
-    )
+    monkeypatch.setattr(bot_handlers, "get_settings", lambda: _settings(None))
     answer = AsyncMock()
     monkeypatch.setattr(Message, "answer", answer)
-    bot = Bot(token="123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi")
+    telegram_bot = Bot(token="123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi")
     message = Message(
-        message_id=3,
+        message_id=5,
         date=datetime.now(UTC),
         chat=Chat(id=123, type="private"),
         text="/unsupported",
@@ -255,98 +337,31 @@ async def test_unknown_command_is_routed_to_fallback_without_exception(
 
     try:
         await dispatcher.feed_update(
-            bot,
-            Update(update_id=10, message=message),
+            telegram_bot,
+            Update(update_id=11, message=message),
         )
     finally:
-        await bot.session.close()
+        await telegram_bot.session.close()
 
     answer.assert_awaited_once()
-    assert "Не удалось распознать сообщение" in answer.await_args.args[0]
-
-
-def test_dispatcher_registers_each_public_handler(
-    dispatcher: Dispatcher,
-) -> None:
-    message_handlers = {
-        handler.callback.__name__ for handler in bot_handlers.router.message.handlers
-    }
-    callback_handlers = {
-        handler.callback.__name__ for handler in bot_handlers.router.callback_query.handlers
-    }
-
-    assert {
-        "handle_start",
-        "handle_help",
-        "handle_app",
-        "handle_text_fallback",
-    }.issubset(message_handlers)
-    assert {"handle_help_callback", "handle_menu_callback"}.issubset(
-        callback_handlers
-    )
-    assert bot_handlers.router in dispatcher.sub_routers
-    assert {"message", "callback_query"}.issubset(
-        set(dispatcher.resolve_used_update_types())
-    )
-
+    assert "не умею отвечать" in answer.await_args.args[0]
 
 
 @pytest.mark.asyncio
-async def test_start_menu_accepts_public_https_mini_app_url(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        bot_handlers,
-        "get_settings",
-        lambda: SimpleNamespace(
-            telegram_mini_app_url="https://shop.example.com/miniapp"
-        ),
-    )
-    message = SimpleNamespace(answer=AsyncMock())
+async def test_register_bot_commands_publishes_russian_command_menu() -> None:
+    telegram_bot = SimpleNamespace(set_my_commands=AsyncMock())
 
-    await bot_handlers.handle_start(message)  # type: ignore[arg-type]
+    await register_bot_commands(telegram_bot)  # type: ignore[arg-type]
 
-    keyboard = message.answer.await_args.kwargs["reply_markup"]
-    assert len(keyboard.inline_keyboard) == 2
-    button = keyboard.inline_keyboard[0][0]
-    assert button.web_app is not None
-    assert button.web_app.url == "https://shop.example.com/miniapp"
-    assert button.style == "primary"
-    assert keyboard.inline_keyboard[1][0].callback_data == "bot:help"
-
-
-@pytest.mark.asyncio
-async def test_app_command_explains_invalid_mini_app_url(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        bot_handlers,
-        "get_settings",
-        lambda: SimpleNamespace(
-            telegram_mini_app_url="http://shop.example.com/miniapp"
-        ),
-    )
-    message = SimpleNamespace(answer=AsyncMock())
-
-    await bot_handlers.handle_app(message)  # type: ignore[arg-type]
-
-    response_text = message.answer.await_args.args[0]
-    assert "не настроена или указана неверно" in response_text
-    assert "публичный HTTPS-адрес" in response_text
-    assert "reply_markup" not in message.answer.await_args.kwargs
-
-
-@pytest.mark.asyncio
-async def test_register_bot_commands_exposes_russian_command_menu() -> None:
-    bot = SimpleNamespace(set_my_commands=AsyncMock())
-
-    await register_bot_commands(bot)  # type: ignore[arg-type]
-
-    bot.set_my_commands.assert_awaited_once_with(BOT_COMMANDS)
+    telegram_bot.set_my_commands.assert_awaited_once_with(BOT_COMMANDS)
     assert [(command.command, command.description) for command in BOT_COMMANDS] == [
         ("start", "Открыть главное меню"),
         ("app", "Открыть VILTARA SHOP"),
-        ("help", "Справка и инструкции"),
+        ("buy", "Как купить NFT"),
+        ("sell", "Как продать NFT"),
+        ("orders", "Заказы и доставка"),
+        ("safety", "Правила безопасности"),
+        ("help", "Центр помощи"),
     ]
 
 
@@ -357,46 +372,48 @@ async def test_register_bot_commands_exposes_russian_command_menu() -> None:
         "https://example.com:not-a-port/miniapp",
         "https://example .com/miniapp",
         "https://user:password@example.com/miniapp",
+        "http://shop.example.com/miniapp",
     ),
 )
-def test_mini_app_button_rejects_malformed_or_credentialed_https_urls(
-    url: str,
-) -> None:
+def test_mini_app_button_rejects_malformed_or_unsafe_urls(url: str) -> None:
     assert bot_handlers._mini_app_button(url) is None
 
 
-@pytest.mark.parametrize(
-    ("error_message", "should_raise"),
-    [
-        ("Bad Request: message is not modified", False),
-        ("Bad Request: message can't be edited", True),
-    ],
-)
 @pytest.mark.asyncio
-async def test_help_callback_suppresses_only_duplicate_message_edit_errors(
+async def test_start_menu_accepts_valid_public_https_mini_app_url(
     monkeypatch: pytest.MonkeyPatch,
-    error_message: str,
-    should_raise: bool,
+) -> None:
+    monkeypatch.setattr(
+        bot_handlers,
+        "get_settings",
+        lambda: _settings("https://shop.example.com/miniapp"),
+    )
+    message = SimpleNamespace(answer=AsyncMock())
+
+    await bot_handlers.handle_start(message)  # type: ignore[arg-type]
+
+    button = message.answer.await_args.kwargs["reply_markup"].inline_keyboard[0][0]
+    assert button.web_app.url == "https://shop.example.com/miniapp"
+    assert button.style == "primary"
+
+
+@pytest.mark.asyncio
+async def test_menu_callback_ignores_only_message_not_modified_error(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     message = Message(
-        message_id=10,
+        message_id=6,
         date=datetime.now(UTC),
         chat=Chat(id=123, type="private"),
-        text="Existing help screen",
+        text="Existing menu",
     )
     edit_error = TelegramBadRequest(
         method=SimpleNamespace(),
-        message=error_message,
+        message="Bad Request: message can't be edited",
     )
     edit_text = AsyncMock(side_effect=edit_error)
     monkeypatch.setattr(Message, "edit_text", edit_text)
     callback = SimpleNamespace(answer=AsyncMock(), message=message)
 
-    if should_raise:
-        with pytest.raises(TelegramBadRequest, match="can't be edited"):
-            await bot_handlers.handle_help_callback(callback)  # type: ignore[arg-type]
-    else:
-        await bot_handlers.handle_help_callback(callback)  # type: ignore[arg-type]
-
-    callback.answer.assert_awaited_once()
-    edit_text.assert_awaited_once()
+    with pytest.raises(TelegramBadRequest, match="can't be edited"):
+        await bot_handlers.handle_menu_callback(callback)  # type: ignore[arg-type]
