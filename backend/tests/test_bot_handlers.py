@@ -415,3 +415,27 @@ async def test_menu_callback_ignores_only_message_not_modified_error(
 
     with pytest.raises(TelegramBadRequest, match="can't be edited"):
         await bot_handlers.handle_menu_callback(callback)  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_about_callback_opens_marketplace_overview(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(bot_handlers, "get_settings", lambda: _settings(None))
+    message = Message(
+        message_id=7,
+        date=datetime.now(UTC),
+        chat=Chat(id=123, type="private"),
+        text="Main menu",
+    )
+    edit_text = AsyncMock()
+    monkeypatch.setattr(Message, "edit_text", edit_text)
+    callback = SimpleNamespace(answer=AsyncMock(), message=message)
+
+    await bot_handlers.handle_about_callback(callback)  # type: ignore[arg-type]
+
+    callback.answer.assert_awaited_once()
+    assert "P2P-маркетплейс" in edit_text.await_args.args[0]
+    assert "Telegram Gifts" in edit_text.await_args.args[0]
+    rows = edit_text.await_args.kwargs["reply_markup"].inline_keyboard
+    assert rows[-1][0].callback_data == "bot:menu"
