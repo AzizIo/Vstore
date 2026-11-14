@@ -465,6 +465,7 @@
 }
 
 .escrow-wallet-select select,
+.escrow-wallet-select input,
 .escrow-dispute-reason textarea {
   width: 100%;
   min-width: 0;
@@ -475,6 +476,13 @@
   background: #10150f;
   color: var(--escrow-ink);
   font-size: 13px;
+}
+
+.escrow-wallet-select small {
+  color: var(--escrow-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .escrow-dispute-reason textarea {
