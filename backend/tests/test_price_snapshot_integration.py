@@ -35,7 +35,6 @@ from app.db.models import (
 )
 from app.listings.service import publish_listing
 from app.orders.service import create_order
-
 from tests.database_safety import require_test_database_url
 
 pytestmark = pytest.mark.integration
