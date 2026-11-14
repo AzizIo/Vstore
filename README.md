@@ -4,7 +4,7 @@ VILTARA SHOP is a Telegram Mini App and optional bot for a peer-to-peer marketpl
 
 **Reservation is not payment.** The product does not collect funds, provide escrow, transfer NFTs on behalf of users, or hold assets. A reservation records the buyer, seller, listing, price/currency snapshot, expiry and lifecycle events. NFT delivery is a separate, non-custodial step: the seller signs from their wallet and the backend observer independently checks chain evidence. A reservation is not proof of delivery or payment.
 
-Product boundaries and decisions approved for the current MVP are recorded in [docs/PRODUCT_MODEL.md](docs/PRODUCT_MODEL.md).
+Product boundaries and decisions approved for the current MVP are recorded in [docs/PRODUCT_MODEL.md](docs/PRODUCT_MODEL.md). Production and monetization launch gates are tracked in [docs/RELEASE_READINESS_2026-11-14.md](docs/RELEASE_READINESS_2026-11-14.md); do not treat the Stars test harness or testnet escrow as live settlement.
 
 Admin workspace: `/admin`. Access is fail-closed and requires the server-side `ADMIN_TELEGRAM_IDS` JSON array of numeric Telegram user IDs. The default is `[]` (no admin access). Never commit real administrator IDs or credentials.
 
