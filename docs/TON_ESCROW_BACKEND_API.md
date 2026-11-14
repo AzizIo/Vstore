@@ -15,7 +15,9 @@ This API follows `docs/TON_ESCROW_SHARED_INTERFACE.md`. It defines transport sem
 - The observer stores raw evidence separately from accepted contract events. Accepted NFT deposit/delivery/return events must match both the snapshotted collection and item; raw NFT transfer observations cannot advance canonical deal state.
 - Non-final, unverified or unmatched events remain pending and pin the durable cursor. The same provider page is re-queried until it can be promoted or reconciled. Missing deal/contract reconciliation and stale sequence/logical-time events also remain pending; database commit failure rolls back the batch and leaves the durable cursor unchanged. Conflicting immutable event parameters move to manual review.
 - Event identity is a SHA-256 key over network, transaction hash, message hash (or event index), trace, phase and attempt. Logical time, deal salt, collection/item and contract-state facts remain correlated payload fields; compatible pending evidence may be enriched, while conflicting values are moved to manual review. A provider must keep the identity tuple stable between non-final and final scans.
-- No contract adapter/provider is configured. All transaction preparation, wallet-reference submission and settlement actions fail closed with HTTP 503.
+- No contract adapter/provider is configured. Preparation remains HTTP 503, but each authorized preparation attempt first persists an idempotent `escrow_wallet_actions` record and returns its stable `action_id` in the error detail. This is an audit/recovery intent, not a transaction payload or permission to broadcast.
+- Durable action identity binds actor, deal, action, idempotency key and the immutable deal/wallet snapshot. Exact retries reuse the row; payload conflicts return HTTP 409. Attempt/query IDs, unsigned BOC digest/reference, submission reference/digest, lease/retry metadata and safe error codes are reserved in the schema.
+- The shared marketplace `Listing` row is locked and moved to `RESERVED` in the same transaction as the escrow deal intent. Escrow-only projection state is not sufficient to prevent a parallel ordinary Order.
 - No production/mainnet routes, real TON transfers, production migrations or observer autostart are enabled.
 
 ## Endpoints
@@ -113,3 +115,6 @@ The isolated router must remain unmounted until all of the following are approve
 4. The full backend, migration and API-backed E2E suites pass against disposable test infrastructure. No migration is run against production or VPS databases.
 
 Payout and refund remain contract-initiated state transitions. The API exposes their pending/finalized state through the deal projection and does not provide a manual client-controlled financial trigger.
+
+
+See [TON escrow durable actions](TON_ESCROW_DURABLE_ACTIONS.md) for the action persistence contract, immutable identity guards, submission-reference policy and migration `e20261115_escrow_actions`.
