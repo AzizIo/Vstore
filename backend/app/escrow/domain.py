@@ -53,7 +53,9 @@ class EscrowChainEventType(StrEnum):
     DISPUTE_OPENED_ONCHAIN = "dispute_opened_onchain"
     DISPUTE_RESOLUTION_ACCEPTED = "dispute_resolution_accepted"
     ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED = "oracle_nft_return_attestation_accepted"
+    SELLER_PAYOUT_INITIATED = "seller_payout_initiated"
     SELLER_PAYOUT_RECONCILED = "seller_payout_reconciled"
+    BUYER_REFUND_INITIATED = "buyer_refund_initiated"
     BUYER_REFUND_RECONCILED = "buyer_refund_reconciled"
     DEAL_EXPIRED = "deal_expired"
     MANUAL_REVIEW_REQUIRED = "manual_review_required"
@@ -105,7 +107,9 @@ _CHAIN_TRANSITIONS: dict[tuple[EscrowDealStatus, EscrowChainEventType], EscrowDe
     (EscrowDealStatus.NFT_RELEASE_PENDING, EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED): EscrowDealStatus.DELIVERED_DISPUTE_WINDOW,
     (EscrowDealStatus.DELIVERED_DISPUTE_WINDOW, EscrowChainEventType.DISPUTE_OPENED_ONCHAIN): EscrowDealStatus.DISPUTED,
     (EscrowDealStatus.DISPUTED, EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED): EscrowDealStatus.NFT_RETURN_PENDING,
-    (EscrowDealStatus.DELIVERED_DISPUTE_WINDOW, EscrowChainEventType.SELLER_PAYOUT_RECONCILED): EscrowDealStatus.SETTLED,
+    (EscrowDealStatus.DELIVERED_DISPUTE_WINDOW, EscrowChainEventType.SELLER_PAYOUT_INITIATED): EscrowDealStatus.SELLER_PAYOUT_PENDING,
+    (EscrowDealStatus.SELLER_PAYOUT_PENDING, EscrowChainEventType.SELLER_PAYOUT_RECONCILED): EscrowDealStatus.SETTLED,
+    (EscrowDealStatus.NFT_RETURN_PENDING, EscrowChainEventType.BUYER_REFUND_INITIATED): EscrowDealStatus.BUYER_REFUND_PENDING,
     (EscrowDealStatus.BUYER_REFUND_PENDING, EscrowChainEventType.BUYER_REFUND_RECONCILED): EscrowDealStatus.REFUNDED,
     (EscrowDealStatus.INTENT_CREATED, EscrowChainEventType.DEAL_EXPIRED): EscrowDealStatus.EXPIRED,
     (EscrowDealStatus.AWAITING_NFT, EscrowChainEventType.DEAL_EXPIRED): EscrowDealStatus.EXPIRED,
@@ -209,14 +213,18 @@ def validate_event_against_deal(event: NormalizedEventEvidence, deal: DealEviden
         or event.amount_nanotons != deal.principal_nanotons
     ):
         raise EscrowDomainError("Payment sender, escrow recipient or exact principal does not match the deal")
+    if event.event_type is EscrowChainEventType.BUYER_ACCEPTANCE_RECORDED and (
+        event.source_address != deal.buyer_address or event.destination_address != deal.contract_address
+    ):
+        raise EscrowDomainError("Buyer acceptance must originate from the bound buyer wallet")
     if event.event_type is EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED and (
         event.source_address != deal.contract_address or event.destination_address != deal.buyer_address
     ):
         raise EscrowDomainError("NFT source or destination does not match the deal")
     if event.event_type is EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED and (
-        event.source_address != deal.contract_address or event.destination_address != deal.seller_address
+        event.source_address != deal.buyer_address or event.destination_address != deal.contract_address
     ):
-        raise EscrowDomainError("NFT return to seller must use the fixed escrow and seller")
+        raise EscrowDomainError("Buyer NFT return must reach the fixed escrow from the bound buyer")
     if event.event_type is EscrowChainEventType.SELLER_PAYOUT_RECONCILED and (
         event.source_address != deal.contract_address
         or event.destination_address != deal.seller_address
