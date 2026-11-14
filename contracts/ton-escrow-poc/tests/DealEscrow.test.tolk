@@ -92,14 +92,11 @@ fun createFixture(salt: uint256): (DealEscrow, TestNftItem, Treasury, Treasury) 
     return (escrow, nftItem, seller, buyer);
 }
 
-fun deployAndActivate(
+fun activateDeal(
     escrow: DealEscrow,
     seller: Treasury,
     salt: uint256,
 ) {
-    val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
-    expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
-
     val activate = escrow.sendActivateDeal(
         seller.address,
         1,
@@ -110,6 +107,16 @@ fun deployAndActivate(
         from: seller.address,
         to: escrow.address,
     });
+}
+
+fun deployAndActivate(
+    escrow: DealEscrow,
+    seller: Treasury,
+    salt: uint256,
+) {
+    val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
+    expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
+    activateDeal(escrow, seller, salt);
 }
 
 fun buildDepositBody(escrowAddress: address, sellerAddress: address, queryId: uint64, salt: uint256): cell {
@@ -193,7 +200,7 @@ get fun `test exact TEP-62 item deposit unlocks buyer funding state`() {
     val nftDeploy = nftItem.deploy(seller.address, { value: grams("0.05"), bounce: false });
     expect(nftDeploy).toHaveSuccessfulDeploy({ to: nftItem.address });
 
-    deployAndActivate(escrow, seller, 0xA11D1);
+    activateDeal(escrow, seller, 0xA11D1);
     depositExpectedNft(escrow, nftItem, seller, 0xA11D1);
     expect(escrow.getState()).toEqual(STATE_AWAITING_BUYER_FUNDS);
 }
@@ -204,7 +211,7 @@ get fun `test a different NFT item sender cannot unlock buyer funding`() {
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
     val realItemDeploy = nftItem.deploy(seller.address, { value: grams("0.05"), bounce: false });
     expect(realItemDeploy).toHaveSuccessfulDeploy({ to: nftItem.address });
-    deployAndActivate(escrow, seller, 0xA11D2);
+    activateDeal(escrow, seller, 0xA11D2);
 
     val fakeOwner = testing.treasury("fake-item-owner");
     val fakeItem = TestNftItem.fromStorage({ ownerAddress: fakeOwner.address, fixtureSalt: 0xA11D2 + 100 });
@@ -228,7 +235,7 @@ get fun `test buyer must attach exact principal plus execution reserve`() {
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
     val nftDeploy = nftItem.deploy(seller.address, { value: grams("0.05"), bounce: false });
     expect(nftDeploy).toHaveSuccessfulDeploy({ to: nftItem.address });
-    deployAndActivate(escrow, seller, 0xA11D3);
+    activateDeal(escrow, seller, 0xA11D3);
     depositExpectedNft(escrow, nftItem, seller, 0xA11D3);
 
     val invalidFunding = escrow.sendFundDeal(
@@ -263,7 +270,7 @@ get fun `test buyer acceptance is pre-delivery and participant scoped`() {
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
     val nftDeploy = nftItem.deploy(seller.address, { value: grams("0.05"), bounce: false });
     expect(nftDeploy).toHaveSuccessfulDeploy({ to: nftItem.address });
-    deployAndActivate(escrow, seller, 0xA11D4);
+    activateDeal(escrow, seller, 0xA11D4);
     depositExpectedNft(escrow, nftItem, seller, 0xA11D4);
     escrow.sendFundDeal(buyer.address, 1001, 0xA11D4, { value: grams("1.5"), bounce: true });
 
@@ -300,7 +307,7 @@ get fun `test observed NFT transfer alone never settles a deal`() {
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
     val nftDeploy = nftItem.deploy(seller.address, { value: grams("0.05"), bounce: false });
     expect(nftDeploy).toHaveSuccessfulDeploy({ to: nftItem.address });
-    deployAndActivate(escrow, seller, 0xA11D5);
+    activateDeal(escrow, seller, 0xA11D5);
     depositExpectedNft(escrow, nftItem, seller, 0xA11D5);
     escrow.sendFundDeal(buyer.address, 1001, 0xA11D5, { value: grams("1.5"), bounce: true });
     escrow.sendAcceptDeal(buyer.address, 1003, 0xA11D5, { value: grams("0.03"), bounce: true });
