@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.db.models import (
     AssetType,
     AssetVerificationStatus,
@@ -121,7 +122,7 @@ async def _seed_order(*, buyer_telegram_id: int, stars: int) -> dict[str, object
         )
         session.add(order)
 
-    settings_name = urlsplit(__import__("app.core.config", fromlist=["get_settings"]).get_settings().database_url).path.lstrip("/")
+    settings_name = urlsplit(get_settings().database_url).path.lstrip("/").split("?", maxsplit=1)[0]
     return {
         "order_id": str(order_id),
         "stars_amount": stars,
