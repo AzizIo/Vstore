@@ -119,7 +119,7 @@ async def _deal_projection(session: AsyncSession, deal: EscrowDeal, actor_id: UU
         id=deal.id, listing_id=deal.marketplace_listing_id, listing_key=intent.listing_key if intent else "",
         buyer_id=deal.buyer_id, seller_id=deal.seller_id, state=deal.status, network="testnet",
         nft=EscrowNftProjection(
-            asset_id=intent.asset_id if intent else UUID(int=0),
+            asset_id=intent.asset_id if intent else None,
             title=asset.name if asset and asset.name else "TON NFT",
             image_url=asset.image_url if asset else None, item_address=deal.item_address,
             collection_address=deal.collection_address_snapshot,
@@ -555,7 +555,7 @@ async def _prepare_action(
         )
         if wallet_address != deal.seller_address_snapshot:
             raise HTTPException(status_code=409, detail="Verified seller wallet snapshot has changed")
-        if action is EscrowWalletAction.DEPOSIT_NFT:
+        if action in {EscrowWalletAction.CREATE_DEAL_ESCROW, EscrowWalletAction.DEPOSIT_NFT}:
             await _verify_current_nft_owner(
                 verifier, item_address=deal.item_address, seller_address=deal.seller_address_snapshot,
             )
