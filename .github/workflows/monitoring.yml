@@ -1,0 +1,40 @@
+name: Monitoring configuration
+
+on:
+  pull_request:
+    paths:
+      - "docs/monitoring/**"
+      - ".github/workflows/monitoring.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/monitoring/**"
+      - ".github/workflows/monitoring.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  monitoring-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate YAML syntax
+        run: |
+          ruby -e 'require "yaml"; ARGV.each { |path| YAML.safe_load_file(path, aliases: false) }' \
+            docs/monitoring/prometheus.yml.example \
+            docs/monitoring/blackbox.yml.example \
+            docs/monitoring/rules/alerts.yml \
+            docs/monitoring/alertmanager.yml.example
+      - name: Validate rules and alert recovery simulation
+        run: python docs/monitoring/scripts/check_monitoring.py --simulate
+      - name: Run endpoint probe safety tests
+        run: python -m unittest discover -s docs/monitoring/tests -v
+      - name: Compile monitoring scripts
+        run: python -m py_compile docs/monitoring/scripts/*.py
