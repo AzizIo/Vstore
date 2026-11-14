@@ -37,8 +37,8 @@ jobs:
         run: |
           set -euo pipefail
           curl -LsSf https://github.com/ton-blockchain/acton/releases/latest/download/acton-installer.sh | sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          "$HOME/.local/bin/acton" --version
+          echo "$HOME/.acton/bin" >> "$GITHUB_PATH"
+          "$HOME/.acton/bin/acton" --version
 
       - name: Pin toolchain and refresh standard library
         run: |
