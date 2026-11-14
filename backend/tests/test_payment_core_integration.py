@@ -628,6 +628,7 @@ async def test_escrow_deal_terms_are_immutable_in_postgres(
                     idempotency_key=f"escrow-listing-{uuid4()}",
                 )
             )
+            await session.flush()
             session.add(
                 EscrowDeal(
                     id=deal_id,
