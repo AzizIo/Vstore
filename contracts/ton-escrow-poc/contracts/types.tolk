@@ -112,6 +112,16 @@ struct DealTerms {
     protocolVersion: uint16
 }
 
+struct DealEvidence {
+    lastEvidenceHash: uint256
+    disputeReasonHash: uint256
+}
+
+struct DealRecovery {
+    unexpectedPreviousOwner: address?
+    unexpectedItemAddress: address?
+}
+
 struct DealProgress {
     state: uint8
     deadlineUnix: uint64
@@ -119,10 +129,8 @@ struct DealProgress {
     pendingAction: uint8
     nftInEscrow: bool
     principalLocked: bool
-    lastEvidenceHash: uint256
-    disputeReasonHash: uint256
-    unexpectedPreviousOwner: address?
-    unexpectedItemAddress: address?
+    evidence: Cell<DealEvidence>
+    recovery: Cell<DealRecovery>
 }
 
 struct EscrowStorage {
