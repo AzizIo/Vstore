@@ -8,6 +8,7 @@ on:
       - "backend/**"
       - "docker-compose.yml"
       - "docker-compose.preview.yml"
+      - "docker-compose.stars-test.yml"
       - ".env.example"
       - ".github/workflows/backend.yml"
   pull_request:
@@ -15,6 +16,7 @@ on:
       - "backend/**"
       - "docker-compose.yml"
       - "docker-compose.preview.yml"
+      - "docker-compose.stars-test.yml"
       - ".env.example"
       - ".github/workflows/backend.yml"
 
@@ -104,6 +106,33 @@ jobs:
           assert api_env["BOT_TOKEN"] == bot_env["BOT_TOKEN"]
           '
 
+      - name: Validate isolated Telegram Stars test Compose configuration
+        working-directory: .
+        env:
+          TELEGRAM_STARS_TEST_BOT_TOKEN: 123456:test-server-placeholder
+          STARS_TEST_DB_PASSWORD: 0123456789abcdef0123456789abcdef0123456789abcdef
+        run: |
+          docker compose -p viltara-stars-test -f docker-compose.stars-test.yml --profile bot --profile tools --profile refund-worker config --quiet
+          docker compose -p viltara-stars-test -f docker-compose.stars-test.yml --profile bot --profile tools --profile refund-worker config --format json | python -c '
+          import json, sys
+          config = json.load(sys.stdin)
+          services = config["services"]
+          assert config.get("name") == "viltara-stars-test", "Stars test project must have a dedicated name"
+          assert set(("db", "migrate", "tools", "bot", "refund-worker")).issubset(services)
+          for name, service in services.items():
+              assert not service.get("ports"), f"{name} must not publish host ports"
+              assert not service.get("env_file"), f"{name} must not load a production env file"
+          assert set(services["db"]["volumes"][0].keys()) == {"type", "source", "target"}
+          app_services = ("migrate", "tools", "bot", "refund-worker")
+          for name in app_services:
+              env = services[name]["environment"]
+              assert env["ENVIRONMENT"] == "test"
+              assert env["TELEGRAM_STARS_TEST_ENABLED"] == "true"
+              assert env["TELEGRAM_STARS_TEST_BOT_TOKEN"] != env["BOT_TOKEN"]
+              assert "viltara_test" in env["DATABASE_URL"]
+              assert "@db:" in env["DATABASE_URL"]
+          assert "stars_test_data" in config["volumes"]
+          '
       - name: Lint
         run: ruff check app tests migrations scripts
 
