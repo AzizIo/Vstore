@@ -133,6 +133,7 @@ class EscrowDeal(TimestampMixin, EscrowBase):
         Uuid(as_uuid=True), ForeignKey("wallets.id", ondelete="RESTRICT"), nullable=False
     )
     network: Mapped[str] = mapped_column(String(16), server_default="testnet", nullable=False)
+    deal_salt: Mapped[str] = mapped_column(String(128), nullable=False)
     contract_address: Mapped[str | None] = mapped_column(String(128))
     contract_abi_version: Mapped[str | None] = mapped_column(String(64))
     item_address: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -154,24 +155,33 @@ class EscrowChainEvent(TimestampMixin, EscrowBase):
         CheckConstraint("network = 'testnet'", name="ck_escrow_event_network_testnet"),
         CheckConstraint("event_index >= 0", name="ck_escrow_event_index_nonnegative"),
         CheckConstraint(
-            "status IN ('applied', 'duplicate', 'rejected', 'manual_review', 'unmatched')",
+            "status IN ('pending', 'applied', 'duplicate', 'rejected', 'manual_review', 'unmatched')",
             name="ck_escrow_event_status",
         ),
         CheckConstraint(
             "length(evidence_sha256) = 64", name="ck_escrow_event_evidence_hash"
         ),
-        UniqueConstraint(
-            "network", "transaction_hash", "event_index", name="uq_escrow_chain_event_position"
-        ),
+        UniqueConstraint("network", "event_key", name="uq_escrow_chain_event_key"),
         Index("ix_escrow_chain_event_deal_created", "deal_id", "created_at"),
         Index("ix_escrow_chain_event_seqno", "network", "masterchain_seqno"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     network: Mapped[str] = mapped_column(String(16), server_default="testnet", nullable=False)
+    event_key: Mapped[str] = mapped_column(String(512), nullable=False)
     transaction_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     event_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    event_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    message_hash: Mapped[str | None] = mapped_column(String(128))
+    trace_id: Mapped[str | None] = mapped_column(String(128))
+    logical_time: Mapped[int | None] = mapped_column(BigInteger)
+    phase: Mapped[str | None] = mapped_column(String(32))
+    attempt_id: Mapped[str | None] = mapped_column(String(128))
+    query_id: Mapped[str | None] = mapped_column(String(128))
+    operation_id: Mapped[str | None] = mapped_column(String(128))
+    deal_salt: Mapped[str | None] = mapped_column(String(128))
+    account_address: Mapped[str | None] = mapped_column(String(128))
+    observed_contract_state: Mapped[str | None] = mapped_column(String(64))
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     contract_address: Mapped[str] = mapped_column(String(128), nullable=False)
     deal_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("escrow_deals.id", ondelete="RESTRICT")
