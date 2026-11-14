@@ -190,10 +190,15 @@ async def _apply_one_event(
             reason_code="awaiting_finality", deal_id=None, existing=existing)
         return "pending"
     if is_raw_evidence_event(event.event_type):
-        # Persist forensic evidence, but it is not a canonical transition and
-        # does not place the deal in MANUAL_REVIEW by itself.
+        # Persist forensic evidence with its deal FK when a stable deal UUID is
+        # present, but never call the canonical transition function for it.
+        try:
+            raw_deal_id = uuid.UUID(event.deal_id) if event.deal_id else None
+        except ValueError:
+            raw_deal_id = None
         await _persist_event(session, event, status="rejected",
-            reason_code="raw_evidence_not_contract_attestation", deal_id=None, existing=existing)
+            reason_code="raw_evidence_not_contract_attestation",
+            deal_id=raw_deal_id, existing=existing)
         return "rejected"
 
     try:
