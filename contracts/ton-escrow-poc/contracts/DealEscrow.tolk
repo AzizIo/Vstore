@@ -75,13 +75,22 @@ fun asManualReview(progress: DealProgress): DealProgress {
     return next;
 }
 
-fun checkInlineNftPayload(payload: slice, asset: DealAsset) {
+fun hasValidInlineNftPayload(payload: slice, asset: DealAsset): bool {
+    if (payload.remainingBitsCount() != 289 || payload.remainingRefsCount() != 0) {
+        return false;
+    }
+
     var body = payload;
-    assert (body.remainingBitsCount() == 289 && body.remainingRefsCount() == 0) throw Errors.InvalidNft;
-    assert (body.loadUint(1) == 0) throw Errors.InvalidNft;
-    assert (body.loadUint(32) == NFT_FORWARD_MAGIC) throw Errors.InvalidNft;
-    assert (body.loadUint(256) == asset.dealSalt) throw Errors.InvalidNft;
-    body.assertEnd();
+    if (body.loadUint(1) != 0) {
+        return false;
+    }
+    if (body.loadUint(32) != NFT_FORWARD_MAGIC) {
+        return false;
+    }
+    if (body.loadUint(256) != asset.dealSalt) {
+        return false;
+    }
+    return body.remainingBitsCount() == 0 && body.remainingRefsCount() == 0;
 }
 
 fun makeNftPayload(asset: DealAsset): RemainingBitsAndRefs {
@@ -157,7 +166,7 @@ fun handleNftOwnershipNotification(
     val money = terms.money.load();
 
     // Only the exact item fixed in StateInit may alter this DealEscrow.
-    // Other NFT items are ignored and must never be used as collateral.
+    // An unrelated NFT notification cannot be used as collateral.
     if (in.senderAddress != asset.itemAddress) {
         return;
     }
@@ -170,19 +179,22 @@ fun handleNftOwnershipNotification(
     val isExpectedBuyerReturn = (
         progress.state == STATE_DISPUTED
         && progress.disputePhase == DISPUTE_PHASE_POST_DELIVERY
+        && !progress.nftInEscrow
         && msg.oldOwnerAddress == roles.buyer
         && msg.queryId == money.nftReturnToEscrowQueryId
     );
 
-    if (isExpectedDeposit || isExpectedBuyerReturn) {
-        checkInlineNftPayload(msg.payload, asset);
+    if (
+        (isExpectedDeposit || isExpectedBuyerReturn)
+        && hasValidInlineNftPayload(msg.payload, asset)
+    ) {
         progress.nftInEscrow = true;
         if (isExpectedDeposit) {
             progress.state = STATE_AWAITING_BUYER_FUNDS;
             progress.deadlineUnix = (blockchain.now() + BUYER_FUNDING_WINDOW_SECONDS) as uint64;
         } else {
-            // The callback proves that the exact configured item is back in escrow.
-            // Resolver authorization is still required before either asset moves.
+            // Exact configured item is back in escrow; resolver authorization
+            // remains required before the NFT or principal can move.
             progress.deadlineUnix = (blockchain.now() + ARBITRATION_WINDOW_SECONDS) as uint64;
         }
         storage.progress = progress.toCell();
@@ -190,19 +202,15 @@ fun handleNftOwnershipNotification(
         return;
     }
 
-    // A malformed/duplicate transfer of the configured test item is recoverable
-    // only to the previous owner included in this exact item's notification.
-    if (
-        msg.oldOwnerAddress == roles.seller
-        || msg.oldOwnerAddress == roles.buyer
-    ) {
-        progress.nftInEscrow = true;
-        progress.unexpectedItemAddress = in.senderAddress;
-        progress.unexpectedPreviousOwner = msg.oldOwnerAddress;
-        progress = asManualReview(progress);
-        storage.progress = progress.toCell();
-        storage.save();
-    }
+    // TEP-62 ownership has already changed before ownership_assigned is emitted.
+    // Never revert a malformed callback from the snapshotted item: doing so would
+    // leave the NFT owned by this escrow with no recovery information.
+    progress.nftInEscrow = true;
+    progress.unexpectedItemAddress = in.senderAddress;
+    progress.unexpectedPreviousOwner = msg.oldOwnerAddress;
+    progress = asManualReview(progress);
+    storage.progress = progress.toCell();
+    storage.save();
 }
 
 fun countValidOracleSignatures(
