@@ -103,7 +103,7 @@ async def test_start_menu_remains_useful_without_mini_app_url(
     await bot_handlers.handle_start(message)  # type: ignore[arg-type]
 
     rows = message.answer.await_args.kwargs["reply_markup"].inline_keyboard
-    assert len(rows) == 4
+    assert len(rows) == 3
     assert rows[0][0].callback_data == "bot:buy"
     assert rows[-1][0].callback_data == "bot:about"
 
@@ -281,7 +281,9 @@ async def test_menu_callback_restores_premium_start_screen(
 
 
 @pytest.mark.asyncio
-async def test_only_duplicate_message_edit_errors_are_suppressed() -> None:
+async def test_only_duplicate_message_edit_errors_are_suppressed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     message = Message(
         message_id=4,
         date=datetime.now(UTC),
@@ -294,12 +296,8 @@ async def test_only_duplicate_message_edit_errors_are_suppressed() -> None:
         message="Bad Request: message is not modified",
     )
     edit_text = AsyncMock(side_effect=duplicate)
-    original = Message.edit_text
-    Message.edit_text = edit_text  # type: ignore[method-assign]
-    try:
-        await bot_handlers.handle_buy_callback(callback)  # type: ignore[arg-type]
-    finally:
-        Message.edit_text = original  # type: ignore[method-assign]
+    monkeypatch.setattr(Message, "edit_text", edit_text)
+    await bot_handlers.handle_buy_callback(callback)  # type: ignore[arg-type]
 
     callback.answer.assert_awaited_once()
 
