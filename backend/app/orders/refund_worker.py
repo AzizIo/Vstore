@@ -4,6 +4,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any, Protocol
 
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
@@ -35,6 +36,8 @@ class RefundClaim:
     telegram_payment_charge_id: str
     payer_telegram_id: int
     currency: str
+    amount: Decimal
+    provider: str
     transaction_status: str
     request_started_at: datetime | None
     attempt_count: int
@@ -126,6 +129,8 @@ async def claim_due_refund_jobs(
                     telegram_payment_charge_id=transaction.telegram_payment_charge_id,
                     payer_telegram_id=transaction.payer_telegram_id,
                     currency=transaction.currency,
+                    amount=Decimal(transaction.amount),
+                    provider=transaction.provider,
                     transaction_status=transaction.status,
                     request_started_at=job.request_started_at,
                     attempt_count=job.attempt_count,
@@ -189,6 +194,8 @@ async def _scan_provider_history(
                 and getattr(source, "type", None) == "user"
                 and getattr(source, "transaction_type", None) == "invoice_payment"
                 and getattr(source_user, "id", None) == claim.payer_telegram_id
+                and getattr(item, "amount", None) is not None
+                and Decimal(str(getattr(item, "amount"))) == claim.amount
             ):
                 original_seen = True
 
@@ -356,7 +363,13 @@ async def _process_claim(
             )
             else "lease_lost"
         )
-    if claim.transaction_status != "refund_pending" or claim.currency != "XTR":
+    if (
+        claim.transaction_status != "refund_pending"
+        or claim.currency != "XTR"
+        or claim.provider != "telegram_stars"
+        or claim.amount <= 0
+        or claim.amount != claim.amount.to_integral_value()
+    ):
         changed = await _set_job_state(
             session,
             claim,
@@ -510,6 +523,16 @@ async def run_refund_worker_pass(
     limit: int | None = None,
 ) -> RefundWorkerResult:
     """Run one bounded refund batch using independent short DB transactions."""
+
+    settings = get_settings()
+    if not settings.telegram_stars_refund_worker_enabled:
+        raise PaymentConflict("Telegram Stars refund worker is disabled")
+    if not settings.telegram_stars_test_enabled:
+        raise PaymentConflict("Telegram Stars test payments are disabled")
+    if settings.environment.lower() not in {"local", "development", "test"}:
+        raise PaymentConflict("Telegram Stars refund worker is unavailable outside test environments")
+    if settings.telegram_stars_test_bot_token is None:
+        raise PaymentConflict("A dedicated Telegram Stars test bot token is required")
 
     current_time = now or datetime.now(UTC)
     async with session_factory() as session:
