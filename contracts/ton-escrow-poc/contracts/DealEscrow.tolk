@@ -55,9 +55,6 @@ fun validateTerms(terms: DealTerms) {
     assert (money.nftDepositQueryId != 0) throw Errors.InvalidDeal;
     assert (money.nftReleaseQueryId != 0) throw Errors.InvalidDeal;
     assert (money.nftReturnToEscrowQueryId != 0) throw Errors.InvalidDeal;
-    assert (money.nftReturnToSellerQueryId != 0) throw Errors.InvalidDeal;
-    assert (money.sellerPayoutQueryId != 0) throw Errors.InvalidDeal;
-    assert (money.buyerRefundQueryId != 0) throw Errors.InvalidDeal;
 }
 
 fun requireActionValue(valueCoins: coins) {
