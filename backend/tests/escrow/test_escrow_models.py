@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from app.db.models import Base as MarketplaceBase
+import pytest
+
 from app.escrow.models import (
     EscrowBase,
     EscrowChainEvent,
@@ -10,6 +12,7 @@ from app.escrow.models import (
     EscrowListingIntent,
     EscrowObserverCheckpoint,
     EscrowWithdrawal,
+    assert_deal_terms_immutable,
 )
 
 
@@ -74,3 +77,27 @@ def test_escrow_models_use_separate_metadata_registry() -> None:
     assert "escrow_listing_intents" not in marketplace_tables
     assert {"escrow_deals", "escrow_listing_intents"} <= escrow_tables
     assert escrow_tables.isdisjoint(marketplace_tables)
+
+
+def test_deal_deployment_terms_cannot_be_mutated_after_creation() -> None:
+    deal = EscrowDeal(
+        listing_intent_id=__import__("uuid").uuid4(),
+        marketplace_listing_id=__import__("uuid").uuid4(),
+        seller_id=__import__("uuid").uuid4(),
+        buyer_id=__import__("uuid").uuid4(),
+        buyer_wallet_id=__import__("uuid").uuid4(),
+        network="testnet",
+        deal_salt="a" * 64,
+        collection_address_snapshot="0:" + "b" * 64,
+        item_address="0:" + "c" * 64,
+        seller_address_snapshot="0:" + "d" * 64,
+        buyer_address_snapshot="0:" + "e" * 64,
+        price_amount=__import__("decimal").Decimal("2.5"),
+        price_currency="TON",
+        principal_nanotons=2_500_000_000,
+        idempotency_key="deal-create-1",
+    )
+    deal.buyer_address_snapshot = "0:" + "f" * 64
+
+    with pytest.raises(ValueError, match="Immutable DealEscrow terms"):
+        assert_deal_terms_immutable(deal)
