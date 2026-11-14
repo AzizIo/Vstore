@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -9,7 +10,9 @@ from app.escrow.models import EscrowWalletActionRecord
 from app.escrow.service import (
     EscrowActionConflict,
     canonical_request_sha256,
+    claim_next_action,
     record_submission_reference,
+    release_action_lease,
 )
 
 
@@ -72,8 +75,10 @@ class FakeActionSession:
         self.results = list(results)
         self.added: list[object] = []
         self.flushed = 0
+        self.statements: list[object] = []
 
     async def scalar(self, statement: object) -> object:
+        self.statements.append(statement)
         return self.results.pop(0) if self.results else None
 
     def add(self, value: object) -> None:
@@ -127,3 +132,38 @@ async def test_create_or_replay_action_reuses_exact_identity_and_rejects_payload
             idempotency_key="action-key-1",
             request_sha256=canonical_request_sha256({"deal_id": "different"}),
         )
+
+
+
+@pytest.mark.asyncio
+async def test_action_lease_uses_skip_locked_and_fences_stale_worker() -> None:
+    now = datetime(2026, 11, 15, tzinfo=UTC)
+    action = EscrowWalletActionRecord(
+        id=uuid4(), actor_id=uuid4(), deal_id=uuid4(), action_type="fund_deal",
+        network="testnet", idempotency_key="action-key-1", request_sha256="a" * 64,
+        status="prepared", attempt_count=0, created_at=now, updated_at=now,
+    )
+    session = FakeActionSession(action)
+    claimed = await claim_next_action(session, now=now, lease_seconds=60)
+    assert claimed is action
+    assert action.lease_token is not None
+    assert action.lease_until == now + timedelta(seconds=60)
+    assert "SKIP LOCKED" in str(session.statements[0]).upper()
+
+    stale = await release_action_lease(
+        FakeActionSession(action), action_id=action.id, lease_token=uuid4(),
+        now=now, retry_after_seconds=5, error_code="provider_timeout",
+    )
+    assert stale is False
+    assert action.lease_token is not None
+
+    released = await release_action_lease(
+        FakeActionSession(action), action_id=action.id, lease_token=action.lease_token,
+        now=now, retry_after_seconds=5, error_code="HTTP 500", ambiguous=True,
+    )
+    assert released is True
+    assert action.lease_token is None
+    assert action.lease_until is None
+    assert action.next_retry_at == now + timedelta(seconds=5)
+    assert action.last_error_code == "provider_error"
+    assert action.status == "ambiguous"
