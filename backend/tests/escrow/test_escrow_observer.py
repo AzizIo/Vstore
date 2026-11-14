@@ -128,6 +128,24 @@ async def test_nonfinal_event_is_pending_then_promoted_once_when_final() -> None
 
 
 @pytest.mark.asyncio
+async def test_raw_nft_transfer_evidence_is_persisted_without_deal_transition() -> None:
+    deal_id = uuid4()
+    event = make_event(
+        deal_id=str(deal_id),
+        event_type=EscrowChainEventType.NFT_TRANSFER_CONFIRMED,
+    )
+    session = FakeSession(None)
+    assert await _apply_one_event(session, event, provider_verified=True) == "rejected"
+    row = session.added[0]
+    assert isinstance(row, EscrowChainEvent)
+    assert row.status == "rejected"
+    assert row.reason_code == "raw_evidence_not_contract_attestation"
+    assert row.deal_id == deal_id
+    # No deal lookup/update was attempted after persisting raw evidence.
+    assert len(session.statements) == 1
+
+
+@pytest.mark.asyncio
 async def test_duplicate_final_event_is_idempotent_after_restart() -> None:
     event = make_event()
     existing = stored_row(event)
