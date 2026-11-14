@@ -566,7 +566,7 @@ function WorkspaceBody({
       if (walletRequestStarted && !rejected) setWalletResultUncertain(true);
       setActionError(rejected
         ? "Запрос кошелька отклонён. Backend не получил подтверждение операции."
-        : reason instanceof Error ? reason.message : "Результат запроса кошелька неизвестен.");
+        : "Результат запроса кошелька неизвестен. Проверьте состояние сделки в Backend.");
       if (walletRequestStarted && !rejected) {
         setActionMessage("Не отправляйте повторную транзакцию, пока Backend observer не сверит первое действие.");
       }
