@@ -189,6 +189,7 @@ async def _cleanup(
                 SET status = 'manual_review',
                     lease_token = NULL,
                     locked_until = NULL,
+                    completed_at = NULL,
                     last_error_code = 'test_fixture_retained'
                 WHERE payment_transaction_id IN (
                     SELECT pt.id
@@ -199,6 +200,17 @@ async def _cleanup(
                 """
             ),
             {"order_id": ids["order_id"]},
+        )
+        await session.execute(
+            text("UPDATE orders SET status = 'cancelled' WHERE id = :order_id"),
+            {"order_id": ids["order_id"]},
+        )
+        await session.execute(
+            text(
+                "UPDATE listings SET status = 'active' "
+                "WHERE id = :listing_id AND status = 'reserved'"
+            ),
+            {"listing_id": ids["listing_id"]},
         )
 
 
