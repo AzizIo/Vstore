@@ -13,14 +13,16 @@ const TEST_KEY_C = 0x33
 fun createFixture(): (DealEscrow, TestNftItem, Treasury, Treasury) {
     val seller = testing.treasury("seller");
     val buyer = testing.treasury("buyer");
+    val collection = testing.treasury("test-collection");
+    val nftItem = TestNftItem.fromStorage({ ownerAddress: seller.address });
 
     val roles: DealRoles = {
         seller: seller.address,
         buyer: buyer.address,
     };
     val asset: DealAsset = {
-        itemAddress: randomAddress("test-nft-item"),
-        collectionAddress: randomAddress("test-nft-collection"),
+        itemAddress: nftItem.address,
+        collectionAddress: collection.address,
         dealSalt: 0xA11CE,
     };
     val money: DealMoney = {
@@ -76,7 +78,6 @@ fun createFixture(): (DealEscrow, TestNftItem, Treasury, Treasury) {
         terms: terms.toCell(),
         progress: progress.toCell(),
     });
-    val nftItem = TestNftItem.fromStorage({ ownerAddress: seller.address });
     return (escrow, nftItem, seller, buyer);
 }
 
@@ -193,16 +194,17 @@ get fun `a different NFT item sender cannot unlock buyer funding`() {
     expect(realItemDeploy).toHaveSuccessfulDeploy({ to: nftItem.address });
     deployAndActivate(escrow, seller, 0xA11CE);
 
-    val fakeItem = TestNftItem.fromStorage({ ownerAddress: seller.address });
-    val fakeDeploy = fakeItem.deploy(seller.address, { value: grams("0.05"), bounce: false });
+    val fakeOwner = testing.treasury("fake-item-owner");
+    val fakeItem = TestNftItem.fromStorage({ ownerAddress: fakeOwner.address });
+    val fakeDeploy = fakeItem.deploy(fakeOwner.address, { value: grams("0.05"), bounce: false });
     expect(fakeDeploy).toHaveSuccessfulDeploy({ to: fakeItem.address });
     val fakeDeposit = fakeItem.sendAny(
-        seller.address,
-        buildDepositBody(escrow.address, seller.address, 1002, 0xA11CE),
+        fakeOwner.address,
+        buildDepositBody(escrow.address, fakeOwner.address, 1002, 0xA11CE),
         { value: grams("0.12"), bounce: true },
     );
     expect(fakeDeposit).toHaveSuccessfulTx<NftTransfer>({
-        from: seller.address,
+        from: fakeOwner.address,
         to: fakeItem.address,
     });
     expect(escrow.get_state()).toEqual(STATE_AWAITING_NFT);
