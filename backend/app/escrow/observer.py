@@ -10,7 +10,7 @@ import hashlib
 import json
 import logging
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -32,6 +32,7 @@ from app.escrow.models import EscrowChainEvent, EscrowDeal, EscrowObserverCheckp
 from app.escrow.provider import (
     EscrowProviderInvalidEvidence,
     EscrowProviderUnavailable,
+    FinalityVerification,
     NormalizedChainEvent,
     TONTestnetEscrowProvider,
 )
@@ -270,6 +271,20 @@ async def _apply_one_event(
         await _persist_event(session, event, status="pending",
             reason_code="awaiting_finality", deal_id=None, existing=existing)
         return "pending"
+    if (
+        not event.masterchain_block_hash
+        or not event.finality_proof_sha256
+        or not event.finality_provider
+        or len(event.masterchain_block_hash) != 64
+        or len(event.finality_proof_sha256) != 64
+        or not event.message_hash
+        or not event.trace_id
+    ):
+        await _persist_event(
+            session, event, status="pending", reason_code="finality_proof_missing",
+            deal_id=None, existing=existing,
+        )
+        return "pending"
     if is_raw_evidence_event(event.event_type):
         # Persist forensic evidence with its deal FK when a stable deal UUID is
         # present, but never call the canonical transition function for it.
@@ -439,11 +454,23 @@ async def run_observer_pass(
             ),
         )
         for event in ordered_events:
-            # Reject obvious network / hash malformation before provider work.
+            # A boolean/indexer "finalized" flag is insufficient. The provider
+            # must return a proof bound to this transaction, message, trace and
+            # masterchain sequence number.
             if event.network != "testnet":
                 verified_events.append((event, False))
                 continue
-            verified_events.append((event, await provider.verify_event(event)))
+            proof = await provider.verify_event(event)
+            if isinstance(proof, FinalityVerification) and proof.matches(event):
+                event = replace(
+                    event,
+                    masterchain_block_hash=proof.masterchain_block_hash,
+                    finality_proof_sha256=proof.proof_sha256,
+                    finality_provider=proof.provider_id,
+                )
+                verified_events.append((event, True))
+            else:
+                verified_events.append((event, False))
     except EscrowProviderUnavailable:
         await _release_lease(
             session_factory, lease_token, error_code="provider_unavailable", now=current_time
