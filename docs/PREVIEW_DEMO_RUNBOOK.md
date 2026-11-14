@@ -29,6 +29,7 @@ PREVIEW_DB_PASSWORD=<different-fresh-64-character-hex-password>
 PREVIEW_HTTP_PORT=8080
 
 PREVIEW_BOT_TOKEN=<dedicated-preview-bot-token>
+PREVIEW_ADMIN_TELEGRAM_IDS=[123456789]
 PREVIEW_TELEGRAM_MINI_APP_URL=https://<stable-public-mini-app-host>
 PREVIEW_TELEGRAM_MINI_APP_DIRECT_LINK=https://t.me/<preview_bot_username>/<app_short_name>
 
