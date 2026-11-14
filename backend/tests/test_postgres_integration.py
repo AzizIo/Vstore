@@ -250,10 +250,8 @@ async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
             )
 
         engine = create_async_engine(test_database_url, pool_pre_ping=True)
-        async with engine.connect() as connection:
-            revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "0012_telegram_stars_payments"
-
+        # Clean the committed fixture before any version assertion so a failing
+        # migration-version check cannot leak reserved orders into later tests.
         async with engine.begin() as connection:
             await connection.execute(
                 text("DELETE FROM order_events WHERE order_id = :order_id"),
@@ -275,6 +273,11 @@ async def test_downgrade_refuses_delivery_event_history_without_attempt_rows(
                 text("DELETE FROM users WHERE id IN (:seller_id, :buyer_id)"),
                 {"seller_id": seller_id, "buyer_id": buyer_id},
             )
+
+        async with engine.connect() as connection:
+            revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+        expected_head = ScriptDirectory.from_config(Config(ALEMBIC_CONFIG_PATH)).get_current_head()
+        assert revision == expected_head
     finally:
         await engine.dispose()
 
