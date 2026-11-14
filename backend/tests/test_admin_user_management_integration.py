@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 from uuid import uuid4
@@ -9,6 +10,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -25,21 +27,54 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture(scope="module")
 def admin_user_database() -> str:
-    url = require_test_database_url("Admin user-management integration tests")
+    source_url = make_url(
+        require_test_database_url("Admin user-management integration tests")
+    )
+    database_name = f"admin_user_{uuid4().hex[:8]}_test"
+    temporary_url = source_url.set(database=database_name)
+    maintenance_url = source_url.set(database="postgres")
+
+    async def create_database() -> None:
+        engine = create_async_engine(
+            maintenance_url,
+            poolclass=NullPool,
+            isolation_level="AUTOCOMMIT",
+        )
+        try:
+            async with engine.connect() as connection:
+                await connection.execute(text(f'CREATE DATABASE "{database_name}"'))
+        finally:
+            await engine.dispose()
+
+    async def drop_database() -> None:
+        engine = create_async_engine(
+            maintenance_url,
+            poolclass=NullPool,
+            isolation_level="AUTOCOMMIT",
+        )
+        try:
+            async with engine.connect() as connection:
+                await connection.execute(
+                    text(f'DROP DATABASE IF EXISTS "{database_name}" WITH (FORCE)')
+                )
+        finally:
+            await engine.dispose()
+
     previous_url = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = url
+    asyncio.run(create_database())
+    os.environ["DATABASE_URL"] = str(temporary_url)
     get_settings.cache_clear()
     try:
         config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
         command.upgrade(config, "head")
-        yield url
+        yield str(temporary_url)
     finally:
         if previous_url is None:
             os.environ.pop("DATABASE_URL", None)
         else:
             os.environ["DATABASE_URL"] = previous_url
         get_settings.cache_clear()
-
+        asyncio.run(drop_database())
 
 @pytest.mark.asyncio
 async def test_block_unblock_idempotency_audit_and_immutability(
@@ -64,6 +99,7 @@ async def test_block_unblock_idempotency_audit_and_immutability(
         previous_admin_ids = list(settings.admin_telegram_ids)
         monkeypatch.setattr(settings, "admin_telegram_ids", [admin.telegram_id])
 
+        previous_overrides = app.dependency_overrides.copy()
         app.dependency_overrides[get_current_user] = lambda: admin
 
         async def override_database_session():
@@ -73,7 +109,7 @@ async def test_block_unblock_idempotency_audit_and_immutability(
         app.dependency_overrides[get_db_session] = override_database_session
 
         try:
-            with TestClient(app) as client:
+            client = TestClient(app)
                 block_payload = {"reason": "Repeated policy violations confirmed"}
                 block_headers = {"Idempotency-Key": f"block-user-{uuid4()}"}
                 block_url = f"/api/admin/users/{target.id}/block"
@@ -172,7 +208,10 @@ async def test_block_unblock_idempotency_audit_and_immutability(
                             await session.execute(text(statement), parameters)
                 await session.rollback()
         finally:
+            if "client" in locals():
+                client.close()
             app.dependency_overrides.clear()
+            app.dependency_overrides.update(previous_overrides)
             monkeypatch.setattr(settings, "admin_telegram_ids", previous_admin_ids)
     finally:
         await engine.dispose()
