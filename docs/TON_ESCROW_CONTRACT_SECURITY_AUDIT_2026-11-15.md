@@ -11,15 +11,15 @@
 
 The inspected source contains meaningful fail-closed controls: fixed per-deal roles/item/amounts, signed ConfigParam 19 testnet check, 2-of-3 signatures over typed cell hashes, distinct oracle/resolver key sets, attempt/query binding, exact NFT sender/payload checks, and manual-review transitions for bounced internal actions.
 
-This pass does **not** establish that the contract is safe to deploy. The emulator suite is materially narrower than the requested lifecycle matrix; bounce recovery loses action identity; frozen-source provenance is not bound to the current reviewed source SHA; and the reserve-accounting test bypasses signature checking for the terminal payout path. No live testnet transactions or independent specialist review were performed.
+This pass does **not** establish that the contract is safe to deploy. The emulator suite is materially narrower than the requested lifecycle matrix; bounce recovery loses action identity; frozen-source provenance is not bound to the current reviewed source SHA; and the reserve-accounting test bypasses signature checking for the terminal payout path. No live testnet transactions or independent specialist review were performed. The branch adds three Acton emulator reproducers for late oracle attestation, late resolver decision and terminal-state overwrite after bounce; their CI run is pending.
 
 ## Findings
 
-### F-01 — HIGH (candidate; reproduce before final severity): bounced message handler has no sender/action/attempt binding
+### F-01 — MEDIUM: bounced message handler can overwrite a completed terminal state
 
 **Location:** `DealEscrow.tolk:738-745`.
 
-`onBouncedMessage(_in)` ignores the entire bounced message, unconditionally loads storage and changes the current deal state to `STATE_MANUAL_REVIEW`. It does not inspect the original bounced body, destination/sender identity, operation opcode, query ID, deal salt or the current pending action/attempt.
+`onBouncedMessage(_in)` ignores the entire bounced message and unconditionally changes the current deal state to `STATE_MANUAL_REVIEW`. It does not inspect the original bounced body, sender/destination identity, operation opcode, query ID, deal salt or the current pending action/attempt. The critical practical case is a bounce of `sendSellerDeploymentRefund` sent during `settleRemainingBalanceForBuyer`: the principal may already have been paid and state set to `STATE_SETTLED` / `STATE_REFUNDED`, while the later refund bounce overwrites that terminal state.
 
 **Preconditions / potential impact**
 - Contract receives a valid TVM bounced internal message addressed to this escrow.
@@ -40,7 +40,7 @@ This pass does **not** establish that the contract is safe to deploy. The emulat
 **Recommendation**
 Decode the bounced body and bind recovery to the expected outbound operation/pending state/attempt/query/salt and trusted destination. Define a safe policy for unrecognized bounces (ignore vs manual review with recorded evidence). This is protocol/behavior-sensitive and must be coordinated with the #206 adapter owner before editing. Do not patch ABI/storage here.
 
-**Severity caveat:** HIGH is provisional until the arbitrary-bounce source/feasibility is demonstrated with an Acton emulator reproducer and TON VM semantics reviewed by an independent specialist.
+**Severity caveat:** MEDIUM is based on loss of terminal-state reporting after a genuine bounce of a contract-controlled, bounce-enabled refund. Exact transaction ordering and consumer impact still require an independent TON/Tolk reviewer.
 
 ### F-02 — HIGH coverage blocker: terminal/refund/dispute/expiry lifecycle is not proven by emulator tests
 
@@ -65,7 +65,7 @@ No exploit is asserted solely from missing tests. The project Definition of Done
 **Recommendation**
 Add deterministic Acton emulator tests for each state/actor/timing/failure branch, assert getters, NFT owner and before/after TON balances, and exercise real Ed25519 signatures on contract entrypoint paths. Do not use the checksig-ignore bypass except isolated accounting unit tests, which must be labeled as such.
 
-### F-03 — HIGH review-provenance blocker: frozen manifest does not bind exact current source to frozen ABI/BoC
+### Provenance note — frozen manifest source commit differs, but no contract source drift was found
 
 **Location:** `artifacts/frozen/manifest.json`; `contracts/DealEscrow.tolk`.
 
@@ -93,6 +93,29 @@ The terminal accounting test explicitly sets `testing.setChecksigIgnore(true)` b
 
 **Impact**
 Test suite may pass the financial settlement branch if the signature gate is accidentally bypassed in test configuration, because the existing test does bypass it. This is a validation blind spot, not proof of production bypass.
+
+### F-06 — MEDIUM: oracle and resolver attestations are not rejected after their state deadline
+
+**Locations:** oracle path `DealEscrow.tolk:329-352`; resolver path `DealEscrow.tolk:456-472`; timeout path `DealEscrow.tolk:640-696`.
+
+The contract checks deadlines for funding/acceptance, NFT deposit/return notifications and dispute opening, but `handleOracleAttestation` and `handleDisputeResolution` do not compare `blockchain.now()` with `progress.deadlineUnix`. The timeout path only moves the state forward when a separate `TimeoutDeal` message is processed.
+
+**Preconditions**
+- The deal is still in an oracle- or resolver-pending state.
+- `deadlineUnix` has passed.
+- No permissionless `TimeoutDeal` transaction has yet been included.
+- A correctly signed attestation/decision for the current attempt is submitted after expiry.
+
+**Potential impact**
+The accepted outcome becomes a transaction-order race: a late oracle confirmation can advance a delivery/payout/refund path after its confirmation grace, or a late resolver decision can leave the arbitration window and still initiate NFT return/release. This weakens the documented rule that expired unresolved cases enter manual review. No loss of principal is proven from this condition alone; the impact is deadline-policy bypass and inconsistent handling of stale evidence.
+
+**Reproducers added**
+- `test expired oracle attestation is still accepted before timeout transaction` sets emulator time beyond the stored deadline and exercises the oracle handler.
+- `test expired resolver decision is still accepted before timeout transaction` opens a real pre-delivery dispute, advances time beyond the arbitration deadline, then exercises the resolver handler.
+- These tests deliberately bypass only the signature VM check with `testing.setChecksigIgnore(true)` to isolate the missing time check; they do not claim cryptographic acceptance. The signature helper tests remain separate.
+
+**Recommendation**
+Define whether the deadline constrains (a) the source-chain action timestamp, (b) the attestation submission time, or (c) only the time by which a permissionless timeout must be processed. If it constrains contract submission, add `blockchain.now() <= progress.deadlineUnix` before state mutation. If late proof of an in-deadline source transaction is permitted, include and validate an authenticated source timestamp/checkpoint in the signed oracle data rather than relying only on positive masterchain seqno/logical time. Coordinate semantics with #206/#213 before protocol or adapter changes.
 
 ### F-05 — MEDIUM: oracle attestation evidence hashes are only checked for non-zero and persisted
 
@@ -129,8 +152,8 @@ Independent reviewer to inspect signed payload format, source evidence verificat
 | Full pre/post delivery dispute | no complete emulator traces | Missing |
 | Buyer principal refund | no full real-signature path | Missing |
 | Seller expiry/return | not fully exercised | Missing |
-| Every outbound bounce branch | one generic bounce test | Missing |
-| Deadline boundaries | not demonstrated | Missing |
+| Every outbound bounce branch | generic bounce + terminal-state overwrite reproducer (pending CI) | Partial |
+| Deadline boundaries | new expired oracle/resolver reproducer tests (pending CI); expiry just before/at/after still incomplete | Partial |
 | Terminal principal/NFT/reserve invariants across branches | one seeded seller payout/reserve case | Missing |
 | Replay and stale attempt | stale oracle check only | Partial |
 | Live valueless testnet lifecycle | none attached | Blocked |
