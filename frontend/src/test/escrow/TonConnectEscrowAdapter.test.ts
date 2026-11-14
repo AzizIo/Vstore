@@ -6,24 +6,34 @@ import {
   TON_TESTNET_CHAIN_ID,
 } from "../../escrow/TonConnectEscrowAdapter";
 
-const sellerAddress = `0:${"1".repeat(64)}`;
-const wrongAddress = `0:${"2".repeat(64)}`;
+const sellerAddress = "0:" + "1".repeat(64);
+const wrongAddress = "0:" + "2".repeat(64);
+const itemAddress = "0:" + "3".repeat(64);
+const escrowAddress = "0:" + "4".repeat(64);
+const factoryAddress = "0:" + "5".repeat(64);
 
-function preparedTransaction(overrides: Partial<PreparedEscrowTransaction> = {}): PreparedEscrowTransaction {
+function preparedTransaction(
+  action: PreparedEscrowTransaction["action"] = "fund_deal",
+  overrides: Partial<PreparedEscrowTransaction> = {},
+): PreparedEscrowTransaction {
+  const factoryAction = action === "create_deal_escrow";
+  const nftAction = action === "deposit_nft" || action === "return_nft_to_escrow";
+  const destination = factoryAction ? factoryAddress : nftAction ? itemAddress : escrowAddress;
   return {
-    id: "operation-1",
-    action: "nft_deposit",
+    action_id: "operation-1",
+    action,
     network: "testnet",
-    contract_address: `0:${"3".repeat(64)}`,
-    nft_item_address: `0:${"4".repeat(64)}`,
-    amount_ton: "0.05",
-    fee_ton: "0",
-    network_fee_ton: "0.02",
+    factory_address: factoryAction ? factoryAddress : null,
+    escrow_address: factoryAction ? null : escrowAddress,
+    nft_item_address: itemAddress,
+    price_nano: "2500000000",
+    fee_bps: 0,
+    execution_reserve_nano: "20000000",
     valid_until: "2099-01-01T00:00:00.000Z",
-    display_summary: "Внести NFT в testnet escrow",
+    display_purpose: "Проверьте параметры escrow-операции",
     messages: [{
-      address: `0:${"3".repeat(64)}`,
-      amount_nanotons: "70000000",
+      address: destination,
+      amount_nano: "2520000000",
       payload_boc: "server-prepared-payload-boc",
       state_init_boc: null,
     }],
@@ -37,7 +47,7 @@ describe("TON Connect escrow adapter", () => {
 
   beforeEach(() => sendTransaction.mockClear());
 
-  it("is disabled unless an explicit opt-in and sender are supplied", async () => {
+  it("is disabled unless explicit testnet opt-in and a sender are supplied", async () => {
     const adapter = createTonConnectEscrowAdapter({
       connectedWallet: { address: sellerAddress, chain: TON_TESTNET_CHAIN_ID },
       sendTransaction,
@@ -49,7 +59,7 @@ describe("TON Connect escrow adapter", () => {
     expect(sendTransaction).not.toHaveBeenCalled();
   });
 
-  it("rejects a mainnet wallet even when the adapter is explicitly enabled", async () => {
+  it("rejects a mainnet wallet when the adapter is enabled", async () => {
     const adapter = createTonConnectEscrowAdapter({
       connectedWallet: { address: sellerAddress, chain: "-239" },
       sendTransaction,
@@ -62,7 +72,7 @@ describe("TON Connect escrow adapter", () => {
     expect(sendTransaction).not.toHaveBeenCalled();
   });
 
-  it("rejects a wallet that differs from the persisted verified wallet", async () => {
+  it("rejects a connected wallet that differs from the Backend-verified wallet", async () => {
     const adapter = createTonConnectEscrowAdapter({
       connectedWallet: { address: wrongAddress, chain: TON_TESTNET_CHAIN_ID },
       sendTransaction,
@@ -84,13 +94,13 @@ describe("TON Connect escrow adapter", () => {
     });
 
     await expect(adapter.sendPreparedTransaction(
-      preparedTransaction({ valid_until: "2026-11-14T11:59:59.000Z" }),
+      preparedTransaction("fund_deal", { valid_until: "2026-11-14T11:59:59.000Z" }),
       sellerAddress,
     )).rejects.toThrow(/истёк/i);
     expect(sendTransaction).not.toHaveBeenCalled();
   });
 
-  it("forwards only the Backend-prepared messages and testnet network", async () => {
+  it("forwards server-prepared escrow messages unchanged after checking the Factory recipient", async () => {
     const adapter = createTonConnectEscrowAdapter({
       connectedWallet: { address: sellerAddress, chain: TON_TESTNET_CHAIN_ID },
       sendTransaction,
@@ -98,20 +108,42 @@ describe("TON Connect escrow adapter", () => {
       now,
     });
 
-    await adapter.sendPreparedTransaction(preparedTransaction(), sellerAddress);
+    const transaction = preparedTransaction("create_deal_escrow");
+    await adapter.sendPreparedTransaction(transaction, sellerAddress);
 
     expect(sendTransaction).toHaveBeenCalledWith({
-      validUntil: Math.floor(Date.parse("2099-01-01T00:00:00.000Z") / 1000),
+      validUntil: Math.floor(Date.parse(transaction.valid_until) / 1000),
       network: TON_TESTNET_CHAIN_ID,
       messages: [{
-        address: `0:${"3".repeat(64)}`,
-        amount: "70000000",
+        address: factoryAddress,
+        amount: "2520000000",
         payload: "server-prepared-payload-boc",
       }],
     });
   });
 
-  it("rejects invalid or mainnet prepared transaction data", async () => {
+  it.each([
+    ["deposit_nft", itemAddress],
+    ["fund_deal", escrowAddress],
+    ["accept_deal", escrowAddress],
+    ["open_dispute", escrowAddress],
+    ["return_nft_to_escrow", itemAddress],
+    ["withdraw_unsold_nft", escrowAddress],
+  ] as const)("allows %s only to its action-specific recipient", async (action, recipient) => {
+    const adapter = createTonConnectEscrowAdapter({
+      connectedWallet: { address: sellerAddress, chain: TON_TESTNET_CHAIN_ID },
+      sendTransaction,
+      enabled: true,
+      now,
+    });
+    const transaction = preparedTransaction(action);
+    await adapter.sendPreparedTransaction(transaction, sellerAddress);
+    expect(sendTransaction).toHaveBeenCalledWith(expect.objectContaining({
+      messages: [expect.objectContaining({ address: recipient })],
+    }));
+  });
+
+  it("rejects a message destination that does not match the action allowlist", async () => {
     const adapter = createTonConnectEscrowAdapter({
       connectedWallet: { address: sellerAddress, chain: TON_TESTNET_CHAIN_ID },
       sendTransaction,
@@ -120,12 +152,39 @@ describe("TON Connect escrow adapter", () => {
     });
 
     await expect(adapter.sendPreparedTransaction(
-      preparedTransaction({ network: "mainnet" as "testnet" }),
+      preparedTransaction("fund_deal", {
+        messages: [{
+          address: itemAddress,
+          amount_nano: "2520000000",
+          payload_boc: null,
+          state_init_boc: null,
+        }],
+      }),
       sellerAddress,
-    )).rejects.toThrow(/неподтверждённый формат|основную сеть/i);
+    )).rejects.toThrow(/получатель TON-сообщения/i);
+    expect(sendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed and non-testnet prepared transactions", async () => {
+    const adapter = createTonConnectEscrowAdapter({
+      connectedWallet: { address: sellerAddress, chain: TON_TESTNET_CHAIN_ID },
+      sendTransaction,
+      enabled: true,
+      now,
+    });
 
     await expect(adapter.sendPreparedTransaction(
-      preparedTransaction({ messages: [] }),
+      preparedTransaction("fund_deal", { network: "mainnet" as "testnet" }),
+      sellerAddress,
+    )).rejects.toThrow(/неподтверждённый формат/i);
+
+    await expect(adapter.sendPreparedTransaction(
+      preparedTransaction("fund_deal", { fee_bps: 1 as 0 }),
+      sellerAddress,
+    )).rejects.toThrow(/неподтверждённый формат/i);
+
+    await expect(adapter.sendPreparedTransaction(
+      preparedTransaction("fund_deal", { messages: [] }),
       sellerAddress,
     )).rejects.toThrow(/неподтверждённый формат/i);
     expect(sendTransaction).not.toHaveBeenCalled();
