@@ -60,8 +60,8 @@ fun validateTerms(terms: DealTerms) {
     assert (money.buyerRefundQueryId != 0) throw Errors.InvalidDeal;
 }
 
-fun requireActionValue(in: InMessage) {
-    assert (in.valueCoins >= grams("0.01")) throw Errors.InvalidValue;
+fun requireActionValue(valueCoins: coins) {
+    assert (valueCoins >= grams("0.01")) throw Errors.InvalidValue;
 }
 
 fun checkDealSalt(asset: DealAsset, suppliedSalt: uint256) {
@@ -154,7 +154,7 @@ fun sendBuyerRefund(roles: DealRoles, asset: DealAsset, money: DealMoney) {
 }
 
 fun handleNftOwnershipNotification(
-    in: InMessage,
+    senderAddress: address,
     msg: NotificationForNewOwner,
     storage: EscrowStorage,
 ) {
@@ -167,7 +167,7 @@ fun handleNftOwnershipNotification(
 
     // Only the exact item fixed in StateInit may alter this DealEscrow.
     // An unrelated NFT notification cannot be used as collateral.
-    if (in.senderAddress != asset.itemAddress) {
+    if (senderAddress != asset.itemAddress) {
         return;
     }
 
@@ -207,7 +207,7 @@ fun handleNftOwnershipNotification(
     // leave the NFT owned by this escrow with no recovery information.
     progress.nftInEscrow = true;
     var recovery = progress.recovery.load();
-    recovery.unexpectedItemAddress = in.senderAddress;
+    recovery.unexpectedItemAddress = senderAddress;
     recovery.unexpectedPreviousOwner = msg.oldOwnerAddress;
     progress.recovery = recovery.toCell();
     progress = asManualReview(progress);
@@ -457,7 +457,7 @@ fun onInternalMessage(in: InMessage) {
 
     match (msg) {
         ActivateDeal => {
-            requireActionValue(in);
+            requireActionValue(in.valueCoins);
             var progress = storage.progress.load();
             val terms = storage.terms.load();
             assertTestnet(terms);
@@ -473,7 +473,7 @@ fun onInternalMessage(in: InMessage) {
             storage.save();
         }
         FundDeal => {
-            requireActionValue(in);
+            requireActionValue(in.valueCoins);
             var progress = storage.progress.load();
             val terms = storage.terms.load();
             assertTestnet(terms);
@@ -496,7 +496,7 @@ fun onInternalMessage(in: InMessage) {
             storage.save();
         }
         AcceptDeal => {
-            requireActionValue(in);
+            requireActionValue(in.valueCoins);
             var progress = storage.progress.load();
             val terms = storage.terms.load();
             assertTestnet(terms);
@@ -525,7 +525,7 @@ fun onInternalMessage(in: InMessage) {
             storage.save();
         }
         OpenDispute => {
-            requireActionValue(in);
+            requireActionValue(in.valueCoins);
             var progress = storage.progress.load();
             val terms = storage.terms.load();
             assertTestnet(terms);
@@ -562,15 +562,15 @@ fun onInternalMessage(in: InMessage) {
             storage.save();
         }
         OracleAttestation => {
-            requireActionValue(in);
+            requireActionValue(in.valueCoins);
             handleOracleAttestation(msg, storage);
         }
         ResolveDispute => {
-            requireActionValue(in);
+            requireActionValue(in.valueCoins);
             handleDisputeResolution(msg, storage);
         }
         TimeoutDeal => {
-            requireActionValue(in);
+            requireActionValue(in.valueCoins);
             var progress = storage.progress.load();
             val terms = storage.terms.load();
             assertTestnet(terms);
@@ -624,7 +624,7 @@ fun onInternalMessage(in: InMessage) {
             storage.save();
         }
         RecoverUnexpectedNft => {
-            requireActionValue(in);
+            requireActionValue(in.valueCoins);
             var progress = storage.progress.load();
             val terms = storage.terms.load();
             assertTestnet(terms);
@@ -654,7 +654,7 @@ fun onInternalMessage(in: InMessage) {
             storage.save();
         }
         NotificationForNewOwner => {
-            handleNftOwnershipNotification(in, msg, storage);
+            handleNftOwnershipNotification(in.senderAddress, msg, storage);
         }
         else => {
             assert (in.body.isEmpty()) throw Errors.UnexpectedMessage;
