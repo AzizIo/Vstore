@@ -176,6 +176,24 @@ async def test_payment_snapshots_and_evidence_cannot_be_rewritten_or_removed(
                     "payment_events",
                     "payment_refunds",
                 ):
+                    trigger_name = f"trg_{table}_no_truncate"
+                    trigger_installed = await session.scalar(
+                        text(
+                            """
+                            SELECT EXISTS (
+                                SELECT 1
+                                FROM pg_trigger
+                                WHERE tgrelid = CAST(:table_name AS regclass)
+                                  AND tgname = :trigger_name
+                                  AND NOT tgisinternal
+                            )
+                            """
+                        ),
+                        {"table_name": table, "trigger_name": trigger_name},
+                    )
+                    assert trigger_installed is True, (
+                        f"Expected migration to install {trigger_name}"
+                    )
                     await assert_rejected(text(f"TRUNCATE {table}"))
 
                 # Lifecycle changes remain possible; only the evidence snapshot is frozen.
