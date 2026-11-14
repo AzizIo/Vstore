@@ -30,7 +30,7 @@ from app.db.models import (
     User,
     Wallet,
 )
-from app.db.payments import PaymentEvent, PaymentIntent, PaymentRefund, PaymentTransaction
+from app.db.payments import PaymentIntent, PaymentRefund, PaymentTransaction
 from app.orders import payment_service, refund_worker
 from app.orders.payment_service import (
     create_stars_payment_intent,
@@ -316,7 +316,11 @@ class FakeRefundProvider:
             self.refunded_charges.add(telegram_payment_charge_id)
         return RefundCallResult(
             self.outcome,
-            error_code="synthetic_gateway_result" if self.outcome is not RefundCallOutcome.SUCCEEDED else None,
+            error_code=(
+                "synthetic_gateway_result"
+                if self.outcome is not RefundCallOutcome.SUCCEEDED
+                else None
+            ),
             retry_after_seconds=self.retry_after_seconds,
         )
 
