@@ -219,7 +219,12 @@ def validate_snapshot(snapshot: Any) -> tuple[Address, Address, Address, Address
         _uint(snapshot.fund_query_id, 64, "fund_query_id", allow_zero=False),
         _uint(snapshot.nft_deposit_query_id, 64, "nft_deposit_query_id", allow_zero=False),
         _uint(snapshot.nft_release_query_id, 64, "nft_release_query_id", allow_zero=False),
-        _uint(snapshot.nft_return_to_escrow_query_id, 64, "nft_return_to_escrow_query_id", allow_zero=False),
+        _uint(
+            snapshot.nft_return_to_escrow_query_id,
+            64,
+            "nft_return_to_escrow_query_id",
+            allow_zero=False,
+        ),
     )
     if len(set(query_ids)) != len(query_ids):
         raise TONABIError("all immutable query IDs must be unique")
@@ -255,7 +260,10 @@ def validate_snapshot(snapshot: Any) -> tuple[Address, Address, Address, Address
     _uint(snapshot.deadline_unix, 64, "deadline_unix")
     _uint(snapshot.observed_chain_time_unix, 64, "observed_chain_time_unix")
     _uint(snapshot.dispute_phase, 8, "dispute_phase")
-    if not isinstance(snapshot.nft_in_escrow, bool) or not isinstance(snapshot.principal_locked, bool):
+    if (
+        not isinstance(snapshot.nft_in_escrow, bool)
+        or not isinstance(snapshot.principal_locked, bool)
+    ):
         raise TONABIError("contract flags must be booleans")
     return seller, buyer, collection, item, salt
 
