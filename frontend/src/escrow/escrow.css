@@ -685,6 +685,31 @@
   line-height: 1.55;
 }
 
+.escrow-message-review {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.escrow-message-review h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.escrow-message-review-row {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--escrow-line);
+  border-radius: 12px;
+  background: var(--escrow-panel-raised);
+}
+
+.escrow-message-review-row > strong {
+  font-size: 12px;
+}
+
 .escrow-icon-button {
   flex: 0 0 auto;
   font-size: 22px;
