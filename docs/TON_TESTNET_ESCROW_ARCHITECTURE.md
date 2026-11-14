@@ -129,7 +129,80 @@ MANUAL_REVIEW is deliberately a hold, not a terminal success/failure state. Reco
 7. If no dispute arrives within 48 hours, anyone may trigger seller settlement. The contract sends the principal only to the snapshotted seller address and enters SELLER_PAYOUT_PENDING.
 8. The payout observer confirms the exact outgoing payment at finality. The contract moves to SETTLED. A bounce or missing finality leaves a retryable pending state; it never marks payout successful optimistically.
 
-### 5.3 Refund and dispute paths
+### 5.3 Sequence diagram — normal settlement and dispute/refund
+
+The diagram shows the normal path. Dispute and refund branches remain guarded by the contract state machine below; the observer provides evidence only and never chooses the commercial outcome.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Seller
+    actor Buyer
+    participant NFT as TEP-62 NFT item
+    participant Escrow as Per-deal escrow contract
+    participant Observer as Vstore read-only observer
+    participant Oracle as Evidence quorum
+    participant Resolver as 2-of-3 resolver
+
+    Seller->>NFT: transfer(new_owner=Escrow, query_id, deal_hash)
+    NFT->>Escrow: ownership_assigned(prev_owner=Seller, query_id)
+    Escrow->>Escrow: Validate item, sender, owner, query_id and phase
+    Note over Escrow: AWAITING_BUYER_FUNDS
+    Buyer->>Escrow: Deposit exact TON principal + gas reserve
+    Escrow->>Escrow: Verify buyer, amount, nonce; lock funds
+    Note over Escrow: FUNDED_REVIEW (24h)
+    alt Buyer accepts
+        Buyer->>Escrow: ACCEPT
+        Escrow->>NFT: transfer(new_owner=Buyer, query_id)
+        NFT-->>Buyer: ownership notification
+        Observer->>Observer: Correlate exact item/source/destination/query/trace
+        Observer->>Oracle: Submit finalized evidence reference
+        Oracle->>Escrow: CONFIRM_NFT_DELIVERED (quorum attestation)
+        Note over Escrow: DELIVERED_DISPUTE_WINDOW (48h)
+        alt No dispute before deadline
+            Buyer->>Escrow: No dispute
+            Escrow->>Seller: Fixed TON payout
+            Observer->>Observer: Verify payout at finality
+            Observer->>Escrow: RECONCILE_PAYOUT
+            Note over Escrow: SETTLED
+        else Buyer disputes in window
+            Buyer->>Escrow: OPEN_DISPUTE
+            Note over Escrow: DISPUTED; funds frozen
+            Buyer->>NFT: transfer(new_owner=Escrow, return_query_id)
+            NFT->>Escrow: ownership_assigned(prev_owner=Buyer)
+            Observer->>Oracle: Verify exact return at finality
+            Oracle->>Escrow: CONFIRM_NFT_RETURNED
+            Resolver->>Escrow: RESOLVE_DISPUTE (2-of-3, enum outcome)
+            alt Buyer wins
+                Escrow->>NFT: transfer(new_owner=Seller)
+                NFT->>Escrow: ownership_assigned(prev_owner=Escrow)
+                Observer->>Oracle: Verify NFT returned to Seller
+                Oracle->>Escrow: CONFIRM_NFT_RETURNED
+                Escrow->>Buyer: Fixed TON refund
+                Observer->>Escrow: RECONCILE_REFUND
+                Note over Escrow: REFUNDED
+            else Seller wins
+                Escrow->>NFT: transfer(new_owner=Buyer)
+                Observer->>Oracle: Verify NFT delivery at finality
+                Oracle->>Escrow: CONFIRM_NFT_DELIVERED
+                Escrow->>Seller: Fixed TON payout
+                Observer->>Escrow: RECONCILE_PAYOUT
+                Note over Escrow: SETTLED
+            end
+        end
+    else Buyer does not accept by review deadline
+        Escrow->>NFT: Return NFT to Seller
+        Observer->>Oracle: Verify return at finality
+        Oracle->>Escrow: CONFIRM_NFT_RETURNED
+        Escrow->>Buyer: Fixed TON refund
+        Observer->>Escrow: RECONCILE_REFUND
+        Note over Escrow: REFUNDED
+    end
+```
+
+An outbound message, ownership_assigned notification, observer callback, timeout or resolver decision is not by itself a final state. All outbound asset and money movements remain pending until their exact result is reconciled at masterchain finality. A bounce leaves the same principal owed to the same snapshotted recipient and follows the retry/manual-review rules in §7.
+
+### 5.4 Refund and dispute paths
 
 **Buyer does not accept within the review window:** the contract starts returning the NFT to the snapshotted seller. It refunds the buyer only after the NFT return is independently confirmed at finality. If the return message bounces or evidence is unavailable, both principal and NFT remain in a retry/manual-review state.
 
@@ -146,7 +219,7 @@ If the resolver does not decide within seven days, the default is buyer-favourin
 
 If the resolver does not decide within seven days after a valid post-delivery return, default to buyer refund plus NFT return to seller. No refund may be sent while the buyer still owns the NFT.
 
-### 5.4 Timeout is not proof
+### 5.5 Timeout is not proof
 
 A deadline only makes an action eligible. It does not prove that an asynchronous NFT transfer failed. Before retry/refund/expiry, the oracle must establish a finalized canonical state that is consistent with the intended branch: exact NFT owner, relevant transfer trace, query ID, and no contradictory in-flight or finalized transfer evidence. If the provider is unavailable, a trace is incomplete, or providers disagree, remain pending/manual review.
 
