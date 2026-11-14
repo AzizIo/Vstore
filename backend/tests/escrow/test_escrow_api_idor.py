@@ -5,10 +5,10 @@ from uuid import uuid4
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.api.escrow import router
 from app.auth.dependencies import get_current_user
 from app.db.models import User
 from app.db.session import get_db_session
-from app.api.escrow import router
 
 
 class MissingResourceSession:
