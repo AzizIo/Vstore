@@ -11,6 +11,8 @@ from typing import Protocol
 from urllib.parse import urlsplit
 
 from aiogram import Bot
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramRetryAfter
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -689,12 +691,22 @@ def _validate_worker_runtime() -> str:
     return token
 
 
+def _test_api_server() -> TelegramAPIServer:
+    """Route all Bot API calls to Telegram's isolated test environment."""
+
+    return TelegramAPIServer(
+        base="https://api.telegram.org/bot{token}/test/{method}",
+        file="https://api.telegram.org/file/bot{token}/test/{path}",
+    )
+
+
 async def run_refund_worker() -> None:
     """Run the opt-in local/test worker; no production runtime starts it implicitly."""
 
     token = _validate_worker_runtime()
     settings = get_settings()
-    bot = Bot(token=token)
+    session = AiohttpSession(api=_test_api_server())
+    bot = Bot(token=token, session=session)
     provider = TelegramStarsRefundProvider(bot)
     try:
         while True:
