@@ -316,7 +316,7 @@ export function submitUserAccessDecision(
   userId: string,
   action: "block" | "unblock",
   reason: string,
-  idempotencyKey = crypto.randomUUID(),
+  idempotencyKey: string = crypto.randomUUID(),
 ): Promise<AdminUserAccessDecision> {
   return request("/users/" + encodeURIComponent(userId) + "/" + action, accessToken, {
     method: "POST",
