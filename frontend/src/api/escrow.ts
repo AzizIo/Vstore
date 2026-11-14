@@ -25,6 +25,8 @@ export type EscrowDealState =
   | "expired"
   | "manual_review";
 
+export type EscrowListingAction = "create_deal_intent" | "cancel_listing_intent";
+
 export type EscrowAction =
   | "create_deal_escrow"
   | "deposit_nft"
@@ -68,6 +70,7 @@ export interface EscrowListingIntent {
   seller_wallet_address: string;
   price_nano: string;
   fee_bps: 0;
+  available_actions: EscrowListingAction[];
   created_at: string;
   updated_at: string;
 }
@@ -257,6 +260,10 @@ function isDealState(value: unknown): value is EscrowDealState {
     || value === "manual_review";
 }
 
+function isListingAction(value: unknown): value is EscrowListingAction {
+  return value === "create_deal_intent" || value === "cancel_listing_intent";
+}
+
 function isAction(value: unknown): value is EscrowAction {
   return value === "create_deal_escrow"
     || value === "deposit_nft"
@@ -300,6 +307,8 @@ export function isEscrowListingIntent(value: unknown): value is EscrowListingInt
     && typeof value.seller_wallet_address === "string"
     && isPositiveNano(value.price_nano)
     && value.fee_bps === 0
+    && Array.isArray(value.available_actions)
+    && value.available_actions.every(isListingAction)
     && typeof value.created_at === "string"
     && typeof value.updated_at === "string";
 }
