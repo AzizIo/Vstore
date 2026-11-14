@@ -55,6 +55,10 @@ class NormalizedChainEvent:
     masterchain_block_hash: str | None = None
     finality_proof_sha256: str | None = None
     finality_provider: str | None = None
+    terminal_owner_address: str | None = None
+    terminal_owner_proof_sha256: str | None = None
+    terminal_owner_masterchain_seqno: int | None = None
+    terminal_owner_provider: str | None = None
 
     @property
     def event_key(self) -> str:
@@ -124,9 +128,43 @@ class FinalityVerification:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class TerminalOwnerVerification:
+    """Independent testnet proof of the NFT's current owner at a masterchain height."""
+
+    network: str
+    item_address: str
+    owner_address: str
+    masterchain_seqno: int
+    proof_sha256: str
+    provider_id: str
+    verified: bool
+
+    def matches(
+        self,
+        *,
+        item_address: str,
+        expected_owner_address: str,
+        minimum_masterchain_seqno: int,
+    ) -> bool:
+        return (
+            self.verified
+            and self.network == "testnet"
+            and self.item_address == item_address
+            and self.owner_address == expected_owner_address
+            and self.masterchain_seqno >= minimum_masterchain_seqno
+            and len(self.proof_sha256) == 64
+            and all(char in "0123456789abcdef" for char in self.proof_sha256.lower())
+            and bool(self.provider_id.strip())
+        )
+
+
 class TONTestnetEscrowProvider(Protocol):
     async def scan_events(self, *, cursor: str | None, limit: int) -> ChainEventBatch: ...
     async def verify_event(self, event: NormalizedChainEvent) -> FinalityVerification | None: ...
+    async def verify_terminal_owner(
+        self, *, item_address: str, expected_owner_address: str, minimum_masterchain_seqno: int
+    ) -> TerminalOwnerVerification | None: ...
 
 
 class UnconfiguredTONTestnetEscrowProvider:
@@ -137,3 +175,10 @@ class UnconfiguredTONTestnetEscrowProvider:
     async def verify_event(self, event: NormalizedChainEvent) -> FinalityVerification | None:
         del event
         raise EscrowProviderUnavailable("TON testnet evidence verification is not configured")
+
+    async def verify_terminal_owner(
+        self, *, item_address: str, expected_owner_address: str,
+        minimum_masterchain_seqno: int,
+    ) -> TerminalOwnerVerification | None:
+        del item_address, expected_owner_address, minimum_masterchain_seqno
+        raise EscrowProviderUnavailable("TON testnet current-owner verification is not configured")
