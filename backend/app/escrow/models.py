@@ -193,7 +193,11 @@ def assert_deal_terms_immutable(target: EscrowDeal) -> None:
         raise ValueError(f"Immutable DealEscrow terms cannot be changed: {fields}")
 
 
-def _before_escrow_deal_update(_mapper: object, _connection: object, target: "EscrowDeal") -> None:
+def _before_escrow_deal_update(
+    _mapper: object,
+    _connection: object,
+    target: EscrowDeal,
+) -> None:
     assert_deal_terms_immutable(target)
 
 sa_event.listen(EscrowDeal, "before_update", _before_escrow_deal_update)
