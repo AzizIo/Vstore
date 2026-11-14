@@ -136,7 +136,7 @@ def upgrade() -> None:
     op.execute(
         """
         CREATE FUNCTION prevent_escrow_deal_terms_mutation()
-        RETURNS trigger AS $
+        RETURNS trigger AS $escrow$
         BEGIN
             IF NEW.id IS DISTINCT FROM OLD.id
                 OR NEW.listing_intent_id IS DISTINCT FROM OLD.listing_intent_id
@@ -163,7 +163,7 @@ def upgrade() -> None:
             END IF;
             RETURN NEW;
         END;
-        $ LANGUAGE plpgsql;
+        $escrow$ LANGUAGE plpgsql;
         CREATE TRIGGER escrow_deal_terms_immutable
         BEFORE UPDATE ON escrow_deals
         FOR EACH ROW EXECUTE FUNCTION prevent_escrow_deal_terms_mutation();
