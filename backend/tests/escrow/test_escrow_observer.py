@@ -457,3 +457,20 @@ async def test_stale_logical_time_pins_event_instead_of_advancing_cursor() -> No
 
     assert await _apply_one_event(session, event, provider_verified=True) == "pending"
     assert session.added[0].reason_code == "stale_chain_event"
+
+
+@pytest.mark.asyncio
+async def test_replay_cannot_remove_previously_accepted_attestation() -> None:
+    event = make_event(
+        event_type=EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED,
+        attestation_accepted=False,
+        contract_state_reconciled=False,
+    )
+    existing = stored_row(event, status="pending")
+    existing.payload_json["attestation_accepted"] = True
+    existing.payload_json["contract_state_reconciled"] = True
+    session = FakeSession(existing)
+
+    assert await _apply_one_event(session, event, provider_verified=True) == "rejected"
+    assert existing.status == "manual_review"
+    assert existing.reason_code == "event_correlation_conflict"
