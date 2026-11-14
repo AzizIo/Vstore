@@ -315,7 +315,7 @@ export function isEscrowWithdrawal(value: unknown): value is EscrowWithdrawal {
 
 export function isPreparedEscrowTransaction(value: unknown): value is PreparedEscrowTransaction {
   if (!isRecord(value) || value.network !== "testnet") return false;
-  if (!["nft_deposit", "purchase", "buyer_confirmation", "dispute", "unsold_nft_withdrawal", "seller_proceeds_withdrawal"].includes(String(value.action))) return false;
+  if (!["nft_deposit", "purchase", "buyer_confirmation", "dispute", "buyer_nft_return", "unsold_nft_withdrawal", "seller_proceeds_withdrawal"].includes(String(value.action))) return false;
   return typeof value.id === "string"
     && typeof value.contract_address === "string"
     && isNullableString(value.nft_item_address)
