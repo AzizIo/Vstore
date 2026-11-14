@@ -8,9 +8,16 @@ from app.api import health
 
 
 class FakeConnection:
-    def __init__(self, *, delay: float = 0, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        delay: float = 0,
+        error: Exception | None = None,
+        result=None,
+    ) -> None:
         self.delay = delay
         self.error = error
+        self.result = result
         self.executed = False
 
     async def __aenter__(self):
@@ -25,6 +32,15 @@ class FakeConnection:
         if self.error is not None:
             raise self.error
         self.executed = True
+        return self.result
+
+
+class FakeRows:
+    def __init__(self, rows: list[tuple[str]]) -> None:
+        self.rows = rows
+
+    def fetchall(self) -> list[tuple[str]]:
+        return self.rows
 
 
 class FakeEngine:
@@ -73,6 +89,43 @@ def configure_redis(monkeypatch, *, ping_side_effect=None, close_side_effect=Non
         SimpleNamespace(redis_url="redis://redis:6379/0"),
     )
     return redis, from_url
+
+
+@pytest.mark.asyncio
+async def test_migration_probe_returns_true_when_database_matches_all_heads(monkeypatch) -> None:
+    connection = FakeConnection(result=FakeRows([("head-a",), ("head-b",)]))
+    monkeypatch.setattr(health, "engine", FakeEngine(connection))
+    monkeypatch.setattr(health, "_expected_migration_heads", lambda: frozenset({"head-a", "head-b"}))
+
+    assert await health._database_migrations_ready() is True
+    assert connection.executed is True
+
+
+@pytest.mark.asyncio
+async def test_migration_probe_returns_false_when_database_is_behind(monkeypatch) -> None:
+    connection = FakeConnection(result=FakeRows([("old-revision",)]))
+    monkeypatch.setattr(health, "engine", FakeEngine(connection))
+    monkeypatch.setattr(health, "_expected_migration_heads", lambda: frozenset({"current-head"}))
+
+    assert await health._database_migrations_ready() is False
+
+
+@pytest.mark.asyncio
+async def test_migration_probe_returns_false_when_migration_table_is_missing(monkeypatch) -> None:
+    connection = FakeConnection(error=RuntimeError("alembic_version table missing"))
+    monkeypatch.setattr(health, "engine", FakeEngine(connection))
+    monkeypatch.setattr(health, "_expected_migration_heads", lambda: frozenset({"current-head"}))
+
+    assert await health._database_migrations_ready() is False
+
+
+@pytest.mark.asyncio
+async def test_migration_probe_returns_false_when_expected_heads_cannot_be_resolved(monkeypatch) -> None:
+    connection = FakeConnection(result=FakeRows([("current-head",)]))
+    monkeypatch.setattr(health, "engine", FakeEngine(connection))
+    monkeypatch.setattr(health, "_expected_migration_heads", lambda: frozenset())
+
+    assert await health._database_migrations_ready() is False
 
 
 @pytest.mark.asyncio
