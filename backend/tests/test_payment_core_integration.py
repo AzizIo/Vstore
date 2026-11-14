@@ -11,6 +11,7 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from pydantic import SecretStr
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
@@ -442,6 +443,10 @@ async def test_migration_refuses_to_drop_payment_evidence(
     try:
         await _create_intent(session_factory, ids)
         config = Config(ALEMBIC_CONFIG_PATH)
+        # Escrow and future isolated modules may add migrations after the payment
+        # refund revision. The downgrade guard must preserve the repository's
+        # current single head rather than a hard-coded historical revision.
+        expected_head = ScriptDirectory.from_config(config).get_current_head()
         with pytest.raises(RuntimeError, match="payment ledger"):
             await asyncio.to_thread(
                 command.downgrade,
@@ -452,7 +457,7 @@ async def test_migration_refuses_to_drop_payment_evidence(
             revision = await connection.scalar(
                 text("SELECT version_num FROM alembic_version")
             )
-            assert revision == "0013_payment_refund_workflow"
+            assert revision == expected_head
     finally:
         await _cleanup(session_factory, ids)
         await engine.dispose()
