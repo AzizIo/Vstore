@@ -134,7 +134,7 @@ async def test_raw_nft_transfer_evidence_is_persisted_without_deal_transition() 
         deal_id=str(deal_id),
         event_type=EscrowChainEventType.NFT_TRANSFER_CONFIRMED,
     )
-    session = FakeSession(None)
+    session = FakeSession(None, deal_id)
     assert await _apply_one_event(session, event, provider_verified=True) == "rejected"
     row = session.added[0]
     assert isinstance(row, EscrowChainEvent)
