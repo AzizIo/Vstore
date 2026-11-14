@@ -3,14 +3,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Chat, Message, Update
 
 from app import bot_handlers
 from app.bot import BOT_COMMANDS, create_dispatcher, register_bot_commands
-
 
 APP_URL = "https://shop.example.com/miniapp"
 
