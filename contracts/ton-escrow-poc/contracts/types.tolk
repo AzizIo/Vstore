@@ -132,6 +132,9 @@ struct DealProgress {
     // Monotonic, per-deal nonce for all oracle-attested outbound actions.
     // It is also used as the outbound TON message query_id.
     oracleAttemptId: uint64
+    // Monotonic nonce for each dispute, preventing old resolver decisions
+    // from becoming valid again if the same evidence hash is submitted later.
+    disputeAttemptId: uint64
     evidence: Cell<DealEvidence>
     recovery: Cell<DealRecovery>
 }
