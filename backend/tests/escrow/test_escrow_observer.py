@@ -351,3 +351,48 @@ async def test_unknown_deal_event_is_pending_without_invalid_foreign_key() -> No
     assert row.reason_code == "deal_not_found"
     assert row.deal_id is None
     assert row.payload_json["deal_id"] == str(missing_deal_id)
+
+
+@pytest.mark.asyncio
+async def test_database_disconnect_during_batch_keeps_cursor_for_replay() -> None:
+    now = datetime(2026, 11, 14, tzinfo=UTC)
+    checkpoint = EscrowObserverCheckpoint(
+        checkpoint_id=CHECKPOINT_ID,
+        network="testnet",
+        cursor="cursor-before-db-disconnect",
+        last_masterchain_seqno=99,
+        lease_token=None,
+        lease_until=None,
+        next_scan_at=None,
+        last_error_code=None,
+    )
+
+    class CommitFailingContext(FakeContext):
+        async def __aexit__(self, *args: object) -> None:
+            raise RuntimeError("simulated database disconnect during commit")
+
+    class CommitFailingSession(FakeEscrowSession):
+        def begin(self) -> CommitFailingContext:
+            return CommitFailingContext(self)
+
+    sessions = [
+        FakeEscrowSession(checkpoint),
+        CommitFailingSession(checkpoint, None, None),
+        FakeEscrowSession(checkpoint),
+    ]
+
+    def factory() -> FakeEscrowSession:
+        return sessions.pop(0)
+
+    provider = BatchProvider(
+        make_event(event_type=EscrowChainEventType.NFT_TRANSFER_CONFIRMED)
+    )
+    result = await run_observer_pass(
+        factory, provider, now=now, limit=5
+    )  # type: ignore[arg-type]
+
+    assert result.persistence_failed
+    assert checkpoint.cursor == "cursor-before-db-disconnect"
+    assert checkpoint.lease_token is None
+    assert checkpoint.lease_until is None
+    assert checkpoint.last_error_code == "batch_persistence_failed"
