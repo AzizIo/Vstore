@@ -127,14 +127,16 @@ async def test_accept_deal_is_buyer_only_and_funded_review_only(
     )
     with pytest.raises(HTTPException) as seller_error:
         await _prepare_action(
-            deal_id, EscrowWalletAction.ACCEPT_DEAL, seller, DealSession(deal), None
+            deal_id, EscrowWalletAction.ACCEPT_DEAL, seller, DealSession(deal), None,
+            "accept-key-0001",
         )
     assert seller_error.value.status_code == 409
 
     deal.status = "awaiting_buyer_funds"
     with pytest.raises(HTTPException) as buyer_error:
         await _prepare_action(
-            deal_id, EscrowWalletAction.ACCEPT_DEAL, buyer, DealSession(deal), None
+            deal_id, EscrowWalletAction.ACCEPT_DEAL, buyer, DealSession(deal), None,
+            "accept-key-0001",
         )
     assert buyer_error.value.status_code == 409
 
