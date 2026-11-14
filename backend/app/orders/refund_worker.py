@@ -233,7 +233,14 @@ async def claim_due_refunds(
                 job.locked_until = None
                 continue
 
-            transaction_id, intent_id, payer_id, charge_id, order_id, transaction_status = transaction_data
+            (
+                transaction_id,
+                intent_id,
+                payer_id,
+                charge_id,
+                order_id,
+                transaction_status,
+            ) = transaction_data
             if transaction_status != "refund_pending":
                 if transaction_status == "refunded":
                     job.status = "succeeded"
@@ -330,11 +337,12 @@ async def _persist_claim_result(
         )
         if order is None or intent is None or transaction is None or job is None:
             return False
+        checked_at = max(now, datetime.now(UTC))
         if (
             job.status != "processing"
             or job.lease_token != claim.claim_token
             or job.locked_until is None
-            or job.locked_until <= now
+            or job.locked_until <= checked_at
         ):
             # A late worker must not overwrite a newer worker's result. If Telegram
             # already completed the refund, the next worker will reconcile it.
@@ -342,10 +350,10 @@ async def _persist_claim_result(
 
         if succeeded or transaction.status == "refunded":
             transaction.status = "refunded"
-            transaction.refunded_at = transaction.refunded_at or now
+            transaction.refunded_at = transaction.refunded_at or checked_at
             transaction.last_error_code = None
             job.status = "succeeded"
-            job.completed_at = job.completed_at or now
+            job.completed_at = job.completed_at or checked_at
             job.last_error_code = None
             job.lease_token = None
             job.locked_until = None
