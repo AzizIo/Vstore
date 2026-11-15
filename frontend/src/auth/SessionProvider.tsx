@@ -43,12 +43,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [sessionAttempt, setSessionAttempt] = useState(0);
 
   function retrySession() {
+    clearPrivateCache(queryClient);
     setSession({ status: "loading" });
     setSessionAttempt((attempt) => attempt + 1);
   }
 
   useEffect(() => {
     const controller = new AbortController();
+    let expirationTimer: number | null = null;
+
     async function loadSession() {
       try {
         const initData = await getTelegramInitData(controller.signal);
@@ -57,12 +60,35 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           setSession({ status: "unauthenticated", reason: "missing_init_data" });
           return;
         }
-        const accessToken = await authenticateTelegram(initData, controller.signal);
-        const user = await fetchCurrentUser(accessToken, controller.signal);
-        if (!controller.signal.aborted) setSession({ status: "authenticated", accessToken, user });
+        const authenticationStartedAt = Date.now();
+        const authenticatedSession = await authenticateTelegram(initData, controller.signal);
+        const tokenExpiresAt = authenticationStartedAt + authenticatedSession.expiresIn * 1000;
+        const user = await fetchCurrentUser(authenticatedSession.accessToken, controller.signal);
+        if (!controller.signal.aborted) {
+          setSession({
+            status: "authenticated",
+            accessToken: authenticatedSession.accessToken,
+            user,
+          });
+
+          // Telegram initData is valid only for a short server-defined window and
+          // there is no refresh-token endpoint. Do not mint a new JWT from stale
+          // initData: expire this session and require a fresh Mini App launch.
+          const remainingLifetimeMs = Math.max(0, tokenExpiresAt - Date.now());
+          if (remainingLifetimeMs === 0) {
+            clearPrivateCache(queryClient);
+            setSession({ status: "unauthenticated", reason: "invalid_init_data" });
+            return;
+          }
+          expirationTimer = window.setTimeout(() => {
+            if (controller.signal.aborted) return;
+            clearPrivateCache(queryClient);
+            setSession({ status: "unauthenticated", reason: "invalid_init_data" });
+          }, remainingLifetimeMs);
+        }
       } catch (error) {
         if (controller.signal.aborted) return;
-        if (error instanceof AuthApiError && error.status === 401) clearPrivateCache(queryClient);
+        clearPrivateCache(queryClient);
         setSession(error instanceof TypeError
           ? {
               status: "error",
@@ -74,7 +100,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
 
     void loadSession();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (expirationTimer !== null) window.clearTimeout(expirationTimer);
+    };
   }, [queryClient, sessionAttempt]);
 
   return (

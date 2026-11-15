@@ -3,16 +3,43 @@ import logging
 from contextlib import suppress
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import BotCommand
 
 from app.bot_handlers import router as user_router
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.db.session import async_session_factory
 from app.notifications.service import process_due_notifications
 from app.notifications.telegram import TelegramNotificationSender
 
 logger = logging.getLogger(__name__)
+
+# A bounded Telegram API timeout keeps claimed notification batches within
+# their database lease, even when the remote Bot API is unavailable.
+TELEGRAM_API_MAX_TIMEOUT_SECONDS = 15
+
+
+def telegram_api_timeout_seconds(settings: Settings) -> int:
+    """Keep each Bot API request shorter than a quarter of the notification lease."""
+    return max(
+        1,
+        min(
+            TELEGRAM_API_MAX_TIMEOUT_SECONDS,
+            settings.notification_claim_lease_seconds // 4,
+        ),
+    )
+
+
+def notification_worker_batch_limit(settings: Settings) -> int:
+    """Keep sequential Telegram sends comfortably inside the claim lease."""
+    request_timeout = telegram_api_timeout_seconds(settings)
+    lease_safe_batch_size = max(
+        1,
+        settings.notification_claim_lease_seconds // (2 * request_timeout),
+    )
+    return min(settings.notification_batch_size, lease_safe_batch_size)
+
 
 BOT_COMMANDS = [
     BotCommand(command="start", description="Открыть главное меню"),
@@ -43,7 +70,11 @@ async def _run_notification_worker(bot: Bot) -> None:
     while True:
         try:
             async with async_session_factory() as session:
-                result = await process_due_notifications(session, sender)
+                result = await process_due_notifications(
+                    session,
+                    sender,
+                    limit=notification_worker_batch_limit(settings),
+                )
             if result.claimed == 0:
                 await asyncio.sleep(settings.notification_poll_seconds)
         except asyncio.CancelledError:
@@ -69,7 +100,10 @@ async def main() -> None:
         )
 
     logging.basicConfig(level=logging.INFO)
-    bot = Bot(token=settings.bot_token)
+    bot = Bot(
+        token=settings.bot_token,
+        session=AiohttpSession(timeout=telegram_api_timeout_seconds(settings)),
+    )
     try:
         await register_bot_commands(bot)
     except TelegramAPIError:

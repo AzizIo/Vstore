@@ -327,6 +327,15 @@ async def handle_about_callback(callback: CallbackQuery) -> None:
     await _edit_screen(callback, "about")
 
 
+@router.callback_query()
+async def handle_unknown_callback(callback: CallbackQuery) -> None:
+    """Acknowledge stale or unsupported buttons instead of leaving a spinner."""
+    await callback.answer(
+        "Эта кнопка устарела. Используйте /start, чтобы открыть актуальное меню.",
+        show_alert=True,
+    )
+
+
 @router.message(F.text)
 async def handle_text_fallback(message: Message) -> None:
     """Guide unsupported text toward the bot's available actions."""

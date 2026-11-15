@@ -6,6 +6,7 @@ import pytest
 from aiogram.exceptions import TelegramNetworkError
 
 from app import bot as bot_runtime
+from app.core.config import Settings
 
 
 class _SessionContext:
@@ -28,6 +29,8 @@ def _settings(*, bot_token: str | None = "123456:test-token") -> SimpleNamespace
         telegram_mini_app_url="https://example.com/miniapp",
         telegram_mini_app_direct_link=None,
         notification_poll_seconds=0.001,
+        notification_claim_lease_seconds=300,
+        notification_batch_size=10,
     )
 
 
@@ -62,6 +65,7 @@ async def test_main_starts_worker_and_closes_bot_session_after_polling(
     worker_cancelled = asyncio.Event()
     bot_factory = Mock(return_value=fake_bot)
     dispatcher_factory = Mock(return_value=dispatcher)
+    session_factory = Mock(return_value=fake_bot.session)
 
     async def worker(bot: object) -> None:
         assert bot is fake_bot
@@ -79,12 +83,19 @@ async def test_main_starts_worker_and_closes_bot_session_after_polling(
     dispatcher.start_polling.side_effect = polling
     monkeypatch.setattr(bot_runtime, "get_settings", _settings)
     monkeypatch.setattr(bot_runtime, "Bot", bot_factory)
+    monkeypatch.setattr(bot_runtime, "AiohttpSession", session_factory)
     monkeypatch.setattr(bot_runtime, "create_dispatcher", dispatcher_factory)
     monkeypatch.setattr(bot_runtime, "_run_notification_worker", worker)
 
     await bot_runtime.main()
 
-    bot_factory.assert_called_once_with(token="123456:test-token")
+    bot_factory.assert_called_once_with(
+        token="123456:test-token",
+        session=fake_bot.session,
+    )
+    session_factory.assert_called_once_with(
+        timeout=bot_runtime.telegram_api_timeout_seconds(_settings())
+    )
     dispatcher_factory.assert_called_once_with()
     dispatcher.start_polling.assert_awaited_once_with(fake_bot)
     assert worker_started.is_set()
@@ -100,6 +111,7 @@ async def test_main_cleans_up_worker_and_bot_session_when_polling_raises(
     dispatcher = SimpleNamespace(start_polling=AsyncMock())
     worker_started = asyncio.Event()
     worker_cancelled = asyncio.Event()
+    session_factory = Mock(return_value=fake_bot.session)
 
     async def worker(bot: object) -> None:
         assert bot is fake_bot
@@ -118,6 +130,7 @@ async def test_main_cleans_up_worker_and_bot_session_when_polling_raises(
     dispatcher.start_polling.side_effect = failing_polling
     monkeypatch.setattr(bot_runtime, "get_settings", _settings)
     monkeypatch.setattr(bot_runtime, "Bot", Mock(return_value=fake_bot))
+    monkeypatch.setattr(bot_runtime, "AiohttpSession", session_factory)
     monkeypatch.setattr(bot_runtime, "create_dispatcher", Mock(return_value=dispatcher))
     monkeypatch.setattr(bot_runtime, "_run_notification_worker", worker)
 
@@ -143,7 +156,9 @@ async def test_notification_worker_propagates_cancellation_and_releases_session(
             session_exited.set()
             return None
 
-    async def wait_for_cancel(session: object, sender: object) -> object:
+    async def wait_for_cancel(
+        session: object, sender: object, limit: int | None = None
+    ) -> object:
         processing_started.set()
         await asyncio.Event().wait()
         return session
@@ -178,7 +193,9 @@ async def test_notification_worker_keeps_running_after_temporary_processing_erro
     recovered = asyncio.Event()
     attempts = 0
 
-    async def process(session: object, sender: object) -> SimpleNamespace:
+    async def process(
+        session: object, sender: object, limit: int | None = None
+    ) -> SimpleNamespace:
         nonlocal attempts
         attempts += 1
         if attempts == 1:
@@ -220,11 +237,46 @@ async def test_main_continues_when_telegram_command_menu_registration_fails(
 
     monkeypatch.setattr(bot_runtime, "get_settings", _settings)
     monkeypatch.setattr(bot_runtime, "Bot", Mock(return_value=fake_bot))
+    session_factory = Mock(return_value=fake_bot.session)
+    monkeypatch.setattr(bot_runtime, "AiohttpSession", session_factory)
     monkeypatch.setattr(bot_runtime, "create_dispatcher", Mock(return_value=dispatcher))
     monkeypatch.setattr(bot_runtime, "_run_notification_worker", AsyncMock())
 
     await bot_runtime.main()
 
+    session_factory.assert_called_once_with(
+        timeout=bot_runtime.telegram_api_timeout_seconds(_settings())
+    )
     fake_bot.set_my_commands.assert_awaited_once_with(bot_runtime.BOT_COMMANDS)
     dispatcher.start_polling.assert_awaited_once_with(fake_bot)
     fake_bot.session.close.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    (
+        "lease_seconds",
+        "configured_batch_size",
+        "expected_batch_size",
+        "expected_timeout",
+    ),
+    [
+        (300, 10, 10, 15),
+        (300, 100, 10, 15),
+        (60, 10, 2, 15),
+        (15, 10, 2, 3),
+    ],
+)
+def test_notification_batch_is_bounded_by_claim_lease(
+    lease_seconds: int,
+    configured_batch_size: int,
+    expected_batch_size: int,
+    expected_timeout: int,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        notification_claim_lease_seconds=lease_seconds,
+        notification_batch_size=configured_batch_size,
+    )
+
+    assert bot_runtime.telegram_api_timeout_seconds(settings) == expected_timeout
+    assert bot_runtime.notification_worker_batch_limit(settings) == expected_batch_size
