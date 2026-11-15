@@ -157,6 +157,7 @@ async def test_accept_deal_is_buyer_only_and_funded_review_only(
         principal_nanotons=2_500_000_000,
         deal_salt="f" * 64,
         network="testnet",
+        listing_intent_id=uuid4(),
     )
     with pytest.raises(HTTPException) as seller_error:
         await _prepare_action(
