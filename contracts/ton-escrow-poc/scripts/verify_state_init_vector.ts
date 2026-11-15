@@ -98,7 +98,7 @@ if (deployed.init.code.hash().toString("hex").toUpperCase() !== EXPECTED_CODE_HA
   throw new Error("Generated Acton CodeCell does not match pinned manifest");
 }
 if (stateInit.hash().toString("hex") !== EXPECTED_STATE_INIT_HASH) {
-  throw new Error("Generated fixed StateInit hash differs from frozen golden vector");
+  throw new Error("Generated fixed StateInit hash differs from frozen golden vector: " + JSON.stringify({address: deployed.address.toRawString(), state_init_hash: stateInit.hash().toString("hex"), data_hash: deployed.init.data.hash().toString("hex"), code_hash: deployed.init.code.hash().toString("hex").toUpperCase()}));
 }
 if (deployed.address.toRawString() !== EXPECTED_RAW_ADDRESS) {
   throw new Error("Generated fixed DealEscrow address differs from frozen golden vector");
