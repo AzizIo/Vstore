@@ -77,7 +77,7 @@ def upgrade() -> None:
                 OR NEW.price_currency IS DISTINCT FROM OLD.price_currency
                 OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key
             ) THEN
-                RAISE EXCEPTION 'Persisted escrow NFT identity snapshot and bound terms are immutable'
+                RAISE EXCEPTION 'Persisted escrow NFT identity and bound terms are immutable'
                     USING ERRCODE = 'integrity_constraint_violation';
             END IF;
             RETURN NEW;
@@ -85,6 +85,34 @@ def upgrade() -> None:
         $$
         """
     )
+    op.execute(
+        """
+        CREATE FUNCTION guard_escrow_listing_nft_identity_terms()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $
+        BEGIN
+            IF OLD.nft_identity_snapshot_json IS NOT NULL AND (
+                NEW.asset_id IS DISTINCT FROM OLD.asset_id
+                OR NEW.seller_wallet_id IS DISTINCT FROM OLD.seller_wallet_id
+                OR NEW.listing_key IS DISTINCT FROM OLD.listing_key
+            ) THEN
+                RAISE EXCEPTION 'Persisted escrow listing NFT identity binding is immutable'
+                    USING ERRCODE = 'integrity_constraint_violation';
+            END IF;
+            RETURN NEW;
+        END;
+        $
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER trg_escrow_listing_nft_identity_binding_immutable
+        BEFORE UPDATE ON escrow_listing_intents
+        FOR EACH ROW EXECUTE FUNCTION guard_escrow_listing_nft_identity_terms()
+        """
+    )
+
     op.execute(
         """
         CREATE TRIGGER trg_escrow_listing_nft_identity_immutable
@@ -116,6 +144,11 @@ def downgrade() -> None:
             "Cannot downgrade while escrow NFT identity evidence is referenced by intents or deals"
         )
 
+    op.execute(
+        "DROP TRIGGER IF EXISTS trg_escrow_listing_nft_identity_binding_immutable "
+        "ON escrow_listing_intents"
+    )
+    op.execute("DROP FUNCTION IF EXISTS guard_escrow_listing_nft_identity_terms()")
     op.execute(
         "DROP TRIGGER IF EXISTS trg_escrow_listing_nft_identity_immutable ON escrow_listing_intents"
     )
