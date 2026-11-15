@@ -15,11 +15,11 @@ This pass does **not** establish that the contract is safe to deploy. The emulat
 
 ## Findings
 
-### F-01 — MEDIUM: bounced message handler can overwrite a completed terminal state
+### F-01 — RESOLVED IN BRANCH: terminal state is preserved after a later bounce
 
-**Location:** `DealEscrow.tolk:738-745`.
+**Original location:** `DealEscrow.tolk:738-745`; fix is in the same handler.
 
-`onBouncedMessage(_in)` ignores the entire bounced message and unconditionally changes the current deal state to `STATE_MANUAL_REVIEW`. It does not inspect the original bounced body, sender/destination identity, operation opcode, query ID, deal salt or the current pending action/attempt. The critical practical case is a bounce of `sendSellerDeploymentRefund` sent during `settleRemainingBalanceForBuyer`: the principal may already have been paid and state set to `STATE_SETTLED` / `STATE_REFUNDED`, while the later refund bounce overwrites that terminal state.
+The original handler unconditionally changed every deal to `STATE_MANUAL_REVIEW`. The branch now returns without mutation when the state is `STATE_SETTLED`, `STATE_REFUNDED` or `STATE_EXPIRED`; non-terminal bounced actions still fail closed into manual review.
 
 **Preconditions / potential impact**
 - Principal settlement has already been reconciled by the oracle and the contract has entered `STATE_SETTLED` or `STATE_REFUNDED`.
@@ -29,7 +29,7 @@ This pass does **not** establish that the contract is safe to deploy. The emulat
 
 **Evidence**
 - The existing bounce test exercises a synthetic bounce and expects manual review (`DealEscrow.test.tolk:615-640`).
-- The added `test bounced message can overwrite an already terminal state` seeds `STATE_SETTLED`, delivers a bounced settlement message and observes `STATE_MANUAL_REVIEW`. This proves the callback does not preserve terminal states. A full transaction-chain test with a seller contract rejecting the actual deployment-refund message remains to be added.
+- The updated `test bounced message can overwrite an already terminal state` seeds `STATE_SETTLED`, delivers a bounced settlement message and asserts that the state remains `STATE_SETTLED`. A full transaction-chain test with a seller contract rejecting the actual deployment-refund message remains to be added.
 - `sendSellerDeploymentRefund` is bounce-enabled (`DealEscrow.tolk:179-195`) and is emitted during terminal settlement (`DealEscrow.tolk:223-235`); the handler does not discriminate message kind (`DealEscrow.tolk:738-745`).
 
 **Reproducer**
@@ -91,11 +91,11 @@ The terminal accounting test explicitly sets `testing.setChecksigIgnore(true)` b
 **Impact**
 Test suite may pass the financial settlement branch if the signature gate is accidentally bypassed in test configuration, because the existing test does bypass it. This is a validation blind spot, not proof of production bypass.
 
-### F-06 — MEDIUM: oracle and resolver attestations are not rejected after their state deadline
+### F-06 — RESOLVED IN BRANCH: oracle and resolver attestations are rejected after their state deadline
 
 **Locations:** oracle path `DealEscrow.tolk:329-352`; resolver path `DealEscrow.tolk:456-472`; timeout path `DealEscrow.tolk:640-696`.
 
-The contract checks deadlines for funding/acceptance, NFT deposit/return notifications and dispute opening, but `handleOracleAttestation` and `handleDisputeResolution` do not compare `blockchain.now()` with `progress.deadlineUnix`. The timeout path only moves the state forward when a separate `TimeoutDeal` message is processed.
+The original contract checked the deadlines for funding/acceptance, NFT notifications and dispute opening, but not in `handleOracleAttestation` or `handleDisputeResolution`. The branch now checks that a non-zero state deadline has not passed before signature processing or state mutation, using the same inclusive deadline boundary as the other contract actions.
 
 **Preconditions**
 - The deal is still in an oracle- or resolver-pending state.
@@ -107,9 +107,9 @@ The contract checks deadlines for funding/acceptance, NFT deposit/return notific
 The accepted outcome becomes a transaction-order race: a late oracle confirmation can advance a delivery/payout/refund path after its confirmation grace, or a late resolver decision can leave the arbitration window and still initiate NFT return/release. This weakens the documented rule that expired unresolved cases enter manual review. No loss of principal is proven from this condition alone; the impact is deadline-policy bypass and inconsistent handling of stale evidence.
 
 **Reproducers added**
-- `test expired oracle attestation is still accepted before timeout transaction` sets emulator time beyond the stored deadline and exercises the oracle handler.
-- `test expired resolver decision is still accepted before timeout transaction` opens a real pre-delivery dispute, advances time beyond the arbitration deadline, then exercises the resolver handler.
-- These tests deliberately bypass only the signature VM check with `testing.setChecksigIgnore(true)` to isolate the missing time check; they do not claim cryptographic acceptance. The signature helper tests remain separate.
+- The late-oracle test now expects `Errors.Deadline` and verifies that the deal remains in `STATE_NFT_RELEASE_PENDING`.
+- The late-resolver test opens a real pre-delivery dispute, advances time beyond the arbitration deadline, expects `Errors.Deadline`, and verifies that the NFT remains in escrow and the deal remains disputed.
+- Both tests now fail at the deadline guard without disabling signature verification.
 
 **Recommendation**
 Define whether the deadline constrains (a) the source-chain action timestamp, (b) the attestation submission time, or (c) only the time by which a permissionless timeout must be processed. If it constrains contract submission, add `blockchain.now() <= progress.deadlineUnix` before state mutation. If late proof of an in-deadline source transaction is permitted, include and validate an authenticated source timestamp/checkpoint in the signed oracle data rather than relying only on positive masterchain seqno/logical time. Coordinate semantics with #206/#213 before protocol or adapter changes.
@@ -150,7 +150,7 @@ Independent reviewer to inspect signed payload format, source evidence verificat
 | Buyer principal refund | no full real-signature path | Missing |
 | Seller expiry/return | not fully exercised | Missing |
 | Every outbound bounce branch | generic bounce + terminal-state overwrite reproducer (CI passed); full real NFT/principal/refund bounce matrix absent | Partial |
-| Deadline boundaries | late oracle/resolver reproducers (CI passed); -1/exact/+1 boundary matrix still incomplete | Partial |
+| Late oracle/resolver deadline rejection | exact post-deadline rejection regressions added; -1/exact/+1 matrix for every deadline remains incomplete | Improved; partial |
 | Terminal principal/NFT/reserve invariants across branches | one seeded seller payout/reserve case | Missing |
 | Replay and stale attempt | stale oracle check only | Partial |
 | Live valueless testnet lifecycle | none attached | Blocked |
@@ -183,3 +183,11 @@ These are copied from the frozen manifest; this pass did not independently downl
 ## Decision
 
 **BLOCKED for testnet acceptance / any production use.** The contract may only proceed as an isolated disabled testnet PoC under the existing Gate A controls. Do not enable signing, mount public routes, claim buyer protection, or merge as proof of live acceptance. Resolve or explicitly disposition the above findings, complete missing emulator matrix, rebuild/bind the frozen artifact to an exact source SHA, and obtain independent TON/Tolk review before Gate B.
+
+
+## Follow-up changes on the current branch
+
+- F-01: terminal states now survive late bounces; non-terminal bounces still enter manual review.
+- F-06: oracle and resolver handlers now reject after-deadline messages with `Errors.Deadline`; regressions assert the deal/NFT state does not advance.
+- F-02, F-04 and F-05 remain open: full dispute/refund/expiry financial matrix, real-signature settlement integration fixtures and oracle trust/evidence review are not complete.
+- CI evidence for these follow-up commits must be recorded separately from the historical run IDs above.
