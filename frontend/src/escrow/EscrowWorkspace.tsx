@@ -88,6 +88,7 @@ function shortAddress(value: string | null | undefined): string {
 function actionLabel(action: EscrowAction): string {
   switch (action) {
     case "create_deal_escrow": return "Создать DealEscrow";
+    case "activate_deal": return "Активировать DealEscrow";
     case "deposit_nft": return "Внести NFT в escrow";
     case "fund_deal": return "Внести TON";
     case "accept_deal": return "Принять условия и передать NFT";
@@ -758,6 +759,11 @@ function WorkspaceBody({
                         {allowed("create_deal_escrow", deal.available_actions) && (
                           <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !signer} onClick={() => signer && void prepareWalletAction("create_deal_escrow", deal, () => api!.prepareDealEscrow({ deal_id: deal.id, wallet_id: signer.id }), signer)}>
                             Создать DealEscrow
+                          </button>
+                        )}
+                        {allowed("activate_deal", deal.available_actions) && (
+                          <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !signer} onClick={() => signer && void prepareWalletAction("activate_deal", deal, () => api!.prepareDealActivation({ deal_id: deal.id, wallet_id: signer.id }), signer)}>
+                            Активировать DealEscrow
                           </button>
                         )}
                         {allowed("deposit_nft", deal.available_actions) && (

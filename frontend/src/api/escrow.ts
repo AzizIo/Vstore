@@ -29,6 +29,7 @@ export type EscrowListingAction = "create_deal_intent" | "cancel_listing_intent"
 
 export type EscrowAction =
   | "create_deal_escrow"
+  | "activate_deal"
   | "deposit_nft"
   | "fund_deal"
   | "accept_deal"
@@ -190,6 +191,7 @@ export interface EscrowHttpContract {
   createListingIntent: (input: EscrowCreateListingIntentInput) => EscrowHttpOperation;
   createBuyerDealIntent: (input: EscrowCreateBuyerDealIntentInput) => EscrowHttpOperation;
   prepareDealEscrow: (input: EscrowPrepareDealActionInput) => EscrowHttpOperation;
+  prepareDealActivation: (input: EscrowPrepareDealActionInput) => EscrowHttpOperation;
   prepareNftDeposit: (input: EscrowPrepareDealActionInput) => EscrowHttpOperation;
   prepareBuyerFunding: (input: EscrowPrepareDealActionInput) => EscrowHttpOperation;
   prepareBuyerAcceptance: (input: EscrowPrepareDealActionInput) => EscrowHttpOperation;
@@ -267,6 +269,7 @@ function isListingAction(value: unknown): value is EscrowListingAction {
 
 function isAction(value: unknown): value is EscrowAction {
   return value === "create_deal_escrow"
+    || value === "activate_deal"
     || value === "deposit_nft"
     || value === "fund_deal"
     || value === "accept_deal"
@@ -489,6 +492,7 @@ export function createEscrowApiClient(
     createListingIntent: (input) => writeJson(contract.createListingIntent(input), accessToken, isEscrowListingIntent),
     createBuyerDealIntent: (input) => writeJson(contract.createBuyerDealIntent(input), accessToken, isEscrowDeal),
     prepareDealEscrow: (input) => getPrepared(contract.prepareDealEscrow(input)),
+    prepareDealActivation: (input) => getPrepared(contract.prepareDealActivation(input)),
     prepareNftDeposit: (input) => getPrepared(contract.prepareNftDeposit(input)),
     prepareBuyerFunding: (input) => getPrepared(contract.prepareBuyerFunding(input)),
     prepareBuyerAcceptance: (input) => getPrepared(contract.prepareBuyerAcceptance(input)),

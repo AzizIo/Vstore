@@ -35,6 +35,7 @@ export function createEscrowHttpContract(baseUrl = API_BASE_URL): EscrowHttpCont
     createListingIntent: (input) => write(`${root}/listing-intents`, input),
     createBuyerDealIntent: (input) => write(`${root}/deals`, input),
     prepareDealEscrow: ({ deal_id }) => write(`${deal(deal_id)}/prepare/create-deal-escrow`),
+    prepareDealActivation: ({ deal_id }) => write(`${deal(deal_id)}/prepare/activate-deal`),
     prepareNftDeposit: ({ deal_id }) => write(`${deal(deal_id)}/prepare/deposit-nft`),
     prepareBuyerFunding: ({ deal_id }) => write(`${deal(deal_id)}/prepare/funding`),
     prepareBuyerAcceptance: ({ deal_id }) => write(`${deal(deal_id)}/prepare/accept`),
