@@ -30,7 +30,13 @@ from app.db.models import (
     User,
     Wallet,
 )
-from app.db.payments import PaymentEvent, PaymentIntent, PaymentRefund, PaymentTransaction
+from app.db.payments import (
+    PaymentEvent,
+    PaymentIntent,
+    PaymentIntentRequest,
+    PaymentRefund,
+    PaymentTransaction,
+)
 from app.escrow.models import EscrowDeal, EscrowListingIntent, EscrowWalletActionRecord
 from app.escrow.service import (
     EscrowActionConflict,
