@@ -761,7 +761,6 @@ async def create_listing_intent(
         except AddressError as exc:
             raise HTTPException(status_code=409,
                 detail="Stored NFT collection address is invalid") from exc
-        asset_collection_id = asset.collection_id
         asset_snapshot = {
             "id": asset.id,
             "owner_id": asset.owner_id,
@@ -998,43 +997,6 @@ async def create_listing_intent(
                 price_amount=price_amount,
                 price_currency=PriceCurrency.TON,
                 title=asset.name,
-            )
-            session.add(listing)
-            await session.flush()
-
-        price_nano = Decimal(payload.price_nano)
-        price_amount = price_nano / _NANOTON
-        if price_amount <= 0 or price_amount * _NANOTON != price_nano:
-            raise HTTPException(status_code=422,
-                detail="price_nano must be a positive integer nanotons")
-
-        listing = await session.scalar(select(Listing).where(
-            Listing.asset_id == asset.id, Listing.seller_id == actor_id,
-            Listing.status.in_((ListingStatus.ACTIVE, ListingStatus.DRAFT)),
-        ).order_by(Listing.status.asc()).with_for_update())
-        if listing is not None and listing.status is ListingStatus.ACTIVE:
-            if (
-                listing.price_currency is not PriceCurrency.TON
-                or listing.price_amount != price_amount
-            ):
-                raise HTTPException(status_code=409,
-                    detail="Active listing price/currency must match the escrow intent")
-        elif listing is not None:
-            listing.price_amount = price_amount
-            listing.price_currency = PriceCurrency.TON
-            if not listing.title:
-                listing.title = asset.name
-        else:
-            conflict = await session.scalar(select(Listing.id).where(
-                Listing.asset_id == asset.id,
-                Listing.status.in_((ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW)),
-            ))
-            if conflict is not None:
-                raise HTTPException(status_code=409,
-                    detail="NFT already has a reserved or review-pending listing")
-            listing = Listing(
-                id=uuid4(), asset_id=asset.id, seller_id=actor_id, status=ListingStatus.DRAFT,
-                price_amount=price_amount, price_currency=PriceCurrency.TON, title=asset.name,
             )
             session.add(listing)
             await session.flush()
