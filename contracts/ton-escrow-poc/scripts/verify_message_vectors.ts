@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { beginCell, Address } from "@ton/core";
 import {
@@ -16,9 +17,10 @@ const salt = BigInt("0x" + "01".repeat(32));
 const reasonHash = BigInt("0x" + "ab".repeat(32));
 const seller = Address.parseRaw("0:" + "11".repeat(32));
 const buyer = Address.parseRaw("0:" + "22".repeat(32));
-const escrow = Address.parseRaw(
-  "0:e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6",
-);
+const stateInitVector = JSON.parse(
+  readFileSync("build/state_init_vector.json", "utf8"),
+) as { address: string };
+const escrow = Address.parseRaw(stateInitVector.address);
 const forwardPayload = PayloadInline.create({
   value: beginCell()
     .storeUint(0x56454e46, 32)
