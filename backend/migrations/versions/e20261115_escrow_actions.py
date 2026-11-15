@@ -94,6 +94,24 @@ def upgrade() -> None:
             THEN
                 RAISE EXCEPTION 'Escrow action request identity is immutable';
             END IF;
+            IF OLD.attempt_id IS NOT NULL
+                AND NEW.attempt_id IS DISTINCT FROM OLD.attempt_id
+            THEN
+                RAISE EXCEPTION 'Escrow action attempt id cannot be replaced';
+            END IF;
+            IF OLD.query_id IS NOT NULL
+                AND NEW.query_id IS DISTINCT FROM OLD.query_id
+            THEN
+                RAISE EXCEPTION 'Escrow action query id cannot be replaced';
+            END IF;
+            IF OLD.unsigned_boc_sha256 IS NOT NULL
+                AND (
+                    NEW.unsigned_boc_sha256 IS DISTINCT FROM OLD.unsigned_boc_sha256
+                    OR NEW.unsigned_boc_ref IS DISTINCT FROM OLD.unsigned_boc_ref
+                )
+            THEN
+                RAISE EXCEPTION 'Escrow action unsigned BOC cannot be replaced';
+            END IF;
             IF OLD.submission_reference_sha256 IS NOT NULL
                 AND (
                     NEW.submission_reference_sha256 IS DISTINCT FROM OLD.submission_reference_sha256
