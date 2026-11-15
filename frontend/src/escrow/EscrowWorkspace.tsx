@@ -235,8 +235,7 @@ function TransactionReview({
       <p className="escrow-transaction-summary">{transaction.display_purpose}</p>
       <dl className="escrow-facts">
         <div><dt>Сеть</dt><dd>TON testnet</dd></div>
-        {transaction.factory_address && <div><dt>Factory</dt><dd><code>{transaction.factory_address}</code></dd></div>}
-        <div><dt>DealEscrow</dt><dd><code>{transaction.escrow_address ?? "Будет создан Factory; адрес подтвердит observer"}</code></dd></div>
+        <div><dt>DealEscrow</dt><dd><code>{transaction.escrow_address ?? "Адрес будет рассчитан Backend по StateInit"}</code></dd></div>
         <div><dt>NFT item address</dt><dd><code>{transaction.nft_item_address}</code></dd></div>
         {transaction.price_nano !== null && <div><dt>Цена сделки</dt><dd>{nanoToTon(transaction.price_nano)} TON</dd></div>}
         <div><dt>Комиссия платформы</dt><dd>0 TON · 0 bps · PoC</dd></div>
@@ -715,7 +714,7 @@ function WorkspaceBody({
                     </div>
                     <dl className="escrow-compact-facts">
                       <div><dt>Цена</dt><dd>{nanoToTon(listing.price_nano)} TON</dd></div>
-                      <div><dt>Listing key</dt><dd><code>{listing.listing_key ?? "Назначается Backend/Factory"}</code></dd></div>
+                      <div><dt>Listing key</dt><dd><code>{listing.listing_key ?? "Назначается Backend"}</code></dd></div>
                       <div><dt>NFT item</dt><dd><code>{shortAddress(listing.nft.item_address)}</code></dd></div>
                     </dl>
                   </article>

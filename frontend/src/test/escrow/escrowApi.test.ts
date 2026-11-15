@@ -14,7 +14,6 @@ import {
 
 const item = "0:" + "1".repeat(64);
 const escrow = "0:" + "2".repeat(64);
-const factory = "0:" + "3".repeat(64);
 
 function listing(): EscrowListingIntent {
   return {
@@ -78,16 +77,14 @@ function withdrawal(): EscrowWithdrawal {
 }
 
 function prepared(action: PreparedEscrowTransaction["action"] = "fund_deal") {
-  const isFactoryAction = action === "create_deal_escrow";
-  const destination = isFactoryAction ? factory
-    : action === "deposit_nft" || action === "return_nft_to_escrow" ? item
-      : escrow;
+  const isNftAction = action === "deposit_nft" || action === "return_nft_to_escrow";
+  const destination = isNftAction ? item : escrow;
   return {
     action_id: "operation-1",
     action,
     network: "testnet",
-    factory_address: isFactoryAction ? factory : null,
-    escrow_address: isFactoryAction ? null : escrow,
+    factory_address: null,
+    escrow_address: escrow,
     nft_item_address: item,
     price_nano: "2500000000",
     fee_bps: 0,
@@ -98,7 +95,7 @@ function prepared(action: PreparedEscrowTransaction["action"] = "fund_deal") {
       address: destination,
       amount_nano: "2520000000",
       payload_boc: null,
-      state_init_boc: null,
+      state_init_boc: action === "create_deal_escrow" ? "server-prepared-state-init-boc" : null,
     }],
   };
 }
@@ -225,6 +222,28 @@ describe("escrow API boundary", () => {
     await expect(api.prepareBuyerFunding({ deal_id: "deal-1", wallet_id: "wallet-buyer" }))
       .rejects.toThrow(/не соответствует ожидаемому контракту/i);
     await expect(api.prepareBuyerFunding({ deal_id: "deal-1", wallet_id: "wallet-buyer" }))
+      .rejects.toThrow(/не соответствует ожидаемому контракту/i);
+  });
+
+
+
+  it("accepts only a direct DealEscrow deployment with escrow address and StateInit", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response(prepared("create_deal_escrow")))
+      .mockResolvedValueOnce(response({
+        ...prepared("create_deal_escrow"),
+        messages: [{
+          address: escrow,
+          amount_nano: "2520000000",
+          payload_boc: null,
+          state_init_boc: null,
+        }],
+      }));
+
+    const api = createEscrowApiClient("access-token", contract());
+    await expect(api.prepareDealEscrow({ deal_id: "deal-1", wallet_id: "wallet-seller" }))
+      .resolves.toMatchObject({ escrow_address: escrow, factory_address: null });
+    await expect(api.prepareDealEscrow({ deal_id: "deal-1", wallet_id: "wallet-seller" }))
       .rejects.toThrow(/не соответствует ожидаемому контракту/i);
   });
 

@@ -133,7 +133,7 @@ export interface PreparedEscrowTransaction {
   action_id: string;
   action: EscrowAction;
   network: EscrowNetwork;
-  factory_address: string | null;
+  factory_address: null;
   escrow_address: string | null;
   nft_item_address: string;
   price_nano: string | null;
@@ -353,25 +353,38 @@ export function isEscrowWithdrawal(value: unknown): value is EscrowWithdrawal {
 
 export function isPreparedEscrowTransaction(value: unknown): value is PreparedEscrowTransaction {
   if (!isRecord(value) || value.network !== "testnet" || !isAction(value.action)) return false;
-  const addressTopologyValid = value.action === "create_deal_escrow"
-    ? typeof value.factory_address === "string" && isNullableString(value.escrow_address)
-    : isNullableString(value.factory_address) && typeof value.escrow_address === "string";
-  return addressTopologyValid
-    && typeof value.action_id === "string"
-    && typeof value.nft_item_address === "string"
-    && (value.price_nano === null || isPositiveNano(value.price_nano))
-    && value.fee_bps === 0
-    && (value.execution_reserve_nano === null || isNonNegativeNano(value.execution_reserve_nano))
-    && typeof value.valid_until === "string"
-    && Number.isFinite(Date.parse(value.valid_until))
-    && typeof value.display_purpose === "string"
-    && Array.isArray(value.messages)
+  // DealEscrow v1 deploys one immutable contract per deal. It does not use a
+  // Factory; every prepared action carries the backend-derived escrow address.
+  const addressTopologyValid = value.factory_address === null
+    && typeof value.escrow_address === "string";
+  const messagesValid = Array.isArray(value.messages)
     && value.messages.length > 0
     && value.messages.every((message) => isRecord(message)
       && typeof message.address === "string"
       && isPositiveNano(message.amount_nano)
       && isNullableString(message.payload_boc ?? null)
       && isNullableString(message.state_init_boc ?? null));
+  const deploymentMessage = Array.isArray(value.messages) && value.messages.length === 1
+    ? value.messages[0]
+    : null;
+  const directDeploymentValid = value.action !== "create_deal_escrow"
+    || (isRecord(deploymentMessage)
+      && deploymentMessage.address === value.escrow_address
+      && typeof deploymentMessage.state_init_boc === "string"
+      && deploymentMessage.state_init_boc.length > 0
+      && (deploymentMessage.payload_boc === null || deploymentMessage.payload_boc === undefined));
+  return addressTopologyValid
+    && messagesValid
+    && directDeploymentValid
+    && typeof value.action_id === "string"
+    && value.action_id.length > 0
+    && typeof value.nft_item_address === "string"
+    && (value.price_nano === null || isPositiveNano(value.price_nano))
+    && value.fee_bps === 0
+    && (value.execution_reserve_nano === null || isNonNegativeNano(value.execution_reserve_nano))
+    && typeof value.valid_until === "string"
+    && Number.isFinite(Date.parse(value.valid_until))
+    && typeof value.display_purpose === "string";
 }
 
 export function isEscrowPage<T>(

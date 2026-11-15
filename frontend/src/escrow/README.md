@@ -26,10 +26,10 @@ This supersedes any earlier UI shorthand such as `payment_received`, `buyer_conf
 - `EscrowWorkspace` owns the standalone seller and buyer workspaces, listing intents, deal timeline, dispute details, transaction review, and unsold-NFT withdrawal history.
 - `inventory.ts` reuses `fetchMyWallets` and `fetchMyInventory`. It only exposes NFTs from persisted, server-verified TON **testnet** wallets and validates the returned wallet ID and NFT verification/eligibility fields. A TonConnect connection is never an ownership signal.
 - `TonConnectEscrowAdapter.ts` accepts only Backend-prepared transaction data. It validates testnet chain `-3`, expiry, exact verified signer and action-specific message recipients:
-  - `create_deal_escrow` → Factory;
+  - `create_deal_escrow` → the backend-derived per-deal DealEscrow address, with its StateInit BOC;
   - `deposit_nft` / `return_nft_to_escrow` → exact NFT item;
   - `fund_deal`, `accept_deal`, `open_dispute`, `withdraw_unsold_nft` → DealEscrow.
-- The transaction review shows every outgoing message destination and amount in nanotons and TON, Factory/DealEscrow/NFT addresses, price, fee_bps, execution reserve, signer and expiry. No opcode or payload is created in the browser.
+- The transaction review shows every outgoing message destination and amount in nanotons and TON, the direct per-deal DealEscrow/NFT addresses, price, fee_bps, execution reserve, signer and expiry. No Factory is used; no opcode or payload is created in the browser.
 - `api/escrow.ts` contains provisional listing-intent/deal/dispute/withdrawal DTOs, runtime validators and an injected HTTP contract. No endpoint URL or unapproved request path is guessed.
 - `escrowState.ts` maps canonical listing and deal states. It converts decimal TON to/from nanotons using string/BigInt operations only.
 
@@ -40,9 +40,9 @@ The Backend/contract workstreams must finalize and version:
 1. API paths, HTTP methods, cursor format, payload and response schema for listing intents, buyer deal-intent creation, buyer/seller deal feeds, action preparation, participant-scoped detail, withdrawal history and BOC-reference submission.
 2. Exact canonical field names/nullability and immutable snapshot fields, including listing key, network, escrow address, seller/buyer wallet, NFT item, price_nano, fee_bps, deadlines, chain evidence and dispute projection.
 3. `available_actions` values and participant authorization. UI only renders buttons when the Backend includes the canonical action in this array.
-4. Action preparation fields: `action_id`, action, testnet network, valid_until, exact Factory/DealEscrow/NFT addresses, nanotons per outgoing message, payload/state-init bytes, display purpose and execution reserve.
+4. Action preparation fields: `action_id`, action, testnet network, valid_until, direct per-deal DealEscrow address, exact NFT address, nanotons per outgoing message, payload/state-init bytes, display purpose and execution reserve.
 5. Confirmation semantics: the returned wallet BOC digest is a lookup hint only. Backend observer must distinguish off-chain evidence observation from oracle-accepted contract state, then reconcile the contract getter/state before updating the view model.
-6. Exact deployment transaction sequence and predicted DealEscrow address. Factory address may be shown for deployment; do not invent a deal address before the backend returns it.
+6. Direct per-deal deployment: backend derives the address from the pinned code BOC and immutable StateInit terms, then returns that address and StateInit BOC together. The browser must not recompute or invent the deal address.
 7. Seller unsold-NFT withdrawal eligibility and its finality projection. No payout/refund transaction is user-signed in this PoC.
 8. The first PoC fixes `fee_bps = 0`. Non-zero commission/payout arithmetic must be rejected until separately reviewed.
 9. Listing and deal timers must expose the exact triggering event/deadline. UI must not create local deadlines or start the dispute clock from a client callback.
