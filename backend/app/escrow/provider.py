@@ -124,6 +124,18 @@ class FinalityVerification:
             and self.trace_id == event.trace_id
             and is_sha256(self.masterchain_block_hash)
             and is_sha256(self.proof_sha256)
+            and (
+                event.masterchain_block_hash is None
+                or event.masterchain_block_hash == self.masterchain_block_hash
+            )
+            and (
+                event.finality_proof_sha256 is None
+                or event.finality_proof_sha256 == self.proof_sha256
+            )
+            and (
+                event.finality_provider is None
+                or event.finality_provider == self.provider_id
+            )
             and bool(self.provider_id.strip())
         )
 
