@@ -1241,8 +1241,36 @@ async def create_deal_intent(
                 detail={"code": "escrow_nft_identity_changed_since_listing"},
             )
 
-        # Keep lock ordering consistent with listing creation: NFTAsset, then
-        # Listing, then escrow intent. Never hold these locks across provider I/O.
+        # Match ordinary order reservation: buyer User -> Listing -> wallet ->
+        # NFTAsset. Lock marketplace rows before the asset so an Order and an
+        # EscrowDeal cannot form an asset/listing lock cycle. No locks span proof I/O.
+        await session.scalar(select(User.id).where(User.id == actor_id).with_for_update())
+        listing = await session.scalar(
+            select(Listing)
+            .where(Listing.id == intent_snapshot["marketplace_listing_id"])
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if (
+            listing is None
+            or listing.status is not ListingStatus.ACTIVE
+            or any(
+                getattr(listing, field) != value
+                for field, value in listing_snapshot.items()
+            )
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_listing_changed_during_proof"},
+            )
+
+        buyer_wallet, buyer_address = await _verified_wallet(
+            session,
+            user_id=actor_id,
+            wallet_id=payload.buyer_wallet_id,
+            lock=True,
+        )
+
         asset = await session.scalar(
             select(NFTAsset)
             .where(NFTAsset.id == intent_snapshot["asset_id"])
@@ -1269,9 +1297,15 @@ async def create_deal_intent(
                 status_code=409,
                 detail={"code": "escrow_nft_asset_changed_during_proof"},
             ) from exc
+        if locked_asset_item_address != asset_snapshot["item_address"]:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_identity_snapshot_mismatch"},
+            )
+
         collection = await session.scalar(
             select(NFTCollection)
-            .where(NFTCollection.id == asset.collection_id)
+            .where(NFTCollection.id == asset_snapshot["collection_id"])
             .with_for_update()
             .execution_options(populate_existing=True)
         )
@@ -1287,51 +1321,32 @@ async def create_deal_intent(
                 status_code=409,
                 detail={"code": "escrow_nft_collection_changed_during_proof"},
             ) from exc
-        if (
-            locked_asset_item_address != asset_snapshot["item_address"]
-            or locked_collection_address != asset_snapshot["collection_address"]
-        ):
+        if locked_collection_address != asset_snapshot["collection_address"]:
             raise HTTPException(
                 status_code=409,
                 detail={"code": "escrow_nft_identity_snapshot_mismatch"},
             )
 
-        listing = await session.scalar(
-            select(Listing)
-            .where(Listing.id == payload.listing_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
         intent = await session.scalar(
             select(EscrowListingIntent)
             .where(EscrowListingIntent.id == intent_id)
             .with_for_update()
             .execution_options(populate_existing=True)
         )
-        if (
-            listing is None
-            or listing.status is not ListingStatus.ACTIVE
-            or intent is None
-            or intent.status not in {"intent_only", "active"}
-        ):
+        if intent is None or intent.status not in {"intent_only", "active"}:
             raise HTTPException(
                 status_code=409,
-                detail="Listing was reserved or changed during verification",
-            )
-        if any(getattr(listing, field) != value for field, value in listing_snapshot.items()):
-            raise HTTPException(
-                status_code=409, detail="Marketplace listing changed during verification"
+                detail={"code": "escrow_intent_changed_during_proof"},
             )
         if any(
             getattr(intent, field) != value
             for field, value in intent_snapshot.items()
         ):
             raise HTTPException(
-                status_code=409, detail="Escrow listing snapshot changed during verification"
+                status_code=409,
+                detail={"code": "escrow_intent_snapshot_changed_during_proof"},
             )
-        buyer_wallet, buyer_address = await _verified_wallet(
-            session, user_id=actor_id, wallet_id=payload.buyer_wallet_id
-        )
+
         principal = intent.price_amount * _NANOTON
         if principal <= 0 or principal != principal.to_integral_value():
             raise HTTPException(status_code=409, detail="TON principal precision is invalid")
