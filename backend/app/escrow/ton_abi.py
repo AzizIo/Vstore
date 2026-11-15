@@ -334,6 +334,9 @@ def build_storage_cell(snapshot: Any) -> Cell:
     )
     evidence = begin_cell().store_uint(0, 256).store_uint(0, 256).end_cell()
     recovery = begin_cell().store_address(None).store_address(None).end_cell()
+    # The third reference is the persisted OutboundActionSet introduced by
+    # DealProgress v1. Both maybe-ref slots start empty in a fresh deployment.
+    outbound_actions = begin_cell().store_bit(0).store_bit(0).end_cell()
     progress = (
         begin_cell()
         .store_uint(0, 8)  # STATE_INTENT_CREATED
@@ -346,6 +349,7 @@ def build_storage_cell(snapshot: Any) -> Cell:
         .store_uint(0, 64)  # disputeAttemptId
         .store_ref(evidence)
         .store_ref(recovery)
+        .store_ref(outbound_actions)
         .end_cell()
     )
     return begin_cell().store_ref(terms).store_ref(progress).end_cell()
@@ -413,6 +417,17 @@ def decode_storage_cell(data_cell: Cell) -> dict[str, object]:
         recovery = progress.load_ref().begin_parse()
         recovery_previous_owner = recovery.load_address()
         recovery_item_address = recovery.load_address()
+
+        # DealProgress now stores a mandatory OutboundActionSet cell with two
+        # optional references. Parse the option bits so the observer rejects an
+        # old/truncated storage layout instead of silently accepting it.
+        outbound_actions = progress.load_ref().begin_parse()
+        outbound_first_present = bool(outbound_actions.load_bit())
+        if outbound_first_present:
+            outbound_actions.load_ref()
+        outbound_second_present = bool(outbound_actions.load_bit())
+        if outbound_second_present:
+            outbound_actions.load_ref()
     except Exception as exc:
         raise TONABIError("DealEscrow storage data cell is malformed") from exc
 
