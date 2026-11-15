@@ -909,6 +909,22 @@ async def create_listing_intent(
                 detail={"code": "escrow_nft_listing_changed_during_proof"},
             )
 
+        # Any reserved/review-pending listing blocks a new escrow intent even
+        # when an unrelated draft row also exists for the same asset.
+        reserved_or_review_listing = await session.scalar(
+            select(Listing.id).where(
+                Listing.asset_id == asset_snapshot["id"],
+                Listing.status.in_(
+                    (ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW)
+                ),
+            )
+        )
+        if reserved_or_review_listing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="NFT already has a reserved or review-pending listing",
+            )
+
         # A second open intent for a different draft of the same NFT is also
         # disallowed; idempotent replay was handled before leaving the first
         # transaction. Intent rows are locked last, after shared marketplace rows.
