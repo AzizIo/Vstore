@@ -767,6 +767,75 @@ class PytoniqTONTestnetEscrowProvider:
                 "Direct escrow message body failed ABI validation"
             ) from exc
 
+    def _decode_resolver_decision(
+        self,
+        body: Any,
+        deal: EscrowDeal,
+        getter: dict[str, object],
+    ) -> dict[str, object]:
+        """Decode the pinned ResolverDecision context from a proven contract call.
+
+        ResolveDispute has no top-level query_id/deal_salt fields: they are bound
+        through a signed context cell. Its accepted signatures are proven by the
+        successful execution of the pinned contract code at the proved block, while
+        these fields are independently checked against the persisted deal/getters.
+        """
+
+        try:
+            parser = body.begin_parse()
+            if parser.load_uint(32) != _OP_RESOLVE:
+                raise ValueError("unexpected resolver opcode")
+            data_cell = parser.load_ref()
+            _signatures_cell = parser.load_ref()
+            decision = data_cell.begin_parse().load_ref().begin_parse()
+            domain = decision.load_uint(32)
+            protocol_version = decision.load_uint(16)
+            network_id = decision.load_int(32)
+            escrow_address = decision.load_address()
+            deal_salt = decision.load_uint(256)
+            dispute_phase = decision.load_uint(8)
+            outcome = decision.load_uint(8)
+            attempt_id = decision.load_uint(64)
+            evidence_hash = decision.load_uint(256)
+
+            snapshot = deal.deployment_snapshot_json
+            if not isinstance(snapshot, dict):
+                raise ValueError("immutable deployment snapshot is missing")
+            expected_state = {1: 7, 2: 4}.get(outcome)
+            getter_reason = getter.get("dispute_reason_hash")
+            if not isinstance(getter_reason, str):
+                raise ValueError("proof-read dispute reason is missing")
+            if (
+                domain != _ESCROW_DOMAIN
+                or protocol_version != _PROTOCOL_VERSION
+                or network_id != _NETWORK_ID
+                or _canonical_address(escrow_address.to_str(is_user_friendly=False))
+                    != _canonical_address(deal.contract_address)
+                or deal_salt != int(deal.deal_salt, 16)
+                or dispute_phase != int(getter["dispute_phase"])
+                or attempt_id <= 0
+                or attempt_id != int(getter["dispute_attempt_id"])
+                or evidence_hash <= 0
+                or evidence_hash != int(getter_reason, 16)
+                or expected_state is None
+                or int(getter["contract_state"]) != expected_state
+                or not bool(getter["nft_in_escrow"])
+            ):
+                raise ValueError("resolver context does not match final contract state")
+            return {
+                "outcome": outcome,
+                "attempt_id": attempt_id,
+                "dispute_phase": dispute_phase,
+                "evidence_hash": f"{evidence_hash:064x}",
+                "observed_contract_state": _STATE_NAMES[expected_state],
+            }
+        except EscrowProviderInvalidEvidence:
+            raise
+        except Exception as exc:
+            raise EscrowProviderInvalidEvidence(
+                "Resolver decision body failed ABI/getter reconciliation"
+            ) from exc
+
     def _decode_oracle_attestation(
         self,
         body: Any,
@@ -884,7 +953,24 @@ class PytoniqTONTestnetEscrowProvider:
         snapshot = deal.deployment_snapshot_json
         if not isinstance(snapshot, dict):
             raise EscrowProviderInvalidEvidence("DealEscrow snapshot is missing")
-        if opcode in _DIRECT_OPCODES:
+        if opcode == _OP_RESOLVE:
+            resolution = self._decode_resolver_decision(tx.in_msg.body, deal, getter)
+            if event.query_id is not None:
+                raise EscrowProviderInvalidEvidence(
+                    "ResolverDecision has no top-level query id; indexed query is untrusted"
+                )
+            event_type = EscrowChainEventType.DISPUTE_RESOLUTION_ACCEPTED
+            source = message_source
+            destination = message_destination
+            item = _canonical_address(snapshot["item_address"])
+            collection = _canonical_address(snapshot["collection_address"])
+            amount = message_value
+            accepted = True
+            if resolution["observed_contract_state"] != state_name:
+                raise EscrowProviderInvalidEvidence(
+                    "ResolverDecision state name differs from the proof-read state"
+                )
+        elif opcode in _DIRECT_OPCODES:
             query_id, _salt, _reason_hash = self._decode_direct_body(
                 tx.in_msg.body, opcode, deal
             )
@@ -900,8 +986,6 @@ class PytoniqTONTestnetEscrowProvider:
                 _OP_DISPUTE: 6,
                 _OP_RECOVER: 7,
             }.get(opcode)
-            if opcode == _OP_RESOLVE and state not in {4, 7}:
-                raise EscrowProviderInvalidEvidence("ResolveDispute did not reach an allowed state")
             if opcode == _OP_TIMEOUT and state not in {7, 8, 12, 13}:
                 raise EscrowProviderInvalidEvidence("TimeoutDeal did not reach an allowed state")
             if expected_state is not None and state != expected_state:
@@ -928,9 +1012,7 @@ class PytoniqTONTestnetEscrowProvider:
                 raise EscrowProviderInvalidEvidence(
                     "Buyer action source does not match the snapshot"
                 )
-            if opcode == _OP_RESOLVE:
-                event_type = EscrowChainEventType.DISPUTE_RESOLUTION_ACCEPTED
-            elif opcode == _OP_TIMEOUT:
+            if opcode == _OP_TIMEOUT:
                 event_type = EscrowChainEventType.DEAL_TIMEOUT_ACCEPTED
             elif opcode == _OP_RECOVER:
                 event_type = EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED
