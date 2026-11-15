@@ -879,6 +879,29 @@ fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
     storage.save();
 }
 
+fun hasBouncedSellerDeploymentRefund(progress: DealProgress): bool {
+    val actions = progress.outboundActions.load();
+    if (actions.first != null) {
+        val action = actions.first.load();
+        if (
+            action.kind == OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND
+            && action.status == OUTBOUND_STATUS_BOUNCED
+        ) {
+            return true;
+        }
+    }
+    if (actions.second != null) {
+        val action = actions.second.load();
+        if (
+            action.kind == OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND
+            && action.status == OUTBOUND_STATUS_BOUNCED
+        ) {
+            return true;
+        }
+    }
+    return false;
+}
+
 fun retryBouncedOutboundAction(
     mutate progress: DealProgress,
     action: OutboundAction,
@@ -887,6 +910,12 @@ fun retryBouncedOutboundAction(
     money: DealMoney,
 ) {
     assert (action.status == OUTBOUND_STATUS_BOUNCED) throw Errors.RetryNotReady;
+    // The carry-all buyer refund must not sweep back a seller allowance that has
+    // already bounced into escrow. Require the seller's fixed refund to be retried
+    // first; otherwise the buyer could capture that returned allowance.
+    if (action.kind == OUTBOUND_KIND_EXECUTION_RESERVE_REFUND) {
+        assert (!hasBouncedSellerDeploymentRefund(progress)) throw Errors.RetryNotReady;
+    }
     val retryAttemptId = progress.startOracleAttempt();
 
     val addresses = action.addresses.load();
