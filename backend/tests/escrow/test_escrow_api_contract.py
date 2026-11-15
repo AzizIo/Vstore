@@ -118,9 +118,13 @@ async def test_accept_deal_is_buyer_only_and_funded_review_only(
     class DealSession:
         def __init__(self, deal: SimpleNamespace) -> None:
             self.deal = deal
+            self.scalar_calls = 0
 
-        async def scalar(self, statement: object) -> SimpleNamespace:
-            return self.deal
+        async def scalar(self, statement: object) -> SimpleNamespace | None:
+            self.scalar_calls += 1
+            # The first query loads the deal; the second checks for an existing
+            # durable wallet action and must return no row for this new action.
+            return self.deal if self.scalar_calls == 1 else None
 
     deal = SimpleNamespace(
         id=deal_id,
