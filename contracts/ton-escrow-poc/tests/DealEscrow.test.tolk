@@ -728,7 +728,7 @@ get fun `test bounced internal action forces manual review`() {
 }
 
 
-get fun `test expired oracle attestation is still accepted before timeout transaction`() {
+get fun `test expired oracle attestation is rejected before timeout transaction`() {
     testing.setNow(1_700_000_000);
     val deadline = testing.getNow() - 1;
     val (escrow, nftItem, seller, buyer) = createFixture(
@@ -793,7 +793,7 @@ get fun `test expired oracle attestation is still accepted before timeout transa
     expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
 }
 
-get fun `test expired resolver decision is still accepted before timeout transaction`() {
+get fun `test expired resolver decision is rejected before timeout transaction`() {
     testing.setNow(1_700_000_000);
     val salt = 0xA11DB;
     val (escrow, nftItem, seller, buyer) = createFixture(salt);
@@ -1587,7 +1587,7 @@ get fun `test post-delivery buyer dispute outcome returns NFT and refunds buyer`
 }
 
 
-get fun `test bounced message can overwrite an already terminal state`() {
+get fun `test bounced message cannot overwrite an already terminal state`() {
     val (escrow, _, seller, _) = createFixture(
         0xA11DC,
         STATE_SETTLED,
@@ -1617,3 +1617,65 @@ get fun `test bounced message can overwrite an already terminal state`() {
     // A secondary refund bounce cannot erase a reconciled terminal result.
     expect(escrow.getState()).toEqual(STATE_SETTLED);
 }
+
+get fun `test bounced secondary action preserves refunded terminal state`() {
+    val salt = 0xA11DD1;
+    val (escrow, _, seller, _) = createFixture(
+        salt,
+        STATE_REFUNDED,
+        0,
+        0,
+        false,
+        false,
+    );
+    val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
+    expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_REFUNDED);
+
+    val bounceOrigin = testing.treasury("refunded-terminal-bounce-origin");
+    val bouncedMessage = createMessage({
+        bounce: false,
+        value: grams("0.03"),
+        dest: escrow.address,
+        body: SettlementMessage {
+            queryId: 2,
+            dealSalt: salt,
+            action: SETTLEMENT_ACTION_SELLER_DEPLOYMENT_REFUND,
+        },
+    }).bounced();
+    val result = net.send(bounceOrigin.address, bouncedMessage);
+    expect(result).toHaveSuccessfulTx({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_REFUNDED);
+}
+
+
+get fun `test bounced secondary action preserves expired terminal state`() {
+    val salt = 0xA11DD2;
+    val (escrow, _, seller, _) = createFixture(
+        salt,
+        STATE_EXPIRED,
+        0,
+        0,
+        false,
+        false,
+    );
+    val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
+    expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_EXPIRED);
+
+    val bounceOrigin = testing.treasury("expired-terminal-bounce-origin");
+    val bouncedMessage = createMessage({
+        bounce: false,
+        value: grams("0.03"),
+        dest: escrow.address,
+        body: SettlementMessage {
+            queryId: 3,
+            dealSalt: salt,
+            action: SETTLEMENT_ACTION_SELLER_DEPLOYMENT_REFUND,
+        },
+    }).bounced();
+    val result = net.send(bounceOrigin.address, bouncedMessage);
+    expect(result).toHaveSuccessfulTx({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_EXPIRED);
+}
+
