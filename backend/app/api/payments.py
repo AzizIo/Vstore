@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import logging
 from datetime import UTC, datetime
 from typing import Annotated
@@ -42,7 +43,9 @@ def _test_payment_router_enabled(settings=None) -> bool:
         return False
     if settings.telegram_stars_test_bot_token is None or not settings.bot_token:
         return False
-    if settings.telegram_stars_test_bot_token.get_secret_value() == settings.bot_token:
+    if hmac.compare_digest(
+        settings.telegram_stars_test_bot_token.get_secret_value(), settings.bot_token
+    ):
         return False
     try:
         from urllib.parse import urlsplit
