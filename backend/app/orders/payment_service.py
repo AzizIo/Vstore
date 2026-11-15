@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from urllib.parse import urlsplit
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,20 +20,55 @@ class PaymentConflict(Exception):
     """A payment action does not match the persisted order/payment state."""
 
 
+_LOCAL_TEST_DATABASE_HOSTS = {"localhost", "127.0.0.1", "::1", "db", "postgres"}
+
+
 def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _assert_test_stars_enabled() -> None:
+    """Require an isolated Telegram test bot *and* an isolated local PostgreSQL DB.
+
+    The entrypoint checks are intentionally repeated here: service functions can be
+    called outside the test-bot/refund-worker process, so a safe bot runner alone
+    must not be the only barrier protecting payment mutations.
+    """
+
     settings = get_settings()
     if not settings.telegram_stars_test_enabled:
         raise PaymentConflict("Telegram Stars test payments are disabled")
-    if settings.environment.lower() not in {"local", "development", "test"}:
+    if settings.environment.strip().lower() not in {"local", "development", "test"}:
         raise PaymentConflict(
             "Telegram Stars test payments are unavailable outside test environments"
         )
     if settings.telegram_stars_test_bot_token is None:
         raise PaymentConflict("A dedicated Telegram Stars test bot token is required")
+
+    test_bot_token = settings.telegram_stars_test_bot_token.get_secret_value()
+    if not settings.bot_token:
+        raise PaymentConflict("BOT_TOKEN must be configured to verify test-token isolation")
+    if hmac.compare_digest(test_bot_token, settings.bot_token):
+        raise PaymentConflict("The Telegram Stars test bot token must differ from BOT_TOKEN")
+
+    try:
+        parsed = urlsplit(settings.database_url)
+        # Force parsing of the port so malformed URLs fail closed before any DB write.
+        _ = parsed.port
+    except ValueError as exc:
+        raise PaymentConflict("Telegram Stars test database URL is invalid") from exc
+
+    if parsed.scheme != "postgresql+asyncpg":
+        raise PaymentConflict("Telegram Stars test payments require PostgreSQL")
+    database_name = parsed.path.lstrip("/").split("?", maxsplit=1)[0]
+    if not (database_name.startswith("test_") or database_name.endswith("_test")):
+        raise PaymentConflict(
+            "Telegram Stars test payments require a dedicated test-named database"
+        )
+    if parsed.hostname not in _LOCAL_TEST_DATABASE_HOSTS:
+        raise PaymentConflict(
+            "Telegram Stars test payments may connect only to a local PostgreSQL host"
+        )
 
 
 async def queue_stars_refund(
