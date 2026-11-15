@@ -998,6 +998,25 @@ get fun `test actual nft transfer bounce is correlated and retryable with signed
     expect(escrow.getProgress().principalLocked).toEqual(true);
     expect(escrow.getProgress().nftInEscrow).toEqual(true);
 
+    // Manual review after a real bounce must not accept a late success attestation
+    // for the failed attempt. Only the snapshotted recipient may retry it.
+    val staleDelivery = buildTestOracleAttestation(
+        escrow, salt, ORACLE_ACTION_NFT_DELIVERED, 1,
+        nftItem.address, escrow.address, buyer.address, 0, 1, 0xA11D90, 98, 98,
+    );
+    val rejectedStaleDelivery = escrow.sendAny(
+        testing.treasury("bounced-action-stale-oracle").address,
+        staleDelivery.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(rejectedStaleDelivery).toHaveFailedTx<OracleAttestation>({
+        to: escrow.address,
+        exitCode: Errors.Deadline,
+    });
+    expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
+    expect(escrow.getProgress().principalLocked).toEqual(true);
+    expect(nftItem.getOwner()).toEqual(escrow.address);
+
     val failedActions = escrow.getProgress().outboundActions.load();
     assert (failedActions.first != null) throw Errors.OutboundActionMissing;
     val failed = failedActions.first.load();
