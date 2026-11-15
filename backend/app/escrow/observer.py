@@ -591,13 +591,17 @@ async def _persist_getter_snapshot(
         or proof.getter_snapshot_block_hash != proof.masterchain_block_hash
         or proof.getter_snapshot_provider != proof.provider_id
     ):
-        raise EscrowProviderInvalidEvidence("Getter snapshot is not bound to the event finality proof")
+        raise EscrowProviderInvalidEvidence(
+            "Getter snapshot is not bound to the event finality proof"
+        )
     if not event.deal_id:
         raise EscrowProviderInvalidEvidence("Verified getter snapshot has no deal identity")
     try:
         deal_id = uuid.UUID(event.deal_id)
     except (ValueError, TypeError) as exc:
-        raise EscrowProviderInvalidEvidence("Verified getter snapshot has an invalid deal identity") from exc
+        raise EscrowProviderInvalidEvidence(
+            "Verified getter snapshot has an invalid deal identity"
+        ) from exc
 
     async with session_factory() as session:
         async with session.begin():
@@ -605,7 +609,9 @@ async def _persist_getter_snapshot(
                 select(EscrowDeal).where(EscrowDeal.id == deal_id).with_for_update()
             )
             if deal is None:
-                raise EscrowProviderInvalidEvidence("Verified getter snapshot references an unknown deal")
+                raise EscrowProviderInvalidEvidence(
+                    "Verified getter snapshot references an unknown deal"
+                )
             current_seqno = deal.getter_snapshot_masterchain_seqno
             if current_seqno is not None and proof.masterchain_seqno < current_seqno:
                 # Old events may be replayed while a newer authoritative snapshot is
