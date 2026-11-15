@@ -106,14 +106,16 @@ Revision `e20261114_ton_escrow` is chained after the current main Alembic head `
 Until these blockers close, all preparation endpoints remain fail-closed. The router may be conditionally mounted in testnet mode for discovery/projection APIs, but signing, broadcast and mainnet must remain disabled.
 
 
-## Explicit integration gates before mounting
+## Remaining integration gates before transaction preparation
 
-The isolated router must remain unmounted until all of the following are approved and tested:
+The testnet-only router is conditionally mounted when `TON_CONNECT_NETWORK=testnet`. That mount exposes the isolated projections and intent APIs; it does not enable wallet transaction preparation. The following gates remain:
 
-1. A versioned DealEscrow ABI and Factory contract are reviewed, including deterministic address derivation, state-init, opcodes, cell layouts and getter semantics. Until then, all transaction preparation returns HTTP 503.
-2. A real testnet provider adapter can prove transaction/message/trace identity, masterchain finality, accepted oracle attestations and getter-state reconciliation. A transaction hash or NFT transfer notification alone is never accepted delivery.
-3. Marketplace listing reservation is coordinated atomically with the existing Orders workflow so an escrow-reserved listing cannot also be purchased through the ordinary order path. This PR deliberately does not change OrderStatus, Stars payments or the current order workflow; that integration gate must be resolved before public discovery/checkout is enabled.
-4. The full backend, migration and API-backed E2E suites pass against disposable test infrastructure. No migration is run against production or VPS databases.
+1. The versioned DealEscrow ABI, code BOC, StateInit/address derivation and message serializers are now pinned and cross-checked against the generated Acton wrapper. Independent contract/security review and confirmation of oracle/resolver authority policy are still required.
+2. Persist the complete immutable deployment snapshot, including all authority public keys, reserve/refund/transfer amounts, query IDs and protocol/network terms. The current `EscrowDeal` row does not contain every required field.
+3. Persist exact unsigned TON Connect payloads and response metadata so idempotent retries return the identical payload and query IDs.
+4. Implement a testnet provider adapter that proves transaction/message/trace identity, masterchain/shard finality, accepted oracle attestations and getter-state reconciliation. A transaction hash or NFT transfer notification alone is never accepted delivery.
+5. Complete PostgreSQL concurrency coverage for ordinary Orders versus escrow reservation and terminal relisting/ownership reconciliation.
+6. Execute a valueless live testnet lifecycle run and attach transaction, trace, getter and current-owner evidence. Backend, migration, frontend and API-backed E2E checks must pass on the exact release commit. No migration is run against production or VPS databases.
 
 Payout and refund remain contract-initiated state transitions. The API exposes their pending/finalized state through the deal projection and does not provide a manual client-controlled financial trigger.
 
