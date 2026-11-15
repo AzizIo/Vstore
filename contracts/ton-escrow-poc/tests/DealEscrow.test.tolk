@@ -175,6 +175,92 @@ fun depositExpectedNft(
     });
 }
 
+fun buildTestOracleAttestation(
+    escrow: DealEscrow,
+    salt: uint256,
+    action: uint8,
+    attemptId: uint64,
+    itemAddress: address,
+    sourceAddress: address,
+    destinationAddress: address,
+    amountNanotons: coins,
+    queryId: uint64,
+    evidenceHash: uint256,
+    masterchainSeqno: uint32,
+    logicalTime: uint64,
+): OracleAttestation {
+    val data: OracleAttestationData = {
+        context: OracleContext {
+            domain: ESCROW_DOMAIN,
+            protocolVersion: PROTOCOL_VERSION,
+            networkId: TESTNET_NETWORK_ID,
+            escrowAddress: escrow.address,
+            dealSalt: salt,
+            action,
+            attemptId,
+        }.toCell(),
+        route: OracleRoute {
+            itemAddress,
+            sourceAddress,
+            destinationAddress,
+            amountNanotons,
+            queryId,
+        }.toCell(),
+        position: OraclePosition {
+            masterchainSeqno,
+            logicalTime,
+        }.toCell(),
+        hashes: OracleEvidenceHashes {
+            messageHash: evidenceHash + 1,
+            traceHash: evidenceHash + 2,
+            evidenceHash,
+        }.toCell(),
+    };
+    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
+    return OracleAttestation {
+        data: data.toCell(),
+        signatures: OracleSignatureSet {
+            signatureA: dummySignature,
+            signatureB: dummySignature,
+            signatureC: dummySignature,
+        }.toCell(),
+    };
+}
+
+
+fun buildTestResolverDecision(
+    escrow: DealEscrow,
+    salt: uint256,
+    disputePhase: uint8,
+    outcome: uint8,
+    attemptId: uint64,
+    evidenceHash: uint256,
+): ResolveDispute {
+    val decision: ResolverDecisionData = {
+        context: ResolverDecisionContext {
+            domain: ESCROW_DOMAIN,
+            protocolVersion: PROTOCOL_VERSION,
+            networkId: TESTNET_NETWORK_ID,
+            escrowAddress: escrow.address,
+            dealSalt: salt,
+            disputePhase,
+            outcome,
+            attemptId,
+            evidenceHash,
+        }.toCell(),
+    };
+    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
+    return ResolveDispute {
+        data: decision.toCell(),
+        signatures: ResolverSignatureSet {
+            signatureA: dummySignature,
+            signatureB: dummySignature,
+            signatureC: dummySignature,
+        }.toCell(),
+    };
+}
+
+
 get fun `test deployment address is derived from immutable StateInit`() {
     val (escrowA, _, seller, _) = createFixture(0xA11CE);
     val (escrowB, _, _, _) = createFixture(0xA11CE);
@@ -1140,6 +1226,160 @@ get fun `test pre-delivery buyer dispute returns NFT and refunds principal exact
         exitCode: Errors.Deadline,
     });
     expect(escrow.getState()).toEqual(STATE_REFUNDED);
+}
+
+
+get fun `test post-delivery seller dispute outcome requires buyer NFT return before payout`() {
+    testing.setNow(1_700_000_000);
+    val salt = 0xA11E1;
+    val (escrow, nftItem, seller, buyer) = createFixture(salt);
+    val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
+    expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
+    val nftDeploy = nftItem.deploy(seller.address, { value: grams("0.05"), bounce: false });
+    expect(nftDeploy).toHaveSuccessfulDeploy({ to: nftItem.address });
+
+    activateDeal(escrow, seller, salt);
+    depositExpectedNft(escrow, nftItem, seller, salt);
+    val funding = escrow.sendFundDeal(
+        buyer.address,
+        1001,
+        salt,
+        { value: grams("1.5"), bounce: true },
+    );
+    expect(funding).toHaveSuccessfulTx<FundDeal>({ to: escrow.address });
+    val accepted = escrow.sendAcceptDeal(
+        buyer.address,
+        1003,
+        salt,
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(accepted).toHaveSuccessfulTx<AcceptDeal>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
+    expect(nftItem.getOwner()).toEqual(buyer.address);
+
+    val delivered = buildTestOracleAttestation(
+        escrow,
+        salt,
+        ORACLE_ACTION_NFT_DELIVERED,
+        1,
+        nftItem.address,
+        escrow.address,
+        buyer.address,
+        0,
+        1,
+        0x301,
+        21,
+        21,
+    );
+    testing.setChecksigIgnore(true);
+    val deliveryConfirmed = escrow.sendAny(
+        testing.treasury("post-delivery-oracle").address,
+        delivered.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(deliveryConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
+    testing.setChecksigIgnore(false);
+    expect(escrow.getState()).toEqual(STATE_DELIVERED_DISPUTE_WINDOW);
+
+    val reasonHash = 0xA11E1A;
+    val dispute = escrow.sendAny(
+        buyer.address,
+        OpenDispute {
+            queryId: 9201,
+            dealSalt: salt,
+            reasonHash,
+        }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(dispute).toHaveSuccessfulTx<OpenDispute>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_DISPUTED);
+    expect(escrow.getProgress().disputePhase).toEqual(DISPUTE_PHASE_POST_DELIVERY);
+
+    val buyerReturn = nftItem.sendAny(
+        buyer.address,
+        buildDepositBody(escrow.address, buyer.address, 1004, salt),
+        { value: grams("0.12"), bounce: true },
+    );
+    expect(buyerReturn).toHaveSuccessfulTx<NftTransfer>({ to: nftItem.address });
+    expect(buyerReturn).toHaveTx<NotificationForNewOwner>({
+        from: nftItem.address,
+        to: escrow.address,
+    });
+    expect(nftItem.getOwner()).toEqual(escrow.address);
+    expect(escrow.getState()).toEqual(STATE_DISPUTED);
+    expect(escrow.getProgress().nftInEscrow).toEqual(true);
+
+    val resolution = buildTestResolverDecision(
+        escrow,
+        salt,
+        DISPUTE_PHASE_POST_DELIVERY,
+        RESOLUTION_SELLER_WINS,
+        1,
+        reasonHash,
+    );
+    testing.setChecksigIgnore(true);
+    val acceptedResolution = escrow.sendAny(
+        testing.treasury("post-delivery-resolver").address,
+        resolution.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(acceptedResolution).toHaveSuccessfulTx<ResolveDispute>({ to: escrow.address });
+    testing.setChecksigIgnore(false);
+    expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
+    expect(nftItem.getOwner()).toEqual(buyer.address);
+
+    val deliveredAfterDispute = buildTestOracleAttestation(
+        escrow,
+        salt,
+        ORACLE_ACTION_NFT_DELIVERED,
+        2,
+        nftItem.address,
+        escrow.address,
+        buyer.address,
+        0,
+        2,
+        0x302,
+        22,
+        22,
+    );
+    testing.setChecksigIgnore(true);
+    val deliveryConfirmedAfterDispute = escrow.sendAny(
+        testing.treasury("post-delivery-release-oracle").address,
+        deliveredAfterDispute.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(deliveryConfirmedAfterDispute)
+        .toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
+    testing.setChecksigIgnore(false);
+    expect(escrow.getState()).toEqual(STATE_SELLER_PAYOUT_PENDING);
+
+    val payout = buildTestOracleAttestation(
+        escrow,
+        salt,
+        ORACLE_ACTION_SELLER_PAYOUT,
+        3,
+        nftItem.address,
+        escrow.address,
+        seller.address,
+        grams("1"),
+        3,
+        0x303,
+        23,
+        23,
+    );
+    testing.setChecksigIgnore(true);
+    val payoutConfirmed = escrow.sendAny(
+        testing.treasury("post-delivery-payout-oracle").address,
+        payout.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(payoutConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
+    testing.setChecksigIgnore(false);
+
+    expect(escrow.getState()).toEqual(STATE_SETTLED);
+    expect(escrow.getProgress().principalLocked).toEqual(false);
+    expect(escrow.getProgress().nftInEscrow).toEqual(false);
+    expect(nftItem.getOwner()).toEqual(buyer.address);
 }
 
 
