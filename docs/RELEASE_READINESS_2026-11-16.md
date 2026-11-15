@@ -40,7 +40,7 @@ Current `main`: `e003dc5ae82f2beb55fb2277361588267a70f21e`.
 - The DealEscrow source/ABI/BOC, backend observer/action primitives and testnet-only UI/API foundations are development/PoC components.
 - The contract is testnet-scoped and has no arbitrary owner withdrawal or server-held user key capability.
 - The current PoC pins `fee_bps = 0`; the backend/frontend action contract also rejects non-zero fee configuration.
-- The carry-all execution-reserve retry now reapplies the terminal storage reserve before sending remaining balance. PR #242 is merged to this baseline after exact-head Contract CI passed (30/30 emulator tests); the post-merge Contract CI for this new main SHA is still running at report time.
+- The carry-all execution-reserve retry now reapplies the terminal storage reserve before sending remaining balance. PR #242 is merged to this baseline after exact-head Contract CI passed (30/30 emulator tests); the post-merge Contract CI #43767167484 for this exact main SHA passed.
 - Escrow observer/router exposure is runtime-gated; production deployment does not mount testnet escrow routes. The isolated Preview observer requires an explicit opt-in and remains disabled by default.
 - A backend database projection, a submitted wallet transaction hash, an emitted outbound message, or an indexer status does not prove finalized NFT delivery or payment.
 - No public paid NFT purchase CTA, mainnet escrow, live custody, treasury collection or automatic seller payout is approved.
@@ -60,7 +60,7 @@ Current `main`: `e003dc5ae82f2beb55fb2277361588267a70f21e`.
 | Preview runtime gate — PR #238 | Merged to main; post-merge Backend and Frontend/API E2E passed | Preview opt-in is wired; it does not authorize payments or mainnet |
 | Revenue and settlement ADR — PR #240 | Merged to main | Commercial accounting and policy boundaries documented; no payment rail enabled |
 | NFT identity / collection membership — PR #241 | Draft; exact-head Backend CI failed 2 API contract tests; Frontend/API E2E passed | Do not merge until fixtures are corrected and all checks pass |
-| Contract reserve retry floor — PR #242 | Merged to main; exact-head Contract CI #43766977381 passed (30/30 emulator tests); post-merge Contract CI #43767167484 is running | Backend adapter code-hash pin still belongs to Issue #206; merge does not approve live escrow |
+| Contract reserve retry floor — PR #242 | Merged to main; exact-head Contract CI #43766977381 passed (30/30 emulator tests); post-merge Contract CI #43767167484 passed | Backend adapter code-hash pin still belongs to Issue #206; merge does not approve live escrow |
 | Direct per-deal StateInit UI — PR #233 / Issue #226 | Draft, based on an older main SHA | Must be rebased/integrated with the new backend activation and proof contract before acceptance |
 | Independent contract review — Issue #225 | Not completed | No production escrow |
 | Telegram policy ruling — Issue #155 | Open | Paid P2P NFT flow inside the Telegram Mini App remains blocked |
