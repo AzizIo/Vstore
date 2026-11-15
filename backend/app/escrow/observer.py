@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.db.models import Listing, ListingStatus, NFTAsset
 from app.escrow.domain import (
     TERMINAL_DEAL_STATES,
     DealEvidenceSnapshot,
@@ -28,7 +29,6 @@ from app.escrow.domain import (
     transition_for_verified_event,
     validate_event_against_deal,
 )
-from app.db.models import Listing, ListingStatus, NFTAsset
 from app.escrow.models import (
     EscrowChainEvent,
     EscrowDeal,
