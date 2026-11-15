@@ -973,3 +973,37 @@ async def test_query_id_mismatch_never_finalizes_an_action() -> None:
     assert action.status == "prepared"
     assert action.finalized_transaction_hash is None
 
+
+
+
+@pytest.mark.asyncio
+async def test_unmatched_proof_verified_bounce_is_audited_without_mutating_deal_state() -> None:
+    event = make_event(
+        event_type=EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED,
+        phase="bounce",
+        attempt_id=None,
+        query_id=None,
+        bounce_match_reason="outbound_action_descriptor_not_found",
+    )
+    deal_id = uuid4()
+    event = replace(event, deal_id=str(deal_id))
+    deal = SimpleNamespace(
+        id=deal_id,
+        network="testnet",
+        contract_address=event.contract_address,
+        deal_salt=event.deal_salt,
+        status=EscrowDealStatus.AWAITING_NFT.value,
+        last_chain_seqno=None,
+        last_chain_logical_time=None,
+    )
+    session = FakeSession(None, deal)
+
+    result = await _apply_one_event(session, event, provider_verified=True)
+
+    assert result == "rejected"
+    assert deal.status == EscrowDealStatus.AWAITING_NFT.value
+    row = session.added[0]
+    assert isinstance(row, EscrowChainEvent)
+    assert row.status == "manual_review"
+    assert row.reason_code == "outbound_action_descriptor_not_found"
+    assert row.deal_id == deal_id

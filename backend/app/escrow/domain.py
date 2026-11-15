@@ -61,6 +61,8 @@ class EscrowChainEventType(StrEnum):
     MANUAL_REVIEW_REQUIRED = "manual_review_required"
     DEAL_TIMEOUT_ACCEPTED = "deal_timeout_accepted"
     RECOVERY_NFT_RETURN_STARTED = "recovery_nft_return_started"
+    OUTBOUND_ACTION_BOUNCED = "outbound_action_bounced"
+    OUTBOUND_BOUNCE_UNMATCHED = "outbound_bounce_unmatched"
 
     # Legacy event names are parseable for forensic/history purposes only.
     NFT_DEPOSITED = "nft_deposited"
@@ -183,6 +185,20 @@ def transition_for_verified_event(
         if source in TERMINAL_DEAL_STATES:
             raise EscrowDomainError("A terminal deal cannot be silently reopened")
         return EscrowDealStatus.MANUAL_REVIEW
+    if event is EscrowChainEventType.OUTBOUND_ACTION_BOUNCED:
+        if observed_contract_state == EscrowDealStatus.MANUAL_REVIEW.value:
+            if source in TERMINAL_DEAL_STATES:
+                raise EscrowDomainError("A terminal deal cannot be reopened by a late bounce")
+            return EscrowDealStatus.MANUAL_REVIEW
+        if observed_contract_state == source.value:
+            # Non-critical reserve/allowance refunds preserve the current state,
+            # including an already-terminal deal.
+            return source
+        raise EscrowDomainError(
+            "Outbound bounce does not match the proof-read contract state"
+        )
+    if event is EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED:
+        raise EscrowDomainError("An unmatched bounce cannot advance a deal state")
 
     # Several DealEscrow v1 messages have more than one legitimate result. The
     # proof-verified contract storage state selects the transition; event labels
@@ -298,6 +314,20 @@ def validate_event_against_deal(event: NormalizedEventEvidence, deal: DealEviden
         raise EscrowDomainError("Raw observations are evidence only, not accepted contract state")
     if not deal.contract_address or event.contract_address != deal.contract_address:
         raise EscrowDomainError("Event does not belong to the configured deal contract")
+
+    if event.event_type is EscrowChainEventType.OUTBOUND_ACTION_BOUNCED:
+        if (
+            not event.contract_state_reconciled
+            or not event.message_hash
+            or not event.trace_id
+            or not event.attempt_id
+            or event.phase != "bounce"
+            or event.source_address != deal.contract_address
+            or event.observed_contract_state is None
+        ):
+            raise EscrowDomainError(
+                "Outbound bounce lacks a matched descriptor and reconciled contract state"
+            )
 
     if event.event_type is EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED:
         if (

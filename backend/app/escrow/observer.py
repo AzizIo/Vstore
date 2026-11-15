@@ -512,6 +512,20 @@ async def _apply_one_event(
             reason_code="stale_chain_event", deal_id=deal.id, existing=existing)
         return "pending"
 
+    if event.event_type is EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED:
+        # The block/message is genuine, but its relationship to a persisted
+        # outbound action was not proven. Keep forensic evidence without changing
+        # the canonical deal, NFT custody or financial state.
+        await _persist_event(
+            session,
+            event,
+            status="manual_review",
+            reason_code=event.bounce_match_reason or "unmatched_rich_bounce",
+            deal_id=deal.id,
+            existing=existing,
+        )
+        return "rejected"
+
     try:
         validate_event_against_deal(_event_snapshot(event), _deal_snapshot(deal))
         if (
@@ -870,11 +884,28 @@ async def run_observer_pass(
                 event = replace(
                     event,
                     event_type=proof.verified_event_type or event.event_type,
+                    attempt_id=(
+                        proof.verified_attempt_id
+                        if proof.verified_attempt_id is not None
+                        else event.attempt_id
+                    ),
                     query_id=(
                         proof.verified_query_id
                         if proof.verified_query_id is not None
                         else event.query_id
                     ),
+                    bounce_phase=proof.bounce_phase,
+                    bounce_exit_code=proof.bounce_exit_code,
+                    bounce_original_body_hash=proof.bounce_original_body_hash,
+                    bounce_original_value_nanotons=proof.bounce_original_value_nanotons,
+                    bounce_original_created_lt=proof.bounce_original_created_lt,
+                    bounce_original_created_at=proof.bounce_original_created_at,
+                    bounce_gas_used=proof.bounce_gas_used,
+                    bounce_vm_steps=proof.bounce_vm_steps,
+                    outbound_action_kind=proof.outbound_action_kind,
+                    outbound_action_status=proof.outbound_action_status,
+                    outbound_action_expected_state=proof.outbound_action_expected_state,
+                    bounce_match_reason=proof.bounce_match_reason,
                     source_address=(
                         proof.source_address
                         if proof.verified_event_type is not None

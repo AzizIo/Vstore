@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from pytoniq_core import Address, begin_cell
+
 from app.escrow.ton_abi import build_storage_cell, decode_storage_cell
 
 
@@ -56,3 +58,86 @@ def test_initial_storage_matches_acton_state_init_vector_and_has_empty_action_sl
     assert decoded["outbound_action_slots"] == [False, False]
     assert decoded["seller_address"] == "0:" + "11" * 32
     assert decoded["buyer_address"] == "0:" + "22" * 32
+
+
+
+def test_storage_decoder_reads_both_outbound_action_slots_and_full_descriptor() -> None:
+    root = build_storage_cell(_initial_snapshot()).begin_parse()
+    terms = root.load_ref()
+    initial_progress = root.load_ref()
+    progress = initial_progress.begin_parse()
+    progress.load_uint(8)
+    progress.load_uint(64)
+    progress.load_uint(8)
+    progress.load_uint(8)
+    progress.load_bit()
+    progress.load_bit()
+    progress.load_uint(64)
+    progress.load_uint(64)
+    evidence = progress.load_ref()
+    recovery = progress.load_ref()
+
+    item = Address("0:" + "44" * 32)
+    buyer = Address("0:" + "22" * 32)
+    item_pair = begin_cell().store_address(item).store_address(item).end_cell()
+    recipient_pair = begin_cell().store_address(buyer).store_address(buyer).end_cell()
+    addresses = begin_cell().store_ref(item_pair).store_ref(recipient_pair).end_cell()
+    action = (
+        begin_cell()
+        .store_uint(1, 8)
+        .store_uint(42, 64)
+        .store_uint(int("01" * 32, 16), 256)
+        .store_uint(42, 64)
+        .store_coins(80_000_000)
+        .store_coins(90_000_000)
+        .store_uint(4, 8)
+        .store_uint(0, 8)
+        .store_uint(1800, 32)
+        .store_uint(int("ab" * 32, 16), 256)
+        .store_uint(1, 8)
+        .store_uint(2, 8)
+        .store_int(37, 32)
+        .store_ref(addresses)
+        .end_cell()
+    )
+    action_set = begin_cell().store_bit(1).store_ref(action).store_bit(0).end_cell()
+    updated_progress = (
+        begin_cell()
+        .store_uint(0, 8)
+        .store_uint(0, 64)
+        .store_uint(0, 8)
+        .store_uint(0, 8)
+        .store_bit(0)
+        .store_bit(0)
+        .store_uint(0, 64)
+        .store_uint(0, 64)
+        .store_ref(evidence)
+        .store_ref(recovery)
+        .store_ref(action_set)
+        .end_cell()
+    )
+    updated_storage = begin_cell().store_ref(terms).store_ref(updated_progress).end_cell()
+
+    decoded = decode_storage_cell(updated_storage)
+
+    assert decoded["outbound_action_slots"] == [True, False]
+    assert decoded["outbound_actions"] == [{
+        "slot": "first",
+        "kind": 1,
+        "query_id": 42,
+        "deal_salt": "01" * 32,
+        "attempt_id": 42,
+        "amount_nanotons": 80_000_000,
+        "message_value_nanotons": 90_000_000,
+        "expected_state": 4,
+        "expected_pending_action": 0,
+        "retry_window_seconds": 1800,
+        "message_body_hash": "ab" * 32,
+        "status": 1,
+        "bounce_phase": 2,
+        "exit_code": 37,
+        "item_address": "0:" + "44" * 32,
+        "destination_address": "0:" + "44" * 32,
+        "recipient_address": "0:" + "22" * 32,
+        "response_address": "0:" + "22" * 32,
+    }]

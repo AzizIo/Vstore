@@ -141,6 +141,8 @@ async def test_liteclient_must_be_trust_level_zero_before_any_proof_use() -> Non
         (0x05138D91, EscrowChainEventType.NFT_DEPOSIT_ACCEPTED),
         (0x56450007, EscrowChainEventType.DEAL_TIMEOUT_ACCEPTED),
         (0x56450008, EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED),
+        (0xFFFFFFFE, EscrowChainEventType.OUTBOUND_ACTION_BOUNCED),
+        (0xFFFFFFFF, EscrowChainEventType.OUTBOUND_ACTION_BOUNCED),
     ],
 )
 def test_discovery_opcode_mapping_is_provisional_and_state_independent(
@@ -231,4 +233,46 @@ async def test_scan_rejects_corrupted_or_wrong_version_cursor() -> None:
                    '{"version":1,"last_lt_by_address":{"address":"not-a-number"}}'):
         with pytest.raises(EscrowProviderInvalidEvidence, match="cursor"):
             await provider.scan_events(cursor=cursor, limit=1)
+    await provider.close()
+
+
+
+@pytest.mark.asyncio
+async def test_scan_persists_bounce_candidate_without_untrusted_attempt_or_query_id() -> None:
+    deal = _deal()
+    row = {
+        "lt": "501",
+        "hash": _b64_hash(b"t" * 32),
+        "mc_block_seqno": 600,
+        "now": 1_700_000_001,
+        "block_ref": {"workchain": 0, "shard": "8000000000000000", "seqno": 599},
+        "in_msg": {
+            "hash": _b64_hash(b"b" * 32),
+            "source": "0:" + "d" * 64,
+            "destination": deal.contract_address,
+            "value": "90000000",
+            "bounced": True,
+            "opcode": 0xFFFFFFFE,
+            "message_content": {"opcode": 0xFFFFFFFE, "body": ""},
+        },
+    }
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(),
+        session_factory=_FakeSessionFactory([deal]),  # type: ignore[arg-type]
+        http_client=_FakeHttp({"transactions": [row]}),
+        lite_client_factory=lambda: object(),
+    )
+
+    batch = await provider.scan_events(cursor=None, limit=5)
+
+    assert len(batch.events) == 1
+    event = batch.events[0]
+    assert event.event_type is EscrowChainEventType.OUTBOUND_ACTION_BOUNCED
+    assert event.phase == "bounce"
+    assert event.attempt_id is None
+    assert event.query_id is None
+    assert event.operation_id == "0xfffffffe"
+    # Enrichment with a proof-decoded attempt must not change the dedup identity.
+    from dataclasses import replace
+    assert replace(event, attempt_id="42", query_id="42").event_key == event.event_key
     await provider.close()

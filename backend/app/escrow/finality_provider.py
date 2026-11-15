@@ -37,6 +37,13 @@ from app.escrow.provider import (
     NormalizedChainEvent,
     TerminalOwnerVerification,
 )
+from app.escrow.rich_bounce import (
+    CLASSIC_BOUNCE_OPCODE,
+    RICH_BOUNCE_OPCODE,
+    RichBounceParseError,
+    match_rich_bounce_to_action,
+    parse_rich_bounce_body,
+)
 from app.escrow.ton_abi import (
     decode_storage_cell,
     derive_deployment,
@@ -233,6 +240,8 @@ def _candidate_type(opcode: int, state: int | None = None) -> EscrowChainEventTy
     State-dependent meanings are resolved exclusively after a proof-checked
     transaction and a proof-read DealEscrow storage snapshot.
     """
+    if opcode in {RICH_BOUNCE_OPCODE, CLASSIC_BOUNCE_OPCODE}:
+        return EscrowChainEventType.OUTBOUND_ACTION_BOUNCED
     if opcode == _OP_ACTIVATE:
         return EscrowChainEventType.CONTRACT_ACTIVATED
     if opcode == _OP_FUND:
@@ -509,7 +518,19 @@ class PytoniqTONTestnetEscrowProvider:
             if not isinstance(in_msg, dict):
                 continue
             opcode = _candidate_opcode(in_msg)
-            event_type = _candidate_type(opcode, -1) if opcode is not None else None
+            bounced_flag = (
+                in_msg.get("bounced") is True
+                or in_msg.get("bounced") == 1
+                or str(in_msg.get("bounced", "")).lower() == "true"
+            )
+            bounce_candidate = bounced_flag or opcode in {
+                RICH_BOUNCE_OPCODE, CLASSIC_BOUNCE_OPCODE,
+            }
+            event_type = (
+                EscrowChainEventType.OUTBOUND_ACTION_BOUNCED
+                if bounce_candidate
+                else _candidate_type(opcode, -1) if opcode is not None else None
+            )
             if event_type is None:
                 # State-dependent oracle/timeout events are emitted only for opcodes
                 # known to the escrow protocol; the verified phase selects final semantics.
@@ -527,6 +548,10 @@ class PytoniqTONTestnetEscrowProvider:
             try:
                 block_ref = row["block_ref"]
                 if not transaction_hash or not message_hash:
+                    if bounce_candidate:
+                        raise EscrowProviderInvalidEvidence(
+                            "Bounce candidate is missing its transaction or message hash"
+                        )
                     continue
                 lt = int(row["lt"])
                 source = _canonical_address(in_msg.get("source"))
@@ -542,12 +567,11 @@ class PytoniqTONTestnetEscrowProvider:
                 )
                 body_cell = _untrusted_boc(body)
                 query_id = None
-                if body_cell is not None:
+                if body_cell is not None and not bounce_candidate and opcode is not None:
                     try:
                         parser = body_cell.begin_parse()
-                        if parser.remaining_bits >= 96:
-                            if parser.load_uint(32) == opcode:
-                                query_id = str(parser.load_uint(64))
+                        if parser.remaining_bits >= 96 and parser.load_uint(32) == opcode:
+                            query_id = str(parser.load_uint(64))
                     except Exception:
                         query_id = None
                 events.append(
@@ -575,10 +599,13 @@ class PytoniqTONTestnetEscrowProvider:
                         message_hash=message_hash,
                         trace_id=trace_id,
                         logical_time=lt,
-                        phase="contract_in",
-                        attempt_id=query_id or message_hash[:32],
-                        query_id=query_id,
-                        operation_id=f"0x{opcode:08x}",
+                        phase="bounce" if bounce_candidate else "contract_in",
+                        attempt_id=None if bounce_candidate else query_id or message_hash[:32],
+                        query_id=None if bounce_candidate else query_id,
+                        operation_id=(
+                            f"0x{opcode:08x}" if opcode is not None
+                            else "bounce:unknown" if bounce_candidate else None
+                        ),
                         deal_salt=deal.deal_salt,
                         account_address=address,
                         candidate_workchain=int(block_ref["workchain"]),
@@ -965,6 +992,122 @@ class PytoniqTONTestnetEscrowProvider:
                 "Oracle attestation body failed ABI validation"
             ) from exc
 
+    def _verified_bounce(
+        self,
+        event: NormalizedChainEvent,
+        tx: Any,
+        deal: EscrowDeal,
+        getter: dict[str, object],
+        state_name: str,
+        message_source: str | None,
+        message_destination: str | None,
+    ) -> tuple[
+        EscrowChainEventType, str | None, str | None, str | None, str | None,
+        int | None, bool, str | None, dict[str, object],
+    ]:
+        """Correlate a protocol-generated bounce with a proof-read action descriptor."""
+        details: dict[str, object] = {}
+        snapshot = deal.deployment_snapshot_json
+        collection = (
+            _canonical_address(snapshot["collection_address"])
+            if isinstance(snapshot, dict) else None
+        )
+        item = (
+            _canonical_address(snapshot["item_address"])
+            if isinstance(snapshot, dict) else None
+        )
+        reason: str | None = None
+        envelope = None
+        try:
+            bounced = bool(getattr(tx.in_msg.info, "bounced", False))
+            body_parser = tx.in_msg.body.begin_parse()
+            tag = body_parser.load_uint(32) if body_parser.remaining_bits >= 32 else None
+            if not bounced:
+                reason = "included_message_is_not_marked_bounced"
+            elif tag == CLASSIC_BOUNCE_OPCODE:
+                reason = "classic_bounce_does_not_carry_full_original_body"
+            elif tag != RICH_BOUNCE_OPCODE:
+                reason = "bounced_message_is_not_rich_bounce"
+            else:
+                envelope = parse_rich_bounce_body(tx.in_msg.body)
+        except RichBounceParseError:
+            reason = "rich_bounce_malformed"
+        except Exception:
+            reason = "rich_bounce_header_malformed"
+
+        action: dict[str, Any] | None = None
+        if reason is None and envelope is not None:
+            if not isinstance(snapshot, dict):
+                reason = "deal_deployment_snapshot_missing"
+            else:
+                actions = getter.get("outbound_actions", [])
+                action, reason = match_rich_bounce_to_action(
+                    envelope,
+                    actions if isinstance(actions, list) else [],
+                    bounce_sender=message_source or "",
+                    contract_address=_canonical_address(deal.contract_address) or "",
+                    transaction_lt=int(getattr(tx, "lt", 0) or 0),
+                    deal_salt=deal.deal_salt,
+                    item_address=_canonical_address(snapshot["item_address"]) or "",
+                    seller_address=_canonical_address(snapshot["seller_address"]) or "",
+                    buyer_address=_canonical_address(snapshot["buyer_address"]) or "",
+                    principal_nanotons=int(snapshot["principal_nanotons"]),
+                    seller_deployment_refund_nanotons=int(
+                        snapshot["seller_deployment_refund_nanotons"]
+                    ),
+                    nft_transfer_value_nanotons=int(snapshot["nft_transfer_value_nanotons"]),
+                    recovery_item_address=_canonical_address(
+                        getter.get("recovery_item_address")
+                    ),
+                    recovery_previous_owner=_canonical_address(
+                        getter.get("recovery_previous_owner")
+                    ),
+                    current_contract_state=state_name,
+                )
+
+        if envelope is not None:
+            details.update({
+                "bounce_phase": envelope.bounced_by_phase,
+                "bounce_exit_code": envelope.exit_code,
+                "bounce_original_body_hash": envelope.original_body_hash,
+                "bounce_original_value_nanotons": envelope.original_value_nanotons,
+                "bounce_original_created_lt": envelope.original_created_lt,
+                "bounce_original_created_at": envelope.original_created_at,
+                "bounce_gas_used": envelope.gas_used,
+                "bounce_vm_steps": envelope.vm_steps,
+            })
+        if action is None:
+            details["bounce_match_reason"] = reason or "outbound_action_not_matched"
+            return (
+                EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED,
+                message_source,
+                message_destination,
+                item,
+                collection,
+                None,
+                False,
+                None,
+                details,
+            )
+
+        details.update({
+            "verified_attempt_id": str(action["attempt_id"]),
+            "outbound_action_kind": int(action["kind"]),
+            "outbound_action_status": int(action["status"]),
+            "outbound_action_expected_state": int(action["expected_state"]),
+        })
+        return (
+            EscrowChainEventType.OUTBOUND_ACTION_BOUNCED,
+            _canonical_address(deal.contract_address),
+            action["destination_address"],
+            action["item_address"],
+            collection,
+            int(action["amount_nanotons"]),
+            False,
+            str(action["query_id"]),
+            details,
+        )
+
     def _verified_event(
         self,
         event: NormalizedChainEvent,
@@ -985,11 +1128,22 @@ class PytoniqTONTestnetEscrowProvider:
         int | None,
         bool,
         str | None,
+        dict[str, object],
     ]:
         state = int(getter["contract_state"])
         verified_query_id: int | None = None
-        opcode = int(event.operation_id, 16) if event.operation_id else -1
+        opcode = (
+            int(event.operation_id, 16)
+            if event.operation_id and event.operation_id.startswith("0x")
+            else -1
+        )
         snapshot = deal.deployment_snapshot_json
+        if event.phase == "bounce" or bool(getattr(tx.in_msg.info, "bounced", False)) or opcode in {
+            RICH_BOUNCE_OPCODE, CLASSIC_BOUNCE_OPCODE,
+        }:
+            return self._verified_bounce(
+                event, tx, deal, getter, state_name, message_source, message_destination
+            )
         if not isinstance(snapshot, dict):
             raise EscrowProviderInvalidEvidence("DealEscrow snapshot is missing")
         if opcode == _OP_RESOLVE:
@@ -1229,6 +1383,7 @@ class PytoniqTONTestnetEscrowProvider:
             amount,
             accepted,
             str(verified_query_id) if verified_query_id is not None else None,
+            {},
         )
 
     async def verify_event(self, event: NormalizedChainEvent) -> FinalityVerification | None:
@@ -1317,6 +1472,7 @@ class PytoniqTONTestnetEscrowProvider:
                 verified_amount,
                 accepted,
                 verified_query_id,
+                verified_details,
             ) = self._verified_event(
                 event, tx, deal, getter, state_name, oracle, source, destination, amount
             )
@@ -1343,6 +1499,7 @@ class PytoniqTONTestnetEscrowProvider:
                     "contract_data_hash": getter_identity_sha,
                     "contract_state": state_name,
                     "attestation": oracle,
+                    "bounce": verified_details,
                     "generation_time": int(block.info.gen_utime),
                 }
             )
@@ -1376,6 +1533,19 @@ class PytoniqTONTestnetEscrowProvider:
                 getter_snapshot_masterchain_seqno=master_id.seqno,
                 getter_snapshot_block_hash=block_hash,
                 getter_snapshot_provider=_PROVIDER_ID,
+                verified_attempt_id=verified_details.get("verified_attempt_id"),
+                bounce_phase=verified_details.get("bounce_phase"),
+                bounce_exit_code=verified_details.get("bounce_exit_code"),
+                bounce_original_body_hash=verified_details.get("bounce_original_body_hash"),
+                bounce_original_value_nanotons=verified_details.get("bounce_original_value_nanotons"),
+                bounce_original_created_lt=verified_details.get("bounce_original_created_lt"),
+                bounce_original_created_at=verified_details.get("bounce_original_created_at"),
+                bounce_gas_used=verified_details.get("bounce_gas_used"),
+                bounce_vm_steps=verified_details.get("bounce_vm_steps"),
+                outbound_action_kind=verified_details.get("outbound_action_kind"),
+                outbound_action_status=verified_details.get("outbound_action_status"),
+                outbound_action_expected_state=verified_details.get("outbound_action_expected_state"),
+                bounce_match_reason=verified_details.get("bounce_match_reason"),
             )
         except (EscrowProviderInvalidEvidence, EscrowProviderUnavailable):
             raise

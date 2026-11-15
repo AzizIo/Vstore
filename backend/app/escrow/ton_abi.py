@@ -426,11 +426,76 @@ def decode_storage_cell(data_cell: Cell) -> dict[str, object]:
         # old/truncated storage layout instead of silently accepting it.
         outbound_actions = progress.load_ref().begin_parse()
         outbound_first_present = bool(outbound_actions.load_bit())
+        outbound_action_cells = []
         if outbound_first_present:
-            outbound_actions.load_ref()
+            outbound_action_cells.append(("first", outbound_actions.load_ref()))
         outbound_second_present = bool(outbound_actions.load_bit())
         if outbound_second_present:
-            outbound_actions.load_ref()
+            outbound_action_cells.append(("second", outbound_actions.load_ref()))
+        if outbound_actions.remaining_bits != 0 or outbound_actions.remaining_refs != 0:
+            raise ValueError("OutboundActionSet contains trailing data")
+        outbound_action_rows = []
+        for slot, action_cell in outbound_action_cells:
+            action = action_cell.begin_parse()
+            kind = action.load_uint(8)
+            query_id = action.load_uint(64)
+            action_deal_salt = f"{action.load_uint(256):064x}"
+            attempt_id = action.load_uint(64)
+            amount_nanotons = action.load_coins()
+            message_value_nanotons = action.load_coins()
+            expected_state = action.load_uint(8)
+            expected_pending_action = action.load_uint(8)
+            retry_window_seconds = action.load_uint(32)
+            message_body_hash = f"{action.load_uint(256):064x}"
+            status = action.load_uint(8)
+            bounce_phase = action.load_uint(8)
+            exit_code = action.load_int(32)
+            addresses_cell = action.load_ref()
+            if action.remaining_bits != 0 or action.remaining_refs != 0:
+                raise ValueError("OutboundAction contains trailing data")
+            addresses = addresses_cell.begin_parse()
+            item_pair = addresses.load_ref().begin_parse()
+            item_address = item_pair.load_address().to_str(is_user_friendly=False)
+            destination_address = item_pair.load_address().to_str(is_user_friendly=False)
+            recipient_pair = addresses.load_ref().begin_parse()
+            recipient_address = recipient_pair.load_address().to_str(is_user_friendly=False)
+            response_address = recipient_pair.load_address().to_str(is_user_friendly=False)
+            if (
+                item_pair.remaining_bits != 0 or item_pair.remaining_refs != 0
+                or recipient_pair.remaining_bits != 0 or recipient_pair.remaining_refs != 0
+                or addresses.remaining_bits != 0 or addresses.remaining_refs != 0
+            ):
+                raise ValueError("OutboundAction addresses contain trailing data")
+            if (
+                kind not in {1, 2, 3, 4, 5, 6, 7}
+                or query_id <= 0 or attempt_id <= 0
+                or action_deal_salt == "0" * 64
+                or status not in {0, 1}
+                or expected_state > 13
+                or bounce_phase not in {0, 1, 2}
+                or (status == 0 and (bounce_phase != 0 or exit_code != 0))
+            ):
+                raise ValueError("OutboundAction contains invalid protocol values")
+            outbound_action_rows.append({
+                "slot": slot,
+                "kind": kind,
+                "query_id": query_id,
+                "deal_salt": action_deal_salt,
+                "attempt_id": attempt_id,
+                "amount_nanotons": amount_nanotons,
+                "message_value_nanotons": message_value_nanotons,
+                "expected_state": expected_state,
+                "expected_pending_action": expected_pending_action,
+                "retry_window_seconds": retry_window_seconds,
+                "message_body_hash": message_body_hash,
+                "status": status,
+                "bounce_phase": bounce_phase,
+                "exit_code": exit_code,
+                "item_address": item_address,
+                "destination_address": destination_address,
+                "recipient_address": recipient_address,
+                "response_address": response_address,
+            })
     except Exception as exc:
         raise TONABIError("DealEscrow storage data cell is malformed") from exc
 
@@ -476,6 +541,7 @@ def decode_storage_cell(data_cell: Cell) -> dict[str, object]:
             if recovery_item_address is not None else None
         ),
         "outbound_action_slots": [outbound_first_present, outbound_second_present],
+        "outbound_actions": outbound_action_rows,
     }
 
 

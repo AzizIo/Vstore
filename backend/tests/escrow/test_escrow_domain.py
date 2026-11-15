@@ -353,3 +353,44 @@ def test_buyer_acceptance_attestation_requires_the_bound_buyer(
             ),
             deal,
         )
+
+
+
+def test_outbound_bounce_state_machine_preserves_terminal_and_noncritical_states(
+    deal: DealEvidenceSnapshot,
+) -> None:
+    matched = evidence(
+        event_type=EscrowChainEventType.OUTBOUND_ACTION_BOUNCED,
+        source_address=deal.contract_address,
+        phase="bounce",
+        observed_contract_state=EscrowDealStatus.MANUAL_REVIEW.value,
+        contract_state_reconciled=True,
+    )
+    validate_event_against_deal(matched, deal)
+    assert transition_for_verified_event(
+        EscrowDealStatus.NFT_RELEASE_PENDING,
+        EscrowChainEventType.OUTBOUND_ACTION_BOUNCED,
+        EscrowDealStatus.MANUAL_REVIEW.value,
+    ) is EscrowDealStatus.MANUAL_REVIEW
+
+    assert transition_for_verified_event(
+        EscrowDealStatus.EXPIRED,
+        EscrowChainEventType.OUTBOUND_ACTION_BOUNCED,
+        EscrowDealStatus.EXPIRED.value,
+    ) is EscrowDealStatus.EXPIRED
+
+    with pytest.raises(EscrowDomainError, match="terminal deal"):
+        transition_for_verified_event(
+            EscrowDealStatus.SETTLED,
+            EscrowChainEventType.OUTBOUND_ACTION_BOUNCED,
+            EscrowDealStatus.MANUAL_REVIEW.value,
+        )
+
+
+def test_unmatched_outbound_bounce_cannot_transition_a_deal() -> None:
+    with pytest.raises(EscrowDomainError, match="unmatched bounce"):
+        transition_for_verified_event(
+            EscrowDealStatus.NFT_RELEASE_PENDING,
+            EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED,
+            EscrowDealStatus.MANUAL_REVIEW.value,
+        )

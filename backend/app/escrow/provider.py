@@ -70,17 +70,33 @@ class NormalizedChainEvent:
     verified_item_address: str | None = None
     verified_collection_address: str | None = None
     verified_amount_nanotons: int | None = None
+    bounce_phase: int | None = None
+    bounce_exit_code: int | None = None
+    bounce_original_body_hash: str | None = None
+    bounce_original_value_nanotons: int | None = None
+    bounce_original_created_lt: int | None = None
+    bounce_original_created_at: int | None = None
+    bounce_gas_used: int | None = None
+    bounce_vm_steps: int | None = None
+    outbound_action_kind: int | None = None
+    outbound_action_status: int | None = None
+    outbound_action_expected_state: int | None = None
+    bounce_match_reason: str | None = None
 
     @property
     def event_key(self) -> str:
-        # Stable across pending -> final. Trace, phase and attempt distinguish
-        # separate messages; logical time and deal salt may be enriched later.
+        # Bounce identities cannot depend on query/attempt ids: those facts are
+        # decoded only after the proof-backed original body has been matched.
+        attempt_identity = (
+            self.message_hash if self.phase == "bounce"
+            else self.attempt_id or "attempt-unknown"
+        )
         identity = (
             self.network, self.transaction_hash,
             self.message_hash or f"idx-{self.event_index}",
             self.trace_id or "trace-unknown",
             self.phase or "phase-unknown",
-            self.attempt_id or "attempt-unknown",
+            attempt_identity,
         )
         return hashlib.sha256(
             json.dumps(identity, separators=(",", ":")).encode()
@@ -127,6 +143,19 @@ class FinalityVerification:
     getter_snapshot_masterchain_seqno: int | None = None
     getter_snapshot_block_hash: str | None = None
     getter_snapshot_provider: str | None = None
+    verified_attempt_id: str | None = None
+    bounce_phase: int | None = None
+    bounce_exit_code: int | None = None
+    bounce_original_body_hash: str | None = None
+    bounce_original_value_nanotons: int | None = None
+    bounce_original_created_lt: int | None = None
+    bounce_original_created_at: int | None = None
+    bounce_gas_used: int | None = None
+    bounce_vm_steps: int | None = None
+    outbound_action_kind: int | None = None
+    outbound_action_status: int | None = None
+    outbound_action_expected_state: int | None = None
+    bounce_match_reason: str | None = None
 
     def matches(self, event: NormalizedChainEvent) -> bool:
         def is_sha256(value: str) -> bool:
@@ -163,6 +192,36 @@ class FinalityVerification:
                 or event.finality_provider == self.provider_id
             )
             and bool(self.provider_id.strip())
+            and (
+                self.verified_event_type not in {
+                    EscrowChainEventType.OUTBOUND_ACTION_BOUNCED,
+                    EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED,
+                }
+                or (
+                    event.phase == "bounce"
+                    and (
+                        (
+                            self.verified_event_type is EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED
+                            and isinstance(self.bounce_match_reason, str)
+                            and bool(self.bounce_match_reason)
+                        )
+                        or (
+                            self.verified_event_type is EscrowChainEventType.OUTBOUND_ACTION_BOUNCED
+                            and self.bounce_phase in {0, 1, 2}
+                            and isinstance(self.bounce_exit_code, int)
+                            and not isinstance(self.bounce_exit_code, bool)
+                            and isinstance(self.bounce_original_body_hash, str)
+                            and is_sha256(self.bounce_original_body_hash)
+                            and self.verified_attempt_id is not None
+                            and self.verified_attempt_id.isdecimal()
+                            and int(self.verified_attempt_id) > 0
+                            and self.outbound_action_kind in {1, 2, 3, 4, 5, 6, 7}
+                            and self.outbound_action_status == 1
+                            and self.outbound_action_expected_state is not None
+                        )
+                    )
+                )
+            )
             and (
                 self.verified_event_type is None
                 or isinstance(self.verified_event_type, EscrowChainEventType)
