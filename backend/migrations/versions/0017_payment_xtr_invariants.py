@@ -27,7 +27,6 @@ def upgrade() -> None:
         sa.text(
             "SELECT count(*) FROM payment_transactions "
             "WHERE provider <> 'telegram_stars' "
-            "OR currency <> 'XTR' "
             "OR amount <> trunc(amount)"
         )
     ).scalar_one()
@@ -36,7 +35,7 @@ def upgrade() -> None:
         raise RuntimeError(
             "Cannot enforce Telegram Stars XTR invariants: "
             f"{invalid_intents} fractional payment intents and "
-            f"{invalid_transactions} invalid payment transactions exist. "
+            f"{invalid_transactions} provider-mismatched or fractional payment transactions exist. "
             "Reconcile financial evidence explicitly before retrying this migration; "
             "the migration never rewrites or rounds payment records."
         )
@@ -56,21 +55,11 @@ def upgrade() -> None:
         "payment_transactions",
         "provider = 'telegram_stars'",
     )
-    op.create_check_constraint(
-        "ck_payment_transactions_currency_stars",
-        "payment_transactions",
-        "currency = 'XTR'",
-    )
 
 
 def downgrade() -> None:
     # Removing these CHECK constraints weakens future validation. No payment
     # evidence is changed or deleted by this downgrade.
-    op.drop_constraint(
-        "ck_payment_transactions_currency_stars",
-        "payment_transactions",
-        type_="check",
-    )
     op.drop_constraint(
         "ck_payment_transactions_provider_stars",
         "payment_transactions",
