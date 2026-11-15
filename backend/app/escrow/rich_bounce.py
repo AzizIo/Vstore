@@ -139,8 +139,12 @@ def _validate_original_body(
             if settlement_action != expected_action:
                 return "outbound_settlement_action_mismatch"
             destination = action["destination_address"]
+            if action["item_address"] != item_address:
+                return "outbound_settlement_item_mismatch"
             if destination != action["recipient_address"]:
                 return "outbound_settlement_recipient_mismatch"
+            if action["response_address"] != destination:
+                return "outbound_settlement_response_mismatch"
             if kind in {4, 6} and destination != seller_address:
                 return "outbound_seller_destination_mismatch"
             if kind == 5 and destination != buyer_address:
@@ -151,7 +155,10 @@ def _validate_original_body(
                     else buyer_address if int(action["expected_state"]) in {10, 11}
                     else None
                 )
-                if expected_reserve_recipient is None or destination != expected_reserve_recipient:
+                if (
+                    expected_reserve_recipient is None
+                    or destination != expected_reserve_recipient
+                ):
                     return "outbound_reserve_destination_mismatch"
         if parser.remaining_bits != 0 or parser.remaining_refs != 0:
             return "outbound_body_has_trailing_data"

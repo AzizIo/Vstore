@@ -1747,14 +1747,18 @@ class PytoniqTONTestnetEscrowProvider:
                 bounce_phase=verified_details.get("bounce_phase"),
                 bounce_exit_code=verified_details.get("bounce_exit_code"),
                 bounce_original_body_hash=verified_details.get("bounce_original_body_hash"),
-                bounce_original_value_nanotons=verified_details.get("bounce_original_value_nanotons"),
+                bounce_original_value_nanotons=verified_details.get(
+                    "bounce_original_value_nanotons"
+                ),
                 bounce_original_created_lt=verified_details.get("bounce_original_created_lt"),
                 bounce_original_created_at=verified_details.get("bounce_original_created_at"),
                 bounce_gas_used=verified_details.get("bounce_gas_used"),
                 bounce_vm_steps=verified_details.get("bounce_vm_steps"),
                 outbound_action_kind=verified_details.get("outbound_action_kind"),
                 outbound_action_status=verified_details.get("outbound_action_status"),
-                outbound_action_expected_state=verified_details.get("outbound_action_expected_state"),
+                outbound_action_expected_state=verified_details.get(
+                    "outbound_action_expected_state"
+                ),
                 bounce_match_reason=verified_details.get("bounce_match_reason"),
                 outbound_transaction_hash=verified_details.get("outbound_transaction_hash"),
                 outbound_block_hash=verified_details.get("outbound_block_hash"),

@@ -263,6 +263,31 @@ def test_execution_reserve_refund_uses_carry_all_value_exception() -> None:
     assert reason is None
     assert matched is action
 
+    for field, invalid_value, expected_reason in (
+        ("item_address", "0:" + "ff" * 32, "outbound_settlement_item_mismatch"),
+        ("response_address", SELLER, "outbound_settlement_response_mismatch"),
+    ):
+        altered_action = {**action, field: invalid_value}
+        matched, reason = match_rich_bounce_to_action(
+            envelope,
+            [altered_action],
+            bounce_sender=BUYER,
+            contract_address=CONTRACT,
+            transaction_lt=500,
+            deal_salt=SALT,
+            item_address=ITEM,
+            seller_address=SELLER,
+            buyer_address=BUYER,
+            principal_nanotons=2_500_000_000,
+            seller_deployment_refund_nanotons=50_000_000,
+            nft_transfer_value_nanotons=80_000_000,
+            recovery_item_address=None,
+            recovery_previous_owner=None,
+            current_contract_state="refunded",
+        )
+        assert matched is None
+        assert reason == expected_reason
+
 
 def test_extra_currency_bounce_is_retained_as_unmatched_not_accepted() -> None:
     original = _nft_transfer_body()
