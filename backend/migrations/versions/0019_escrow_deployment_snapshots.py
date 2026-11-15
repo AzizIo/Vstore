@@ -82,6 +82,26 @@ def upgrade() -> None:
         "escrow_wallet_actions",
         sa.Column("unsigned_bocs_json", sa.JSON(), nullable=True),
     )
+    op.add_column(
+        "escrow_wallet_actions",
+        sa.Column("finalized_transaction_hash", sa.String(length=128), nullable=True),
+    )
+    op.add_column(
+        "escrow_wallet_actions",
+        sa.Column("finality_masterchain_seqno", sa.BigInteger(), nullable=True),
+    )
+    op.add_column(
+        "escrow_wallet_actions",
+        sa.Column("finality_masterchain_block_hash", sa.String(length=64), nullable=True),
+    )
+    op.add_column(
+        "escrow_wallet_actions",
+        sa.Column("finality_proof_sha256", sa.String(length=64), nullable=True),
+    )
+    op.add_column(
+        "escrow_wallet_actions",
+        sa.Column("finality_provider", sa.String(length=128), nullable=True),
+    )
 
     op.create_check_constraint(
         "ck_escrow_deal_deployment_snapshot_pair",
@@ -127,6 +147,28 @@ def upgrade() -> None:
         "unsigned_payload_json IS NOT NULL "
         "AND unsigned_payload_sha256 IS NOT NULL "
         "AND length(unsigned_payload_sha256) = 64"
+        ")",
+    )
+    op.create_check_constraint(
+        "ck_escrow_action_finality_pair",
+        "escrow_wallet_actions",
+        "("
+        "finalized_transaction_hash IS NULL "
+        "AND finality_masterchain_seqno IS NULL "
+        "AND finality_masterchain_block_hash IS NULL "
+        "AND finality_proof_sha256 IS NULL "
+        "AND finality_provider IS NULL"
+        ") OR ("
+        "finalized_transaction_hash IS NOT NULL "
+        "AND length(finalized_transaction_hash) BETWEEN 1 AND 128 "
+        "AND finality_masterchain_seqno IS NOT NULL "
+        "AND finality_masterchain_seqno > 0 "
+        "AND finality_masterchain_block_hash IS NOT NULL "
+        "AND length(finality_masterchain_block_hash) = 64 "
+        "AND finality_proof_sha256 IS NOT NULL "
+        "AND length(finality_proof_sha256) = 64 "
+        "AND finality_provider IS NOT NULL "
+        "AND length(finality_provider) BETWEEN 1 AND 128"
         ")",
     )
     op.create_check_constraint(
@@ -245,6 +287,35 @@ def upgrade() -> None:
         FOR EACH ROW EXECUTE FUNCTION guard_escrow_unsigned_action_payload()
         """
     )
+    op.execute(
+        """
+        CREATE FUNCTION guard_escrow_action_finality_evidence()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $
+        BEGIN
+            IF OLD.finalized_transaction_hash IS NOT NULL AND (
+                NEW.finalized_transaction_hash IS DISTINCT FROM OLD.finalized_transaction_hash
+                OR NEW.finality_masterchain_seqno IS DISTINCT FROM OLD.finality_masterchain_seqno
+                OR NEW.finality_masterchain_block_hash IS DISTINCT FROM OLD.finality_masterchain_block_hash
+                OR NEW.finality_proof_sha256 IS DISTINCT FROM OLD.finality_proof_sha256
+                OR NEW.finality_provider IS DISTINCT FROM OLD.finality_provider
+            ) THEN
+                RAISE EXCEPTION 'Verified escrow action finality evidence is immutable'
+                    USING ERRCODE = 'integrity_constraint_violation';
+            END IF;
+            RETURN NEW;
+        END;
+        $
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER trg_escrow_action_finality_immutable
+        BEFORE UPDATE ON escrow_wallet_actions
+        FOR EACH ROW EXECUTE FUNCTION guard_escrow_action_finality_evidence()
+        """
+    )
 
 
 def downgrade() -> None:
@@ -292,6 +363,13 @@ def downgrade() -> None:
         "DROP TRIGGER IF EXISTS trg_escrow_deployment_getter_snapshot_guard ON escrow_deals"
     )
     op.execute("DROP FUNCTION IF EXISTS guard_escrow_deployment_and_getter_snapshots()")
+    op.execute(
+        "DROP TRIGGER IF EXISTS trg_escrow_action_finality_immutable ON escrow_wallet_actions"
+    )
+    op.execute("DROP FUNCTION IF EXISTS guard_escrow_action_finality_evidence()")
+    op.drop_constraint(
+        "ck_escrow_action_finality_pair", "escrow_wallet_actions", type_="check"
+    )
     op.drop_constraint(
         "ck_escrow_action_unsigned_bocs_pair", "escrow_wallet_actions", type_="check"
     )
@@ -305,6 +383,11 @@ def downgrade() -> None:
         "ck_escrow_deal_deployment_snapshot_pair", "escrow_deals", type_="check"
     )
     for column in (
+        "finality_provider",
+        "finality_proof_sha256",
+        "finality_masterchain_block_hash",
+        "finality_masterchain_seqno",
+        "finalized_transaction_hash",
         "unsigned_bocs_json",
         "unsigned_payload_sha256",
         "unsigned_payload_json",
