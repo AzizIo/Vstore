@@ -54,9 +54,7 @@ function allowedDestination(transaction: PreparedEscrowTransaction): string {
         throw new Error("Для создания DealEscrow Backend должен вернуть прямой адрес договора без Factory.");
       }
       return transaction.escrow_address;
-    case "deposit_nft":
-    case "return_nft_to_escrow":
-      return transaction.nft_item_address;
+    case "activate_deal":
     case "fund_deal":
     case "accept_deal":
     case "open_dispute":
@@ -65,6 +63,9 @@ function allowedDestination(transaction: PreparedEscrowTransaction): string {
         throw new Error("Для этой операции Backend не вернул адрес DealEscrow.");
       }
       return transaction.escrow_address;
+    case "deposit_nft":
+    case "return_nft_to_escrow":
+      return transaction.nft_item_address;
   }
 }
 

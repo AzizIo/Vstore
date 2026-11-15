@@ -212,6 +212,7 @@ export interface EscrowApiClient {
   createListingIntent(input: EscrowCreateListingIntentInput): Promise<EscrowListingIntent>;
   createBuyerDealIntent(input: EscrowCreateBuyerDealIntentInput): Promise<EscrowDeal>;
   prepareDealEscrow(input: EscrowPrepareDealActionInput): Promise<PreparedEscrowTransaction>;
+  prepareDealActivation(input: EscrowPrepareDealActionInput): Promise<PreparedEscrowTransaction>;
   prepareNftDeposit(input: EscrowPrepareDealActionInput): Promise<PreparedEscrowTransaction>;
   prepareBuyerFunding(input: EscrowPrepareDealActionInput): Promise<PreparedEscrowTransaction>;
   prepareBuyerAcceptance(input: EscrowPrepareDealActionInput): Promise<PreparedEscrowTransaction>;

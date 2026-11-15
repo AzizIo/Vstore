@@ -45,5 +45,9 @@ describe("TON escrow HTTP contract", () => {
     const funding = contract.prepareBuyerFunding({ deal_id: "deal-id", wallet_id: "wallet-id" });
     expect(funding.url).toContain("/deals/deal-id/prepare/funding");
     expect(funding.body).toBeUndefined();
+
+    const activation = contract.prepareDealActivation({ deal_id: "deal-id", wallet_id: "wallet-id" });
+    expect(activation.url).toContain("/deals/deal-id/prepare/activate-deal");
+    expect(activation.body).toBeUndefined();
   });
 });
