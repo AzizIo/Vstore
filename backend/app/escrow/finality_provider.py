@@ -16,7 +16,6 @@ import base64
 import hashlib
 import json
 import logging
-from datetime import UTC, datetime
 from typing import Any, Callable
 from urllib.parse import urlsplit
 
@@ -38,7 +37,6 @@ from app.escrow.provider import (
     TerminalOwnerVerification,
 )
 from app.escrow.ton_abi import (
-    TONABIError,
     decode_storage_cell,
     derive_deployment,
     load_pinned_code_boc,
@@ -81,29 +79,6 @@ _STATE_NAMES = {
     12: "expired",
     13: "manual_review",
 }
-_ONCHAIN_STATIC_FIELDS = (
-    ("network_id", "network_id"),
-    ("protocol_version", "protocol_version"),
-    ("seller_address", "seller_address"),
-    ("buyer_address", "buyer_address"),
-    ("item_address", "item_address"),
-    ("collection_address", "collection_address"),
-    ("deal_salt", "deal_salt"),
-    ("principal_nanotons", "principal_nanotons"),
-    ("execution_reserve_nanotons", "execution_reserve_nanotons"),
-    ("seller_deployment_refund_nanotons", "seller_deployment_refund_nanotons"),
-    ("nft_transfer_value_nanotons", "nft_transfer_value_nanotons"),
-    ("fund_query_id", "fund_query_id"),
-    ("nft_deposit_query_id", "nft_deposit_query_id"),
-    ("nft_release_query_id", "nft_release_query_id"),
-    ("nft_return_to_escrow_query_id", "nft_return_to_escrow_query_id"),
-    ("oracle_key_a", "oracle_key_a"),
-    ("oracle_key_b", "oracle_key_b"),
-    ("oracle_key_c", "oracle_key_c"),
-    ("resolver_key_a", "resolver_key_a"),
-    ("resolver_key_b", "resolver_key_b"),
-    ("resolver_key_c", "resolver_key_c"),
-)
 _GETTER_FIELDS = (
     "contract_state",
     "deadline_unix",
@@ -251,7 +226,12 @@ def _candidate_opcode(in_msg: dict[str, Any]) -> int | None:
     return None
 
 
-def _candidate_type(opcode: int, state: int) -> EscrowChainEventType | None:
+def _candidate_type(opcode: int, state: int | None = None) -> EscrowChainEventType | None:
+    """Map an opcode to a provisional event label for database lookup only.
+
+    State-dependent meanings are resolved exclusively after a proof-checked
+    transaction and a proof-read DealEscrow storage snapshot.
+    """
     if opcode == _OP_ACTIVATE:
         return EscrowChainEventType.CONTRACT_ACTIVATED
     if opcode == _OP_FUND:
@@ -263,31 +243,13 @@ def _candidate_type(opcode: int, state: int) -> EscrowChainEventType | None:
     if opcode == _OP_RESOLVE:
         return EscrowChainEventType.DISPUTE_RESOLUTION_ACCEPTED
     if opcode == _OP_TIMEOUT:
-        return {
-            7: EscrowChainEventType.NFT_RETURN_STARTED,
-            8: EscrowChainEventType.SELLER_PAYOUT_INITIATED,
-            12: EscrowChainEventType.DEAL_EXPIRED,
-            13: EscrowChainEventType.MANUAL_REVIEW_REQUIRED,
-        }.get(state, EscrowChainEventType.DEAL_EXPIRED)
+        return EscrowChainEventType.DEAL_TIMEOUT_ACCEPTED
     if opcode == _OP_RECOVER:
-        return EscrowChainEventType.MANUAL_REVIEW_REQUIRED
+        return EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED
     if opcode == _OP_ORACLE:
-        return {
-            5: EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED,
-            8: EscrowChainEventType.SELLER_PAYOUT_INITIATED,
-            9: EscrowChainEventType.BUYER_REFUND_INITIATED,
-            10: EscrowChainEventType.SELLER_PAYOUT_RECONCILED,
-            11: EscrowChainEventType.BUYER_REFUND_RECONCILED,
-            12: EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED,
-            13: EscrowChainEventType.MANUAL_REVIEW_REQUIRED,
-        }.get(state, EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED)
+        return EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED
     if opcode == _NFT_NOTIFICATION_OPCODE:
-        if state == 2:
-            return EscrowChainEventType.NFT_DEPOSIT_ACCEPTED
-        if state == 7:
-            return EscrowChainEventType.NFT_RETURN_EVIDENCE_OBSERVED
-        if state == 13:
-            return EscrowChainEventType.MANUAL_REVIEW_REQUIRED
+        return EscrowChainEventType.NFT_DEPOSIT_ACCEPTED
     return None
 
 
@@ -424,6 +386,7 @@ class PytoniqTONTestnetEscrowProvider:
             "account": address,
             "sort": "asc",
             "limit": limit,
+            "include_msg_body": "true",
         }
         if start_lt is not None:
             params["start_lt"] = start_lt
@@ -557,12 +520,6 @@ class PytoniqTONTestnetEscrowProvider:
                 lt = int(row["lt"])
                 source = _canonical_address(in_msg.get("source"))
                 destination = _canonical_address(in_msg.get("destination"))
-                state_json = deal.deployment_snapshot_json
-                candidate_state = (
-                    int(state_json.get("contract_state", 0))
-                    if isinstance(state_json, dict) else -1
-                )
-                event_type = _candidate_type(opcode, candidate_state) or event_type
                 evidence_sha256 = _sha256(row)
                 trace_id = hashlib.sha256(
                     f"{address}|{transaction_hash}|{message_hash}|{lt}".encode()
