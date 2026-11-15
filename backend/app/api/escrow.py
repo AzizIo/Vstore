@@ -35,30 +35,30 @@ from app.db.models import (
     Wallet,
 )
 from app.db.session import get_db_session
-from app.escrow.dependencies import get_escrow_nft_identity_provider
-from app.escrow.finality_provider import (
-    EscrowProviderInvalidEvidence,
-    EscrowProviderUnavailable,
-    PytoniqTONTestnetEscrowProvider,
-)
-from app.escrow.nft_identity import (
-    NFTIdentityEvidenceError,
-    same_nft_identity_anchor,
-    validate_nft_identity_snapshot,
-)
 from app.escrow.contracts import (
     DealEscrowDeploymentSnapshot,
     EscrowContractABIUnavailable,
     EscrowWalletAction,
     PinnedTONEscrowContractAdapter,
 )
+from app.escrow.dependencies import get_escrow_nft_identity_provider
 from app.escrow.domain import EscrowDealStatus
+from app.escrow.finality_provider import (
+    EscrowProviderInvalidEvidence,
+    EscrowProviderUnavailable,
+    PytoniqTONTestnetEscrowProvider,
+)
 from app.escrow.models import (
     EscrowDeal,
     EscrowDispute,
     EscrowIdempotencyRecord,
     EscrowListingIntent,
     EscrowWalletActionRecord,
+)
+from app.escrow.nft_identity import (
+    NFTIdentityEvidenceError,
+    same_nft_identity_anchor,
+    validate_nft_identity_snapshot,
 )
 from app.escrow.reservation import (
     EscrowListingReservationConflict,
