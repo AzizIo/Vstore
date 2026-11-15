@@ -201,7 +201,10 @@ class FinalityVerification:
                     event.phase == "bounce"
                     and (
                         (
-                            self.verified_event_type is EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED
+                            (
+                                self.verified_event_type
+                                is EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED
+                            )
                             and isinstance(self.bounce_match_reason, str)
                             and bool(self.bounce_match_reason)
                         )
