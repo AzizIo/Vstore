@@ -32,7 +32,11 @@ from app.db.models import (
 )
 from app.db.payments import PaymentEvent, PaymentIntent, PaymentRefund, PaymentTransaction
 from app.escrow.models import EscrowDeal, EscrowListingIntent, EscrowWalletActionRecord
-from app.escrow.service import EscrowActionConflict, canonical_request_sha256, create_or_replay_action
+from app.escrow.service import (
+    EscrowActionConflict,
+    canonical_request_sha256,
+    create_or_replay_action,
+)
 from app.orders import payment_service
 from app.orders.payment_service import (
     PaymentConflict,
