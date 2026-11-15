@@ -118,3 +118,20 @@ async def test_successful_payment_handler_journals_telegram_update_id(
 
     assert captured["provider_event_id"] == "update:987654321"
     assert captured["telegram_payment_charge_id"] == "telegram-charge-123"
+
+
+@pytest.mark.asyncio
+async def test_refund_queue_rejects_mutations_when_test_runtime_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings(telegram_stars_test_enabled=False)
+    _use_settings(monkeypatch, settings)
+
+    with pytest.raises(
+        payment_service.PaymentConflict, match="test payments are disabled"
+    ):
+        await payment_service.queue_stars_refund(
+            None,  # Runtime guard must execute before a database operation.
+            SimpleNamespace(id="charge-id", status="refund_pending"),
+            reason_code="test",
+        )
