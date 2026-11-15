@@ -613,6 +613,8 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
     val data = msg.data.load();
     val context = data.context.load();
     val route = data.route.load();
+    val position = data.position.load();
+    val hashes = data.hashes.load();
     // A timeout can move an in-flight action to manual review while the transfer
     // itself has already succeeded. Permit only its exact, still-PENDING descriptor
     // to finish reconciliation; a BOUNCED descriptor must go through recipient-
@@ -634,19 +636,6 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
             && blockchain.now() <= progress.deadlineUnix
         )
     ) throw Errors.Deadline;
-
-    assertTestnet(terms);
-
-    val roles = terms.roles.load();
-    val asset = terms.asset.load();
-    val money = terms.money.load();
-    val security = terms.security.load();
-
-    val data = msg.data.load();
-    val context = data.context.load();
-    val route = data.route.load();
-    val position = data.position.load();
-    val hashes = data.hashes.load();
 
     assert (context.domain == ESCROW_DOMAIN) throw Errors.InvalidAttestation;
     assert (context.protocolVersion == terms.protocolVersion) throw Errors.InvalidAttestation;
