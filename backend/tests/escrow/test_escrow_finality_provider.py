@@ -658,7 +658,10 @@ async def test_validator_configuration_proof_failure_is_not_finalized() -> None:
         lite_client_factory=lambda: client,
     )
 
-    with pytest.raises(EscrowProviderUnavailable, match="Could not verify TON block inclusion proof"):
+    with pytest.raises(
+        EscrowProviderUnavailable,
+        match="Could not verify TON block inclusion proof",
+    ):
         await provider._trusted_shard_and_masterchain(_finality_candidate(), client)
     assert client.shard_proof_calls == []
     await provider.close()
@@ -675,6 +678,9 @@ async def test_shard_inclusion_proof_failure_is_not_finalized() -> None:
         lite_client_factory=lambda: client,
     )
 
-    with pytest.raises(EscrowProviderUnavailable, match="Could not verify TON block inclusion proof"):
+    with pytest.raises(
+        EscrowProviderUnavailable,
+        match="Could not verify TON block inclusion proof",
+    ):
         await provider._trusted_shard_and_masterchain(_finality_candidate(), client)
     await provider.close()
