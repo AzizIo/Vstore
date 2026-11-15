@@ -6,9 +6,15 @@ import "types"
 struct TestNftStorage {
     ownerAddress: address
     fixtureSalt: uint256
+    adminAddress: address
+    rejectRecipient: address?
 }
 
-type TestNftMessage = NftTransfer
+struct (0x5645ff01) UpdateNftTransferPolicy {
+    rejectRecipient: address?
+}
+
+type TestNftMessage = NftTransfer | UpdateNftTransferPolicy
 
 contract TestNftItem {
     author: "AzizIo"
@@ -36,6 +42,10 @@ fun onInternalMessage(in: InMessage) {
             var storage = TestNftStorage.load();
             assert (in.senderAddress == storage.ownerAddress) throw 401;
             assert (msg.forwardTonAmount > 0) throw 402;
+            assert (
+                storage.rejectRecipient == null
+                || msg.newOwnerAddress != storage.rejectRecipient
+            ) throw 403;
             val previousOwner = storage.ownerAddress;
             storage.ownerAddress = msg.newOwnerAddress;
             storage.save();
@@ -51,6 +61,12 @@ fun onInternalMessage(in: InMessage) {
                 },
             });
             notification.send(SEND_MODE_PAY_FEES_SEPARATELY);
+        }
+        UpdateNftTransferPolicy => {
+            var storage = TestNftStorage.load();
+            assert (in.senderAddress == storage.adminAddress) throw 404;
+            storage.rejectRecipient = msg.rejectRecipient;
+            storage.save();
         }
         else => {
             assert (in.body.isEmpty()) throw 0xFFFF;

@@ -1,6 +1,7 @@
 import "@acton/emulation/config"
 import "@acton/emulation/network"
 import "@acton/emulation/testing"
+import "@acton/crypto"
 import "@acton/testing/expect"
 import "@acton/types/transaction"
 
@@ -9,9 +10,20 @@ import "@contracts/signatures"
 import "@wrappers/DealEscrow.gen"
 import "@wrappers/TestNftItem.gen"
 
-const TEST_KEY_A = 0x11
-const TEST_KEY_B = 0x22
-const TEST_KEY_C = 0x33
+const TEST_SIGNER_A_SEED = 0x1111111111111111111111111111111111111111111111111111111111111111
+const TEST_SIGNER_B_SEED = 0x2222222222222222222222222222222222222222222222222222222222222222
+const TEST_SIGNER_C_SEED = 0x3333333333333333333333333333333333333333333333333333333333333333
+const TEST_RESOLVER_A_SEED = 0x4444444444444444444444444444444444444444444444444444444444444444
+const TEST_RESOLVER_B_SEED = 0x5555555555555555555555555555555555555555555555555555555555555555
+const TEST_RESOLVER_C_SEED = 0x6666666666666666666666666666666666666666666666666666666666666666
+
+const TEST_SIGNER_A_KEY = 0xd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737
+const TEST_SIGNER_B_KEY = 0xa09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0
+const TEST_SIGNER_C_KEY = 0x17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce
+const TEST_RESOLVER_A_KEY = 0xd759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48
+const TEST_RESOLVER_B_KEY = 0xc6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242
+const TEST_RESOLVER_C_KEY = 0x34b4d9043156cb6dcf0beb0a2949b7559c940d2bcb6dbe8c53a9b30278e3a746
+
 const ZERO_SIGNATURE_BITS: bits512 = "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000".hexToSlice() as bits512
 const TEST_ED25519_DIGEST: uint256 = 0xabababababababababababababababababababababababababababababababab
 const TEST_SIGNER_A_KEY: uint256 = 0xd04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737
@@ -37,15 +49,27 @@ fun createFixture(
     initialDeadlineUnix: uint64 = 0,
     initialNftInEscrow: bool = false,
     initialPrincipalLocked: bool = false,
+    rejectRecipient: address? = null,
+    sellerAddressOverride: address? = null,
 ): (DealEscrow, TestNftItem, Treasury, Treasury) {
     configureTestnet();
     val seller = testing.treasury("seller");
     val buyer = testing.treasury("buyer");
     val collection = testing.treasury("test-collection");
-    val nftItem = TestNftItem.fromStorage({ ownerAddress: seller.address, fixtureSalt: salt });
+    val admin = testing.treasury("test-nft-policy-admin");
+    var dealSeller = seller.address;
+    if (sellerAddressOverride != null) {
+        dealSeller = sellerAddressOverride;
+    }
+    val nftItem = TestNftItem.fromStorage({
+        ownerAddress: seller.address,
+        fixtureSalt: salt,
+        adminAddress: admin.address,
+        rejectRecipient,
+    });
 
     val roles: DealRoles = {
-        seller: seller.address,
+        seller: dealSeller,
         buyer: buyer.address,
     };
     val asset: DealAsset = {
@@ -65,14 +89,14 @@ fun createFixture(
     };
     val security: DealSecurity = {
         oracleKeys: AuthorityKeys {
-            keyA: TEST_KEY_A,
-            keyB: TEST_KEY_B,
-            keyC: TEST_KEY_C,
+            keyA: TEST_SIGNER_A_KEY,
+            keyB: TEST_SIGNER_B_KEY,
+            keyC: TEST_SIGNER_C_KEY,
         }.toCell(),
         resolverKeys: AuthorityKeys {
-            keyA: 0x101,
-            keyB: 0x202,
-            keyC: 0x303,
+            keyA: TEST_RESOLVER_A_KEY,
+            keyB: TEST_RESOLVER_B_KEY,
+            keyC: TEST_RESOLVER_C_KEY,
         }.toCell(),
     };
     val terms: DealTerms = {
@@ -83,6 +107,44 @@ fun createFixture(
         networkId: TESTNET_NETWORK_ID,
         protocolVersion: PROTOCOL_VERSION,
     };
+    var outboundActions: OutboundActionSet = {
+        first: null,
+        second: null,
+    };
+    if (initialState == STATE_NFT_RELEASE_PENDING) {
+        val releasePayload = beginCell()
+            .storeBool(false)
+            .storeUint(NFT_FORWARD_MAGIC, 32)
+            .storeUint(salt, 256)
+            .toSlice();
+        val releaseBody = NftTransfer {
+            queryId: oracleAttemptId,
+            newOwnerAddress: buyer.address,
+            sendExcessesTo: seller.address,
+            customPayload: null,
+            forwardTonAmount: grams("0.01"),
+            forwardPayload: releasePayload,
+        };
+        outboundActions.first = OutboundAction {
+            kind: OUTBOUND_KIND_NFT_RELEASE,
+            itemAddress: nftItem.address,
+            destination: nftItem.address,
+            recipient: buyer.address,
+            responseDestination: seller.address,
+            queryId: oracleAttemptId,
+            dealSalt: salt,
+            attemptId: oracleAttemptId,
+            amountNanotons: grams("0.08"),
+            messageValueNanotons: grams("0.08"),
+            expectedState: STATE_NFT_RELEASE_PENDING,
+            expectedPendingAction: PENDING_NONE,
+            retryWindowSeconds: DELIVERY_CONFIRMATION_GRACE_SECONDS,
+            messageBodyHash: releaseBody.toCell().hash(),
+            status: OUTBOUND_STATUS_PENDING,
+            bouncePhase: 0,
+            exitCode: 0,
+        }.toCell();
+    }
     val progress: DealProgress = {
         state: initialState,
         deadlineUnix: initialDeadlineUnix,
@@ -100,6 +162,7 @@ fun createFixture(
             unexpectedPreviousOwner: null,
             unexpectedItemAddress: null,
         }.toCell(),
+        outboundActions: outboundActions.toCell(),
     };
 
     val escrow = DealEscrow.fromStorage({
@@ -175,6 +238,34 @@ fun depositExpectedNft(
     });
 }
 
+fun buildOracleSignatures(data: cell): Cell<OracleSignatureSet> {
+    return OracleSignatureSet {
+        signatureA: Signature {
+            data: crypto.rawSign(TEST_SIGNER_A_SEED, data.hash()) as bits512,
+        }.toCell(),
+        signatureB: Signature {
+            data: crypto.rawSign(TEST_SIGNER_B_SEED, data.hash()) as bits512,
+        }.toCell(),
+        signatureC: Signature {
+            data: crypto.rawSign(TEST_SIGNER_C_SEED, data.hash()) as bits512,
+        }.toCell(),
+    }.toCell();
+}
+
+fun buildResolverSignatures(data: cell): Cell<ResolverSignatureSet> {
+    return ResolverSignatureSet {
+        signatureA: Signature {
+            data: crypto.rawSign(TEST_RESOLVER_A_SEED, data.hash()) as bits512,
+        }.toCell(),
+        signatureB: Signature {
+            data: crypto.rawSign(TEST_RESOLVER_B_SEED, data.hash()) as bits512,
+        }.toCell(),
+        signatureC: Signature {
+            data: crypto.rawSign(TEST_RESOLVER_C_SEED, data.hash()) as bits512,
+        }.toCell(),
+    }.toCell();
+}
+
 fun buildTestOracleAttestation(
     escrow: DealEscrow,
     salt: uint256,
@@ -216,14 +307,9 @@ fun buildTestOracleAttestation(
             evidenceHash,
         }.toCell(),
     };
-    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
     return OracleAttestation {
         data: data.toCell(),
-        signatures: OracleSignatureSet {
-            signatureA: dummySignature,
-            signatureB: dummySignature,
-            signatureC: dummySignature,
-        }.toCell(),
+        signatures: buildOracleSignatures(data.toCell()),
     };
 }
 
@@ -249,14 +335,9 @@ fun buildTestResolverDecision(
             evidenceHash,
         }.toCell(),
     };
-    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
     return ResolveDispute {
         data: decision.toCell(),
-        signatures: ResolverSignatureSet {
-            signatureA: dummySignature,
-            signatureB: dummySignature,
-            signatureC: dummySignature,
-        }.toCell(),
+        signatures: buildResolverSignatures(decision.toCell()),
     };
 }
 
@@ -579,19 +660,13 @@ get fun `test terminal payout returns unused execution reserve to buyer`() {
             evidenceHash: 2,
         }.toCell(),
     };
-    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
     val payoutAttestation = OracleAttestation {
         data: payoutData.toCell(),
-        signatures: OracleSignatureSet {
-            signatureA: dummySignature,
-            signatureB: dummySignature,
-            signatureC: dummySignature,
-        }.toCell(),
+        signatures: buildOracleSignatures(payoutData.toCell()),
     };
 
     // The emulator bypass is intentionally scoped to this test. The separate
     // crypto fixture tests exercise real Ed25519 verification.
-    testing.setChecksigIgnore(true);
     val acceptedPayout = escrow.sendAny(
         keeper.address,
         payoutAttestation.toCell(),
@@ -601,7 +676,6 @@ get fun `test terminal payout returns unused execution reserve to buyer`() {
         from: keeper.address,
         to: escrow.address,
     });
-    testing.setChecksigIgnore(false);
 
     expect(escrow.getState()).toEqual(STATE_SETTLED);
     val sellerDeploymentRefundTx = acceptedPayout.findTransaction({
@@ -700,33 +774,147 @@ get fun `test 2-of-3 Ed25519 oracle and resolver signatures use distinct signer 
     expect(countValidResolverSignatures(TEST_ED25519_DIGEST, keys, duplicateResolver)).toEqual(1);
 }
 
-get fun `test bounced internal action forces manual review`() {
-    val (escrow, _, seller, _) = createFixture(
-        0xA11D9,
-        STATE_NFT_RELEASE_PENDING,
-        1,
+get fun `test actual nft transfer bounce is correlated and retryable with signed delivery`() {
+    testing.setNow(1_700_000_000);
+    val salt = 0xA11D9;
+    val buyer = testing.treasury("buyer");
+    val (escrow, nftItem, seller, _) = createFixture(
+        salt,
+        STATE_INTENT_CREATED,
+        0,
+        0,
+        false,
+        false,
+        buyer.address,
     );
     val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
+    val nftDeploy = nftItem.deploy(seller.address, { value: grams("0.05"), bounce: false });
+    expect(nftDeploy).toHaveSuccessfulDeploy({ to: nftItem.address });
 
-    val keeper = testing.treasury("bounce-recovery-keeper");
-    val bouncedMessage = createMessage({
-        bounce: false,
-        value: grams("0.03"),
-        dest: escrow.address,
-        body: TimeoutDeal {
-            queryId: 1,
-            dealSalt: 0xA11D9,
-        },
-    }).bounced();
-    val bounceResult = net.send(keeper.address, bouncedMessage);
-    expect(bounceResult).toHaveSuccessfulTx({
-        from: keeper.address,
-        to: escrow.address,
-    });
+    activateDeal(escrow, seller, salt);
+    depositExpectedNft(escrow, nftItem, seller, salt);
+    val funding = escrow.sendFundDeal(
+        buyer.address,
+        1001,
+        salt,
+        { value: grams("1.5"), bounce: true },
+    );
+    expect(funding).toHaveSuccessfulTx<FundDeal>({ to: escrow.address });
+
+    val accepted = escrow.sendAcceptDeal(
+        buyer.address,
+        1003,
+        salt,
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(accepted).toHaveSuccessfulTx<AcceptDeal>({ to: escrow.address });
+    expect(nftItem.getOwner()).toEqual(escrow.address);
     expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
+    expect(escrow.getProgress().principalLocked).toEqual(true);
+    expect(escrow.getProgress().nftInEscrow).toEqual(true);
+
+    val failed = escrow.getProgress().outboundActions.load().first.load();
+    expect(failed.kind).toEqual(OUTBOUND_KIND_NFT_RELEASE);
+    expect(failed.status).toEqual(OUTBOUND_STATUS_BOUNCED);
+    expect(failed.destination).toEqual(nftItem.address);
+    expect(failed.recipient).toEqual(buyer.address);
+    expect(failed.queryId).toEqual(1);
+
+    val admin = testing.treasury("test-nft-policy-admin");
+    val allowRetry = nftItem.sendAny(
+        admin.address,
+        UpdateNftTransferPolicy { rejectRecipient: null }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(allowRetry).toHaveSuccessfulTx<UpdateNftTransferPolicy>({ to: nftItem.address });
+
+    val retry = escrow.sendAny(
+        buyer.address,
+        RetryFailedOutboundAction { queryId: failed.queryId, dealSalt: salt }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(retry).toHaveSuccessfulTx<RetryFailedOutboundAction>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
+    expect(escrow.getProgress().oracleAttemptId).toEqual(2);
+    expect(nftItem.getOwner()).toEqual(buyer.address);
+
+    val delivered = buildTestOracleAttestation(
+        escrow,
+        salt,
+        ORACLE_ACTION_NFT_DELIVERED,
+        2,
+        nftItem.address,
+        escrow.address,
+        buyer.address,
+        0,
+        2,
+        0xA11D91,
+        99,
+        99,
+    );
+    val deliveryConfirmed = escrow.sendAny(
+        testing.treasury("signed-delivery-oracle").address,
+        delivered.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(deliveryConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_DELIVERED_DISPUTE_WINDOW);
+    expect(escrow.getProgress().principalLocked).toEqual(true);
+    expect(escrow.getProgress().nftInEscrow).toEqual(false);
 }
 
+
+get fun `test seller payout bounce is correlated and keeps principal locked`() {
+    testing.setNow(1_700_000_000);
+    val salt = 0xA11DA;
+    val buyer = testing.treasury("buyer");
+    val uninitializedSeller = address.fromWorkchainAndHash(
+        0,
+        0xA11DA00000000000000000000000000000000000000000000000000000000001,
+    );
+    val (escrow, _, deployer, _) = createFixture(
+        salt,
+        STATE_DELIVERED_DISPUTE_WINDOW,
+        0,
+        1_699_999_999,
+        false,
+        true,
+        null,
+        uninitializedSeller,
+    );
+    val deployResult = escrow.deploy(deployer.address, { value: grams("0.2"), bounce: false });
+    expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
+
+    val funding = net.send(
+        buyer.address,
+        createMessage({
+            bounce: false,
+            value: grams("1.5"),
+            dest: escrow.address,
+            body: beginCell().endCell(),
+        }),
+    );
+    expect(funding).toHaveSuccessfulTx({ from: buyer.address, to: escrow.address });
+
+    val timeout = escrow.sendAny(
+        testing.treasury("payout-bounce-keeper").address,
+        TimeoutDeal { queryId: 88, dealSalt: salt }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(timeout).toHaveSuccessfulTx<TimeoutDeal>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
+    expect(escrow.getProgress().principalLocked).toEqual(true);
+    expect(escrow.getProgress().nftInEscrow).toEqual(false);
+
+    val actions = escrow.getProgress().outboundActions.load();
+    expect(actions.first).toBeNotNull();
+    val failed = actions.first.load();
+    expect(failed.kind).toEqual(OUTBOUND_KIND_SELLER_PAYOUT);
+    expect(failed.status).toEqual(OUTBOUND_STATUS_BOUNCED);
+    expect(failed.destination).toEqual(uninitializedSeller);
+    expect(failed.queryId).toEqual(1);
+}
 
 get fun `test expired oracle attestation is rejected before timeout transaction`() {
     testing.setNow(1_700_000_000);
@@ -770,14 +958,9 @@ get fun `test expired oracle attestation is rejected before timeout transaction`
             evidenceHash: 0xA11DA,
         }.toCell(),
     };
-    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
     val attestation = OracleAttestation {
         data: data.toCell(),
-        signatures: OracleSignatureSet {
-            signatureA: dummySignature,
-            signatureB: dummySignature,
-            signatureC: dummySignature,
-        }.toCell(),
+        signatures: buildOracleSignatures(data.toCell()),
     };
 
     val result = escrow.sendAny(
@@ -842,14 +1025,9 @@ get fun `test expired resolver decision is rejected before timeout transaction`(
             evidenceHash: reasonHash,
         }.toCell(),
     };
-    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
     val resolution = ResolveDispute {
         data: decision.toCell(),
-        signatures: ResolverSignatureSet {
-            signatureA: dummySignature,
-            signatureB: dummySignature,
-            signatureC: dummySignature,
-        }.toCell(),
+        signatures: buildResolverSignatures(decision.toCell()),
     };
 
     val result = escrow.sendAny(
@@ -950,23 +1128,16 @@ get fun `test oracle attestation is accepted at the exact state deadline`() {
             evidenceHash: 0xA11DE,
         }.toCell(),
     };
-    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
     val attestation = OracleAttestation {
         data: data.toCell(),
-        signatures: OracleSignatureSet {
-            signatureA: dummySignature,
-            signatureB: dummySignature,
-            signatureC: dummySignature,
-        }.toCell(),
+        signatures: buildOracleSignatures(data.toCell()),
     };
 
-    testing.setChecksigIgnore(true);
     val result = escrow.sendAny(
         testing.treasury("exact-deadline-oracle").address,
         attestation.toCell(),
         { value: grams("0.03"), bounce: true },
     );
-    testing.setChecksigIgnore(false);
 
     expect(result).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
     expect(escrow.getState()).toEqual(STATE_DELIVERED_DISPUTE_WINDOW);
@@ -1022,23 +1193,16 @@ get fun `test resolver decision is accepted at the exact arbitration deadline`()
             evidenceHash: reasonHash,
         }.toCell(),
     };
-    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
     val resolution = ResolveDispute {
         data: decision.toCell(),
-        signatures: ResolverSignatureSet {
-            signatureA: dummySignature,
-            signatureB: dummySignature,
-            signatureC: dummySignature,
-        }.toCell(),
+        signatures: buildResolverSignatures(decision.toCell()),
     };
 
-    testing.setChecksigIgnore(true);
     val result = escrow.sendAny(
         testing.treasury("exact-deadline-resolver").address,
         resolution.toCell(),
         { value: grams("0.03"), bounce: true },
     );
-    testing.setChecksigIgnore(false);
 
     expect(result).toHaveSuccessfulTx<ResolveDispute>({ to: escrow.address });
     expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
@@ -1091,24 +1255,17 @@ get fun `test pre-delivery buyer dispute returns NFT and refunds principal exact
             evidenceHash: reasonHash,
         }.toCell(),
     };
-    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
     val resolution = ResolveDispute {
         data: decision.toCell(),
-        signatures: ResolverSignatureSet {
-            signatureA: dummySignature,
-            signatureB: dummySignature,
-            signatureC: dummySignature,
-        }.toCell(),
+        signatures: buildResolverSignatures(decision.toCell()),
     };
 
-    testing.setChecksigIgnore(true);
     val acceptedResolution = escrow.sendAny(
         testing.treasury("buyer-dispute-resolver").address,
         resolution.toCell(),
         { value: grams("0.03"), bounce: true },
     );
     expect(acceptedResolution).toHaveSuccessfulTx<ResolveDispute>({ to: escrow.address });
-    testing.setChecksigIgnore(false);
 
     expect(escrow.getState()).toEqual(STATE_NFT_RETURN_PENDING);
     expect(nftItem.getOwner()).toEqual(seller.address);
@@ -1150,14 +1307,12 @@ get fun `test pre-delivery buyer dispute returns NFT and refunds principal exact
         }.toCell(),
     };
 
-    testing.setChecksigIgnore(true);
     val nftReturnConfirmed = escrow.sendAny(
         testing.treasury("buyer-dispute-oracle").address,
         nftReturnedAttestation.toCell(),
         { value: grams("0.03"), bounce: true },
     );
     expect(nftReturnConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
-    testing.setChecksigIgnore(false);
 
     expect(escrow.getState()).toEqual(STATE_BUYER_REFUND_PENDING);
     expect(testing.getAccountBalance(buyer.address))
@@ -1200,14 +1355,12 @@ get fun `test pre-delivery buyer dispute returns NFT and refunds principal exact
         }.toCell(),
     };
 
-    testing.setChecksigIgnore(true);
     val refundConfirmed = escrow.sendAny(
         testing.treasury("buyer-refund-oracle").address,
         refundAttestation.toCell(),
         { value: grams("0.03"), bounce: true },
     );
     expect(refundConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
-    testing.setChecksigIgnore(false);
 
     expect(escrow.getState()).toEqual(STATE_REFUNDED);
     expect(escrow.getProgress().principalLocked).toEqual(false);
@@ -1271,14 +1424,12 @@ get fun `test post-delivery seller dispute outcome requires buyer NFT return bef
         21,
         21,
     );
-    testing.setChecksigIgnore(true);
     val deliveryConfirmed = escrow.sendAny(
         testing.treasury("post-delivery-oracle").address,
         delivered.toCell(),
         { value: grams("0.03"), bounce: true },
     );
     expect(deliveryConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
-    testing.setChecksigIgnore(false);
     expect(escrow.getState()).toEqual(STATE_DELIVERED_DISPUTE_WINDOW);
 
     val reasonHash = 0xA11E1A;
@@ -1317,14 +1468,12 @@ get fun `test post-delivery seller dispute outcome requires buyer NFT return bef
         1,
         reasonHash,
     );
-    testing.setChecksigIgnore(true);
     val acceptedResolution = escrow.sendAny(
         testing.treasury("post-delivery-resolver").address,
         resolution.toCell(),
         { value: grams("0.03"), bounce: true },
     );
     expect(acceptedResolution).toHaveSuccessfulTx<ResolveDispute>({ to: escrow.address });
-    testing.setChecksigIgnore(false);
     expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
     expect(nftItem.getOwner()).toEqual(buyer.address);
 
@@ -1342,7 +1491,6 @@ get fun `test post-delivery seller dispute outcome requires buyer NFT return bef
         22,
         22,
     );
-    testing.setChecksigIgnore(true);
     val deliveryConfirmedAfterDispute = escrow.sendAny(
         testing.treasury("post-delivery-release-oracle").address,
         deliveredAfterDispute.toCell(),
@@ -1350,7 +1498,6 @@ get fun `test post-delivery seller dispute outcome requires buyer NFT return bef
     );
     expect(deliveryConfirmedAfterDispute)
         .toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
-    testing.setChecksigIgnore(false);
     expect(escrow.getState()).toEqual(STATE_SELLER_PAYOUT_PENDING);
 
     val payout = buildTestOracleAttestation(
@@ -1367,14 +1514,12 @@ get fun `test post-delivery seller dispute outcome requires buyer NFT return bef
         23,
         23,
     );
-    testing.setChecksigIgnore(true);
     val payoutConfirmed = escrow.sendAny(
         testing.treasury("post-delivery-payout-oracle").address,
         payout.toCell(),
         { value: grams("0.03"), bounce: true },
     );
     expect(payoutConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
-    testing.setChecksigIgnore(false);
 
     expect(escrow.getState()).toEqual(STATE_SETTLED);
     expect(escrow.getProgress().principalLocked).toEqual(false);
@@ -1422,14 +1567,12 @@ get fun `test pre-delivery seller dispute outcome settles payout after delivery 
         1,
         reasonHash,
     );
-    testing.setChecksigIgnore(true);
     val acceptedResolution = escrow.sendAny(
         testing.treasury("pre-delivery-seller-resolver").address,
         resolution.toCell(),
         { value: grams("0.03"), bounce: true },
     );
     expect(acceptedResolution).toHaveSuccessfulTx<ResolveDispute>({ to: escrow.address });
-    testing.setChecksigIgnore(false);
     expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
     expect(nftItem.getOwner()).toEqual(buyer.address);
 
@@ -1437,28 +1580,24 @@ get fun `test pre-delivery seller dispute outcome settles payout after delivery 
         escrow, salt, ORACLE_ACTION_NFT_DELIVERED, 1,
         nftItem.address, escrow.address, buyer.address, 0, 1, 0x401, 31, 31,
     );
-    testing.setChecksigIgnore(true);
     val deliveryConfirmed = escrow.sendAny(
         testing.treasury("pre-delivery-seller-delivery-oracle").address,
         delivery.toCell(),
         { value: grams("0.03"), bounce: true },
     );
     expect(deliveryConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
-    testing.setChecksigIgnore(false);
     expect(escrow.getState()).toEqual(STATE_SELLER_PAYOUT_PENDING);
 
     val payout = buildTestOracleAttestation(
         escrow, salt, ORACLE_ACTION_SELLER_PAYOUT, 2,
         nftItem.address, escrow.address, seller.address, grams("1"), 2, 0x402, 32, 32,
     );
-    testing.setChecksigIgnore(true);
     val payoutConfirmed = escrow.sendAny(
         testing.treasury("pre-delivery-seller-payout-oracle").address,
         payout.toCell(),
         { value: grams("0.03"), bounce: true },
     );
     expect(payoutConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
-    testing.setChecksigIgnore(false);
 
     expect(escrow.getState()).toEqual(STATE_SETTLED);
     expect(escrow.getProgress().principalLocked).toEqual(false);
@@ -1497,14 +1636,12 @@ get fun `test post-delivery buyer dispute outcome returns NFT and refunds buyer`
         escrow, salt, ORACLE_ACTION_NFT_DELIVERED, 1,
         nftItem.address, escrow.address, buyer.address, 0, 1, 0x501, 41, 41,
     );
-    testing.setChecksigIgnore(true);
     val deliveryConfirmed = escrow.sendAny(
         testing.treasury("post-buyer-initial-delivery-oracle").address,
         delivery.toCell(),
         { value: grams("0.03"), bounce: true },
     );
     expect(deliveryConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
-    testing.setChecksigIgnore(false);
     expect(escrow.getState()).toEqual(STATE_DELIVERED_DISPUTE_WINDOW);
 
     val reasonHash = 0xA11E3A;
@@ -1542,14 +1679,12 @@ get fun `test post-delivery buyer dispute outcome returns NFT and refunds buyer`
         1,
         reasonHash,
     );
-    testing.setChecksigIgnore(true);
     val acceptedResolution = escrow.sendAny(
         testing.treasury("post-delivery-buyer-resolver").address,
         resolution.toCell(),
         { value: grams("0.03"), bounce: true },
     );
     expect(acceptedResolution).toHaveSuccessfulTx<ResolveDispute>({ to: escrow.address });
-    testing.setChecksigIgnore(false);
     expect(escrow.getState()).toEqual(STATE_NFT_RETURN_PENDING);
     expect(nftItem.getOwner()).toEqual(seller.address);
 
@@ -1557,28 +1692,24 @@ get fun `test post-delivery buyer dispute outcome returns NFT and refunds buyer`
         escrow, salt, ORACLE_ACTION_NFT_RETURNED_TO_SELLER, 2,
         nftItem.address, escrow.address, seller.address, 0, 2, 0x502, 42, 42,
     );
-    testing.setChecksigIgnore(true);
     val nftReturnConfirmed = escrow.sendAny(
         testing.treasury("post-delivery-buyer-return-oracle").address,
         nftReturned.toCell(),
         { value: grams("0.03"), bounce: true },
     );
     expect(nftReturnConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
-    testing.setChecksigIgnore(false);
     expect(escrow.getState()).toEqual(STATE_BUYER_REFUND_PENDING);
 
     val refund = buildTestOracleAttestation(
         escrow, salt, ORACLE_ACTION_BUYER_REFUND, 3,
         nftItem.address, escrow.address, buyer.address, grams("1"), 3, 0x503, 43, 43,
     );
-    testing.setChecksigIgnore(true);
     val refundConfirmed = escrow.sendAny(
         testing.treasury("post-delivery-buyer-refund-oracle").address,
         refund.toCell(),
         { value: grams("0.03"), bounce: true },
     );
     expect(refundConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
-    testing.setChecksigIgnore(false);
 
     expect(escrow.getState()).toEqual(STATE_REFUNDED);
     expect(escrow.getProgress().principalLocked).toEqual(false);
@@ -1602,7 +1733,7 @@ get fun `test bounced message cannot overwrite an already terminal state`() {
 
     val bounceOrigin = testing.treasury("terminal-bounce-origin");
     val bouncedMessage = createMessage({
-        bounce: false,
+        bounce: BounceMode.RichBounce,
         value: grams("0.03"),
         dest: escrow.address,
         body: SettlementMessage {
@@ -1634,7 +1765,7 @@ get fun `test bounced secondary action preserves refunded terminal state`() {
 
     val bounceOrigin = testing.treasury("refunded-terminal-bounce-origin");
     val bouncedMessage = createMessage({
-        bounce: false,
+        bounce: BounceMode.RichBounce,
         value: grams("0.03"),
         dest: escrow.address,
         body: SettlementMessage {
@@ -1665,7 +1796,7 @@ get fun `test bounced secondary action preserves expired terminal state`() {
 
     val bounceOrigin = testing.treasury("expired-terminal-bounce-origin");
     val bouncedMessage = createMessage({
-        bounce: false,
+        bounce: BounceMode.RichBounce,
         value: grams("0.03"),
         dest: escrow.address,
         body: SettlementMessage {
