@@ -1299,10 +1299,11 @@ async def _prepare_action(
     request_context: dict[str, object] | None = None,
 ):
     _require_testnet()
+    actor_id = user.id
     # Do not hold a database row lock across ownership-provider calls.
     deal = await session.scalar(select(EscrowDeal).where(
         deal_id == EscrowDeal.id,
-        (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id),
+        (EscrowDeal.buyer_id == actor_id) | (EscrowDeal.seller_id == actor_id),
     ))
     if deal is None:
         raise HTTPException(status_code=404, detail="Escrow deal not found")
@@ -1324,7 +1325,7 @@ async def _prepare_action(
     existing_action = await session.scalar(
         select(EscrowWalletActionRecord)
         .where(
-            EscrowWalletActionRecord.actor_id == user.id,
+            EscrowWalletActionRecord.actor_id == actor_id,
             EscrowWalletActionRecord.action_type == action.value,
             EscrowWalletActionRecord.idempotency_key == idempotency_key,
         )
@@ -1336,16 +1337,16 @@ async def _prepare_action(
             raise HTTPException(status_code=404, detail="Escrow listing intent not found")
         replay_wallet_id = (
             intent_for_replay.seller_wallet_id
-            if user.id == deal.seller_id
+            if actor_id == deal.seller_id
             else deal.buyer_wallet_id
         )
         replay_wallet_address = (
             deal.seller_address_snapshot
-            if user.id == deal.seller_id
+            if actor_id == deal.seller_id
             else deal.buyer_address_snapshot
         )
         replay_hash = canonical_request_sha256({
-            "actor_id": str(user.id),
+            "actor_id": str(actor_id),
             "deal_id": str(deal.id),
             "action_type": action.value,
             "network": deal.network,
@@ -1422,14 +1423,14 @@ async def _prepare_action(
         EscrowWalletAction.OPEN_DISPUTE: {"funded_review", "delivered_dispute_window"},
     }
     if action in seller_states:
-        if deal.seller_id != user.id or deal.status != seller_states[action]:
+        if deal.seller_id != actor_id or deal.status != seller_states[action]:
             raise HTTPException(status_code=409,
                 detail="Seller action is not available for this deal state")
         intent = await session.get(EscrowListingIntent, deal.listing_intent_id)
         if intent is None:
             raise HTTPException(status_code=404, detail="Escrow listing intent not found")
         wallet, wallet_address = await _verified_wallet(
-            session, user_id=user.id, wallet_id=intent.seller_wallet_id,
+            session, user_id=actor_id, wallet_id=intent.seller_wallet_id,
         )
         if wallet_address != deal.seller_address_snapshot:
             raise HTTPException(status_code=409,
@@ -1442,21 +1443,21 @@ async def _prepare_action(
                     detail={"code": "contract_address_unavailable"})
             ownership_check = (deal.item_address, deal.contract_address)
     elif action in buyer_states:
-        if deal.buyer_id != user.id or deal.status not in buyer_states[action]:
+        if deal.buyer_id != actor_id or deal.status not in buyer_states[action]:
             raise HTTPException(status_code=409,
                 detail="Buyer action is not available for this deal state")
         wallet, wallet_address = await _verified_wallet(
-            session, user_id=user.id, wallet_id=deal.buyer_wallet_id,
+            session, user_id=actor_id, wallet_id=deal.buyer_wallet_id,
         )
         if wallet_address != deal.buyer_address_snapshot:
             raise HTTPException(status_code=409,
                 detail="Verified buyer wallet snapshot has changed")
     elif action is EscrowWalletAction.RETURN_NFT_TO_ESCROW:
-        if deal.buyer_id != user.id or deal.status != "disputed":
+        if deal.buyer_id != actor_id or deal.status != "disputed":
             raise HTTPException(status_code=409,
                 detail="Buyer NFT return is not available in this deal state")
         wallet, wallet_address = await _verified_wallet(
-            session, user_id=user.id, wallet_id=deal.buyer_wallet_id,
+            session, user_id=actor_id, wallet_id=deal.buyer_wallet_id,
         )
         if wallet_address != deal.buyer_address_snapshot:
             raise HTTPException(status_code=409,
@@ -1494,7 +1495,7 @@ async def _prepare_action(
         select(EscrowDeal)
         .where(
             EscrowDeal.id == validated_snapshot["id"],
-            (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id),
+            (EscrowDeal.buyer_id == actor_id) | (EscrowDeal.seller_id == actor_id),
         )
         .with_for_update()
         .execution_options(populate_existing=True)
@@ -1514,7 +1515,7 @@ async def _prepare_action(
         )
     deal = locked_deal
     wallet, wallet_address = await _verified_wallet(
-        session, user_id=user.id, wallet_id=validated_wallet_id
+        session, user_id=actor_id, wallet_id=validated_wallet_id
     )
     if wallet_address != validated_wallet_address:
         await session.rollback()
@@ -1522,7 +1523,7 @@ async def _prepare_action(
             status_code=409, detail={"code": "escrow_wallet_changed_during_validation"}
         )
     action_hash = canonical_request_sha256({
-        "actor_id": str(user.id),
+        "actor_id": str(actor_id),
         "deal_id": str(deal.id),
         "action_type": action.value,
         "network": deal.network,
@@ -1539,7 +1540,7 @@ async def _prepare_action(
     })
     try:
         action_record, created = await create_or_replay_action(
-            session, actor_id=user.id, deal_id=deal.id, action_type=action.value,
+            session, actor_id=actor_id, deal_id=deal.id, action_type=action.value,
             idempotency_key=idempotency_key, request_sha256=action_hash,
         )
     except EscrowActionConflict as exc:
@@ -1549,7 +1550,7 @@ async def _prepare_action(
         await session.rollback()
         try:
             action_record, created = await create_or_replay_action(
-                session, actor_id=user.id, deal_id=deal.id, action_type=action.value,
+                session, actor_id=actor_id, deal_id=deal.id, action_type=action.value,
                 idempotency_key=idempotency_key, request_sha256=action_hash,
             )
         except EscrowActionConflict as exc:
