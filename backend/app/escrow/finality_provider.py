@@ -983,17 +983,28 @@ class PytoniqTONTestnetEscrowProvider:
                         "Initial NFT deposit did not come from the seller"
                     )
                 event_type = EscrowChainEventType.NFT_DEPOSIT_ACCEPTED
-            elif state == 7:
+            elif (
+                state == 6
+                and int(getter["dispute_phase"]) == 2
+                and bool(getter["nft_in_escrow"])
+            ):
+                # DealEscrow v1 records a valid buyer return in disputed/post-delivery
+                # state; it does not advance to nft_return_pending until the resolver's
+                # later decision. Persist this as evidence only; never release listing.
                 if (
                     _canonical_address(previous_owner_address)
                     != _canonical_address(snapshot["buyer_address"])
                 ):
-                    raise EscrowProviderInvalidEvidence("NFT return did not come from the buyer")
+                    raise EscrowProviderInvalidEvidence(
+                        "Disputed NFT return did not come from the snapshotted buyer"
+                    )
                 event_type = EscrowChainEventType.NFT_RETURN_EVIDENCE_OBSERVED
             elif state == 13:
                 event_type = EscrowChainEventType.MANUAL_REVIEW_REQUIRED
             else:
-                raise EscrowProviderInvalidEvidence("TEP-62 notification/getter state mismatch")
+                raise EscrowProviderInvalidEvidence(
+                    "TEP-62 notification/getter state mismatch"
+                )
             source = previous_owner_address
             destination = _canonical_address(deal.contract_address)
             amount = None
