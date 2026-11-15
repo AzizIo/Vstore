@@ -1026,6 +1026,58 @@ async def create_deal_intent(
                 status_code=409,
                 detail="Active listing price/currency changed after the escrow intent",
             )
+        asset = await session.get(NFTAsset, intent.asset_id)
+        if (
+            asset is None
+            or asset.owner_id != intent.seller_id
+            or asset.network != "testnet"
+            or asset.asset_type is not AssetType.TON_NFT
+            or asset.verification_status is not AssetVerificationStatus.VERIFIED
+            or asset.item_address is None
+            or asset.collection_id is None
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_asset_not_verified"},
+            )
+        try:
+            asset_item_address = normalize_address(asset.item_address)
+        except AddressError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_asset_not_verified"},
+            ) from exc
+        collection = await session.get(NFTCollection, asset.collection_id)
+        if collection is None or collection.network != "testnet":
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_collection_not_verified"},
+            )
+        try:
+            asset_collection_address = normalize_address(collection.address)
+        except AddressError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_collection_not_verified"},
+            ) from exc
+        if (
+            asset.id != intent.asset_id
+            or asset_item_address != intent.item_address
+            or asset_collection_address != intent.collection_address_snapshot
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_identity_snapshot_mismatch"},
+            )
+        asset_snapshot = {
+            "id": asset.id,
+            "owner_id": asset.owner_id,
+            "network": asset.network,
+            "asset_type": asset.asset_type,
+            "verification_status": asset.verification_status,
+            "item_address": asset_item_address,
+            "collection_id": asset.collection_id,
+        }
         # Require identity evidence from the seller intent before repeating a
         # trusted, same-block proof immediately before the reservation.
         try:
