@@ -108,11 +108,11 @@ The reproducible workflow artifact includes `build/state_init_vector.json`, `bui
 
 ## Integration and release boundary
 
-The pinned adapter is present in the repository, but the API intentionally still uses `UnconfiguredTONEscrowContractAdapter` and returns `contract_abi_pending`. The database does not yet persist the complete immutable deployment snapshot (including oracle/resolver public keys, all reserve/refund/transfer terms and query IDs), and the backend has no configured provider that can prove finalized chain inclusion and reconcile all contract getters.
+The backend contains a `PinnedTONEscrowContractAdapter` and a testnet-only action-preparation path. The API validates the persisted immutable deal/deployment snapshot before building a TON Connect request. When required snapshot fields or proof-backed NFT identity are missing, the route fails closed with `contract_abi_pending`/HTTP 503 rather than constructing a partial payload. The pin update in this PR changes only the compiler artifact identity and dependent golden vectors; it does not bypass the snapshot or authorization checks.
 
-The testnet-only router is mounted only when `TON_CONNECT_NETWORK=testnet`; this does not enable transaction preparation, signing or broadcast. No mainnet, real-value funds, server-side signing or production deployment is enabled.
+Prepared wallet messages are **unsigned TON Connect requests**. The server does not hold user keys, sign messages, broadcast transactions, or claim that a prepared/submitted message is finalized. The escrow router is mounted only for `TON_CONNECT_NETWORK=testnet` in the permitted local/development/test/Preview runtime (or the isolated production Preview exception); the chain observer has its own feature-flag and environment gate. No mainnet, real-value checkout, production custody or automatic seller payout is enabled.
 
-A successful build or matching vector proves serializer consistency against the generated compiler wrapper; it does **not** prove contract safety. Remaining gates include complete snapshot persistence and replay-safe payload storage, a provider with independently verifiable finality, getter/trace reconciliation, a valueless live testnet lifecycle run, and an independent TON contract/security review.
+A successful build or matching vector proves serializer consistency against the generated compiler wrapper; it does **not** prove contract safety or chain finality. Remaining gates include the complete proof-backed NFT identity snapshot (Issue #213), independently verifiable finality provider and getter/trace reconciliation, replay-safe durable action handling, a valueless live testnet lifecycle run, written Telegram policy/legal clearance, and an independent TON/Tolk security review.
 
 ## Latest contract CI reproduction
 
