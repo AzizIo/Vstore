@@ -925,7 +925,7 @@ get fun `test seller payout bounce is correlated and keeps principal locked`() {
     expect(escrow.getProgress().nftInEscrow).toEqual(false);
 
     val actions = escrow.getProgress().outboundActions.load();
-    expect(actions.first).toBeNotNull();
+    assert (actions.first != null) throw Errors.OutboundActionMissing;
     val failed = actions.first.load();
     expect(failed.kind).toEqual(OUTBOUND_KIND_SELLER_PAYOUT);
     expect(failed.status).toEqual(OUTBOUND_STATUS_BOUNCED);
