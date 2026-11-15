@@ -577,6 +577,7 @@ get fun `test stale oracle attempt cannot advance escrow state`() {
         }.toCell(),
     };
     val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
+    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
     val staleAttestation = OracleAttestation {
         data: staleData.toCell(),
         signatures: OracleSignatureSet {
@@ -1317,11 +1318,7 @@ get fun `test pre-delivery buyer dispute returns NFT and refunds principal exact
     };
     val nftReturnedAttestation = OracleAttestation {
         data: nftReturnedData.toCell(),
-        signatures: OracleSignatureSet {
-            signatureA: dummySignature,
-            signatureB: dummySignature,
-            signatureC: dummySignature,
-        }.toCell(),
+        signatures: buildOracleSignatures(nftReturnedData.toCell()),
     };
 
     val nftReturnConfirmed = escrow.sendAny(
@@ -1365,11 +1362,7 @@ get fun `test pre-delivery buyer dispute returns NFT and refunds principal exact
     };
     val refundAttestation = OracleAttestation {
         data: refundData.toCell(),
-        signatures: OracleSignatureSet {
-            signatureA: dummySignature,
-            signatureB: dummySignature,
-            signatureC: dummySignature,
-        }.toCell(),
+        signatures: buildOracleSignatures(refundData.toCell()),
     };
 
     val refundConfirmed = escrow.sendAny(
