@@ -348,7 +348,6 @@ async def test_prepare_action_persists_idempotency_before_incomplete_snapshot_50
         last_error_code="deployment_snapshot_incomplete",
     )
     replay_session = ActionSession()
-    replay_session.scalar = replay_scalar  # type: ignore[method-assign]
     async def replay_scalar(_statement: object) -> SimpleNamespace | None:
         replay_session.scalar_calls += 1
         return deal if replay_session.scalar_calls == 1 else blocked_action
