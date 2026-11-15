@@ -168,6 +168,17 @@ class FinalityVerification:
                 or isinstance(self.verified_event_type, EscrowChainEventType)
             )
             and (
+                self.verified_query_id is None
+                or (
+                    self.verified_query_id.isdecimal()
+                    and int(self.verified_query_id) > 0
+                    and (
+                        event.query_id is None
+                        or event.query_id == self.verified_query_id
+                    )
+                )
+            )
+            and (
                 self.getter_snapshot_json is None
                 or (
                     isinstance(self.getter_snapshot_sha256, str)
