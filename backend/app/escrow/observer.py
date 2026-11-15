@@ -101,11 +101,25 @@ def _event_snapshot(event: NormalizedChainEvent) -> NormalizedEventEvidence:
 
 
 def _deal_snapshot(deal: EscrowDeal) -> DealEvidenceSnapshot:
+    snapshot = deal.deployment_snapshot_json
+    execution_reserve = (
+        snapshot.get("execution_reserve_nanotons")
+        if isinstance(snapshot, dict)
+        else None
+    )
     return DealEvidenceSnapshot(
-        network=deal.network, contract_address=deal.contract_address,
-        collection_address=deal.collection_address_snapshot, item_address=deal.item_address,
-        seller_address=deal.seller_address_snapshot, buyer_address=deal.buyer_address_snapshot,
+        network=deal.network,
+        contract_address=deal.contract_address,
+        collection_address=deal.collection_address_snapshot,
+        item_address=deal.item_address,
+        seller_address=deal.seller_address_snapshot,
+        buyer_address=deal.buyer_address_snapshot,
         principal_nanotons=int(deal.principal_nanotons),
+        execution_reserve_nanotons=(
+            int(execution_reserve)
+            if isinstance(execution_reserve, int) and not isinstance(execution_reserve, bool)
+            else None
+        ),
     )
 
 
@@ -300,7 +314,9 @@ async def _terminal_owner_evidence(
             # the current owner for the same terminal result on replay.
             next_state = EscrowDealStatus(deal.status)
         else:
-            next_state = transition_for_verified_event(deal.status, event.event_type)
+            next_state = transition_for_verified_event(
+                deal.status, event.event_type, event.observed_contract_state
+            )
     except (EscrowDomainError, ValueError):
         return event
     if (
@@ -723,13 +739,21 @@ async def run_observer_pass(
                         else event.amount_nanotons
                     ),
                     observed_contract_state=(
-                        proof.observed_contract_state or event.observed_contract_state
+                        proof.observed_contract_state
+                        if proof.verified_event_type is not None
+                        else event.observed_contract_state
                     ),
+                    # A verified False is meaningful. Do not OR with untrusted
+                    # indexer values or a legacy event's persisted booleans.
                     attestation_accepted=(
-                        proof.attestation_accepted or event.attestation_accepted
+                        proof.attestation_accepted
+                        if proof.verified_event_type is not None
+                        else event.attestation_accepted
                     ),
                     contract_state_reconciled=(
-                        proof.contract_state_reconciled or event.contract_state_reconciled
+                        proof.contract_state_reconciled
+                        if proof.verified_event_type is not None
+                        else event.contract_state_reconciled
                     ),
                     masterchain_block_hash=proof.masterchain_block_hash,
                     finality_proof_sha256=proof.proof_sha256,
