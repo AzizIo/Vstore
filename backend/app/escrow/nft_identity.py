@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from typing import Any
 
 from pytoniq_core import Address, Cell, begin_cell
 
@@ -71,7 +70,9 @@ def _parse_policy(
         if not isinstance(policy, dict):
             raise NFTIdentityEvidenceError("NFT collection policy must be a JSON object")
         if any(not isinstance(policy.get(field), str) for field in _POLICY_FIELDS):
-            raise NFTIdentityEvidenceError("NFT collection policy is missing a required string field")
+            raise NFTIdentityEvidenceError(
+                "NFT collection policy is missing a required string field"
+            )
         candidate = {
             "policy_id": policy["policy_id"].strip(),
             "collection_address": canonical_address(policy["collection_address"]),
@@ -84,7 +85,9 @@ def _parse_policy(
         if candidate["collection_address"] in seen_addresses:
             raise NFTIdentityEvidenceError("Duplicate NFT collection policies are not allowed")
         seen_addresses.add(candidate["collection_address"])
-        if not _valid_hash(candidate["collection_code_hash"]) or not _valid_hash(candidate["item_code_hash"]):
+        if not _valid_hash(candidate["collection_code_hash"]) or not _valid_hash(
+            candidate["item_code_hash"]
+        ):
             raise NFTIdentityEvidenceError("NFT collection policy code hashes must be SHA-256 hex")
         if candidate["derivation"] != _POLICY_DERIVATION:
             raise NFTIdentityEvidenceError("Unsupported NFT collection derivation policy")
@@ -167,7 +170,9 @@ def verify_nft_identity_cells(
     if collection_parser.remaining_bits != 0 or collection_parser.remaining_refs != 0:
         raise NFTIdentityEvidenceError("Collection storage has unexpected trailing data")
     if cell_hash(collection_item_code) != policy["item_code_hash"]:
-        raise NFTIdentityEvidenceError("Collection's stored NFT item code differs from the allowlist")
+        raise NFTIdentityEvidenceError(
+            "Collection's stored NFT item code differs from the allowlist"
+        )
     if next_item_index <= item_index:
         raise NFTIdentityEvidenceError("NFT index is outside the collection's minted index range")
 
