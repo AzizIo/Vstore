@@ -17,7 +17,8 @@ from app.api.escrow import router as escrow_router
 from app.api.health import router as health_router
 from app.api.listings import router as listings_router
 from app.api.orders import router as orders_router
-from app.api.payments import _test_payment_router_enabled, router as payments_router
+from app.api.payments import _test_payment_router_enabled
+from app.api.payments import router as payments_router
 from app.api.reviews import router as reviews_router
 from app.api.sellers import router as sellers_router
 from app.api.users import router as users_router
