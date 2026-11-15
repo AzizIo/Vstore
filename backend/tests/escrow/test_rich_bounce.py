@@ -43,7 +43,7 @@ def _nft_transfer_body(*, query_id: int = 42, salt: str = SALT) -> Cell:
 def _rich_bounce(
     original_body: Cell,
     *,
-    value: int = 90_000_000,
+    value: int = 80_000_000,
     created_lt: int = 300,
     phase: int = 2,
     exit_code: int = 37,
@@ -81,7 +81,7 @@ def _nft_descriptor(body: Cell, **overrides: Any) -> dict[str, Any]:
         "deal_salt": SALT,
         "attempt_id": 42,
         "amount_nanotons": 80_000_000,
-        "message_value_nanotons": 90_000_000,
+        "message_value_nanotons": 80_000_000,
         "expected_state": 4,
         "expected_pending_action": 0,
         "retry_window_seconds": 0,
@@ -136,7 +136,7 @@ def test_rich_bounce_roundtrips_real_boc_and_parses_tlb_fields(phase: int) -> No
     decoded = parse_rich_bounce_body(bounce)
 
     assert decoded.original_body_hash == original.get_hash(0).hex()
-    assert decoded.original_value_nanotons == 90_000_000
+    assert decoded.original_value_nanotons == 80_000_000
     assert decoded.original_created_lt == 300
     assert decoded.original_created_at == 1_700_000_000
     assert decoded.bounced_by_phase == phase
@@ -170,6 +170,32 @@ def test_match_requires_exact_proof_read_action_descriptor() -> None:
     assert matched is action
 
 
+def test_original_bounce_value_must_match_proven_outbound_descriptor() -> None:
+    original = _nft_transfer_body()
+    envelope = parse_rich_bounce_body(
+        _rich_bounce(original, value=90_000_000)
+    )
+    action = _nft_descriptor(original)
+
+    matched, reason = _match(envelope, action)
+
+    assert matched is None
+    assert reason == "bounce_original_value_mismatch"
+
+
+def test_descriptor_message_value_must_match_immutable_deal_snapshot() -> None:
+    original = _nft_transfer_body()
+    envelope = parse_rich_bounce_body(
+        _rich_bounce(original, value=90_000_000)
+    )
+    action = _nft_descriptor(original, message_value_nanotons=90_000_000)
+
+    matched, reason = _match(envelope, action)
+
+    assert matched is None
+    assert reason == "outbound_message_value_differs_from_deal_snapshot"
+
+
 @pytest.mark.parametrize(
     ("overrides", "sender", "state", "lt", "expected_reason"),
     [
@@ -179,8 +205,6 @@ def test_match_requires_exact_proof_read_action_descriptor() -> None:
          "bounce_sender_does_not_match_outbound_destination"),
         ({"status": 0}, ITEM, "manual_review", 500,
          "outbound_action_not_marked_bounced_by_contract"),
-        ({"message_value_nanotons": 1}, ITEM, "manual_review", 500,
-         "bounce_original_value_mismatch"),
         ({"bounce_phase": 1}, ITEM, "manual_review", 500,
          "bounce_phase_differs_from_contract_descriptor"),
         ({"exit_code": 1}, ITEM, "manual_review", 500,
