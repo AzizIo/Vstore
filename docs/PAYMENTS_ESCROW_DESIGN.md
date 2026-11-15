@@ -34,9 +34,11 @@ proposal verbatim.
   and does not set an order to `completed`. The synthetic NFT fixture has no
   item address and cannot be transferred. No public Mini App checkout CTA or
   production payment credentials are enabled.
-- **Refund worker:** durable refund workflow and migration
-  `0013_payment_refund_workflow` remain in Draft PR #173 and are not on `main`.
-  Do not assume automated refunds are available.
+- **Refund worker:** durable refund workflow and migrations
+  `0013_payment_refund_workflow`, `0015_payment_ledger_guards` and
+  `0016_refund_evidence_delete_guard` are on `main`. The worker is restricted
+  to the isolated Telegram Stars test bot and a local test-named PostgreSQL
+  database. This is not a production refund capability.
 - **Escrow:** PR #172 contains architecture/threat-model documentation only.
   There is no deployed escrow contract, no testnet PoC acceptance and no mainnet
   escrow or custody.
@@ -47,7 +49,9 @@ proposal verbatim.
    (`invoice -> pre_checkout_query -> successful_payment`).
 2. Obtain the written Telegram policy ruling tracked by Issue #155 before any
    public paid purchase flow.
-3. Review and approve the refund schema/worker proposal before migration 0013.
+3. Complete manual Telegram Test Server acceptance of the test refund worker,
+   including ambiguous-result reconciliation. Its presence on `main` does not
+   authorize production refunds.
 4. Complete live testnet/Tonkeeper acceptance for the non-custodial delivery
    observer in Issue #46.
 5. Accept ADR-0001 and the escrow threat model before starting a testnet escrow
@@ -55,6 +59,13 @@ proposal verbatim.
 
 
 ## 2. Historical proposal — not the current order state machine
+
+> **Current payment backend note (2026-11-15):** the test-only Telegram Stars
+> ledger and refund worker are now on `main`. See
+> [the Issue #224 release snapshot](ISSUE_224_PAYMENT_BACKEND_RELEASE_SNAPSHOT.md)
+> and [the payment security audit](PAYMENT_BACKEND_SECURITY_AUDIT.md) for actual
+> provider support, transport, migrations and remaining launch gates. The
+> historical endpoint/state examples below are not implemented HTTP contracts.
 
 > **Important:** The state names and transitions in this section and its diagrams
 > were drafted before the current `reserved -> awaiting_transfer ->
