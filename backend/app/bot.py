@@ -17,14 +17,26 @@ logger = logging.getLogger(__name__)
 
 # A bounded Telegram API timeout keeps claimed notification batches within
 # their database lease, even when the remote Bot API is unavailable.
-TELEGRAM_API_TIMEOUT_SECONDS = 15
+TELEGRAM_API_MAX_TIMEOUT_SECONDS = 15
+
+
+def telegram_api_timeout_seconds(settings: Settings) -> int:
+    """Keep each Bot API request shorter than a quarter of the notification lease."""
+    return max(
+        1,
+        min(
+            TELEGRAM_API_MAX_TIMEOUT_SECONDS,
+            settings.notification_claim_lease_seconds // 4,
+        ),
+    )
 
 
 def notification_worker_batch_limit(settings: Settings) -> int:
-    """Keep worst-case sequential Telegram sends comfortably inside the claim lease."""
+    """Keep sequential Telegram sends comfortably inside the claim lease."""
+    request_timeout = telegram_api_timeout_seconds(settings)
     lease_safe_batch_size = max(
         1,
-        settings.notification_claim_lease_seconds // (2 * TELEGRAM_API_TIMEOUT_SECONDS),
+        settings.notification_claim_lease_seconds // (2 * request_timeout),
     )
     return min(settings.notification_batch_size, lease_safe_batch_size)
 
@@ -90,7 +102,7 @@ async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     bot = Bot(
         token=settings.bot_token,
-        session=AiohttpSession(timeout=TELEGRAM_API_TIMEOUT_SECONDS),
+        session=AiohttpSession(timeout=telegram_api_timeout_seconds(settings)),
     )
     try:
         await register_bot_commands(bot)
