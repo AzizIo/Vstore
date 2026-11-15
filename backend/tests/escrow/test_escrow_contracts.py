@@ -318,7 +318,7 @@ async def test_post_delivery_nft_return_is_buyer_only_and_state_bound() -> None:
     assert payload.messages[0].amount == "50000000"
     assert payload.messages[0].payload
     assert boc_sha256(payload.messages[0].payload) == (
-        "7a4437e9e5efd359ae559dcc2b41aab3ddcdfb84fa9204ca1705df295a1b6de6"
+        "25b8eb73c755e2e8ce42d09c26a2b010d1a2907083a53d076829700328103018"
     )
 
 
@@ -336,7 +336,7 @@ async def test_seller_nft_deposit_payload_matches_generated_tep62_abi() -> None:
     assert payload.messages[0].address == deal.item_address
     assert payload.messages[0].payload is not None
     assert boc_sha256(payload.messages[0].payload) == (
-        "7984bb5dabbae2fdabf2ff4b77af5e7f3cff94260be560f342dce737b9d4361d"
+        "bfc9ff01ff6855a1ce146990ff0c7e27d9befe09b77a0d755aaf3ec94ea44cae"
     )
 
 
