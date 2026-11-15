@@ -40,6 +40,15 @@ def upgrade() -> None:
         existing_nullable=True,
     )
     op.add_column(
+        "escrow_observer_checkpoints",
+        sa.Column("failure_count", sa.Integer(), server_default="0", nullable=False),
+    )
+    op.create_check_constraint(
+        "ck_escrow_checkpoint_failure_count_nonnegative",
+        "escrow_observer_checkpoints",
+        "failure_count >= 0",
+    )
+    op.add_column(
         "escrow_deals",
         sa.Column("deployment_snapshot_json", sa.JSON(), nullable=True),
     )
@@ -386,6 +395,12 @@ def downgrade() -> None:
         "DROP TRIGGER IF EXISTS trg_escrow_action_finality_immutable ON escrow_wallet_actions"
     )
     op.execute("DROP FUNCTION IF EXISTS guard_escrow_action_finality_evidence()")
+    op.drop_constraint(
+        "ck_escrow_checkpoint_failure_count_nonnegative",
+        "escrow_observer_checkpoints",
+        type_="check",
+    )
+    op.drop_column("escrow_observer_checkpoints", "failure_count")
     op.drop_constraint(
         "ck_escrow_action_finality_pair", "escrow_wallet_actions", type_="check"
     )
