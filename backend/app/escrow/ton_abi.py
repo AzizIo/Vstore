@@ -472,6 +472,7 @@ def decode_storage_cell(data_cell: Cell) -> dict[str, object]:
             recovery_item_address.to_str(is_user_friendly=False)
             if recovery_item_address is not None else None
         ),
+        "outbound_action_slots": [outbound_first_present, outbound_second_present],
     }
 
 
