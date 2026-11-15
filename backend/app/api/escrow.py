@@ -35,6 +35,17 @@ from app.db.models import (
     Wallet,
 )
 from app.db.session import get_db_session
+from app.escrow.dependencies import get_escrow_nft_identity_provider
+from app.escrow.finality_provider import (
+    EscrowProviderInvalidEvidence,
+    EscrowProviderUnavailable,
+    PytoniqTONTestnetEscrowProvider,
+)
+from app.escrow.nft_identity import (
+    NFTIdentityEvidenceError,
+    same_nft_identity_anchor,
+    validate_nft_identity_snapshot,
+)
 from app.escrow.contracts import (
     DealEscrowDeploymentSnapshot,
     EscrowContractABIUnavailable,
@@ -189,6 +200,10 @@ router = APIRouter(prefix="/escrow", tags=["ton-escrow"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 Verifier = Annotated[TONNFTVerifier, Depends(get_ton_nft_verifier)]
+IdentityProvider = Annotated[
+    PytoniqTONTestnetEscrowProvider,
+    Depends(get_escrow_nft_identity_provider),
+]
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=128)]
 
 _NANOTON = Decimal(1_000_000_000)
@@ -652,6 +667,55 @@ async def _verified_wallet(
             detail="Stored wallet address is invalid; re-verify wallet ownership",
         ) from exc
     return wallet, canonical_address
+
+
+async def _verify_escrow_nft_identity(
+    provider: PytoniqTONTestnetEscrowProvider,
+    *,
+    item_address: str,
+    collection_address: str,
+    expected_owner_address: str,
+    minimum_masterchain_seqno: int = 0,
+) -> dict[str, object]:
+    """Require same-block, allowlisted TEP-62 identity evidence for escrow."""
+    try:
+        evidence = await provider.verify_nft_identity(
+            item_address=item_address,
+            collection_address=collection_address,
+            expected_owner_address=expected_owner_address,
+            minimum_masterchain_seqno=minimum_masterchain_seqno,
+        )
+    except EscrowProviderUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "escrow_nft_identity_provider_unavailable"},
+        ) from exc
+    except EscrowProviderInvalidEvidence as exc:
+        message = str(exc)
+        if "No escrow NFT collection policy is configured" in message:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"code": "escrow_nft_collection_policy_unconfigured"},
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "escrow_nft_identity_unverified"},
+        ) from exc
+    if evidence is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "escrow_nft_owner_mismatch"},
+        )
+    try:
+        return validate_nft_identity_snapshot(
+            evidence,
+            evidence.get("evidence_sha256"),
+        )
+    except NFTIdentityEvidenceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "escrow_nft_identity_evidence_invalid"},
+        ) from exc
 
 
 async def _verify_current_nft_owner(
