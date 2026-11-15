@@ -746,7 +746,7 @@ async def _verify_current_nft_owner(
 @router.post("/listing-intents", response_model=EscrowListingIntentResponse, status_code=201)
 async def create_listing_intent(
     payload: EscrowListingIntentCreate, user: CurrentUser, session: DbSession,
-    verifier: Verifier, idempotency_key: IdempotencyKey,
+    identity_provider: IdentityProvider, idempotency_key: IdempotencyKey,
 ) -> EscrowListingIntentResponse:
     """Create a seller intent over a normal draft/active TON marketplace listing."""
     _require_testnet()
@@ -774,8 +774,6 @@ async def create_listing_intent(
         except AddressError as exc:
             raise HTTPException(status_code=409,
                 detail="Stored NFT item address is invalid") from exc
-        await _verify_current_nft_owner(verifier, item_address=item_address,
-            seller_address=seller_address)
         if asset.collection_id is None:
             raise HTTPException(status_code=409,
                 detail="A verified testnet NFT collection is required for DealEscrow")
@@ -788,6 +786,12 @@ async def create_listing_intent(
         except AddressError as exc:
             raise HTTPException(status_code=409,
                 detail="Stored NFT collection address is invalid") from exc
+        identity_snapshot = await _verify_escrow_nft_identity(
+            identity_provider,
+            item_address=item_address,
+            collection_address=collection_address,
+            expected_owner_address=seller_address,
+        )
 
         price_nano = Decimal(payload.price_nano)
         price_amount = price_nano / _NANOTON
@@ -836,6 +840,8 @@ async def create_listing_intent(
             id=uuid4(), marketplace_listing_id=listing.id, asset_id=asset.id, seller_id=user.id,
             seller_wallet_id=wallet.id, network="testnet", item_address=item_address,
             listing_key=secrets.token_hex(32), collection_address_snapshot=collection_address,
+            nft_identity_snapshot_json=identity_snapshot,
+            nft_identity_snapshot_sha256=str(identity_snapshot["evidence_sha256"]),
             seller_address_snapshot=seller_address,
             price_amount=price_amount, price_currency="TON", status="intent_only",
             contract_address=None, contract_abi_version=None, idempotency_key=idempotency_key,
