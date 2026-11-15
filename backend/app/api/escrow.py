@@ -1472,25 +1472,24 @@ async def _prepare_action(
         raise HTTPException(status_code=404, detail="Escrow listing intent not found")
     validated_wallet_id = wallet.id
     validated_wallet_address = wallet_address
-    if ownership_check is not None:
-        # End the read transaction before external provider I/O. No writes have
-        # happened yet; both deal and wallet are revalidated after the call.
-        await session.rollback()
-        current_identity = await _verify_escrow_nft_identity(
-            identity_provider,
-            item_address=ownership_check[0],
-            collection_address=deal.collection_address_snapshot,
-            expected_owner_address=ownership_check[1],
-            minimum_masterchain_seqno=int(identity_snapshot["masterchain_seqno"]),
+    # Re-prove immutable item/collection identity before every new wallet action.
+    # Owner-sensitive actions additionally require the expected owner at this block.
+    # End the read transaction before provider I/O so no row locks span network calls.
+    await session.rollback()
+    current_identity = await _verify_escrow_nft_identity(
+        identity_provider,
+        item_address=deal.item_address,
+        collection_address=deal.collection_address_snapshot,
+        expected_owner_address=ownership_check[1] if ownership_check is not None else None,
+        minimum_masterchain_seqno=int(identity_snapshot["masterchain_seqno"]),
+    )
+    if not same_nft_identity_anchor(identity_snapshot, current_identity):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "escrow_nft_identity_changed_since_snapshot"},
         )
-        if not same_nft_identity_anchor(identity_snapshot, current_identity):
-            await session.rollback()
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "escrow_nft_identity_changed_since_snapshot"},
-            )
 
-    # Reacquire the deal lock only after external ownership checks have finished.
+    # Reacquire the deal lock only after external identity proof has finished.
     locked_deal = await session.scalar(
         select(EscrowDeal)
         .where(
