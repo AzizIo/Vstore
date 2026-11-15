@@ -24,8 +24,6 @@ from app.api.sellers import router as sellers_router
 from app.api.users import router as users_router
 from app.api.wallets import router as wallets_router
 from app.assets.ton_nft.observer import run_delivery_observer_pass
-from app.escrow.finality_provider import PytoniqTONTestnetEscrowProvider
-from app.escrow.observer import run_observer_pass as run_escrow_observer_pass
 from app.core.config import Settings, get_settings
 from app.core.error_responses import (
     http_exception_handler,
@@ -33,6 +31,8 @@ from app.core.error_responses import (
     unhandled_exception_handler,
 )
 from app.db.session import async_session_factory, dispose_engine
+from app.escrow.finality_provider import PytoniqTONTestnetEscrowProvider
+from app.escrow.observer import run_observer_pass as run_escrow_observer_pass
 from app.listings.service import expire_active_listings
 from app.orders.service import expire_pending_orders
 
@@ -106,7 +106,9 @@ async def _observe_escrow_events_periodically(
             raise
         except Exception:
             # Provider/DB outages never authorize state advancement; a later pass retries.
-            logger.exception("TON escrow finality pass failed; durable cursor remains authoritative")
+            logger.exception(
+                "TON escrow finality pass failed; durable cursor remains authoritative"
+            )
 
 
 @asynccontextmanager
