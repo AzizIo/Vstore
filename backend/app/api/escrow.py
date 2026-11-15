@@ -1749,7 +1749,7 @@ async def prepare_deal_activation(
     )
     if existing is not None:
         return await _prepare_action(
-            deal_id, EscrowWalletAction.ACTIVATE_DEAL, user, session,
+            deal_id, EscrowWalletAction.ACTIVATE_DEAL, SimpleNamespace(id=actor_id), session,
             identity_provider, idempotency_key,
         )
 
@@ -1866,7 +1866,7 @@ async def prepare_deal_activation(
     await session.commit()
 
     return await _prepare_action(
-        deal_id, EscrowWalletAction.ACTIVATE_DEAL, user, session,
+        deal_id, EscrowWalletAction.ACTIVATE_DEAL, SimpleNamespace(id=actor_id), session,
         identity_provider, idempotency_key,
     )
 
