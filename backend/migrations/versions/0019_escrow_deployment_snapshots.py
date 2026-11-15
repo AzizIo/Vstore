@@ -93,7 +93,9 @@ def upgrade() -> None:
         "deployment_snapshot_json IS NOT NULL "
         "AND deployment_snapshot_sha256 IS NOT NULL "
         "AND length(deployment_snapshot_sha256) = 64 "
+        "AND deployment_snapshot_version IS NOT NULL "
         "AND deployment_snapshot_version > 0 "
+        "AND deployment_snapshot_source IS NOT NULL "
         "AND length(deployment_snapshot_source) BETWEEN 1 AND 128"
         ")",
     )
@@ -108,8 +110,10 @@ def upgrade() -> None:
         "getter_snapshot_json IS NOT NULL "
         "AND getter_snapshot_sha256 IS NOT NULL "
         "AND length(getter_snapshot_sha256) = 64 "
+        "AND getter_snapshot_masterchain_seqno IS NOT NULL "
         "AND getter_snapshot_masterchain_seqno > 0 "
         "AND getter_snapshot_block_hash IS NOT NULL AND length(getter_snapshot_block_hash) = 64 "
+        "AND getter_snapshot_provider IS NOT NULL "
         "AND length(getter_snapshot_provider) BETWEEN 1 AND 128 "
         "AND getter_snapshot_observed_at IS NOT NULL"
         ")",
@@ -148,16 +152,15 @@ def upgrade() -> None:
         LANGUAGE plpgsql
         AS $$
         BEGIN
-            IF OLD.deployment_snapshot_json IS NOT NULL AND ROW(
-                NEW.deployment_snapshot_json,
-                NEW.deployment_snapshot_sha256,
-                NEW.deployment_snapshot_version,
-                NEW.deployment_snapshot_source
-            ) IS DISTINCT FROM ROW(
-                OLD.deployment_snapshot_json,
-                OLD.deployment_snapshot_sha256,
-                OLD.deployment_snapshot_version,
-                OLD.deployment_snapshot_source
+            IF OLD.deployment_snapshot_json IS NOT NULL AND (
+                NEW.deployment_snapshot_json::jsonb
+                    IS DISTINCT FROM OLD.deployment_snapshot_json::jsonb
+                OR NEW.deployment_snapshot_sha256
+                    IS DISTINCT FROM OLD.deployment_snapshot_sha256
+                OR NEW.deployment_snapshot_version
+                    IS DISTINCT FROM OLD.deployment_snapshot_version
+                OR NEW.deployment_snapshot_source
+                    IS DISTINCT FROM OLD.deployment_snapshot_source
             ) THEN
                 RAISE EXCEPTION 'DealEscrow deployment snapshot is immutable'
                     USING ERRCODE = 'integrity_constraint_violation';
@@ -174,18 +177,17 @@ def upgrade() -> None:
             IF OLD.getter_snapshot_masterchain_seqno IS NOT NULL
                 AND NEW.getter_snapshot_masterchain_seqno
                     = OLD.getter_snapshot_masterchain_seqno
-                AND ROW(
-                    NEW.getter_snapshot_json,
-                    NEW.getter_snapshot_sha256,
-                    NEW.getter_snapshot_block_hash,
-                    NEW.getter_snapshot_provider,
-                    NEW.getter_snapshot_observed_at
-                ) IS DISTINCT FROM ROW(
-                    OLD.getter_snapshot_json,
-                    OLD.getter_snapshot_sha256,
-                    OLD.getter_snapshot_block_hash,
-                    OLD.getter_snapshot_provider,
-                    OLD.getter_snapshot_observed_at
+                AND (
+                    NEW.getter_snapshot_json::jsonb
+                        IS DISTINCT FROM OLD.getter_snapshot_json::jsonb
+                    OR NEW.getter_snapshot_sha256
+                        IS DISTINCT FROM OLD.getter_snapshot_sha256
+                    OR NEW.getter_snapshot_block_hash
+                        IS DISTINCT FROM OLD.getter_snapshot_block_hash
+                    OR NEW.getter_snapshot_provider
+                        IS DISTINCT FROM OLD.getter_snapshot_provider
+                    OR NEW.getter_snapshot_observed_at
+                        IS DISTINCT FROM OLD.getter_snapshot_observed_at
                 )
             THEN
                 RAISE EXCEPTION 'DealEscrow getter snapshot conflicts at the same masterchain block'
@@ -215,18 +217,17 @@ def upgrade() -> None:
             IF (
                 OLD.unsigned_payload_json IS NOT NULL
                 OR OLD.unsigned_bocs_json IS NOT NULL
-            ) AND ROW(
-                NEW.unsigned_payload_json,
-                NEW.unsigned_payload_sha256,
-                NEW.unsigned_bocs_json,
-                NEW.unsigned_boc_sha256,
-                NEW.unsigned_boc_ref
-            ) IS DISTINCT FROM ROW(
-                OLD.unsigned_payload_json,
-                OLD.unsigned_payload_sha256,
-                OLD.unsigned_bocs_json,
-                OLD.unsigned_boc_sha256,
-                OLD.unsigned_boc_ref
+            ) AND (
+                NEW.unsigned_payload_json::jsonb
+                    IS DISTINCT FROM OLD.unsigned_payload_json::jsonb
+                OR NEW.unsigned_payload_sha256
+                    IS DISTINCT FROM OLD.unsigned_payload_sha256
+                OR NEW.unsigned_bocs_json::jsonb
+                    IS DISTINCT FROM OLD.unsigned_bocs_json::jsonb
+                OR NEW.unsigned_boc_sha256
+                    IS DISTINCT FROM OLD.unsigned_boc_sha256
+                OR NEW.unsigned_boc_ref
+                    IS DISTINCT FROM OLD.unsigned_boc_ref
             ) THEN
                 RAISE EXCEPTION 'Persisted unsigned escrow payload and BOCs cannot be replaced'
                     USING ERRCODE = 'integrity_constraint_violation';
