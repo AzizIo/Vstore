@@ -16,7 +16,8 @@ import base64
 import hashlib
 import json
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
@@ -282,7 +283,9 @@ class PytoniqTONTestnetEscrowProvider:
             or parsed.username is not None
             or parsed.password is not None
         ):
-            raise ValueError("TON escrow discovery must use the official testnet TON Center v3 endpoint")
+            raise ValueError(
+                "TON escrow discovery must use the official testnet TON Center v3 endpoint"
+            )
         self._base_url = base
         self._session_factory = session_factory
         self._http = http_client
@@ -353,7 +356,9 @@ class PytoniqTONTestnetEscrowProvider:
                         )
                 if getattr(client, "last_mc_block", None) is None:
                     await client.close()
-                    raise EscrowProviderUnavailable("Pytoniq did not establish a trusted masterchain head")
+                    raise EscrowProviderUnavailable(
+                        "Pytoniq did not establish a trusted masterchain head"
+                    )
                 self._lite = client
                 return client
             except (EscrowProviderInvalidEvidence, EscrowProviderUnavailable):
@@ -399,7 +404,9 @@ class PytoniqTONTestnetEscrowProvider:
                 "TON Center testnet candidate discovery failed"
             ) from exc
         if not isinstance(data, dict) or not isinstance(data.get("transactions"), list):
-            raise EscrowProviderInvalidEvidence("TON Center returned malformed transaction discovery data")
+            raise EscrowProviderInvalidEvidence(
+                "TON Center returned malformed transaction discovery data"
+            )
         rows = data["transactions"]
         if len(rows) > limit or any(not isinstance(row, dict) for row in rows):
             raise EscrowProviderInvalidEvidence("TON Center returned an invalid candidate page")
@@ -442,12 +449,16 @@ class PytoniqTONTestnetEscrowProvider:
         for deal in deals:
             canonical = _canonical_address(deal.contract_address)
             if canonical is None or canonical in address_to_deal:
-                raise EscrowProviderInvalidEvidence("Duplicate or malformed escrow contract address")
+                raise EscrowProviderInvalidEvidence(
+                    "Duplicate or malformed escrow contract address"
+                )
             address_to_deal[canonical] = deal
         if not address_to_deal:
             return ChainEventBatch(events=(), next_cursor=cursor)
 
-        per_account_limit = max(1, min(100, (limit + len(address_to_deal) - 1) // len(address_to_deal) + 1))
+        per_account_limit = max(
+            1, min(100, (limit + len(address_to_deal) - 1) // len(address_to_deal) + 1)
+        )
         scanned: list[tuple[int, int, str, dict[str, Any], EscrowDeal]] = []
         for address, deal in address_to_deal.items():
             previous = cursor_state["last_lt_by_address"].get(address)
@@ -461,8 +472,8 @@ class PytoniqTONTestnetEscrowProvider:
                     block_ref = row["block_ref"]
                     mc_seqno = int(row["mc_block_seqno"])
                     now = int(row.get("now") or 0)
-                    workchain = int(block_ref["workchain"])
-                    shard = _parse_shard(block_ref["shard"])
+                    _ = int(block_ref["workchain"])
+                    _ = _parse_shard(block_ref["shard"])
                     block_seqno = int(block_ref["seqno"])
                 except (KeyError, TypeError, ValueError) as exc:
                     # An unparseable candidate cannot safely advance this account's cursor.
@@ -578,7 +589,9 @@ class PytoniqTONTestnetEscrowProvider:
             except (KeyError, TypeError, ValueError):
                 # Never advance a malformed row as if it represented a verified event.
                 next_cursor_state["last_lt_by_address"].pop(address, None)
-                raise EscrowProviderInvalidEvidence("Malformed indexed event candidate")
+                raise EscrowProviderInvalidEvidence(
+                    "Malformed indexed event candidate"
+                ) from None
         next_cursor = _canonical_json(next_cursor_state)
         return ChainEventBatch(events=tuple(events), next_cursor=next_cursor)
 
@@ -626,7 +639,9 @@ class PytoniqTONTestnetEscrowProvider:
             )
         minimum_head = master_id.seqno + self._settings.ton_escrow_finality_min_depth
         if latest_mc.seqno < minimum_head:
-            raise EscrowProviderUnavailable("Candidate has not reached the configured finality depth")
+            raise EscrowProviderUnavailable(
+                "Candidate has not reached the configured finality depth"
+            )
         return shard_id, master_id, latest_mc
 
     async def _read_contract_state(
@@ -645,18 +660,24 @@ class PytoniqTONTestnetEscrowProvider:
             validate_snapshot(snapshot)
             derived = derive_deployment(load_pinned_code_boc(), snapshot)
             if _canonical_address(derived.address) != _canonical_address(deal.contract_address):
-                raise EscrowProviderInvalidEvidence("Contract address differs from pinned constructor snapshot")
+                raise EscrowProviderInvalidEvidence(
+                    "Contract address differs from pinned constructor snapshot"
+                )
             account, _shard_account = await client.raw_get_account_state(
                 deal.contract_address, block=masterchain_id
             )
             if account is None or account.storage.state.type_ != "account_active":
-                raise EscrowProviderInvalidEvidence("DealEscrow account is not active at the proof block")
+                raise EscrowProviderInvalidEvidence(
+                    "DealEscrow account is not active at the proof block"
+                )
             state_init = account.storage.state.state_init
             code = state_init.code
             data = state_init.data
             artifacts = verify_compiled_code(load_pinned_code_boc())
             if _cell_hash(code).upper() != artifacts.code_hash.upper():
-                raise EscrowProviderInvalidEvidence("Deployed DealEscrow code hash differs from pinned code")
+                raise EscrowProviderInvalidEvidence(
+                    "Deployed DealEscrow code hash differs from pinned code"
+                )
             decoded = decode_storage_cell(data)
             expected_salt = int(snapshot.deal_salt, 16)
             normalized_expect = {
@@ -685,16 +706,22 @@ class PytoniqTONTestnetEscrowProvider:
             for key, expected in normalized_expect.items():
                 actual = decoded.get(key)
                 if actual != expected:
-                    raise EscrowProviderInvalidEvidence(f"On-chain constructor field mismatch: {key}")
+                    raise EscrowProviderInvalidEvidence(
+                        f"On-chain constructor field mismatch: {key}"
+                    )
         except EscrowProviderInvalidEvidence:
             raise
         except Exception as exc:
-            raise EscrowProviderInvalidEvidence("Could not decode or compare DealEscrow state") from exc
+            raise EscrowProviderInvalidEvidence(
+                "Could not decode or compare DealEscrow state"
+            ) from exc
         try:
             master_block = await client.raw_get_block(masterchain_id)
             observed_time = int(master_block.info.gen_utime)
         except Exception as exc:
-            raise EscrowProviderUnavailable("Could not obtain verified masterchain timestamp") from exc
+            raise EscrowProviderUnavailable(
+                "Could not obtain verified masterchain timestamp"
+            ) from exc
         decoded["observed_chain_time_unix"] = observed_time
         snapshot_values = {
             field: decoded[field]
@@ -736,7 +763,9 @@ class PytoniqTONTestnetEscrowProvider:
                 raise ValueError("dispute reason hash is missing")
             return query_id, salt, reason_hash
         except Exception as exc:
-            raise EscrowProviderInvalidEvidence("Direct escrow message body failed ABI validation") from exc
+            raise EscrowProviderInvalidEvidence(
+                "Direct escrow message body failed ABI validation"
+            ) from exc
 
     def _decode_oracle_attestation(
         self,
@@ -824,7 +853,9 @@ class PytoniqTONTestnetEscrowProvider:
                 "evidence_hash": f"{evidence_hash:064x}",
             }
         except Exception as exc:
-            raise EscrowProviderInvalidEvidence("Oracle attestation body failed ABI validation") from exc
+            raise EscrowProviderInvalidEvidence(
+                "Oracle attestation body failed ABI validation"
+            ) from exc
 
     def _verified_event(
         self,
@@ -837,7 +868,15 @@ class PytoniqTONTestnetEscrowProvider:
         message_source: str | None,
         message_destination: str | None,
         message_value: int,
-    ) -> tuple[EscrowChainEventType, str | None, str | None, str | None, str | None, int | None, bool]:
+    ) -> tuple[
+        EscrowChainEventType,
+        str | None,
+        str | None,
+        str | None,
+        str | None,
+        int | None,
+        bool,
+    ]:
         state = int(getter["contract_state"])
         opcode = int(event.operation_id, 16) if event.operation_id else -1
         snapshot = deal.deployment_snapshot_json
@@ -863,11 +902,23 @@ class PytoniqTONTestnetEscrowProvider:
                     snapshot["execution_reserve_nanotons"]
                 )
                 if message_value != required_amount:
-                    raise EscrowProviderInvalidEvidence("Buyer funding value is not exact principal plus reserve")
-            if opcode == _OP_ACTIVATE and message_source != _canonical_address(snapshot["seller_address"]):
-                raise EscrowProviderInvalidEvidence("Only the snapshotted seller may activate the deal")
-            if opcode in {_OP_FUND, _OP_ACCEPT} and message_source != _canonical_address(snapshot["buyer_address"]):
-                raise EscrowProviderInvalidEvidence("Buyer action source does not match the snapshot")
+                    raise EscrowProviderInvalidEvidence(
+                        "Buyer funding value is not exact principal plus reserve"
+                    )
+            if (
+                opcode == _OP_ACTIVATE
+                and message_source != _canonical_address(snapshot["seller_address"])
+            ):
+                raise EscrowProviderInvalidEvidence(
+                    "Only the snapshotted seller may activate the deal"
+                )
+            if (
+                opcode in {_OP_FUND, _OP_ACCEPT}
+                and message_source != _canonical_address(snapshot["buyer_address"])
+            ):
+                raise EscrowProviderInvalidEvidence(
+                    "Buyer action source does not match the snapshot"
+                )
             if opcode == _OP_RESOLVE:
                 event_type = EscrowChainEventType.DISPUTE_RESOLUTION_ACCEPTED
             elif opcode == _OP_TIMEOUT:
@@ -920,13 +971,23 @@ class PytoniqTONTestnetEscrowProvider:
             item = _canonical_address(message_source)
             collection = _canonical_address(snapshot["collection_address"])
             if item != _canonical_address(snapshot["item_address"]):
-                raise EscrowProviderInvalidEvidence("TEP-62 notification came from a different NFT item")
+                raise EscrowProviderInvalidEvidence(
+                    "TEP-62 notification came from a different NFT item"
+                )
             if state == 2:
-                if _canonical_address(previous_owner_address) != _canonical_address(snapshot["seller_address"]):
-                    raise EscrowProviderInvalidEvidence("Initial NFT deposit did not come from the seller")
+                if (
+                    _canonical_address(previous_owner_address)
+                    != _canonical_address(snapshot["seller_address"])
+                ):
+                    raise EscrowProviderInvalidEvidence(
+                        "Initial NFT deposit did not come from the seller"
+                    )
                 event_type = EscrowChainEventType.NFT_DEPOSIT_ACCEPTED
             elif state == 7:
-                if _canonical_address(previous_owner_address) != _canonical_address(snapshot["buyer_address"]):
+                if (
+                    _canonical_address(previous_owner_address)
+                    != _canonical_address(snapshot["buyer_address"])
+                ):
                     raise EscrowProviderInvalidEvidence("NFT return did not come from the buyer")
                 event_type = EscrowChainEventType.NFT_RETURN_EVIDENCE_OBSERVED
             elif state == 13:
@@ -950,7 +1011,12 @@ class PytoniqTONTestnetEscrowProvider:
             }
             if action not in expected_routes:
                 raise EscrowProviderInvalidEvidence("Unknown oracle attestation action")
-            source_role, destination_role, expected_states, expected_amount = expected_routes[action]
+            (
+                source_role,
+                destination_role,
+                expected_states,
+                expected_amount,
+            ) = expected_routes[action]
             source = _canonical_address(oracle["source_address"])
             destination = _canonical_address(oracle["destination_address"])
             item = _canonical_address(oracle["item_address"])
@@ -976,9 +1042,12 @@ class PytoniqTONTestnetEscrowProvider:
                 or amount != expected_amount
                 or (not item_matches_snapshot and not recovery_action)
                 or _canonical_address(message_source) is None
-                or int(oracle["evidence_hash"], 16) != int(getter.get("last_evidence_hash", "0"), 16)
+                or int(oracle["evidence_hash"], 16)
+                != int(getter.get("last_evidence_hash", "0"), 16)
             ):
-                raise EscrowProviderInvalidEvidence("Oracle attestation route/evidence disagrees with getter state")
+                raise EscrowProviderInvalidEvidence(
+                    "Oracle attestation route/evidence disagrees with getter state"
+                )
             event_type = {
                 (1, 5): EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED,
                 (1, 8): EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED,
@@ -989,10 +1058,14 @@ class PytoniqTONTestnetEscrowProvider:
                 (5, 13): EscrowChainEventType.MANUAL_REVIEW_REQUIRED,
             }.get((action, state))
             if event_type is None:
-                raise EscrowProviderInvalidEvidence("Oracle action and final contract state are inconsistent")
+                raise EscrowProviderInvalidEvidence(
+                    "Oracle action and final contract state are inconsistent"
+                )
             accepted = True
         else:
-            raise EscrowProviderInvalidEvidence("The candidate opcode is not part of the DealEscrow v1 ABI")
+            raise EscrowProviderInvalidEvidence(
+                "The candidate opcode is not part of the DealEscrow v1 ABI"
+            )
         return event_type, source, destination, item, collection, amount, accepted
 
     async def verify_event(self, event: NormalizedChainEvent) -> FinalityVerification | None:
@@ -1004,7 +1077,8 @@ class PytoniqTONTestnetEscrowProvider:
         if (
             deal is None
             or deal.network != "testnet"
-            or _canonical_address(deal.contract_address) != _canonical_address(event.contract_address)
+            or _canonical_address(deal.contract_address)
+            != _canonical_address(event.contract_address)
             or deal.contract_address is None
         ):
             raise EscrowProviderInvalidEvidence("Event contract/deal binding mismatch")
@@ -1019,16 +1093,27 @@ class PytoniqTONTestnetEscrowProvider:
                 and _cell_hash(tx.cell) == event.transaction_hash
             ]
             if len(matches) != 1:
-                raise EscrowProviderInvalidEvidence("Candidate transaction was not uniquely proven in the shard block")
+                raise EscrowProviderInvalidEvidence(
+                    "Candidate transaction was not uniquely proven in the shard block"
+                )
             tx = matches[0]
             message = getattr(tx, "in_msg", None)
             if message is None or not message.is_internal:
-                raise EscrowProviderInvalidEvidence("Escrow transaction has no internal input message")
+                raise EscrowProviderInvalidEvidence(
+                    "Escrow transaction has no internal input message"
+                )
             message_hash = _cell_hash(message.serialize())
             if message_hash != event.message_hash:
-                raise EscrowProviderInvalidEvidence("Incoming message hash differs from the indexed candidate")
-            if _canonical_address(message.info.dest.to_str(is_user_friendly=False)) != _canonical_address(deal.contract_address):
-                raise EscrowProviderInvalidEvidence("Proven incoming message destination is not the escrow")
+                raise EscrowProviderInvalidEvidence(
+                    "Incoming message hash differs from the indexed candidate"
+                )
+            if (
+                _canonical_address(message.info.dest.to_str(is_user_friendly=False))
+                != _canonical_address(deal.contract_address)
+            ):
+                raise EscrowProviderInvalidEvidence(
+                    "Proven incoming message destination is not the escrow"
+                )
             description = getattr(tx, "description", None)
             compute = getattr(description, "compute_ph", None)
             action_phase = getattr(description, "action", None)
@@ -1039,7 +1124,9 @@ class PytoniqTONTestnetEscrowProvider:
                 or not bool(getattr(compute, "success", False))
                 or (action_phase is not None and not bool(getattr(action_phase, "success", False)))
             ):
-                raise EscrowProviderInvalidEvidence("DealEscrow transaction did not execute successfully")
+                raise EscrowProviderInvalidEvidence(
+                    "DealEscrow transaction did not execute successfully"
+                )
             getter, state_name, getter_identity_sha = await self._read_contract_state(
                 deal, master_id, client
             )
@@ -1058,7 +1145,15 @@ class PytoniqTONTestnetEscrowProvider:
                 if getattr(message.info, "dest", None) is not None else None
             )
             amount = int(getattr(message.info, "value_coins", 0) or 0)
-            event_type, verified_source, verified_destination, item, collection, verified_amount, accepted = (
+            (
+                event_type,
+                verified_source,
+                verified_destination,
+                item,
+                collection,
+                verified_amount,
+                accepted,
+            ) = (
                 self._verified_event(
                     event, tx, deal, getter, state_name, oracle, source, destination, amount
                 )
@@ -1122,7 +1217,9 @@ class PytoniqTONTestnetEscrowProvider:
         except (EscrowProviderInvalidEvidence, EscrowProviderUnavailable):
             raise
         except Exception as exc:
-            raise EscrowProviderUnavailable("Could not independently verify escrow transaction finality") from exc
+            raise EscrowProviderUnavailable(
+                "Could not independently verify escrow transaction finality"
+            ) from exc
 
     async def verify_terminal_owner(
         self,
@@ -1151,13 +1248,17 @@ class PytoniqTONTestnetEscrowProvider:
         }
         collections.discard(None)
         if not deals or len(collections) != 1:
-            raise EscrowProviderInvalidEvidence("NFT item is not uniquely bound to a persisted testnet collection")
+            raise EscrowProviderInvalidEvidence(
+                "NFT item is not uniquely bound to a persisted testnet collection"
+            )
         collection = next(iter(collections))
         client = await self._get_lite_client()
         try:
             master_id = await client.get_trusted_last_mc_block()
             if master_id.seqno < minimum_masterchain_seqno:
-                raise EscrowProviderUnavailable("No trusted masterchain head at requested minimum sequence")
+                raise EscrowProviderUnavailable(
+                    "No trusted masterchain head at requested minimum sequence"
+                )
             account, _shard_account = await client.raw_get_account_state(item, block=master_id)
             if account is None or account.storage.state.type_ != "account_active":
                 return None
@@ -1172,7 +1273,9 @@ class PytoniqTONTestnetEscrowProvider:
             actual_collection_raw = actual_collection.to_str(is_user_friendly=False)
             actual_owner_raw = actual_owner.to_str(is_user_friendly=False)
             if _canonical_address(actual_collection_raw) != collection:
-                raise EscrowProviderInvalidEvidence("TEP-62 collection differs from the persisted NFT listing")
+                raise EscrowProviderInvalidEvidence(
+                    "TEP-62 collection differs from the persisted NFT listing"
+                )
             if _canonical_address(actual_owner_raw) != expected_owner:
                 return None
             if index < 0:
@@ -1205,4 +1308,6 @@ class PytoniqTONTestnetEscrowProvider:
         except (EscrowProviderInvalidEvidence, EscrowProviderUnavailable):
             raise
         except Exception as exc:
-            raise EscrowProviderUnavailable("Could not verify TEP-62 owner from a trusted account-state proof") from exc
+            raise EscrowProviderUnavailable(
+                "Could not verify TEP-62 owner from a trusted account-state proof"
+            ) from exc
