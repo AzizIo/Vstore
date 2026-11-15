@@ -1097,19 +1097,29 @@ async def _prepare_action(
         ):
             await session.rollback()
             raise HTTPException(status_code=409, detail={"code": "idempotency_payload_conflict"})
-        replay_error_code = (
-            existing_action.last_error_code
-            if existing_action.status == "blocked_abi" and existing_action.last_error_code
-            else "deployment_snapshot_incomplete"
-        )
-        raise HTTPException(status_code=503, detail={
-            "code": replay_error_code,
-            "action_id": str(existing_action.id),
-            "action_status": existing_action.status,
-            "message": (
-                "The same durable action already exists; no duplicate action was created"
-            ),
-        })
+        if existing_action.unsigned_payload_json is not None:
+            # Return the byte-for-byte persisted payload on every exact retry, even
+            # if its chain submission is being reconciled by another worker.
+            return _prepared_action_response(existing_action)
+        if existing_action.status == "blocked_abi":
+            replay_error_code = (
+                existing_action.last_error_code or "deployment_snapshot_incomplete"
+            )
+            raise HTTPException(status_code=503, detail={
+                "code": replay_error_code,
+                "action_id": str(existing_action.id),
+                "action_status": existing_action.status,
+                "message": "This durable action remains blocked; no new payload was generated",
+            })
+        if existing_action.status not in {"pending"}:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "escrow_action_not_retryable",
+                    "action_id": str(existing_action.id),
+                    "action_status": existing_action.status,
+                },
+            )
 
     seller_states = {
         EscrowWalletAction.CREATE_DEAL_ESCROW: "intent_created",
