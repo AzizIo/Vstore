@@ -127,7 +127,11 @@ def test_payment_requires_exact_buyer_and_principal(deal: DealEvidenceSnapshot) 
     )
     validate_event_against_deal(correct, deal)
     for changes in (
-        {"amount_nanotons": deal.principal_nanotons + int(deal.execution_reserve_nanotons or 0) - 1},
+        {
+            "amount_nanotons": deal.principal_nanotons
+            + int(deal.execution_reserve_nanotons or 0)
+            - 1
+        },
         {"source_address": deal.seller_address},
         {"destination_address": deal.buyer_address},
     ):
