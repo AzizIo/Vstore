@@ -11,6 +11,7 @@ import base64
 import hashlib
 import json
 import re
+import zlib
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -21,7 +22,7 @@ from pytoniq_core import Address, Cell, begin_cell
 _ARTIFACTS = Path(__file__).resolve().parent / "abi_artifacts"
 _NETWORK_ID = -3
 _PROTOCOL_VERSION = 1
-_CODE_HASH = "359B02C177CE033C6FE1A673C4E04B59D6D43434AF09B1CBE4BDCD8BE4779450"
+_CODE_HASH = "61348A9F67A31753622AB3E9E204AF67FBC1ED8736B05510DD9DF93E0F49366B"
 _NFT_TRANSFER_OPCODE = 0x5FCC3D14
 _NFT_FORWARD_MAGIC = 0x56454E46
 _OPCODES = {
@@ -102,11 +103,13 @@ def load_pinned_abi() -> tuple[dict[str, Any], dict[str, Any]]:
 
 
 def load_pinned_code_boc() -> str:
-    """Read the checked-in compiler BOC; whitespace is not part of its digest."""
+    """Decompress the pinned compiler BOC and return its canonical base64 text."""
     try:
-        return (_ARTIFACTS / "DealEscrow.code.boc.b64").read_text(encoding="ascii").strip()
-    except (OSError, UnicodeError) as exc:
-        raise TONABIError("pinned DealEscrow code BOC is unavailable") from exc
+        compressed = (_ARTIFACTS / "DealEscrow.code.boc.zlib").read_bytes()
+        raw_boc = zlib.decompress(compressed)
+        return base64.b64encode(raw_boc).decode("ascii")
+    except (OSError, zlib.error, ValueError) as exc:
+        raise TONABIError("pinned DealEscrow code BOC is unavailable or corrupt") from exc
 
 
 def verify_compiled_code(code_boc_base64: str | None = None) -> VerifiedArtifacts:
