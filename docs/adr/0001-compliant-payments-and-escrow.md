@@ -22,11 +22,12 @@ dedicated test API namespace and a local test database. It is not a public check
 does not authorize live charges, and a successful test payment does not complete
 NFT delivery. See `docs/TELEGRAM_STARS_TEST_RUNBOOK.md`.
 
-The durable refund worker and migration 0013 are still proposed in Draft PR #173,
-not merged. No live refund capability, seller payout, funds custody or escrow
-contract is available on main. The order table's check constraint continues to
-forbid payment states such as `paid` and `refunded`; payment status remains a
-separate domain.
+The durable refund worker and migrations 0013/0015/0016 are on `main`, but
+they remain restricted to the isolated Telegram Stars test bot and a local
+test-named PostgreSQL database. No production refund capability, seller payout,
+funds custody or escrow contract is available on main. The order table's check
+constraint continues to forbid payment states such as `paid` and `refunded`;
+payment status remains a separate domain.
 
 A real marketplace must eventually answer four separate questions:
 
@@ -52,10 +53,12 @@ ledger and isolated test bot are technical test infrastructure, not approval of
 the product/payment decision below. In particular:
 
 - Telegram test-environment invoice and payment handling exists on `main`;
-  manual live test-environment acceptance is still tracked by Issue #152.
+  manual Test Server acceptance of invoice/pre-checkout/successful-payment is
+  still tracked by Issue #152.
 - Public checkout remains disabled pending the written platform ruling in Issue
   #155 and qualified legal/compliance review.
-- Refund worker/migration 0013 are not merged; see Draft PR #173.
+- Refund worker and migrations 0013/0015/0016 are merged on `main`, but the
+  worker is test-only and manual Telegram Test Server acceptance remains a gate.
 - The order delivery lifecycle in Issue #46 is implemented on `main`, but live
   testnet/Tonkeeper acceptance remains outstanding.
 - TON escrow remains design-only in PR #172; Issue #153 still requires accepted
