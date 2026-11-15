@@ -34,6 +34,7 @@ from app.escrow.models import (
     EscrowDeal,
     EscrowListingIntent,
     EscrowObserverCheckpoint,
+    EscrowWalletActionRecord,
 )
 from app.escrow.provider import (
     EscrowProviderInvalidEvidence,
@@ -632,6 +633,148 @@ async def _persist_getter_snapshot(
             deal.getter_snapshot_block_hash = proof.masterchain_block_hash
             deal.getter_snapshot_provider = proof.provider_id
             deal.getter_snapshot_observed_at = datetime.now(UTC)
+
+
+_ACTION_TYPE_FOR_VERIFIED_EVENT = {
+    EscrowChainEventType.CONTRACT_ACTIVATED: "activate_deal",
+    EscrowChainEventType.NFT_DEPOSIT_ACCEPTED: "deposit_nft",
+    EscrowChainEventType.BUYER_PAYMENT_ACCEPTED: "fund_deal",
+    EscrowChainEventType.BUYER_ACCEPTANCE_RECORDED: "accept_deal",
+    EscrowChainEventType.DISPUTE_OPENED_ONCHAIN: "open_dispute",
+    EscrowChainEventType.DEAL_TIMEOUT_ACCEPTED: "timeout_deal",
+    EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED: "recover_unexpected_nft",
+    EscrowChainEventType.NFT_RETURN_EVIDENCE_OBSERVED: "return_nft_to_escrow",
+}
+
+
+async def _reconcile_wallet_action_finality(
+    session_factory: SessionFactory,
+    event: NormalizedChainEvent,
+    proof: FinalityVerification,
+) -> None:
+    """Finalize only the durable action whose operation and query ID match proved chain facts.
+
+    The submitted wallet reference is not read here. The authority is the provider's
+    proof-decoded query id plus the exact event type, deal binding and transaction /
+    masterchain proof. Ambiguous client hints can therefore never substitute for chain
+    finality, and a client reference conflict keeps an action in manual review.
+    """
+
+    if (
+        not event.deal_id
+        or proof.verified_event_type is None
+        or not proof.verified_query_id
+        or not proof.verified_query_id.isdecimal()
+        or int(proof.verified_query_id) <= 0
+    ):
+        return
+    action_type = _ACTION_TYPE_FOR_VERIFIED_EVENT.get(proof.verified_event_type)
+    if action_type is None:
+        return
+    try:
+        deal_id = uuid.UUID(event.deal_id)
+    except (TypeError, ValueError):
+        return
+
+    digest_fields = (
+        proof.masterchain_block_hash,
+        proof.proof_sha256,
+        event.transaction_hash,
+    )
+    if any(
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(char not in "0123456789abcdef" for char in value.lower())
+        for value in digest_fields
+    ):
+        raise EscrowProviderInvalidEvidence(
+            "Finalized wallet action is missing a canonical transaction/masterchain hash"
+        )
+    if not proof.provider_id.strip() or proof.masterchain_seqno <= 0:
+        raise EscrowProviderInvalidEvidence(
+            "Finalized wallet action is missing its trusted masterchain identity"
+        )
+
+    async with session_factory() as session:
+        async with session.begin():
+            actions = list(
+                (
+                    await session.scalars(
+                        select(EscrowWalletActionRecord)
+                        .where(
+                            EscrowWalletActionRecord.deal_id == deal_id,
+                            EscrowWalletActionRecord.action_type == action_type,
+                            EscrowWalletActionRecord.query_id == proof.verified_query_id,
+                            EscrowWalletActionRecord.network == "testnet",
+                        )
+                        .order_by(
+                            EscrowWalletActionRecord.created_at,
+                            EscrowWalletActionRecord.id,
+                        )
+                        .with_for_update()
+                    )
+                ).all()
+            )
+            if not actions:
+                return
+            if len(actions) != 1:
+                # Different idempotency keys must not cause one proved transaction
+                # to silently finalize several prepared actions with the same query.
+                for action in actions:
+                    if action.status != "finalized":
+                        action.status = "manual_review"
+                        action.last_error_code = "action_query_id_collision"
+                return
+            action = actions[0]
+            if action.status == "finalized":
+                if (
+                    action.finalized_transaction_hash != event.transaction_hash
+                    or action.finality_masterchain_seqno != proof.masterchain_seqno
+                    or action.finality_masterchain_block_hash != proof.masterchain_block_hash
+                    or action.finality_proof_sha256 != proof.proof_sha256
+                    or action.finality_provider != proof.provider_id
+                ):
+                    action.status = "manual_review"
+                    action.last_error_code = "action_finality_evidence_conflict"
+                return
+            if action.status not in {"prepared", "submitted", "ambiguous", "manual_review"}:
+                return
+            if (
+                action.unsigned_payload_json is None
+                or action.unsigned_payload_sha256 is None
+                or action.unsigned_bocs_json is None
+                or action.unsigned_boc_sha256 is None
+                or action.unsigned_boc_ref is None
+            ):
+                if action.status != "manual_review":
+                    action.status = "manual_review"
+                    action.last_error_code = "finality_without_persisted_unsigned_payload"
+                return
+            if action.finalized_transaction_hash is not None:
+                same_proof = (
+                    action.finalized_transaction_hash == event.transaction_hash
+                    and action.finality_masterchain_seqno == proof.masterchain_seqno
+                    and action.finality_masterchain_block_hash == proof.masterchain_block_hash
+                    and action.finality_proof_sha256 == proof.proof_sha256
+                    and action.finality_provider == proof.provider_id
+                )
+                if not same_proof:
+                    action.status = "manual_review"
+                    action.last_error_code = "action_finality_evidence_conflict"
+                    return
+            else:
+                action.finalized_transaction_hash = event.transaction_hash
+                action.finality_masterchain_seqno = proof.masterchain_seqno
+                action.finality_masterchain_block_hash = proof.masterchain_block_hash
+                action.finality_proof_sha256 = proof.proof_sha256
+                action.finality_provider = proof.provider_id
+
+            if action.status != "manual_review":
+                action.status = "finalized"
+                action.last_error_code = None
+                action.next_retry_at = None
+                action.lease_token = None
+                action.lease_until = None
 
 
 async def _release_lease(
