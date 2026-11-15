@@ -187,7 +187,6 @@ def test_snapshot_rejects_duplicate_authority_keys_and_invalid_reserve() -> None
             replace(deal, contract_state=14),
         )
 
-
 @pytest.mark.asyncio
 async def test_deploy_and_activate_are_distinct_ton_connect_actions() -> None:
     adapter = PinnedTONEscrowContractAdapter()
@@ -223,7 +222,6 @@ async def test_deploy_and_activate_are_distinct_ton_connect_actions() -> None:
     )
     assert activate.messages[0].state_init is None
 
-
 @pytest.mark.asyncio
 async def test_buyer_funding_is_exact_principal_plus_execution_reserve() -> None:
     adapter = PinnedTONEscrowContractAdapter()
@@ -245,7 +243,6 @@ async def test_buyer_funding_is_exact_principal_plus_execution_reserve() -> None
     assert boc_sha256(payload.messages[0].payload) == (
         "ed4ce8f9f3d78815d72e2ecfbecbc9f38aa6d4863a55b4a777a1459449819db6"
     )
-
 
 @pytest.mark.asyncio
 async def test_wallet_network_and_actor_state_must_match_deal() -> None:
@@ -272,7 +269,6 @@ async def test_wallet_network_and_actor_state_must_match_deal() -> None:
             valid_until=1_800_000_000,
         )
 
-
 @pytest.mark.asyncio
 async def test_only_verified_participant_wallet_can_prepare_actions() -> None:
     adapter = PinnedTONEscrowContractAdapter()
@@ -294,7 +290,6 @@ async def test_only_verified_participant_wallet_can_prepare_actions() -> None:
             resource_id="deal-1",
             deal_snapshot=deal,
         )
-
 
 @pytest.mark.asyncio
 async def test_post_delivery_nft_return_is_buyer_only_and_state_bound() -> None:
@@ -321,7 +316,6 @@ async def test_post_delivery_nft_return_is_buyer_only_and_state_bound() -> None:
         "ef84d8803e0ac57af7d9532947862e6f45e1c0676ffbd1142661b36c0e14e639"
     )
 
-
 @pytest.mark.asyncio
 async def test_seller_nft_deposit_payload_matches_generated_tep62_abi() -> None:
     adapter = PinnedTONEscrowContractAdapter()
@@ -338,7 +332,6 @@ async def test_seller_nft_deposit_payload_matches_generated_tep62_abi() -> None:
     assert boc_sha256(payload.messages[0].payload) == (
         "2422073bd457c966e27afb9851ede5ed3cdc19aaf6ffccac5b77e61d24eac52b"
     )
-
 
 @pytest.mark.asyncio
 async def test_accept_dispute_timeout_and_recovery_bocs_match_generated_abi() -> None:
@@ -410,12 +403,36 @@ async def test_accept_dispute_timeout_and_recovery_bocs_match_generated_abi() ->
         query_id=2003,
         valid_until=1_800_000_000,
     )
-    assert recovery.messages[0].address == recovery_deal.recovery_item_address
+    assert recovery.messages[0].address == derive_deployment(
+        load_pinned_code_boc(), recovery_deal
+    ).address
     assert recovery.messages[0].payload is not None
     assert boc_sha256(recovery.messages[0].payload) == (
         "296bbfd9ed948575f6e8dfd31d529384e016cbfe321f73d42717b294b8b3ac34"
     )
 
+@pytest.mark.asyncio
+async def test_unexpected_nft_recovery_requires_recorded_previous_owner() -> None:
+    adapter = PinnedTONEscrowContractAdapter()
+    deal = snapshot(
+        contract_state=13,
+        nft_in_escrow=True,
+        recovery_previous_owner="0:" + "55" * 32,
+        recovery_item_address="0:" + "66" * 32,
+    )
+
+    with pytest.raises(
+        EscrowContractABIUnavailable,
+        match="only the recorded previous NFT owner",
+    ):
+        await adapter.prepare_transaction(
+            EscrowWalletAction.RECOVER_UNEXPECTED_NFT,
+            actor_wallet=wallet(deal.seller_address),  # type: ignore[arg-type]
+            resource_id="deal-1",
+            deal_snapshot=deal,
+            query_id=2004,
+            valid_until=1_800_000_000,
+        )
 
 @pytest.mark.asyncio
 async def test_contract_initiated_payout_and_refund_are_never_wallet_actions() -> None:
@@ -430,7 +447,6 @@ async def test_contract_initiated_payout_and_refund_are_never_wallet_actions() -
                 deal_snapshot=deal,
             )
 
-
 @pytest.mark.asyncio
 async def test_unconfigured_adapter_remains_fail_closed() -> None:
     adapter = UnconfiguredTONEscrowContractAdapter()
@@ -442,7 +458,6 @@ async def test_unconfigured_adapter_remains_fail_closed() -> None:
             resource_id="deal-id",
             deal_snapshot=snapshot(),
         )
-
 
 @pytest.mark.asyncio
 async def test_unconfigured_testnet_provider_fails_closed() -> None:
