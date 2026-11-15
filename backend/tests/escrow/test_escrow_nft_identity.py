@@ -509,3 +509,31 @@ async def test_terminal_owner_verification_fails_closed_for_legacy_deal_without_
             minimum_masterchain_seqno=499,
         )
     await provider.close()
+
+
+def test_identity_snapshot_rejects_rehashed_policy_or_network_tampering() -> None:
+    fixture = _fixture()
+    evidence = _verify_fixture(fixture)
+
+    wrong_network = dict(evidence)
+    wrong_network["network"] = "mainnet"
+    wrong_network.pop("evidence_sha256")
+    from app.escrow.nft_identity import sha256_json
+
+    wrong_network["evidence_sha256"] = sha256_json(wrong_network)
+    with pytest.raises(NFTIdentityEvidenceError, match="unsupported version/network"):
+        validate_nft_identity_snapshot(
+            wrong_network, wrong_network["evidence_sha256"]
+        )
+
+    wrong_policy = dict(evidence)
+    wrong_policy["policy"] = {
+        **wrong_policy["policy"],
+        "collection_code_hash": "f" * 64,
+    }
+    wrong_policy.pop("evidence_sha256")
+    wrong_policy["evidence_sha256"] = sha256_json(wrong_policy)
+    with pytest.raises(NFTIdentityEvidenceError, match="policy digest mismatch"):
+        validate_nft_identity_snapshot(
+            wrong_policy, wrong_policy["evidence_sha256"]
+        )
