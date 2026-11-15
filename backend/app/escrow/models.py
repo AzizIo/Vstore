@@ -493,7 +493,10 @@ class EscrowObserverCheckpoint(EscrowBase):
     __tablename__ = "escrow_observer_checkpoints"
     __table_args__ = (
         CheckConstraint("network = 'testnet'", name="ck_escrow_checkpoint_network_testnet"),
-        CheckConstraint("failure_count >= 0", name="ck_escrow_checkpoint_failure_count_nonnegative"),
+        CheckConstraint(
+            "failure_count >= 0",
+            name="ck_escrow_checkpoint_failure_count_nonnegative",
+        ),
     )
 
     checkpoint_id: Mapped[str] = mapped_column(String(64), primary_key=True)
