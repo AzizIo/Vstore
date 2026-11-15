@@ -454,6 +454,12 @@ class EscrowWalletActionRecord(TimestampMixin, EscrowBase):
     unsigned_payload_json: Mapped[dict[str, object] | None] = mapped_column(JSON)
     unsigned_payload_sha256: Mapped[str | None] = mapped_column(String(64))
     unsigned_bocs_json: Mapped[dict[str, object] | None] = mapped_column(JSON)
+    # Independent finality evidence is separate from the untrusted client reference.
+    finalized_transaction_hash: Mapped[str | None] = mapped_column(String(128))
+    finality_masterchain_seqno: Mapped[int | None] = mapped_column(BigInteger)
+    finality_masterchain_block_hash: Mapped[str | None] = mapped_column(String(64))
+    finality_proof_sha256: Mapped[str | None] = mapped_column(String(64))
+    finality_provider: Mapped[str | None] = mapped_column(String(128))
     submission_reference: Mapped[str | None] = mapped_column(String(512))
     submission_reference_sha256: Mapped[str | None] = mapped_column(String(64))
     lease_token: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
