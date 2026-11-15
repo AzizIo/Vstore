@@ -721,24 +721,25 @@ async def create_listing_intent(
 ) -> EscrowListingIntentResponse:
     """Create a seller intent over a normal draft/active TON marketplace listing."""
     _require_testnet()
+    actor_id = user.id
     request_hash = _request_hash(_payload_dict(payload))
     try:
         replay = await _load_idempotent_resource(
-            session, actor_id=user.id, operation="create_listing_intent", key=idempotency_key,
+            session, actor_id=actor_id, operation="create_listing_intent", key=idempotency_key,
             request_sha256=request_hash, model=EscrowListingIntent,
         )
         if replay is not None:
-            return await _listing_projection(session, replay, user.id)
+            return await _listing_projection(session, replay, actor_id)
 
         asset = await session.scalar(select(NFTAsset).where(
-            NFTAsset.id == payload.asset_id, NFTAsset.owner_id == user.id,
+            NFTAsset.id == payload.asset_id, NFTAsset.owner_id == actor_id,
             NFTAsset.network == "testnet", NFTAsset.asset_type == AssetType.TON_NFT,
             NFTAsset.verification_status == AssetVerificationStatus.VERIFIED,
         ).with_for_update())
         if asset is None or not asset.item_address:
             raise HTTPException(status_code=409,
                 detail="Only verified seller-owned TON testnet NFTs are eligible")
-        wallet, seller_address = await _verified_wallet(session, user_id=user.id,
+        wallet, seller_address = await _verified_wallet(session, user_id=actor_id,
             wallet_id=payload.seller_wallet_id)
         try:
             item_address = normalize_address(asset.item_address)
@@ -774,7 +775,7 @@ async def create_listing_intent(
             select(NFTAsset)
             .where(
                 NFTAsset.id == payload.asset_id,
-                NFTAsset.owner_id == user.id,
+                NFTAsset.owner_id == actor_id,
                 NFTAsset.network == "testnet",
                 NFTAsset.asset_type == AssetType.TON_NFT,
                 NFTAsset.verification_status == AssetVerificationStatus.VERIFIED,
@@ -805,7 +806,7 @@ async def create_listing_intent(
             )
         wallet, current_seller_address = await _verified_wallet(
             session,
-            user_id=user.id,
+            user_id=actor_id,
             wallet_id=payload.seller_wallet_id,
         )
         if wallet.id != seller_wallet_id or current_seller_address != expected_seller_address:
@@ -839,7 +840,7 @@ async def create_listing_intent(
                 detail="price_nano must be a positive integer nanotons")
 
         listing = await session.scalar(select(Listing).where(
-            Listing.asset_id == asset.id, Listing.seller_id == user.id,
+            Listing.asset_id == asset.id, Listing.seller_id == actor_id,
             Listing.status.in_((ListingStatus.ACTIVE, ListingStatus.DRAFT)),
         ).order_by(Listing.status.asc()).with_for_update())
         if listing is not None and listing.status is ListingStatus.ACTIVE:
@@ -863,7 +864,7 @@ async def create_listing_intent(
                 raise HTTPException(status_code=409,
                     detail="NFT already has a reserved or review-pending listing")
             listing = Listing(
-                id=uuid4(), asset_id=asset.id, seller_id=user.id, status=ListingStatus.DRAFT,
+                id=uuid4(), asset_id=asset.id, seller_id=actor_id, status=ListingStatus.DRAFT,
                 price_amount=price_amount, price_currency=PriceCurrency.TON, title=asset.name,
             )
             session.add(listing)
@@ -876,7 +877,7 @@ async def create_listing_intent(
             raise HTTPException(status_code=409,
                 detail="An escrow listing intent already exists for this listing")
         intent = EscrowListingIntent(
-            id=uuid4(), marketplace_listing_id=listing.id, asset_id=asset.id, seller_id=user.id,
+            id=uuid4(), marketplace_listing_id=listing.id, asset_id=asset.id, seller_id=actor_id,
             seller_wallet_id=wallet.id, network="testnet", item_address=item_address,
             listing_key=secrets.token_hex(32), collection_address_snapshot=collection_address,
             nft_identity_snapshot_json=identity_snapshot,
@@ -886,17 +887,17 @@ async def create_listing_intent(
             contract_address=None, contract_abi_version=None, idempotency_key=idempotency_key,
         )
         session.add(intent)
-        _add_idempotency_record(session, actor_id=user.id, operation="create_listing_intent",
+        _add_idempotency_record(session, actor_id=actor_id, operation="create_listing_intent",
             key=idempotency_key, request_sha256=request_hash,
             resource_type="listing_intent", resource_id=intent.id)
         await session.commit()
         await session.refresh(intent)
-        return await _listing_projection(session, intent, user.id)
+        return await _listing_projection(session, intent, actor_id)
     except IntegrityError:
-        replay = await _idempotency_race_replay(session, actor_id=user.id,
+        replay = await _idempotency_race_replay(session, actor_id=actor_id,
             operation="create_listing_intent", key=idempotency_key,
             request_sha256=request_hash, model=EscrowListingIntent)
-        return await _listing_projection(session, replay, user.id)
+        return await _listing_projection(session, replay, actor_id)
     except HTTPException:
         await session.rollback()
         raise
@@ -960,20 +961,21 @@ async def create_deal_intent(
     idempotency_key: IdempotencyKey,
 ) -> EscrowDealResponse:
     _require_testnet()
+    actor_id = user.id
     request_hash = _request_hash(_payload_dict(payload))
     try:
-        replay = await _load_idempotent_resource(session, actor_id=user.id,
+        replay = await _load_idempotent_resource(session, actor_id=actor_id,
             operation="create_deal_intent",
             key=idempotency_key, request_sha256=request_hash, model=EscrowDeal)
         if replay is not None:
-            if replay.buyer_id != user.id:
+            if replay.buyer_id != actor_id:
                 raise HTTPException(status_code=404, detail="Escrow deal not found")
-            return await _deal_projection(session, replay, user.id)
+            return await _deal_projection(session, replay, actor_id)
         intent = await session.scalar(select(EscrowListingIntent).where(
             EscrowListingIntent.marketplace_listing_id == payload.listing_id))
         if intent is None or intent.status not in {"intent_only", "active"}:
             raise HTTPException(status_code=404, detail="Escrow listing intent not found")
-        if intent.seller_id == user.id:
+        if intent.seller_id == actor_id:
             raise HTTPException(status_code=409, detail="A seller cannot buy their own listing")
         if not intent.listing_key or not intent.collection_address_snapshot:
             raise HTTPException(
@@ -1197,7 +1199,7 @@ async def create_deal_intent(
                 status_code=409, detail="Escrow listing snapshot changed during verification"
             )
         buyer_wallet, buyer_address = await _verified_wallet(
-            session, user_id=user.id, wallet_id=payload.buyer_wallet_id
+            session, user_id=actor_id, wallet_id=payload.buyer_wallet_id
         )
         principal = intent.price_amount * _NANOTON
         if principal <= 0 or principal != principal.to_integral_value():
@@ -1208,7 +1210,7 @@ async def create_deal_intent(
             marketplace_listing_id=intent.marketplace_listing_id,
             listing_key_snapshot=intent.listing_key,
             seller_id=intent.seller_id,
-            buyer_id=user.id,
+            buyer_id=actor_id,
             buyer_wallet_id=buyer_wallet.id,
             network="testnet",
             deal_salt=secrets.token_hex(32),
@@ -1246,19 +1248,19 @@ async def create_deal_intent(
         except EscrowListingReservationConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         session.add(deal)
-        _add_idempotency_record(session, actor_id=user.id, operation="create_deal_intent",
+        _add_idempotency_record(session, actor_id=actor_id, operation="create_deal_intent",
             key=idempotency_key,
             request_sha256=request_hash, resource_type="deal", resource_id=deal.id)
         await session.commit()
         await session.refresh(deal)
-        return await _deal_projection(session, deal, user.id)
+        return await _deal_projection(session, deal, actor_id)
     except IntegrityError:
-        replay = await _idempotency_race_replay(session, actor_id=user.id,
+        replay = await _idempotency_race_replay(session, actor_id=actor_id,
             operation="create_deal_intent",
             key=idempotency_key, request_sha256=request_hash, model=EscrowDeal)
-        if replay.buyer_id != user.id:
+        if replay.buyer_id != actor_id:
             raise HTTPException(status_code=404, detail="Escrow deal not found") from None
-        return await _deal_projection(session, replay, user.id)
+        return await _deal_projection(session, replay, actor_id)
     except HTTPException:
         await session.rollback()
         raise
@@ -1729,11 +1731,12 @@ async def prepare_deal_activation(
     idempotent unsigned ActivateDeal payload.
     """
     _require_testnet()
+    actor_id = user.id
 
     existing = await session.scalar(
         select(EscrowWalletActionRecord)
         .where(
-            EscrowWalletActionRecord.actor_id == user.id,
+            EscrowWalletActionRecord.actor_id == actor_id,
             EscrowWalletActionRecord.action_type == EscrowWalletAction.ACTIVATE_DEAL.value,
             EscrowWalletActionRecord.idempotency_key == idempotency_key,
         )
@@ -1748,7 +1751,7 @@ async def prepare_deal_activation(
     deal = await session.scalar(
         select(EscrowDeal).where(
             EscrowDeal.id == deal_id,
-            EscrowDeal.seller_id == user.id,
+            EscrowDeal.seller_id == actor_id,
         )
     )
     if deal is None:
@@ -1820,7 +1823,7 @@ async def prepare_deal_activation(
         select(EscrowDeal)
         .where(
             EscrowDeal.id == deal_id,
-            EscrowDeal.seller_id == user.id,
+            EscrowDeal.seller_id == actor_id,
         )
         .with_for_update()
         .execution_options(populate_existing=True)
@@ -1938,6 +1941,7 @@ async def submit_wallet_reference(
     """
 
     _require_testnet()
+    actor_id = user.id
     normalized_reference = payload.reference.strip()
     if not normalized_reference:
         raise HTTPException(
@@ -1949,7 +1953,7 @@ async def submit_wallet_reference(
         select(EscrowWalletActionRecord)
         .where(
             EscrowWalletActionRecord.id == payload.action_id,
-            EscrowWalletActionRecord.actor_id == user.id,
+            EscrowWalletActionRecord.actor_id == actor_id,
             EscrowWalletActionRecord.action_type == payload.action,
             EscrowWalletActionRecord.network == "testnet",
         )
@@ -1967,7 +1971,7 @@ async def submit_wallet_reference(
     ).hexdigest()
     request_sha256 = canonical_request_sha256(
         {
-            "actor_id": str(user.id),
+            "actor_id": str(actor_id),
             "action_id": str(action.id),
             "action": payload.action,
             "reference_sha256": reference_sha256,
@@ -1978,7 +1982,7 @@ async def submit_wallet_reference(
     prior = await session.scalar(
         select(EscrowIdempotencyRecord)
         .where(
-            EscrowIdempotencyRecord.actor_id == user.id,
+            EscrowIdempotencyRecord.actor_id == actor_id,
             EscrowIdempotencyRecord.operation == operation,
             EscrowIdempotencyRecord.idempotency_key == idempotency_key,
         )
@@ -2006,7 +2010,7 @@ async def submit_wallet_reference(
     # Store the idempotency receipt in the same transaction as the untrusted hint.
     # A transaction reference can never write deal status or owner state.
     receipt = EscrowIdempotencyRecord(
-        actor_id=user.id,
+        actor_id=actor_id,
         operation=operation,
         idempotency_key=idempotency_key,
         request_sha256=request_sha256,
