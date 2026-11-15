@@ -8,6 +8,7 @@ import {
   OpenDispute,
   PayloadInline,
   RecoverUnexpectedNft,
+  RetryFailedOutboundAction,
   TimeoutDeal,
 } from "../wrappers-ts/DealEscrow.gen.ts";
 
@@ -16,7 +17,7 @@ const reasonHash = BigInt("0x" + "ab".repeat(32));
 const seller = Address.parseRaw("0:" + "11".repeat(32));
 const buyer = Address.parseRaw("0:" + "22".repeat(32));
 const escrow = Address.parseRaw(
-  "0:31ffca176042bdc4aa82e21949f900d2c068634306da76b1ebb335e64bd5cf52",
+  "0:e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6",
 );
 const forwardPayload = PayloadInline.create({
   value: beginCell()
@@ -52,6 +53,9 @@ const bodies = {
   recovery: RecoverUnexpectedNft.toCell(RecoverUnexpectedNft.create({
     queryId: 2003n, dealSalt: salt,
   })),
+  retry_failed_outbound_action: RetryFailedOutboundAction.toCell(
+    RetryFailedOutboundAction.create({ queryId: 3001n, dealSalt: salt }),
+  ),
   nft_deposit: nftDeposit,
   nft_return: nftReturn,
 };

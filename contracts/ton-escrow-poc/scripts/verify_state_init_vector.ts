@@ -10,6 +10,7 @@ import {
   DealRoles,
   DealSecurity,
   DealTerms,
+  OutboundActionSet,
 } from "../wrappers-ts/DealEscrow.gen.ts";
 
 const raw = (byte: string) => Address.parseRaw(`0:${byte.repeat(64 / byte.length)}`);
@@ -61,6 +62,7 @@ const progress = DealProgress.create({
     unexpectedPreviousOwner: null,
     unexpectedItemAddress: null,
   }) },
+  outboundActions: { ref: OutboundActionSet.create({ first: null, second: null }) },
 });
 const deployed = DealEscrow.fromStorage({
   terms: { ref: terms },
@@ -74,12 +76,29 @@ const stateInit = beginCell()
   .storeBit(1).storeRef(deployed.init.data) // data = Some(^Cell)
   .storeBit(0) // library = empty HashmapE
   .endCell();
+const EXPECTED_CODE_HASH =
+  "61348A9F67A31753622AB3E9E204AF67FBC1ED8736B05510DD9DF93E0F49366B";
+const EXPECTED_STATE_INIT_HASH =
+  "e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6";
+const EXPECTED_RAW_ADDRESS =
+  "0:e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6";
+const EXPECTED_DATA_HASH =
+  "faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b";
+
 if (!stateInit.hash().equals(deployed.address.hash)) {
   throw new Error("StateInit hash differs from generated Acton wrapper address");
 }
-if (deployed.init.code.hash().toString("hex").toUpperCase() !==
-    "359B02C177CE033C6FE1A673C4E04B59D6D43434AF09B1CBE4BDCD8BE4779450") {
+if (deployed.init.code.hash().toString("hex").toUpperCase() !== EXPECTED_CODE_HASH) {
   throw new Error("Generated Acton CodeCell does not match pinned manifest");
+}
+if (stateInit.hash().toString("hex") !== EXPECTED_STATE_INIT_HASH) {
+  throw new Error("Generated fixed StateInit hash differs from frozen golden vector");
+}
+if (deployed.address.toRawString() !== EXPECTED_RAW_ADDRESS) {
+  throw new Error("Generated fixed DealEscrow address differs from frozen golden vector");
+}
+if (deployed.init.data.hash().toString("hex") !== EXPECTED_DATA_HASH) {
+  throw new Error("Generated initial storage cell differs from frozen golden vector");
 }
 console.log(JSON.stringify({
   vector: "deal-escrow-v1-testnet-fixed-terms-01",

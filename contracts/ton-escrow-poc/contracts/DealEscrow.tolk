@@ -82,6 +82,115 @@ fun asManualReview(progress: DealProgress): DealProgress {
     return next;
 }
 
+fun makeOutboundAction(
+    kind: uint8,
+    itemAddress: address,
+    destination: address,
+    recipient: address,
+    responseDestination: address,
+    queryId: uint64,
+    dealSalt: uint256,
+    attemptId: uint64,
+    amountNanotons: coins,
+    messageValueNanotons: coins,
+    expectedState: uint8,
+    expectedPendingAction: uint8,
+    retryWindowSeconds: uint32,
+    messageBodyHash: uint256,
+    status: uint8,
+    bouncePhase: uint8,
+    exitCode: int32,
+): OutboundAction {
+    return OutboundAction {
+        kind,
+        queryId,
+        dealSalt,
+        attemptId,
+        amountNanotons,
+        messageValueNanotons,
+        expectedState,
+        expectedPendingAction,
+        retryWindowSeconds,
+        messageBodyHash,
+        status,
+        bouncePhase,
+        exitCode,
+        addresses: OutboundActionAddresses {
+            itemAndDestination: OutboundActionAddressPair {
+                first: itemAddress,
+                second: destination,
+            }.toCell(),
+            recipientAndResponse: OutboundActionAddressPair {
+                first: recipient,
+                second: responseDestination,
+            }.toCell(),
+        }.toCell(),
+    };
+}
+
+fun recordOutboundAction(mutate progress: DealProgress, action: OutboundAction) {
+    var actions = progress.outboundActions.load();
+    if (actions.first == null) {
+        actions.first = action.toCell();
+    } else if (actions.second == null) {
+        actions.second = action.toCell();
+    } else {
+        throw Errors.OutboundActionCapacity;
+    }
+    progress.outboundActions = actions.toCell();
+}
+
+fun consumeOutboundAction(
+    mutate progress: DealProgress,
+    kind: uint8,
+    itemAddress: address,
+    recipient: address,
+    queryId: uint64,
+    amountNanotons: coins,
+    verifyAmount: bool,
+): bool {
+    var actions = progress.outboundActions.load();
+    if (actions.first != null) {
+        val action = actions.first.load();
+        val addresses = action.addresses.load();
+        val itemAndDestination = addresses.itemAndDestination.load();
+        val recipientAndResponse = addresses.recipientAndResponse.load();
+        if (
+            action.status == OUTBOUND_STATUS_PENDING
+            && action.kind == kind
+            && itemAndDestination.first == itemAddress
+            && recipientAndResponse.first == recipient
+            && action.queryId == queryId
+            && action.attemptId == queryId
+            && (!verifyAmount || action.amountNanotons == amountNanotons)
+        ) {
+            actions.first = null;
+            progress.outboundActions = actions.toCell();
+            return true;
+        }
+    }
+    if (actions.second != null) {
+        val action = actions.second.load();
+        val addresses = action.addresses.load();
+        val itemAndDestination = addresses.itemAndDestination.load();
+        val recipientAndResponse = addresses.recipientAndResponse.load();
+        if (
+            action.status == OUTBOUND_STATUS_PENDING
+            && action.kind == kind
+            && itemAndDestination.first == itemAddress
+            && recipientAndResponse.first == recipient
+            && action.queryId == queryId
+            && action.attemptId == queryId
+            && (!verifyAmount || action.amountNanotons == amountNanotons)
+        ) {
+            actions.second = null;
+            progress.outboundActions = actions.toCell();
+            return true;
+        }
+    }
+    return false;
+}
+
 fun DealProgress.startOracleAttempt(mutate self): uint64 {
     assert (self.oracleAttemptId < 0xffffffffffffffff) throw Errors.InvalidAttestation;
     self.oracleAttemptId += 1;
@@ -115,106 +224,217 @@ fun makeNftPayload(asset: DealAsset): RemainingBitsAndRefs {
 }
 
 fun sendNftTo(
+    mutate progress: DealProgress,
+    kind: uint8,
     itemAddress: address,
     newOwnerAddress: address,
     responseDestination: address,
     queryId: uint64,
     asset: DealAsset,
     transferValue: coins,
+    expectedState: uint8,
+    expectedPendingAction: uint8,
+    retryWindowSeconds: uint32,
 ) {
+    val body = NftTransfer {
+        queryId,
+        newOwnerAddress,
+        sendExcessesTo: responseDestination,
+        customPayload: null,
+        forwardTonAmount: grams("0.01"),
+        forwardPayload: makeNftPayload(asset),
+    };
+    recordOutboundAction(mutate progress, makeOutboundAction(
+            kind,
+            itemAddress,
+            itemAddress,
+            newOwnerAddress,
+            responseDestination,
+            queryId,
+            asset.dealSalt,
+            queryId,
+            transferValue,
+            transferValue,
+            expectedState,
+            expectedPendingAction,
+            retryWindowSeconds,
+            body.toCell().hash(),
+            OUTBOUND_STATUS_PENDING,
+            0,
+            0
+        ));
     val transfer = createMessage({
         bounce: BounceMode.RichBounce,
         value: transferValue,
         dest: itemAddress,
-        body: NftTransfer {
-            queryId,
-            newOwnerAddress,
-            sendExcessesTo: responseDestination,
-            customPayload: null,
-            forwardTonAmount: grams("0.01"),
-            forwardPayload: makeNftPayload(asset),
-        },
+        body,
     });
     transfer.send(SEND_MODE_PAY_FEES_SEPARATELY + SEND_MODE_BOUNCE_ON_ACTION_FAIL);
 }
 
 fun sendSellerPayout(
+    mutate progress: DealProgress,
     roles: DealRoles,
     asset: DealAsset,
     money: DealMoney,
     attemptId: uint64,
 ) {
+    val body = SettlementMessage {
+        queryId: attemptId,
+        dealSalt: asset.dealSalt,
+        action: ORACLE_ACTION_SELLER_PAYOUT,
+    };
+    recordOutboundAction(mutate progress, makeOutboundAction(
+            OUTBOUND_KIND_SELLER_PAYOUT,
+            asset.itemAddress,
+            roles.seller,
+            roles.seller,
+            roles.seller,
+            attemptId,
+            asset.dealSalt,
+            attemptId,
+            money.principalNanotons,
+            money.principalNanotons,
+            STATE_SELLER_PAYOUT_PENDING,
+            PENDING_PAYOUT_RECONCILIATION,
+            SETTLEMENT_RECONCILIATION_GRACE_SECONDS,
+            body.toCell().hash(),
+            OUTBOUND_STATUS_PENDING,
+            0,
+            0
+        ));
     val payout = createMessage({
         bounce: BounceMode.RichBounce,
         value: money.principalNanotons,
         dest: roles.seller,
-        body: SettlementMessage {
-            queryId: attemptId,
-            dealSalt: asset.dealSalt,
-            action: ORACLE_ACTION_SELLER_PAYOUT,
-        },
+        body,
     });
     payout.send(SEND_MODE_PAY_FEES_SEPARATELY + SEND_MODE_BOUNCE_ON_ACTION_FAIL);
 }
 
 fun sendBuyerRefund(
+    mutate progress: DealProgress,
     roles: DealRoles,
     asset: DealAsset,
     money: DealMoney,
     attemptId: uint64,
 ) {
+    val body = SettlementMessage {
+        queryId: attemptId,
+        dealSalt: asset.dealSalt,
+        action: ORACLE_ACTION_BUYER_REFUND,
+    };
+    recordOutboundAction(mutate progress, makeOutboundAction(
+            OUTBOUND_KIND_BUYER_REFUND,
+            asset.itemAddress,
+            roles.buyer,
+            roles.buyer,
+            roles.buyer,
+            attemptId,
+            asset.dealSalt,
+            attemptId,
+            money.principalNanotons,
+            money.principalNanotons,
+            STATE_BUYER_REFUND_PENDING,
+            PENDING_REFUND_RECONCILIATION,
+            SETTLEMENT_RECONCILIATION_GRACE_SECONDS,
+            body.toCell().hash(),
+            OUTBOUND_STATUS_PENDING,
+            0,
+            0
+        ));
     val refund = createMessage({
         bounce: BounceMode.RichBounce,
         value: money.principalNanotons,
         dest: roles.buyer,
-        body: SettlementMessage {
-            queryId: attemptId,
-            dealSalt: asset.dealSalt,
-            action: ORACLE_ACTION_BUYER_REFUND,
-        },
+        body,
     });
     refund.send(SEND_MODE_PAY_FEES_SEPARATELY + SEND_MODE_BOUNCE_ON_ACTION_FAIL);
 }
 
 fun sendSellerDeploymentRefund(
+    mutate progress: DealProgress,
     roles: DealRoles,
     asset: DealAsset,
     money: DealMoney,
     queryId: uint64,
+    expectedState: uint8,
 ) {
+    val body = SettlementMessage {
+        queryId,
+        dealSalt: asset.dealSalt,
+        action: SETTLEMENT_ACTION_SELLER_DEPLOYMENT_REFUND,
+    };
+    recordOutboundAction(mutate progress, makeOutboundAction(
+            OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND,
+            asset.itemAddress,
+            roles.seller,
+            roles.seller,
+            roles.seller,
+            queryId,
+            asset.dealSalt,
+            queryId,
+            money.sellerDeploymentRefundNanotons,
+            money.sellerDeploymentRefundNanotons,
+            expectedState,
+            PENDING_NONE,
+            0,
+            body.toCell().hash(),
+            OUTBOUND_STATUS_PENDING,
+            0,
+            0
+        ));
     val refund = createMessage({
         bounce: BounceMode.RichBounce,
         value: money.sellerDeploymentRefundNanotons,
         dest: roles.seller,
-        body: SettlementMessage {
-            queryId,
-            dealSalt: asset.dealSalt,
-            action: SETTLEMENT_ACTION_SELLER_DEPLOYMENT_REFUND,
-        },
+        body,
     });
     refund.send(SEND_MODE_PAY_FEES_SEPARATELY + SEND_MODE_BOUNCE_ON_ACTION_FAIL);
 }
 
 fun sendRemainingBalanceTo(
+    mutate progress: DealProgress,
     recipient: address,
     asset: DealAsset,
     queryId: uint64,
+    expectedState: uint8,
 ) {
+    val body = SettlementMessage {
+        queryId,
+        dealSalt: asset.dealSalt,
+        action: SETTLEMENT_ACTION_EXECUTION_RESERVE_REFUND,
+    };
+    recordOutboundAction(mutate progress, makeOutboundAction(
+            OUTBOUND_KIND_EXECUTION_RESERVE_REFUND,
+            asset.itemAddress,
+            recipient,
+            recipient,
+            recipient,
+            queryId,
+            asset.dealSalt,
+            queryId,
+            0,
+            0,
+            expectedState,
+            PENDING_NONE,
+            0,
+            body.toCell().hash(),
+            OUTBOUND_STATUS_PENDING,
+            0,
+            0
+        ));
     val refund = createMessage({
-        bounce: BounceMode.NoBounce,
+        bounce: BounceMode.RichBounce,
         value: 0,
         dest: recipient,
-        body: SettlementMessage {
-            queryId,
-            dealSalt: asset.dealSalt,
-            action: SETTLEMENT_ACTION_EXECUTION_RESERVE_REFUND,
-        },
+        body,
     });
-    // SAFETY: recipient is a snapshotted seller/buyer address selected only
-    // by terminal settlement paths; principal and seller allowance are handled
-    // separately, and TERMINAL_STORAGE_RESERVE is reserved before this call.
-    // This intentionally refunds only the remaining balance and cannot choose
-    // an arbitrary destination or withdraw the protected terminal reserve.
+    // BounceMode.RichBounce keeps the exact original body available for
+    // action/destination/query correlation if the receiver rejects the refund.
+    // SAFETY: terminal paths reserve TERMINAL_STORAGE_RESERVE before this
+    // carry-all refund and fix the recipient to the snapshotted seller or buyer.
+    // Principal and seller allowance are sent by separate, action-correlated messages.
     refund.send(
         SEND_MODE_CARRY_ALL_BALANCE
         + SEND_MODE_PAY_FEES_SEPARATELY
@@ -232,11 +452,17 @@ fun settleRemainingBalanceForBuyer(
     money: DealMoney,
 ) {
     val sellerRefundId = progress.startOracleAttempt();
-    sendSellerDeploymentRefund(roles, asset, money, sellerRefundId);
+    sendSellerDeploymentRefund(mutate progress, roles, asset, money, sellerRefundId, progress.state);
 
     reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, RESERVE_MODE_EXACT_AMOUNT);
     val buyerRefundId = progress.startOracleAttempt();
-    sendRemainingBalanceTo(roles.buyer, asset, buyerRefundId);
+    sendRemainingBalanceTo(
+        mutate progress,
+        roles.buyer,
+        asset,
+        buyerRefundId,
+        progress.state,
+    );
 }
 
 // If the buyer never funded the deal, the NFT and the remaining TON are returned
@@ -248,7 +474,13 @@ fun settleExpiredBalanceForSeller(
 ) {
     reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, RESERVE_MODE_EXACT_AMOUNT);
     val sellerRefundId = progress.startOracleAttempt();
-    sendRemainingBalanceTo(roles.seller, asset, sellerRefundId);
+    sendRemainingBalanceTo(
+        mutate progress,
+        roles.seller,
+        asset,
+        sellerRefundId,
+        progress.state,
+    );
 }
 
 fun handleNftOwnershipNotification(
@@ -369,10 +601,19 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         assert (route.sourceAddress == contract.getAddress()) throw Errors.InvalidAttestation;
         assert (route.destinationAddress == roles.buyer) throw Errors.InvalidAttestation;
         assert (route.amountNanotons == 0) throw Errors.InvalidAttestation;
+        assert (consumeOutboundAction(
+            mutate progress,
+            OUTBOUND_KIND_NFT_RELEASE,
+            route.itemAddress,
+            route.destinationAddress,
+            route.queryId,
+            0,
+            false,
+        )) throw Errors.OutboundActionMissing;
         progress.nftInEscrow = false;
         if (progress.pendingAction == PENDING_PAYOUT_AFTER_NFT_DELIVERY) {
             val payoutAttemptId = progress.startOracleAttempt();
-            sendSellerPayout(roles, asset, money, payoutAttemptId);
+            sendSellerPayout(mutate progress, roles, asset, money, payoutAttemptId);
             progress.state = STATE_SELLER_PAYOUT_PENDING;
             progress.pendingAction = PENDING_PAYOUT_RECONCILIATION;
             progress.deadlineUnix = (blockchain.now() + SETTLEMENT_RECONCILIATION_GRACE_SECONDS) as uint64;
@@ -388,6 +629,15 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         assert (route.destinationAddress == roles.seller) throw Errors.InvalidAttestation;
         assert (route.amountNanotons == 0) throw Errors.InvalidAttestation;
         assert (route.queryId == context.attemptId) throw Errors.InvalidAttestation;
+        assert (consumeOutboundAction(
+            mutate progress,
+            OUTBOUND_KIND_NFT_RETURN,
+            route.itemAddress,
+            route.destinationAddress,
+            route.queryId,
+            0,
+            false,
+        )) throw Errors.OutboundActionMissing;
         progress.nftInEscrow = false;
         if (progress.pendingAction == PENDING_EXPIRE_AFTER_NFT_RETURN) {
             progress.state = STATE_EXPIRED;
@@ -397,7 +647,7 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
             settleExpiredBalanceForSeller(mutate progress, roles, asset);
         } else if (progress.pendingAction == PENDING_REFUND_AFTER_NFT_RETURN) {
             val refundAttemptId = progress.startOracleAttempt();
-            sendBuyerRefund(roles, asset, money, refundAttemptId);
+            sendBuyerRefund(mutate progress, roles, asset, money, refundAttemptId);
             progress.state = STATE_BUYER_REFUND_PENDING;
             progress.pendingAction = PENDING_REFUND_RECONCILIATION;
             progress.deadlineUnix = (blockchain.now() + SETTLEMENT_RECONCILIATION_GRACE_SECONDS) as uint64;
@@ -410,6 +660,15 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         assert (route.sourceAddress == contract.getAddress()) throw Errors.InvalidAttestation;
         assert (route.destinationAddress == roles.seller) throw Errors.InvalidAttestation;
         assert (route.amountNanotons == money.principalNanotons) throw Errors.InvalidAttestation;
+        assert (consumeOutboundAction(
+            mutate progress,
+            OUTBOUND_KIND_SELLER_PAYOUT,
+            route.itemAddress,
+            route.destinationAddress,
+            route.queryId,
+            route.amountNanotons,
+            true,
+        )) throw Errors.OutboundActionMissing;
         progress.state = STATE_SETTLED;
         progress.pendingAction = PENDING_NONE;
         progress.principalLocked = false;
@@ -421,6 +680,15 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         assert (route.sourceAddress == contract.getAddress()) throw Errors.InvalidAttestation;
         assert (route.destinationAddress == roles.buyer) throw Errors.InvalidAttestation;
         assert (route.amountNanotons == money.principalNanotons) throw Errors.InvalidAttestation;
+        assert (consumeOutboundAction(
+            mutate progress,
+            OUTBOUND_KIND_BUYER_REFUND,
+            route.itemAddress,
+            route.destinationAddress,
+            route.queryId,
+            route.amountNanotons,
+            true,
+        )) throw Errors.OutboundActionMissing;
         progress.state = STATE_REFUNDED;
         progress.pendingAction = PENDING_NONE;
         progress.principalLocked = false;
@@ -435,6 +703,15 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         assert (route.destinationAddress == recovery.unexpectedPreviousOwner) throw Errors.InvalidAttestation;
         assert (route.amountNanotons == 0) throw Errors.InvalidAttestation;
         assert (route.queryId == context.attemptId) throw Errors.InvalidAttestation;
+        assert (consumeOutboundAction(
+            mutate progress,
+            OUTBOUND_KIND_UNEXPECTED_NFT_RECOVERY,
+            route.itemAddress,
+            route.destinationAddress,
+            route.queryId,
+            0,
+            false,
+        )) throw Errors.OutboundActionMissing;
         progress.nftInEscrow = false;
         progress.state = STATE_MANUAL_REVIEW;
         progress.pendingAction = PENDING_NONE;
@@ -489,12 +766,17 @@ fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
         // or has been returned by the buyer (post-delivery dispute).
         val returnAttemptId = progress.startOracleAttempt();
         sendNftTo(
+            mutate progress,
+            OUTBOUND_KIND_NFT_RETURN,
             asset.itemAddress,
             roles.seller,
             roles.seller,
             returnAttemptId,
             asset,
             money.nftTransferValue,
+            STATE_NFT_RETURN_PENDING,
+            PENDING_REFUND_AFTER_NFT_RETURN,
+            DELIVERY_CONFIRMATION_GRACE_SECONDS,
         );
         progress.state = STATE_NFT_RETURN_PENDING;
         progress.pendingAction = PENDING_REFUND_AFTER_NFT_RETURN;
@@ -502,12 +784,17 @@ fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
     } else if (context.outcome == RESOLUTION_SELLER_WINS) {
         val releaseAttemptId = progress.startOracleAttempt();
         sendNftTo(
+            mutate progress,
+            OUTBOUND_KIND_NFT_RELEASE,
             asset.itemAddress,
             roles.buyer,
             roles.seller,
             releaseAttemptId,
             asset,
             money.nftTransferValue,
+            STATE_NFT_RELEASE_PENDING,
+            PENDING_PAYOUT_AFTER_NFT_DELIVERY,
+            DELIVERY_CONFIRMATION_GRACE_SECONDS,
         );
         progress.state = STATE_NFT_RELEASE_PENDING;
         progress.pendingAction = PENDING_PAYOUT_AFTER_NFT_DELIVERY;
@@ -518,6 +805,71 @@ fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
 
     storage.progress = progress.toCell();
     storage.save();
+}
+
+fun retryBouncedOutboundAction(
+    mutate progress: DealProgress,
+    action: OutboundAction,
+    roles: DealRoles,
+    asset: DealAsset,
+    money: DealMoney,
+) {
+    assert (action.status == OUTBOUND_STATUS_BOUNCED) throw Errors.RetryNotReady;
+    val retryAttemptId = progress.startOracleAttempt();
+
+    val addresses = action.addresses.load();
+    val itemAndDestination = addresses.itemAndDestination.load();
+    val recipientAndResponse = addresses.recipientAndResponse.load();
+    if (action.kind <= OUTBOUND_KIND_BUYER_REFUND) {
+        progress.state = action.expectedState;
+        progress.pendingAction = action.expectedPendingAction;
+        progress.deadlineUnix = (
+            blockchain.now() + action.retryWindowSeconds
+        ) as uint64;
+    }
+
+    if (
+        action.kind == OUTBOUND_KIND_NFT_RELEASE
+        || action.kind == OUTBOUND_KIND_NFT_RETURN
+        || action.kind == OUTBOUND_KIND_UNEXPECTED_NFT_RECOVERY
+    ) {
+        sendNftTo(
+            mutate progress,
+            action.kind,
+            itemAndDestination.first,
+            recipientAndResponse.first,
+            recipientAndResponse.second,
+            retryAttemptId,
+            asset,
+            action.amountNanotons,
+            action.expectedState,
+            action.expectedPendingAction,
+            action.retryWindowSeconds,
+        );
+    } else if (action.kind == OUTBOUND_KIND_SELLER_PAYOUT) {
+        sendSellerPayout(mutate progress, roles, asset, money, retryAttemptId);
+    } else if (action.kind == OUTBOUND_KIND_BUYER_REFUND) {
+        sendBuyerRefund(mutate progress, roles, asset, money, retryAttemptId);
+    } else if (action.kind == OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND) {
+        sendSellerDeploymentRefund(
+            mutate progress,
+            roles,
+            asset,
+            money,
+            retryAttemptId,
+            action.expectedState,
+        );
+    } else if (action.kind == OUTBOUND_KIND_EXECUTION_RESERVE_REFUND) {
+        sendRemainingBalanceTo(
+            mutate progress,
+            recipientAndResponse.first,
+            asset,
+            retryAttemptId,
+            action.expectedState,
+        );
+    } else {
+        throw Errors.OutboundActionMissing;
+    }
 }
 
 fun onInternalMessage(in: InMessage) {
@@ -589,12 +941,17 @@ fun onInternalMessage(in: InMessage) {
 
             val releaseAttemptId = progress.startOracleAttempt();
             sendNftTo(
+                mutate progress,
+                OUTBOUND_KIND_NFT_RELEASE,
                 asset.itemAddress,
                 roles.buyer,
                 roles.seller,
                 releaseAttemptId,
                 asset,
                 money.nftTransferValue,
+                STATE_NFT_RELEASE_PENDING,
+                PENDING_NONE,
+                DELIVERY_CONFIRMATION_GRACE_SECONDS,
             );
             progress.state = STATE_NFT_RELEASE_PENDING;
             progress.deadlineUnix = (blockchain.now() + DELIVERY_CONFIRMATION_GRACE_SECONDS) as uint64;
@@ -671,12 +1028,17 @@ fun onInternalMessage(in: InMessage) {
                 assert (progress.nftInEscrow) throw Errors.InvalidNft;
                 val returnAttemptId = progress.startOracleAttempt();
                 sendNftTo(
+                    mutate progress,
+                    OUTBOUND_KIND_NFT_RETURN,
                     asset.itemAddress,
                     roles.seller,
                     roles.seller,
                     returnAttemptId,
                     asset,
                     money.nftTransferValue,
+                    STATE_NFT_RETURN_PENDING,
+                    PENDING_EXPIRE_AFTER_NFT_RETURN,
+                    DELIVERY_CONFIRMATION_GRACE_SECONDS,
                 );
                 progress.state = STATE_NFT_RETURN_PENDING;
                 progress.pendingAction = PENDING_EXPIRE_AFTER_NFT_RETURN;
@@ -685,12 +1047,17 @@ fun onInternalMessage(in: InMessage) {
                 assert (progress.principalLocked && progress.nftInEscrow) throw Errors.InvalidState;
                 val returnAttemptId = progress.startOracleAttempt();
                 sendNftTo(
+                    mutate progress,
+                    OUTBOUND_KIND_NFT_RETURN,
                     asset.itemAddress,
                     roles.seller,
                     roles.seller,
                     returnAttemptId,
                     asset,
                     money.nftTransferValue,
+                    STATE_NFT_RETURN_PENDING,
+                    PENDING_REFUND_AFTER_NFT_RETURN,
+                    DELIVERY_CONFIRMATION_GRACE_SECONDS,
                 );
                 progress.state = STATE_NFT_RETURN_PENDING;
                 progress.pendingAction = PENDING_REFUND_AFTER_NFT_RETURN;
@@ -698,12 +1065,47 @@ fun onInternalMessage(in: InMessage) {
             } else if (progress.state == STATE_DELIVERED_DISPUTE_WINDOW) {
                 assert (progress.principalLocked && !progress.nftInEscrow) throw Errors.InvalidState;
                 val payoutAttemptId = progress.startOracleAttempt();
-                sendSellerPayout(roles, asset, money, payoutAttemptId);
+                sendSellerPayout(mutate progress, roles, asset, money, payoutAttemptId);
                 progress.state = STATE_SELLER_PAYOUT_PENDING;
                 progress.pendingAction = PENDING_PAYOUT_RECONCILIATION;
                 progress.deadlineUnix = (blockchain.now() + SETTLEMENT_RECONCILIATION_GRACE_SECONDS) as uint64;
             } else {
                 progress = asManualReview(progress);
+            }
+            storage.progress = progress.toCell();
+            storage.save();
+        }
+        RetryFailedOutboundAction => {
+            requireActionValue(in.valueCoins);
+            var progress = storage.progress.load();
+            val terms = storage.terms.load();
+            assertTestnet(terms);
+            val roles = terms.roles.load();
+            val asset = terms.asset.load();
+            val money = terms.money.load();
+            checkDealSalt(asset, msg.dealSalt);
+
+            var actions = progress.outboundActions.load();
+            if (actions.first != null && actions.first.load().queryId == msg.queryId) {
+                val action = actions.first.load();
+                val recipient = action.addresses.load().recipientAndResponse.load().first;
+                assert (action.dealSalt == msg.dealSalt) throw Errors.InvalidDeal;
+                assert (action.status == OUTBOUND_STATUS_BOUNCED) throw Errors.RetryNotReady;
+                assert (in.senderAddress == recipient) throw Errors.UnauthorizedRetry;
+                actions.first = null;
+                progress.outboundActions = actions.toCell();
+                retryBouncedOutboundAction(mutate progress, action, roles, asset, money);
+            } else if (actions.second != null && actions.second.load().queryId == msg.queryId) {
+                val action = actions.second.load();
+                val recipient = action.addresses.load().recipientAndResponse.load().first;
+                assert (action.dealSalt == msg.dealSalt) throw Errors.InvalidDeal;
+                assert (action.status == OUTBOUND_STATUS_BOUNCED) throw Errors.RetryNotReady;
+                assert (in.senderAddress == recipient) throw Errors.UnauthorizedRetry;
+                actions.second = null;
+                progress.outboundActions = actions.toCell();
+                retryBouncedOutboundAction(mutate progress, action, roles, asset, money);
+            } else {
+                throw Errors.OutboundActionMissing;
             }
             storage.progress = progress.toCell();
             storage.save();
@@ -726,12 +1128,17 @@ fun onInternalMessage(in: InMessage) {
             val unexpectedItem = recovery.unexpectedItemAddress;
             val recoveryAttemptId = progress.startOracleAttempt();
             sendNftTo(
+                mutate progress,
+                OUTBOUND_KIND_UNEXPECTED_NFT_RECOVERY,
                 unexpectedItem,
                 previousOwner,
                 previousOwner,
                 recoveryAttemptId,
                 asset,
                 money.nftTransferValue,
+                STATE_NFT_RETURN_PENDING,
+                PENDING_UNEXPECTED_RECOVERY,
+                DELIVERY_CONFIRMATION_GRACE_SECONDS,
             );
             progress.state = STATE_NFT_RETURN_PENDING;
             progress.pendingAction = PENDING_UNEXPECTED_RECOVERY;
@@ -748,25 +1155,91 @@ fun onInternalMessage(in: InMessage) {
     }
 }
 
-fun onBouncedMessage(_in: InMessageBounced) {
-    // A late bounce of a secondary message (for example the seller deployment
-    // allowance refund) must not erase an already reconciled terminal result.
-    // Terminal state and principal settlement are immutable once recorded.
-    var storage = EscrowStorage.load();
-    var progress = storage.progress.load();
+fun onBouncedMessage(in: InMessageBounced) {
+    // All contract-created outbound messages use RichBounce. Classic bounces
+    // carry only the 0xFFFFFFFF prefix and cannot be correlated to our full
+    // persisted descriptor, so ignore them instead of trying to parse as rich.
+    var bouncedBody = in.bouncedBody;
+    // A malformed/truncated bounce must never abort the handler or mutate
+    // custody/accounting. RichBounce has a 32-bit tag, two mandatory refs and
+    // at least 41 remaining header bits (phase, exit code, compute-phase flag).
     if (
-        progress.state == STATE_SETTLED
-        || progress.state == STATE_REFUNDED
-        || progress.state == STATE_EXPIRED
+        bouncedBody.remainingBitsCount() < 32
+        || bouncedBody.remainingRefsCount() < 2
     ) {
         return;
     }
+    if (bouncedBody.loadUint(32) != 0xfffffffe) {
+        return;
+    }
+    if (bouncedBody.remainingBitsCount() < 41) {
+        return;
+    }
+    // The rich original body hash, bounce sender and original value must match
+    // an explicitly persisted descriptor; unrelated and stale bounces are ignored.
+    val rich = lazy RichBounceBody.fromSlice(in.bouncedBody);
+    val originalBodyHash = rich.originalBody.hash();
+    val originalValue = rich.originalInfo.load().valueCoins;
 
-    // For non-terminal states, a bounce is not final ownership or settlement
-    // evidence. Freeze until a fresh finalized trace/getter check is reconciled.
-    progress = asManualReview(progress);
-    storage.progress = progress.toCell();
-    storage.save();
+    var storage = EscrowStorage.load();
+    var progress = storage.progress.load();
+    var actions = progress.outboundActions.load();
+    var matched = false;
+    var criticalAction = false;
+
+    if (actions.first != null) {
+        var action = actions.first.load();
+        val destination = action.addresses.load().itemAndDestination.load().second;
+        if (
+            action.status == OUTBOUND_STATUS_PENDING
+            && destination == in.senderAddress
+            && action.messageBodyHash == originalBodyHash
+            && (
+                action.kind == OUTBOUND_KIND_EXECUTION_RESERVE_REFUND
+                || action.messageValueNanotons == originalValue
+            )
+        ) {
+            action.status = OUTBOUND_STATUS_BOUNCED;
+            action.bouncePhase = rich.bouncedByPhase;
+            action.exitCode = rich.exitCode;
+            actions.first = action.toCell();
+            matched = true;
+            criticalAction = action.kind <= OUTBOUND_KIND_BUYER_REFUND;
+            if (criticalAction && progress.state == action.expectedState) {
+                progress = asManualReview(progress);
+            }
+        }
+    }
+
+    if (!matched && actions.second != null) {
+        var action = actions.second.load();
+        val destination = action.addresses.load().itemAndDestination.load().second;
+        if (
+            action.status == OUTBOUND_STATUS_PENDING
+            && destination == in.senderAddress
+            && action.messageBodyHash == originalBodyHash
+            && (
+                action.kind == OUTBOUND_KIND_EXECUTION_RESERVE_REFUND
+                || action.messageValueNanotons == originalValue
+            )
+        ) {
+            action.status = OUTBOUND_STATUS_BOUNCED;
+            action.bouncePhase = rich.bouncedByPhase;
+            action.exitCode = rich.exitCode;
+            actions.second = action.toCell();
+            matched = true;
+            criticalAction = action.kind <= OUTBOUND_KIND_BUYER_REFUND;
+            if (criticalAction && progress.state == action.expectedState) {
+                progress = asManualReview(progress);
+            }
+        }
+    }
+
+    if (matched) {
+        progress.outboundActions = actions.toCell();
+        storage.progress = progress.toCell();
+        storage.save();
+    }
 }
 
 get fun get_state(): uint8 {

@@ -1,29 +1,26 @@
 # DealEscrow artifact provenance and verification
 
-This directory pins the exact DealEscrow ABI and the hashes of the compiled code artifact produced by the reviewed PR #193 source.
+This directory pins the ABI and compiler output for the current testnet-only DealEscrow source, including the persisted outbound-action storage layout and the `RetryFailedOutboundAction` opcode. Any change to contract code or storage changes the StateInit hash and the per-deal raw address; never reuse an address created from a previous code/storage version.
 
 ## Frozen provenance
 
 | Field | Value |
 |---|---|
-| Source commit | `2913ea7d53ea7344f57d6503142c08e0b328bc7d` |
-| Acton | `1.2.1` |
-| Tolk | `1.5.0` |
-| Workflow run | [43634396094](https://github.com/AzizIo/Vstore/actions/runs/43634396094) |
-| Artifact ID | `14129775225` |
-| Original archive SHA-256 | `80db85f1dfc91450e6e7e47990bd89bf2ff80e0ecb99d17d8f40a07f33feba58` |
-| Original ABI SHA-256 | `05d3bc9b7aafc7fc71889cffc6d4fea2f607ea14aa48f3854c8e432747623597` |
-| Original build descriptor SHA-256 | `f38b6c867af8ed13d95bc7fed75136961eb97c21290360197ccf9520907ffc3b` |
-| Compiled code hash | `E9358DAA6FFCC8FCEC979FBD631C7FC0BE336347D1DD44F3F06113E7B2A37548` |
-| Original BOC base64 SHA-256 | `1dd9695f38ebc6d158866159ef796bbe8e7d4ec7558a5a2093a4b74951454e57` |
-| Original decoded BOC SHA-256 | `aaaa3822a52e28410589cbd11e7e81252ea8d52b07ece73a9b5dda1c07d8a167` |
+| Source commit | `42b94ea121d7a04e71a7dc9f4268be0744c8e778` |
+| Toolchain | Acton `1.2.1`, Tolk `1.5.0` |
+| Strict green contract workflow | [#43738313655](https://github.com/AzizIo/Vstore/actions/runs/43732705509) |
+| Artifact ID | `14169431583` |
+| Artifact archive SHA-256 | `1a08426a6d6fbdbe5608358962e058d070def036408a7fd420c8d25c9d6dda4a` |
+| Compact ABI SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
+| Build descriptor SHA-256 | `0c3c7dec0bbf5bb231a007e5d99e28a5c5b7285d9cbdd3324e1172cd756b2eea` |
+| Compiled code hash | `61348A9F67A31753622AB3E9E204AF67FBC1ED8736B05510DD9DF93E0F49366B` |
+| BOC base64 SHA-256 | `ab0fdad1ca51d84b5df77f64a34eedac0e41f0c328aeffd5984e0dde0b381a40` |
+| Decoded BOC SHA-256 | `33f6f2e25bf541720eaab59e39aea98a53e2a622a1a569b91d318932dc092153` |
+| Deterministic StateInit hash | `e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6` |
+| Deterministic raw address | `0:e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6` |
+| Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
 
-## What is stored
-
-- `frozen/DealEscrow.abi.json` — generated ABI snapshot, canonical digest pinned in `frozen/manifest.json`.
-- `frozen/manifest.json` — immutable provenance and expected compiled code/BOC digests.
-
-The compiled BOC itself is deliberately **not** checked in as a hand-copied text file. CI rebuilds it from the pinned Acton/Tolk source and compares both the compiler code hash and exact BOC digests against the frozen manifest. This avoids accepting a damaged or mistyped binary snapshot.
+The source-controlled files are `frozen/DealEscrow.abi.json` and `frozen/manifest.json`. The compiled BOC itself is not manually checked in as a text file; CI rebuilds it and verifies the exact compiler code hash and BOC digests.
 
 ## Local verification
 
@@ -34,8 +31,16 @@ python3 -m unittest discover -s scripts -p 'test_*.py' -v
 python3 scripts/verify_frozen_files.py
 acton build
 python3 scripts/verify_build_matches_manifest.py
+acton wrapper --all
+acton wrapper DealEscrow --ts --output wrappers-ts/DealEscrow.gen.ts
+npm install --no-save --no-package-lock @ton/core@0.63.1 tsx@4.19.2
+npx tsx scripts/verify_state_init_vector.ts
+npx tsx scripts/verify_message_vectors.ts
+acton fmt --check
+acton check
+acton test --coverage --no-studio-reporting
 ```
 
-## Limitations
+## Important limitations
 
-These checks pin ABI provenance and detect compiler-output drift. They do not prove semantic contract safety, StateInit/address derivation correctness, backend adapter correctness, provider finality, or live testnet acceptance. Independent TON/Tolk review remains mandatory. Signing and deployment remain disabled.
+The green Acton emulator suite demonstrates behavior only in the pinned toolchain/test fixtures. It is not a live chain finality proof, independent TON/Tolk security audit, or manual TON testnet/Tonkeeper acceptance. The collection/item membership assertion must be checked by the future trusted provider before creating immutable deal terms. Signing and deployment remain disabled.

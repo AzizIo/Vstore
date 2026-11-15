@@ -7,6 +7,29 @@
 
 The contract is a testnet-only immutable single-deal PoC. The repository has a reproducible Acton/Tolk build and 25 emulator tests, but the present evidence is insufficient to call it a defensible testnet release candidate. This report distinguishes implemented guards from behavior that is not yet proven.
 
+## Implementation update — PR #234 (2026-11-15)
+
+The initial findings below describe the pre-implementation baseline. The implementation branch has since added:
+
+- A persisted two-slot outbound-action descriptor. Each action includes kind, exact destination/recipient and item/response addresses, query ID and monotonic attempt ID, deal salt, amount/value, expected state/pending action, retry window and original outbound body hash.
+- RichBounce-only correlation: match the bounce sender/destination, exact original body hash and original message value. Classic/short bounces, unknown descriptors, stale envelopes and mismatches do not mutate state.
+- A correlated critical bounce records phase and exit code, preserves NFT/principal custody flags, and moves to manual review. It does not infer finality from a bounce.
+- `RetryFailedOutboundAction` opcode `0x56450009`: only the descriptor's snapshotted recipient may retry; the failed descriptor is consumed, a fresh monotonic attempt/query ID is used, and old-query replay is rejected.
+- Positive lifecycle oracle/resolver fixtures now sign each exact typed-cell hash using deterministic Acton `crypto.rawSign` test seeds; the test file contains no `testing.setChecksigIgnore` calls. Deliberately invalid zero-signature fixtures remain only in negative tests.
+- Actual failing TEP-62 item transfer and seller payout destination emulator scenarios. NFT retry succeeds and is attested with a signed oracle message; payout bounce preserves `principalLocked=true`. Unauthorized retry and replay tests are included.
+- The `DealProgress` storage extension changes StateInit and every derived deal address. The new frozen ABI/manifest and StateInit/message vectors are regenerated from Acton 1.2.1 / Tolk 1.5.0.
+
+### Exact-head validation
+
+The final exact-head run [#43732705509](https://github.com/AzizIo/Vstore/actions/runs/43732705509) on `61755265e85f5f136d22f2414b350d65b55c9549` passed **all steps with no continue-on-error bypass**: frozen ABI verifier, fresh build/code/BOC comparison, generated wrappers, independent StateInit/address/data-hash cross-check, message BOC vectors, `acton fmt --check`, `acton check`, and the full emulator suite. This run also includes the unauthorized-retry and old-query replay assertions. The action uploaded reproducible artifact `14168644387` (archive SHA-256 `d39f01b327ba575c8d5558e1ef6eb3417fde97458de45b8727fff0f5c7157f7d`). The suite contains 26 emulator tests; the signed end-to-end test cases no longer disable checksig.
+
+### Remaining gates
+
+- Extend the emulator failure matrix to secondary seller allowance and carry-all reserve-refund bounces, plus out-of-order/mismatched RichBounce envelopes.
+- Expand timeout/recovery state × custody × principal/reserve matrix beyond the current boundary tests.
+- Independent TON/Tolk audit and actual valueless testnet transaction traces/getter reconciliation are not performed.
+- Collection authenticity is not proven in contract; a trusted provider must verify exact item's collection getter before immutable deployment terms are accepted.
+
 ## Confirmed findings
 
 ### HIGH — bounced outbound actions are not correlated to their originating action

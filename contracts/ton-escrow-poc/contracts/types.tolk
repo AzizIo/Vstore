@@ -45,6 +45,17 @@ const PENDING_REFUND_RECONCILIATION = 4
 const PENDING_PAYOUT_RECONCILIATION = 5
 const PENDING_UNEXPECTED_RECOVERY = 6
 
+const OUTBOUND_KIND_NFT_RELEASE = 1
+const OUTBOUND_KIND_NFT_RETURN = 2
+const OUTBOUND_KIND_UNEXPECTED_NFT_RECOVERY = 3
+const OUTBOUND_KIND_SELLER_PAYOUT = 4
+const OUTBOUND_KIND_BUYER_REFUND = 5
+const OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND = 6
+const OUTBOUND_KIND_EXECUTION_RESERVE_REFUND = 7
+
+const OUTBOUND_STATUS_PENDING = 0
+const OUTBOUND_STATUS_BOUNCED = 1
+
 const SELLER_DEPOSIT_WINDOW_SECONDS = 1800
 const BUYER_FUNDING_WINDOW_SECONDS = 3600
 const BUYER_REVIEW_WINDOW_SECONDS = 86400
@@ -69,6 +80,10 @@ enum Errors {
     Deadline = 710
     NothingToRecover = 711
     UnexpectedMessage = 712
+    OutboundActionMissing = 713
+    OutboundActionCapacity = 714
+    UnauthorizedRetry = 715
+    RetryNotReady = 716
 }
 
 struct DealRoles {
@@ -123,6 +138,37 @@ struct DealRecovery {
     unexpectedItemAddress: address?
 }
 
+struct OutboundActionAddressPair {
+    first: address
+    second: address
+}
+
+struct OutboundActionAddresses {
+    itemAndDestination: Cell<OutboundActionAddressPair>
+    recipientAndResponse: Cell<OutboundActionAddressPair>
+}
+
+struct OutboundAction {
+    kind: uint8
+    queryId: uint64
+    dealSalt: uint256
+    attemptId: uint64
+    amountNanotons: coins
+    messageValueNanotons: coins
+    expectedState: uint8
+    expectedPendingAction: uint8
+    retryWindowSeconds: uint32
+    messageBodyHash: uint256
+    status: uint8
+    bouncePhase: uint8
+    exitCode: int32
+    addresses: Cell<OutboundActionAddresses>
+}
+struct OutboundActionSet {
+    first: Cell<OutboundAction>?
+    second: Cell<OutboundAction>?
+}
+
 struct DealProgress {
     state: uint8
     deadlineUnix: uint64
@@ -138,6 +184,7 @@ struct DealProgress {
     disputeAttemptId: uint64
     evidence: Cell<DealEvidence>
     recovery: Cell<DealRecovery>
+    outboundActions: Cell<OutboundActionSet>
 }
 
 struct EscrowStorage {
@@ -193,6 +240,11 @@ struct (0x56450007) TimeoutDeal {
 }
 
 struct (0x56450008) RecoverUnexpectedNft {
+    queryId: uint64
+    dealSalt: uint256
+}
+
+struct (0x56450009) RetryFailedOutboundAction {
     queryId: uint64
     dealSalt: uint256
 }
@@ -305,6 +357,7 @@ type AllowedMessage =
     | ResolveDispute
     | TimeoutDeal
     | RecoverUnexpectedNft
+    | RetryFailedOutboundAction
     | NotificationForNewOwner
 
 fun EscrowStorage.load(): EscrowStorage {
