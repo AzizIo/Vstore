@@ -207,6 +207,25 @@ def assert_deal_terms_immutable(target: EscrowDeal) -> None:
         history = state.attrs[name].history
         if history.has_changes() and any(value is not None for value in history.deleted):
             changed.append(name)
+
+    seq_history = state.attrs["getter_snapshot_masterchain_seqno"].history
+    if seq_history.has_changes() and seq_history.deleted:
+        previous_seqno = seq_history.deleted[0]
+        new_seqno = target.getter_snapshot_masterchain_seqno
+        if previous_seqno is not None and new_seqno is not None:
+            if new_seqno < previous_seqno:
+                changed.append("getter_snapshot_masterchain_seqno_regressed")
+            elif new_seqno == previous_seqno:
+                for name in (
+                    "getter_snapshot_json",
+                    "getter_snapshot_sha256",
+                    "getter_snapshot_block_hash",
+                    "getter_snapshot_provider",
+                    "getter_snapshot_observed_at",
+                ):
+                    if state.attrs[name].history.has_changes():
+                        changed.append(f"{name}_changed_at_same_seqno")
+
     if changed:
         fields = ", ".join(sorted(set(changed)))
         raise ValueError(f"Immutable DealEscrow terms cannot be changed: {fields}")
