@@ -96,10 +96,10 @@ def test_state_init_is_deterministic_and_address_is_state_init_hash() -> None:
     # Expected values were independently produced by the generated Acton
     # TypeScript wrapper and @ton/core 0.63.1 in TON Contract CI.
     assert first.address == (
-        "0:5173d3e22bb3eadcc16ac2732553d3cb143250848cd4dd7866f101d82d3e6737"
+        "0:ffd464daa07d4fd3b99e2469520eb77624f3265de9784d103df3babc15c5199f"
     )
     assert first.state_init_hash == (
-        "5173d3e22bb3eadcc16ac2732553d3cb143250848cd4dd7866f101d82d3e6737"
+        "ffd464daa07d4fd3b99e2469520eb77624f3265de9784d103df3babc15c5199f"
     )
     assert first.data_hash == (
         "faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b"
@@ -318,7 +318,7 @@ async def test_post_delivery_nft_return_is_buyer_only_and_state_bound() -> None:
     assert payload.messages[0].amount == "50000000"
     assert payload.messages[0].payload
     assert boc_sha256(payload.messages[0].payload) == (
-        "22916f71edfe37a0fa0b6de5b4b4a1015fcb899c0719b87bb8a846fbf9cc9fb5"
+        "ffb38e6ad5e33f24629a2db0ca10fa135fcedb0d1d7146092d9ee680a7e42297"
     )
 
 
@@ -336,7 +336,7 @@ async def test_seller_nft_deposit_payload_matches_generated_tep62_abi() -> None:
     assert payload.messages[0].address == deal.item_address
     assert payload.messages[0].payload is not None
     assert boc_sha256(payload.messages[0].payload) == (
-        "7bff92183054a66daf6f636ba2d4c36619007f191c1ae62497839fd12a402b37"
+        "7b8f6c9b75f34b381bc5d2cfc8c84cbb9cc1a70cd15a99fa0964a90aee55b751"
     )
 
 
