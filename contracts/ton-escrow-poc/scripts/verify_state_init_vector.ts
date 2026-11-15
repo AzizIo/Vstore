@@ -76,16 +76,10 @@ const stateInit = beginCell()
   .storeBit(1).storeRef(deployed.init.data) // data = Some(^Cell)
   .storeBit(0) // library = empty HashmapE
   .endCell();
-console.log("STATE_INIT_CANDIDATE " + JSON.stringify({
-  address: deployed.address.toRawString(),
-  state_init_hash: stateInit.hash().toString("hex"),
-  data_hash: deployed.init.data.hash().toString("hex"),
-  code_hash: deployed.init.code.hash().toString("hex").toUpperCase(),
-}));
 const EXPECTED_CODE_HASH =
   "61348A9F67A31753622AB3E9E204AF67FBC1ED8736B05510DD9DF93E0F49366B";
 const EXPECTED_STATE_INIT_HASH =
-  "024ec492b97607ed98a2c3f93a36533053d5a8cb4bb4c31c951c820e8aefdaf9";
+  "e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6";
 const EXPECTED_RAW_ADDRESS =
   "0:024ec492b97607ed98a2c3f93a36533053d5a8cb4bb4c31c951c820e8aefdaf9";
 const EXPECTED_DATA_HASH =
@@ -98,7 +92,7 @@ if (deployed.init.code.hash().toString("hex").toUpperCase() !== EXPECTED_CODE_HA
   throw new Error("Generated Acton CodeCell does not match pinned manifest");
 }
 if (stateInit.hash().toString("hex") !== EXPECTED_STATE_INIT_HASH) {
-  throw new Error("Generated fixed StateInit hash differs from frozen golden vector: " + JSON.stringify({address: deployed.address.toRawString(), state_init_hash: stateInit.hash().toString("hex"), data_hash: deployed.init.data.hash().toString("hex"), code_hash: deployed.init.code.hash().toString("hex").toUpperCase()}));
+  throw new Error("Generated fixed StateInit hash differs from frozen golden vector");
 }
 if (deployed.address.toRawString() !== EXPECTED_RAW_ADDRESS) {
   throw new Error("Generated fixed DealEscrow address differs from frozen golden vector");

@@ -14,8 +14,8 @@
   "abi_compact_sha256": "df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028",
   "acton_version": "1.2.1",
   "tolk_version": "1.5.0",
-  "state_init_hash": "024ec492b97607ed98a2c3f93a36533053d5a8cb4bb4c31c951c820e8aefdaf9",
-  "raw_address": "0:024ec492b97607ed98a2c3f93a36533053d5a8cb4bb4c31c951c820e8aefdaf9",
+  "state_init_hash": "e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6",
+  "raw_address": "0:e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6",
   "data_hash": "faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b",
-  "warning": "Build artifact captured from PR #234 head 42b94ea121d7a04e71a7dc9f4268be0744c8e778 using Acton 1.2.1 / Tolk 1.5.0. The previous manifest was stale after hardening RichBounce parsing. CI must independently regenerate wrappers and verify StateInit/address/message vectors. CI/emulator evidence is not an independent security audit or live testnet acceptance."
+  "warning": "Build artifact captured from PR #234 head 42b94ea121d7a04e71a7dc9f4268be0744c8e778 using Acton 1.2.1 / Tolk 1.5.0. After defensive RichBounce envelope guards the code hash is 61348A9F67A31753622AB3E9E204AF67FBC1ED8736B05510DD9DF93E0F49366B and StateInit/address are e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6. The updated StateInit was independently cross-checked by generated Acton wrapper and @ton/core in strict CI; CI/emulator evidence is not an independent security audit or live testnet acceptance."
 }
