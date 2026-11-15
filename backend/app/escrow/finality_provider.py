@@ -997,6 +997,162 @@ class PytoniqTONTestnetEscrowProvider:
                 "Oracle attestation body failed ABI validation"
             ) from exc
 
+    @staticmethod
+    async def _verify_original_outbound_message(
+        client: Any,
+        *,
+        contract_address: str,
+        masterchain_id: Any,
+        action: dict[str, Any],
+        bounce_details: dict[str, object],
+    ) -> tuple[dict[str, object] | None, str | None]:
+        """Prove the original outbound message in the contract account's source transaction.
+
+        The inbound bounce block proof and the contract's proof-read action
+        descriptor are necessary but not sufficient. This additionally walks the
+        contract account transaction hash chain at the same masterchain height,
+        verifies the exact source transaction's block inclusion, and checks that
+        its out_msgs contains the exact original RichBounce body and message info.
+        """
+        from pytoniq_core import Address
+
+        try:
+            target_lt = int(bounce_details["bounce_original_created_lt"])
+            target_created_at = int(bounce_details["bounce_original_created_at"])
+            target_body_hash = str(bounce_details["bounce_original_body_hash"]).lower()
+            target_value = int(bounce_details["bounce_original_value_nanotons"])
+            contract = Address(contract_address)
+            expected_destination = _canonical_address(
+                str(action["destination_address"])
+            )
+            if (
+                target_lt <= 0
+                or target_created_at <= 0
+                or len(target_body_hash) != 64
+                or expected_destination is None
+            ):
+                return None, "original_outbound_identity_malformed"
+
+            _account, shard_account = await client.raw_get_account_state(
+                contract, block=masterchain_id
+            )
+            if shard_account is None:
+                return None, "original_outbound_contract_account_missing"
+            from_lt = int(shard_account.last_trans_lt)
+            from_hash = shard_account.last_trans_hash
+            if from_lt < target_lt or not isinstance(from_hash, bytes) or len(from_hash) != 32:
+                return None, "original_outbound_transaction_not_in_contract_history"
+
+            located_transaction: Any | None = None
+            located_block: Any | None = None
+            lookback_complete = False
+            for _ in range(64):
+                transactions, block_ids = await client.raw_get_transactions(
+                    contract, 16, from_lt, from_hash
+                )
+                if len(transactions) != len(block_ids):
+                    raise EscrowProviderUnavailable(
+                        "LiteServer returned a partial contract transaction/block page"
+                    )
+                if not transactions:
+                    # An empty page before reaching an older LT is not proof
+                    # that the outbound transaction never existed. Treat it as
+                    # an incomplete LiteServer history read and retry the event.
+                    raise EscrowProviderUnavailable(
+                        "LiteServer returned an empty account history page before the target LT"
+                    )
+                for transaction, block_id in zip(transactions, block_ids, strict=True):
+                    transaction_lt = int(getattr(transaction, "lt", 0))
+                    if transaction_lt == target_lt:
+                        located_transaction = transaction
+                        located_block = block_id
+                        break
+                    if transaction_lt < target_lt:
+                        lookback_complete = True
+                        break
+                if located_transaction is not None or lookback_complete:
+                    break
+                previous = transactions[-1]
+                from_lt = int(getattr(previous, "prev_trans_lt", 0))
+                from_hash = getattr(previous, "prev_trans_hash", None)
+                if from_lt <= 0 or not isinstance(from_hash, bytes) or len(from_hash) != 32:
+                    lookback_complete = True
+                    break
+            if located_transaction is None:
+                if not lookback_complete:
+                    raise EscrowProviderUnavailable(
+                        "Original outbound transaction is older than the bounded LiteServer lookback"
+                    )
+                return None, "original_outbound_transaction_not_in_contract_history"
+
+            account_hash = _hash_part(contract_address)
+            located_hash = _cell_hash(located_transaction.cell)
+            if (
+                getattr(located_transaction, "account_addr_hex", "") != account_hash
+                or int(getattr(located_transaction, "lt", 0)) != target_lt
+            ):
+                return None, "original_outbound_transaction_account_or_lt_mismatch"
+
+            # A transaction hash chain is anchored to the account state proof;
+            # verify the same transaction independently in its proven shard block.
+            block_transactions = await client.raw_get_block_transactions_ext(
+                located_block, count=1024
+            )
+            proven_transactions = [
+                transaction
+                for transaction in block_transactions
+                if getattr(transaction, "account_addr_hex", "") == account_hash
+                and int(getattr(transaction, "lt", -1)) == target_lt
+                and _cell_hash(transaction.cell) == located_hash
+            ]
+            if len(proven_transactions) != 1:
+                return None, "original_outbound_transaction_block_inclusion_mismatch"
+            transaction = proven_transactions[0]
+
+            body_matches = [
+                message for message in getattr(transaction, "out_msgs", [])
+                if getattr(message, "is_internal", False)
+                and _cell_hash(message.body) == target_body_hash
+            ]
+            if len(body_matches) != 1:
+                return None, "original_outbound_message_not_uniquely_in_source_transaction"
+
+            message = body_matches[0]
+            info = message.info
+            source = (
+                info.src.to_str(is_user_friendly=False)
+                if getattr(info, "src", None) is not None else None
+            )
+            destination = (
+                info.dest.to_str(is_user_friendly=False)
+                if getattr(info, "dest", None) is not None else None
+            )
+            if (
+                _canonical_address(source or "") != _canonical_address(contract_address)
+                or _canonical_address(destination or "") != expected_destination
+                or int(getattr(info, "created_lt", 0)) != target_lt
+                or int(getattr(info, "created_at", 0)) != target_created_at
+                or int(getattr(transaction, "now", 0)) != target_created_at
+                or int(getattr(info, "value_coins", 0)) != target_value
+                or not bool(getattr(info, "bounce", False))
+                or bool(getattr(info, "bounced", True))
+            ):
+                return None, "original_outbound_message_info_mismatch"
+
+            message_hash = _cell_hash(message.serialize())
+            return {
+                "outbound_transaction_hash": located_hash,
+                "outbound_block_hash": located_block.root_hash.hex(),
+                "outbound_block_seqno": int(located_block.seqno),
+                "outbound_message_hash": message_hash,
+            }, None
+        except EscrowProviderUnavailable:
+            raise
+        except Exception as exc:
+            raise EscrowProviderUnavailable(
+                "Could not verify the original outbound transaction and message proof"
+            ) from exc
+
     def _verified_bounce(
         self,
         event: NormalizedChainEvent,
@@ -1485,6 +1641,47 @@ class PytoniqTONTestnetEscrowProvider:
             ) = self._verified_event(
                 event, tx, deal, getter, state_name, oracle, source, destination, amount
             )
+            if event.phase == "bounce" and event_type is EscrowChainEventType.OUTBOUND_ACTION_BOUNCED:
+                original_body_hash = str(
+                    verified_details.get("bounce_original_body_hash") or ""
+                ).lower()
+                outbound_actions = getter.get("outbound_actions", [])
+                matching_actions = [
+                    action for action in outbound_actions
+                    if isinstance(action, dict)
+                    and action.get("message_body_hash") == original_body_hash
+                ] if isinstance(outbound_actions, list) else []
+                if len(matching_actions) != 1:
+                    outbound_metadata = None
+                    outbound_reason = "proof_read_outbound_action_descriptor_not_unique"
+                else:
+                    outbound_metadata, outbound_reason = (
+                        await self._verify_original_outbound_message(
+                            client,
+                            contract_address=deal.contract_address,
+                            masterchain_id=master_id,
+                            action=matching_actions[0],
+                            bounce_details=verified_details,
+                        )
+                    )
+                if outbound_metadata is None:
+                    # The bounce itself and its contract descriptor were proved,
+                    # but the original source transaction/message was not. Retain
+                    # this as unmatched forensic evidence; never advance a deal.
+                    event_type = EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED
+                    verified_details["bounce_match_reason"] = (
+                        outbound_reason or "original_outbound_message_not_proven"
+                    )
+                    verified_details["outbound_transaction_hash"] = None
+                    verified_details["outbound_block_hash"] = None
+                    verified_details["outbound_block_seqno"] = None
+                    verified_details["outbound_message_hash"] = None
+                    verified_query_id = None
+                    verified_amount = None
+                    accepted = False
+                else:
+                    verified_details.update(outbound_metadata)
+
             # The proof's local trace identity is derived only from the actually
             # included transaction and message; the V3 trace_id is not trusted.
             trace_id = hashlib.sha256(
@@ -1555,6 +1752,10 @@ class PytoniqTONTestnetEscrowProvider:
                 outbound_action_status=verified_details.get("outbound_action_status"),
                 outbound_action_expected_state=verified_details.get("outbound_action_expected_state"),
                 bounce_match_reason=verified_details.get("bounce_match_reason"),
+                outbound_transaction_hash=verified_details.get("outbound_transaction_hash"),
+                outbound_block_hash=verified_details.get("outbound_block_hash"),
+                outbound_block_seqno=verified_details.get("outbound_block_seqno"),
+                outbound_message_hash=verified_details.get("outbound_message_hash"),
             )
         except (EscrowProviderInvalidEvidence, EscrowProviderUnavailable):
             raise

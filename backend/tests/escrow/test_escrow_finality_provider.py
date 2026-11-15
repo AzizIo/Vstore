@@ -281,3 +281,195 @@ async def test_scan_persists_bounce_candidate_without_untrusted_attempt_or_query
     from dataclasses import replace
     assert replace(event, attempt_id="42", query_id="42").event_key == event.event_key
     await provider.close()
+
+
+
+class _FakeOriginalOutboundMessage:
+    def __init__(self, body: object, info: object) -> None:
+        self.is_internal = True
+        self.body = body
+        self.info = info
+
+    def serialize(self):
+        from pytoniq_core import begin_cell
+
+        return (
+            begin_cell()
+            .store_address(self.info.src)
+            .store_address(self.info.dest)
+            .store_uint(self.info.created_lt, 64)
+            .store_uint(self.info.created_at, 32)
+            .store_coins(self.info.value_coins)
+            .store_ref(self.body)
+            .end_cell()
+        )
+
+
+class _FakeOriginalOutboundLiteClient:
+    def __init__(self, transaction: object, block_id: object) -> None:
+        self.transaction = transaction
+        self.block_id = block_id
+        self.account_state_block = None
+        self.block_proof_requested = False
+
+    async def raw_get_account_state(self, _address: object, *, block: object):
+        self.account_state_block = block
+        return object(), SimpleNamespace(
+            last_trans_lt=500,
+            last_trans_hash=b"h" * 32,
+        )
+
+    async def raw_get_transactions(
+        self, _address: object, count: int, from_lt: int, from_hash: bytes
+    ):
+        assert count == 16
+        assert from_lt == 500
+        assert from_hash == b"h" * 32
+        return [self.transaction], [self.block_id]
+
+    async def raw_get_block_transactions_ext(self, block_id: object, *, count: int):
+        assert block_id is self.block_id
+        assert count == 1024
+        self.block_proof_requested = True
+        return [self.transaction]
+
+
+def _original_outbound_fixture(*, value: int = 90_000_000):
+    from pytoniq_core import Address, begin_cell
+
+    contract_address = "0:" + "aa" * 32
+    destination_address = "0:" + "bb" * 32
+    created_lt = 400
+    created_at = 1_700_000_001
+    body = (
+        begin_cell()
+        .store_uint(0x5FCC3D14, 32)
+        .store_uint(42, 64)
+        .store_address(Address(destination_address))
+        .store_address(Address(destination_address))
+        .store_bit(0)
+        .store_coins(10_000_000)
+        .store_bit(0)
+        .store_uint(0x56454E46, 32)
+        .store_uint(int("cc" * 32, 16), 256)
+        .end_cell()
+    )
+    info = SimpleNamespace(
+        src=Address(contract_address),
+        dest=Address(destination_address),
+        created_lt=created_lt,
+        created_at=created_at,
+        value_coins=value,
+        bounce=True,
+        bounced=False,
+    )
+    message = _FakeOriginalOutboundMessage(body, info)
+    transaction = SimpleNamespace(
+        account_addr_hex=Address(contract_address).hash_part.hex(),
+        lt=created_lt,
+        now=created_at,
+        prev_trans_lt=300,
+        prev_trans_hash=b"p" * 32,
+        cell=begin_cell().store_uint(0x77, 8).end_cell(),
+        out_msgs=[message],
+    )
+    block_id = SimpleNamespace(root_hash=b"r" * 32, seqno=777)
+    client = _FakeOriginalOutboundLiteClient(transaction, block_id)
+    masterchain_id = object()
+    action = {
+        "destination_address": destination_address,
+        "message_body_hash": body.get_hash(0).hex(),
+    }
+    bounce_details = {
+        "bounce_original_created_lt": created_lt,
+        "bounce_original_created_at": created_at,
+        "bounce_original_body_hash": body.get_hash(0).hex(),
+        "bounce_original_value_nanotons": value,
+    }
+    return client, masterchain_id, contract_address, action, bounce_details, transaction, block_id
+
+
+@pytest.mark.asyncio
+async def test_original_outbound_message_is_bound_to_account_history_and_proved_block() -> None:
+    (
+        client,
+        masterchain_id,
+        contract_address,
+        action,
+        bounce_details,
+        transaction,
+        block_id,
+    ) = _original_outbound_fixture()
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(),
+        http_client=_FakeHttp({"transactions": []}),
+        lite_client_factory=lambda: object(),
+    )
+
+    proof, reason = await provider._verify_original_outbound_message(
+        client,
+        contract_address=contract_address,
+        masterchain_id=masterchain_id,
+        action=action,
+        bounce_details=bounce_details,
+    )
+
+    assert reason is None
+    assert proof is not None
+    assert proof["outbound_transaction_hash"] == transaction.cell.get_hash(0).hex()
+    assert proof["outbound_block_hash"] == block_id.root_hash.hex()
+    assert proof["outbound_block_seqno"] == block_id.seqno
+    assert proof["outbound_message_hash"] == transaction.out_msgs[0].serialize().get_hash(0).hex()
+    assert client.account_state_block is masterchain_id
+    assert client.block_proof_requested is True
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_original_outbound_message_rejects_value_or_message_mismatch() -> None:
+    (
+        client,
+        masterchain_id,
+        contract_address,
+        action,
+        bounce_details,
+        _transaction,
+        _block_id,
+    ) = _original_outbound_fixture(value=89_000_000)
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(),
+        http_client=_FakeHttp({"transactions": []}),
+        lite_client_factory=lambda: object(),
+    )
+
+    proof, reason = await provider._verify_original_outbound_message(
+        client,
+        contract_address=contract_address,
+        masterchain_id=masterchain_id,
+        action=action,
+        bounce_details=bounce_details,
+    )
+
+    assert proof is None
+    assert reason == "original_outbound_message_info_mismatch"
+
+    (
+        client,
+        masterchain_id,
+        contract_address,
+        action,
+        bounce_details,
+        _transaction,
+        _block_id,
+    ) = _original_outbound_fixture()
+    bounce_details["bounce_original_body_hash"] = "ff" * 32
+    proof, reason = await provider._verify_original_outbound_message(
+        client,
+        contract_address=contract_address,
+        masterchain_id=masterchain_id,
+        action=action,
+        bounce_details=bounce_details,
+    )
+    assert proof is None
+    assert reason == "original_outbound_message_not_uniquely_in_source_transaction"
+    await provider.close()

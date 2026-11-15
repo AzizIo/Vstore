@@ -195,8 +195,6 @@ def match_rich_bounce_to_action(
     )
     if int(action["amount_nanotons"]) != expected_amount:
         return None, "outbound_action_amount_differs_from_deal_snapshot"
-    if kind != 7 and int(action["message_value_nanotons"]) != expected_amount:
-        return None, "outbound_message_value_differs_from_deal_snapshot"
     if action.get("status") != 1:
         return None, "outbound_action_not_marked_bounced_by_contract"
     if action.get("deal_salt") != deal_salt:

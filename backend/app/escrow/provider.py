@@ -82,6 +82,10 @@ class NormalizedChainEvent:
     outbound_action_status: int | None = None
     outbound_action_expected_state: int | None = None
     bounce_match_reason: str | None = None
+    outbound_transaction_hash: str | None = None
+    outbound_block_hash: str | None = None
+    outbound_block_seqno: int | None = None
+    outbound_message_hash: str | None = None
 
     @property
     def event_key(self) -> str:
@@ -156,6 +160,10 @@ class FinalityVerification:
     outbound_action_status: int | None = None
     outbound_action_expected_state: int | None = None
     bounce_match_reason: str | None = None
+    outbound_transaction_hash: str | None = None
+    outbound_block_hash: str | None = None
+    outbound_block_seqno: int | None = None
+    outbound_message_hash: str | None = None
 
     def matches(self, event: NormalizedChainEvent) -> bool:
         def is_sha256(value: str) -> bool:
@@ -221,6 +229,14 @@ class FinalityVerification:
                             and self.outbound_action_kind in {1, 2, 3, 4, 5, 6, 7}
                             and self.outbound_action_status == 1
                             and self.outbound_action_expected_state is not None
+                            and isinstance(self.outbound_transaction_hash, str)
+                            and is_sha256(self.outbound_transaction_hash)
+                            and isinstance(self.outbound_block_hash, str)
+                            and is_sha256(self.outbound_block_hash)
+                            and isinstance(self.outbound_block_seqno, int)
+                            and self.outbound_block_seqno > 0
+                            and isinstance(self.outbound_message_hash, str)
+                            and is_sha256(self.outbound_message_hash)
                         )
                     )
                 )
@@ -228,6 +244,22 @@ class FinalityVerification:
             and (
                 self.verified_event_type is None
                 or isinstance(self.verified_event_type, EscrowChainEventType)
+            )
+            and (
+                event.outbound_transaction_hash is None
+                or event.outbound_transaction_hash == self.outbound_transaction_hash
+            )
+            and (
+                event.outbound_block_hash is None
+                or event.outbound_block_hash == self.outbound_block_hash
+            )
+            and (
+                event.outbound_block_seqno is None
+                or event.outbound_block_seqno == self.outbound_block_seqno
+            )
+            and (
+                event.outbound_message_hash is None
+                or event.outbound_message_hash == self.outbound_message_hash
             )
             and (
                 self.verified_query_id is None

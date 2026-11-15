@@ -190,6 +190,10 @@ async def _persist_event(
         "query_id",
         "operation_id",
         "deal_salt",
+        "outbound_transaction_hash",
+        "outbound_block_hash",
+        "outbound_block_seqno",
+        "outbound_message_hash",
     )
     if (
         not _compatible_event_type(old, event)
@@ -398,6 +402,10 @@ async def _apply_one_event(
             "query_id",
             "operation_id",
             "deal_salt",
+            "outbound_transaction_hash",
+            "outbound_block_hash",
+            "outbound_block_seqno",
+            "outbound_message_hash",
         )
         conflict = (
             not _compatible_event_type(old, event)
@@ -924,6 +932,10 @@ async def run_observer_pass(
                     outbound_action_status=proof.outbound_action_status,
                     outbound_action_expected_state=proof.outbound_action_expected_state,
                     bounce_match_reason=proof.bounce_match_reason,
+                    outbound_transaction_hash=proof.outbound_transaction_hash,
+                    outbound_block_hash=proof.outbound_block_hash,
+                    outbound_block_seqno=proof.outbound_block_seqno,
+                    outbound_message_hash=proof.outbound_message_hash,
                     source_address=(
                         proof.source_address
                         if proof.verified_event_type is not None
