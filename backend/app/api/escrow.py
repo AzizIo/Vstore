@@ -762,9 +762,20 @@ async def create_listing_intent(
             raise HTTPException(status_code=409,
                 detail="Stored NFT collection address is invalid") from exc
         asset_collection_id = asset.collection_id
+        asset_snapshot = {
+            "id": asset.id,
+            "owner_id": asset.owner_id,
+            "network": asset.network,
+            "asset_type": asset.asset_type,
+            "verification_status": asset.verification_status,
+            "external_id": asset.external_id,
+            "item_address": item_address,
+            "collection_id": asset.collection_id,
+            "collection_address": collection_address,
+        }
         seller_wallet_id = wallet.id
         expected_seller_address = seller_address
-        # Never hold asset/wallet row locks while waiting on the trusted chain provider.
+        # No row locks are held during proof-provider I/O.
         await session.rollback()
         identity_snapshot = await _verify_escrow_nft_identity(
             identity_provider,
@@ -773,23 +784,69 @@ async def create_listing_intent(
             expected_owner_address=expected_seller_address,
         )
 
-        # Re-lock and verify the database inputs are unchanged from the proof request.
+        # Preserve the marketplace lock order used by order reservation and
+        # publication: Listing -> seller Wallet -> NFTAsset. Provider I/O above
+        # happened without locks; now lock existing candidate listings in stable
+        # id order before locking the seller wallet and asset.
+        candidate_listing_ids = list(
+            (
+                await session.scalars(
+                    select(Listing.id)
+                    .where(
+                        Listing.asset_id == asset_snapshot["id"],
+                        Listing.status.in_((ListingStatus.ACTIVE, ListingStatus.DRAFT)),
+                    )
+                    .order_by(Listing.id)
+                )
+            ).all()
+        )
+        locked_listings: list[Listing] = []
+        if candidate_listing_ids:
+            locked_listings = list(
+                (
+                    await session.scalars(
+                        select(Listing)
+                        .where(Listing.id.in_(candidate_listing_ids))
+                        .order_by(Listing.id)
+                        .with_for_update()
+                        .execution_options(populate_existing=True)
+                    )
+                ).all()
+            )
+            if {row.id for row in locked_listings} != set(candidate_listing_ids):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "escrow_nft_listing_changed_during_proof"},
+                )
+
+        wallet, current_seller_address = await _verified_wallet(
+            session,
+            user_id=actor_id,
+            wallet_id=seller_wallet_id,
+            lock=True,
+        )
+        if wallet.id != seller_wallet_id or current_seller_address != expected_seller_address:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_seller_wallet_changed_during_proof"},
+            )
+
         asset = await session.scalar(
             select(NFTAsset)
-            .where(
-                NFTAsset.id == payload.asset_id,
-                NFTAsset.owner_id == actor_id,
-                NFTAsset.network == "testnet",
-                NFTAsset.asset_type == AssetType.TON_NFT,
-                NFTAsset.verification_status == AssetVerificationStatus.VERIFIED,
-            )
+            .where(NFTAsset.id == asset_snapshot["id"])
             .with_for_update()
             .execution_options(populate_existing=True)
         )
         if (
             asset is None
+            or asset.owner_id != actor_id
+            or asset.owner_id != asset_snapshot["owner_id"]
+            or asset.network != asset_snapshot["network"]
+            or asset.asset_type != asset_snapshot["asset_type"]
+            or asset.verification_status != asset_snapshot["verification_status"]
+            or asset.external_id != asset_snapshot["external_id"]
+            or asset.collection_id != asset_snapshot["collection_id"]
             or asset.item_address is None
-            or asset.collection_id != asset_collection_id
         ):
             raise HTTPException(
                 status_code=409,
@@ -802,22 +859,18 @@ async def create_listing_intent(
                 status_code=409,
                 detail={"code": "escrow_nft_asset_changed_during_proof"},
             ) from exc
-        if current_item_address != item_address:
+        if current_item_address != asset_snapshot["item_address"]:
             raise HTTPException(
                 status_code=409,
                 detail={"code": "escrow_nft_asset_changed_during_proof"},
             )
-        wallet, current_seller_address = await _verified_wallet(
-            session,
-            user_id=actor_id,
-            wallet_id=payload.seller_wallet_id,
+
+        collection = await session.scalar(
+            select(NFTCollection)
+            .where(NFTCollection.id == asset_snapshot["collection_id"])
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
-        if wallet.id != seller_wallet_id or current_seller_address != expected_seller_address:
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "escrow_seller_wallet_changed_during_proof"},
-            )
-        collection = await session.get(NFTCollection, asset.collection_id)
         if collection is None or collection.network != "testnet":
             raise HTTPException(
                 status_code=409,
@@ -830,11 +883,124 @@ async def create_listing_intent(
                 status_code=409,
                 detail={"code": "escrow_nft_collection_changed_during_proof"},
             ) from exc
-        if current_collection_address != collection_address:
+        if current_collection_address != asset_snapshot["collection_address"]:
             raise HTTPException(
                 status_code=409,
                 detail={"code": "escrow_nft_collection_changed_during_proof"},
             )
+
+        # A draft or active listing may have appeared while provider I/O was in
+        # flight. Never acquire a newly-discovered Listing lock after the asset
+        # lock (that would invert the shared order); retry instead.
+        current_candidate_listing_ids = list(
+            (
+                await session.scalars(
+                    select(Listing.id)
+                    .where(
+                        Listing.asset_id == asset_snapshot["id"],
+                        Listing.status.in_((ListingStatus.ACTIVE, ListingStatus.DRAFT)),
+                    )
+                    .order_by(Listing.id)
+                )
+            ).all()
+        )
+        if current_candidate_listing_ids != candidate_listing_ids:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_listing_changed_during_proof"},
+            )
+
+        # A second open intent for a different draft of the same NFT is also
+        # disallowed; idempotent replay was handled before leaving the first
+        # transaction. Intent rows are locked last, after shared marketplace rows.
+        if candidate_listing_ids:
+            existing_open_intents = list(
+                (
+                    await session.scalars(
+                        select(EscrowListingIntent)
+                        .where(
+                            EscrowListingIntent.marketplace_listing_id.in_(
+                                candidate_listing_ids
+                            ),
+                            EscrowListingIntent.status.in_(
+                                ("intent_only", "active", "reserved", "manual_review")
+                            ),
+                        )
+                        .order_by(EscrowListingIntent.id)
+                        .with_for_update()
+                        .execution_options(populate_existing=True)
+                    )
+                ).all()
+            )
+            if existing_open_intents:
+                raise HTTPException(
+                    status_code=409,
+                    detail="An open escrow listing intent already exists for this NFT",
+                )
+
+        listing = next(
+            (row for row in locked_listings if row.status is ListingStatus.ACTIVE),
+            None,
+        )
+        if listing is None:
+            listing = next(
+                (row for row in locked_listings if row.status is ListingStatus.DRAFT),
+                None,
+            )
+        if listing is not None and listing.seller_id != actor_id:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_listing_owner_mismatch"},
+            )
+        if listing is None:
+            conflict = await session.scalar(
+                select(Listing.id).where(
+                    Listing.asset_id == asset.id,
+                    Listing.status.in_(
+                        (ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW)
+                    ),
+                )
+            )
+            if conflict is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="NFT already has a reserved or review-pending listing",
+                )
+
+        price_nano = Decimal(payload.price_nano)
+        price_amount = price_nano / _NANOTON
+        if price_amount <= 0 or price_amount * _NANOTON != price_nano:
+            raise HTTPException(
+                status_code=422,
+                detail="price_nano must be a positive integer nanotons",
+            )
+
+        if listing is not None and listing.status is ListingStatus.ACTIVE:
+            if (
+                listing.price_currency is not PriceCurrency.TON
+                or listing.price_amount != price_amount
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Active listing price/currency must match the escrow intent",
+                )
+        elif listing is not None:
+            listing.price_amount = price_amount
+            listing.price_currency = PriceCurrency.TON
+            if not listing.title:
+                listing.title = asset.name
+        else:
+            listing = Listing(
+                id=uuid4(),
+                asset_id=asset.id,
+                seller_id=actor_id,
+                status=ListingStatus.DRAFT,
+                price_amount=price_amount,
+                price_currency=PriceCurrency.TON,
+                title=asset.name,
+            )
+            session.add(listing)
+            await session.flush()
 
         price_nano = Decimal(payload.price_nano)
         price_amount = price_nano / _NANOTON
