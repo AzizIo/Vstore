@@ -1,6 +1,6 @@
 # Issue #225 — current contract security and release-gate assessment
 
-**Assessment baseline:** `main` at `2ecf38943216a773dc27fb1841f11edc3ee67b9f`  
+**Assessment baseline:** `main` at `a08b3b7632e1e1d8c38ac7a896b519a595f32df8`  
 **Contract source:** `contracts/ton-escrow-poc/contracts/DealEscrow.tolk`  
 **Test source:** `contracts/ton-escrow-poc/tests/DealEscrow.test.tolk`  
 **Toolchain:** Acton 1.2.1 / Tolk 1.5.0  
@@ -16,10 +16,11 @@ The source currently contains the action-aware contract changes merged through P
 - Oracle/resolver positive fixtures use deterministic test-only Ed25519 signatures; source tests no longer use checksig bypass for positive end-to-end paths.
 - Timeout-to-manual-review can be reconciled by a valid signed oracle attestation only for an exact still-PENDING action. A BOUNCED action cannot use late success and must be retried.
 - Emulator tests cover late NFT delivery and seller payout after timeouts, late NFT return and buyer refund after timeouts, real NFT transfer bounce, seller payout bounce, seller deployment allowance bounce, carry-all reserve refund bounce/retry, stale retry rejection and terminal state protection.
+- **New internal finding on current main:** the authorized retry path for `OUTBOUND_KIND_EXECUTION_RESERVE_REFUND` reuses `SEND_MODE_CARRY_ALL_BALANCE` but does not reapply `reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, ...)`. Since reserve actions apply to the current transaction, a successful retry may consume the terminal storage floor. Remediation and a balance regression assertion are isolated in Draft PR #242; until its frozen artifact is regenerated and exact-head CI passes, treat this as an unresolved financial invariant.
 
 ## Exact-head build evidence
 
-Post-merge Contract CI on main commit `2ecf38943216a773dc27fb1841f11edc3ee67b9f` completed successfully (workflow run `43762485072`). All 16 job steps completed, including:
+Latest contract-specific CI completed successfully on contract commit `2ecf38943216a773dc27fb1841f11edc3ee67b9f` (workflow run `43762485072`). Current `main` is `a08b3b7632e1e1d8c38ac7a896b519a595f32df8`, one commit ahead. The only later commit changes `.env.example`, `backend/app/main.py`, `backend/tests/test_escrow_runtime_gates.py`, and `docker-compose.preview.yml`; it does not change contract source, tests, ABI, frozen artifacts, or the contract workflow. Therefore the cited green contract run still verifies the unchanged contract tree on current `main`; it is not a workflow run on the later preview-only commit. All contract workflow tasks completed successfully, including:
 
 1. Frozen artifact verifier unit tests and ABI snapshot verification.
 2. Acton build and generated code/BOC comparison against the frozen manifest.
@@ -39,7 +40,7 @@ No independent reviewer report is attached. Internal source inspection and emula
 No live deployment or transaction/trace evidence was presented for this assessment. Acceptance still requires explicit owner approval, disposable wallets and valueless assets; finalized transaction/message/trace hashes, masterchain inclusion proof, getter snapshots, balances/fees, NFT owner and authorized retry traces. Do not imply emulator tests demonstrate chain finality.
 
 ### BLOCKED — trusted collection membership before immutable terms
-The contract pins an exact NFT item address, but collection membership is not proven by the contract. Before creating immutable terms, a trusted testnet provider/release process must verify the item’s collection getter against the intended collection and retain finalized evidence in the approval package. The current contract-only PoC does not independently establish that trust decision.
+The contract pins an exact NFT item address, but collection membership is not proven by the contract. Backend remediation is being developed separately in Draft PR #241: allowlisted item/collection code hashes, same-masterchain-block proof reads, and reconstruction of the standard TEP-62 item address from collection item code and index. The PR has not been merged or CI-accepted, and the allowlist intentionally defaults to empty. No real collection policy or code hashes are configured. Until an operator has reviewed and allowlisted a specific collection, new escrow NFT intents must remain blocked.
 
 ### Residual verification to include in independent review
 - RichBounce envelope parser assumptions for Tolk 1.5.0, including phase layout, mandatory refs and original-info/value extraction.
@@ -48,6 +49,9 @@ The contract pins an exact NFT item address, but collection membership is not pr
 - Retry authorization when the fixed recipient is a contract wallet, and the economic consequences of retrying a carry-all action after a bounce.
 - Invariants under action-phase failures, malformed/out-of-order/duplicate bounces, and backend observer restart/replay.
 - Whether source-level custody flags are intentionally conservative projections and how trusted getter/trace reconciliation verifies actual NFT ownership.
+
+### BLOCKED — contract balance floor after carry-all retry
+The current `main` retry helper reissues the carry-all execution-reserve refund without a new storage reserve action. Draft PR #242 adds the reserve action to the retry transaction and checks the escrow balance after bounce and retry. The code fix is not yet merged, and the frozen code hash/BOC manifest must be regenerated with pinned CI before merge.
 
 ## Release posture
 
