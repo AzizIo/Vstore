@@ -84,10 +84,6 @@ class PaymentTransaction(TimestampMixin, Base):
             name="ck_payment_transactions_provider_stars",
         ),
         CheckConstraint(
-            "currency = 'XTR'",
-            name="ck_payment_transactions_currency_stars",
-        ),
-        CheckConstraint(
             "status IN ('captured', 'refund_pending', 'refunded')",
             name="ck_payment_transactions_status",
         ),
