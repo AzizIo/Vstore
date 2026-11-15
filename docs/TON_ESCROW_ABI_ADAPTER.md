@@ -19,7 +19,7 @@ Pinned provenance:
 | Source commit in frozen manifest | `2160aa6780efff2e44e5f8ae99b2d21cb8764740` |
 | Successful contract workflow | [#43767931853](https://github.com/AzizIo/Vstore/actions/runs/43767931853) |
 | Artifact ID | `14183122192` |
-| Artifact archive SHA-256 | `b5c7d011004098ccbeaef48aeaec230231c6531a5554d17972d7f3ec9edf0` |
+| Artifact archive SHA-256 | `b5c7d011004098ccbeaef48aeaec230231c6531a5554d17937972d7f3ec9edf0` |
 | Build descriptor SHA-256 | `d53460a4c957ed011897fe43435d21fbfd570080b2e9bee34e244bd361959bf0` |
 | Acton / Tolk | `1.2.1` / `1.5.0` |
 | ABI compact SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
