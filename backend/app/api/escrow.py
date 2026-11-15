@@ -1149,7 +1149,8 @@ async def list_seller_deals(user: CurrentUser, session: DbSession, limit: int = 
 
 async def _prepare_action(
     deal_id: UUID, action: EscrowWalletAction, user: User,
-    session: AsyncSession, verifier: TONNFTVerifier, idempotency_key: str,
+    session: AsyncSession, verifier: TONNFTVerifier,
+    identity_provider: PytoniqTONTestnetEscrowProvider, idempotency_key: str,
     request_context: dict[str, object] | None = None,
 ):
     _require_testnet()
@@ -1165,6 +1166,7 @@ async def _prepare_action(
         "id", "buyer_id", "seller_id", "listing_key_snapshot", "item_address",
         "collection_address_snapshot", "seller_address_snapshot", "buyer_address_snapshot",
         "principal_nanotons", "deal_salt", "network",
+        "nft_identity_snapshot_json", "nft_identity_snapshot_sha256",
     )
     validated_snapshot = {
         field: getattr(deal, field) for field in immutable_snapshot_fields
@@ -1243,6 +1245,26 @@ async def _prepare_action(
                 },
             )
 
+    try:
+        identity_snapshot = validate_nft_identity_snapshot(
+            deal.nft_identity_snapshot_json,
+            deal.nft_identity_snapshot_sha256,
+        )
+    except NFTIdentityEvidenceError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "escrow_nft_identity_snapshot_required"},
+        ) from exc
+    if (
+        identity_snapshot.get("item_address") != deal.item_address
+        or identity_snapshot.get("collection_address") != deal.collection_address_snapshot
+        or identity_snapshot.get("owner_address") != deal.seller_address_snapshot
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "escrow_nft_identity_snapshot_mismatch"},
+        )
+
     seller_states = {
         EscrowWalletAction.CREATE_DEAL_ESCROW: "intent_created",
         EscrowWalletAction.ACTIVATE_DEAL: "intent_created",
@@ -1309,10 +1331,12 @@ async def _prepare_action(
         # End the read transaction before external provider I/O. No writes have
         # happened yet; both deal and wallet are revalidated after the call.
         await session.rollback()
-        await _verify_current_nft_owner(
-            verifier,
+        await _verify_escrow_nft_identity(
+            identity_provider,
             item_address=ownership_check[0],
-            seller_address=ownership_check[1],
+            collection_address=deal.collection_address_snapshot,
+            expected_owner_address=ownership_check[1],
+            minimum_masterchain_seqno=int(identity_snapshot["masterchain_seqno"]),
         )
 
     # Reacquire the deal lock only after external ownership checks have finished.
