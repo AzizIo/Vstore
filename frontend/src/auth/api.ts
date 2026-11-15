@@ -1,3 +1,4 @@
+import { getApiErrorMessage } from "../api/errors";
 import { API_BASE_URL } from "../api/config";
 
 export interface AuthenticatedUser {
@@ -20,6 +21,11 @@ interface TelegramAuthResponse {
   user: AuthenticatedUser;
 }
 
+export interface TelegramSession {
+  accessToken: string;
+  expiresIn: number;
+}
+
 export class AuthApiError extends Error {
   constructor(readonly status: number, message: string) {
     super(message);
@@ -31,9 +37,7 @@ async function parseError(response: Response): Promise<AuthApiError> {
   let message = `Ошибка авторизации (${response.status}).`;
   try {
     const body: unknown = await response.json();
-    if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
-      message = body.detail;
-    }
+    message = getApiErrorMessage(body, message);
   } catch {
     // Keep the HTTP status message when the server does not return JSON.
   }
@@ -74,7 +78,7 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
-export async function authenticateTelegram(initData: string, signal?: AbortSignal): Promise<string> {
+export async function authenticateTelegram(initData: string, signal?: AbortSignal): Promise<TelegramSession> {
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}/api/auth/telegram`, {
@@ -92,7 +96,10 @@ export async function authenticateTelegram(initData: string, signal?: AbortSigna
   if (!isTelegramAuthResponse(body)) {
     throw new Error("Сервис авторизации вернул некорректную сессию.");
   }
-  return body.access_token;
+  return {
+    accessToken: body.access_token,
+    expiresIn: body.expires_in,
+  };
 }
 
 export async function fetchCurrentUser(accessToken: string, signal?: AbortSignal): Promise<UserProfile> {
