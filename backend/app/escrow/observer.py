@@ -548,7 +548,66 @@ async def _apply_one_event(
     if next_state in TERMINAL_DEAL_STATES:
         if not await _reconcile_terminal_listing(session, deal, next_state, event):
             event_row.reason_code = "terminal_listing_owner_unverified"
+            # Do not advance the durable scan cursor: the same terminal evidence
+            # must be rechecked until current NFT owner is cryptographically proven.
+            return "pending"
     return "applied"
+
+
+async def _persist_getter_snapshot(
+    session_factory: SessionFactory,
+    event: NormalizedChainEvent,
+    proof: FinalityVerification,
+) -> None:
+    """Persist only getter-equivalent state tied to this verified masterchain proof."""
+
+    snapshot = proof.getter_snapshot_json
+    if snapshot is None:
+        return
+    digest = hashlib.sha256(
+        json.dumps(snapshot, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    ).hexdigest()
+    if (
+        digest != proof.getter_snapshot_sha256
+        or proof.getter_snapshot_masterchain_seqno != proof.masterchain_seqno
+        or proof.getter_snapshot_block_hash != proof.masterchain_block_hash
+        or proof.getter_snapshot_provider != proof.provider_id
+    ):
+        raise EscrowProviderInvalidEvidence("Getter snapshot is not bound to the event finality proof")
+    if not event.deal_id:
+        raise EscrowProviderInvalidEvidence("Verified getter snapshot has no deal identity")
+    try:
+        deal_id = uuid.UUID(event.deal_id)
+    except (ValueError, TypeError) as exc:
+        raise EscrowProviderInvalidEvidence("Verified getter snapshot has an invalid deal identity") from exc
+
+    async with session_factory() as session:
+        async with session.begin():
+            deal = await session.scalar(
+                select(EscrowDeal).where(EscrowDeal.id == deal_id).with_for_update()
+            )
+            if deal is None:
+                raise EscrowProviderInvalidEvidence("Verified getter snapshot references an unknown deal")
+            current_seqno = deal.getter_snapshot_masterchain_seqno
+            if current_seqno is not None and proof.masterchain_seqno < current_seqno:
+                # Old events may be replayed while a newer authoritative snapshot is
+                # already stored; never overwrite current state with historical data.
+                return
+            if current_seqno == proof.masterchain_seqno:
+                if (
+                    deal.getter_snapshot_sha256 != digest
+                    or deal.getter_snapshot_block_hash != proof.masterchain_block_hash
+                ):
+                    raise EscrowProviderInvalidEvidence(
+                        "Getter snapshot conflicts at an already-recorded masterchain sequence"
+                    )
+                return
+            deal.getter_snapshot_json = snapshot
+            deal.getter_snapshot_sha256 = digest
+            deal.getter_snapshot_masterchain_seqno = proof.masterchain_seqno
+            deal.getter_snapshot_block_hash = proof.masterchain_block_hash
+            deal.getter_snapshot_provider = proof.provider_id
+            deal.getter_snapshot_observed_at = datetime.now(UTC)
 
 
 async def _release_lease(
@@ -637,8 +696,41 @@ async def run_observer_pass(
                 continue
             proof = await provider.verify_event(event)
             if isinstance(proof, FinalityVerification) and proof.matches(event):
+                await _persist_getter_snapshot(session_factory, event, proof)
                 event = replace(
                     event,
+                    event_type=proof.verified_event_type or event.event_type,
+                    source_address=(
+                        proof.source_address
+                        if proof.verified_event_type is not None
+                        else event.source_address
+                    ),
+                    destination_address=(
+                        proof.destination_address
+                        if proof.verified_event_type is not None
+                        else event.destination_address
+                    ),
+                    item_address=(
+                        proof.item_address if proof.verified_event_type is not None
+                        else event.item_address
+                    ),
+                    collection_address=(
+                        proof.collection_address if proof.verified_event_type is not None
+                        else event.collection_address
+                    ),
+                    amount_nanotons=(
+                        proof.amount_nanotons if proof.verified_event_type is not None
+                        else event.amount_nanotons
+                    ),
+                    observed_contract_state=(
+                        proof.observed_contract_state or event.observed_contract_state
+                    ),
+                    attestation_accepted=(
+                        proof.attestation_accepted or event.attestation_accepted
+                    ),
+                    contract_state_reconciled=(
+                        proof.contract_state_reconciled or event.contract_state_reconciled
+                    ),
                     masterchain_block_hash=proof.masterchain_block_hash,
                     finality_proof_sha256=proof.proof_sha256,
                     finality_provider=proof.provider_id,
