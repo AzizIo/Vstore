@@ -1102,7 +1102,7 @@ async def _prepare_action(
         ):
             await session.rollback()
             raise HTTPException(status_code=409, detail={"code": "idempotency_payload_conflict"})
-        if existing_action.unsigned_payload_json is not None:
+        if getattr(existing_action, "unsigned_payload_json", None) is not None:
             # Return the byte-for-byte persisted payload on every exact retry, even
             # if its chain submission is being reconciled by another worker.
             return _prepared_action_response(existing_action)
@@ -1275,7 +1275,7 @@ async def _prepare_action(
         await session.commit()
         await session.refresh(action_record)
 
-    if action_record.unsigned_payload_json is not None:
+    if getattr(action_record, "unsigned_payload_json", None) is not None:
         return _prepared_action_response(action_record)
     if action_record.status == "blocked_abi":
         raise HTTPException(status_code=503, detail={
