@@ -52,6 +52,18 @@ class Settings(BaseSettings):
     ton_center_mainnet_base_url: str = "https://toncenter.com/api/v3"
     ton_center_testnet_base_url: str = "https://testnet.toncenter.com/api/v3"
     ton_center_timeout_seconds: float = Field(default=8.0, gt=0, le=60)
+    # DealEscrow v1 deployment terms. The authority lists intentionally default empty;
+    # deployment/action preparation stays blocked until approved testnet keys are supplied.
+    ton_escrow_oracle_public_keys: list[str] = Field(default_factory=list)
+    ton_escrow_resolver_public_keys: list[str] = Field(default_factory=list)
+    ton_escrow_execution_reserve_nanotons: int = Field(default=500_000_000, gt=0)
+    ton_escrow_seller_deployment_refund_nanotons: int = Field(default=20_000_000, gt=0)
+    ton_escrow_nft_transfer_value_nanotons: int = Field(default=50_000_000, gt=0)
+    ton_escrow_deployment_value_nanotons: int = Field(default=100_000_000, gt=0)
+    ton_escrow_activation_value_nanotons: int = Field(default=10_000_000, gt=0)
+    ton_escrow_action_value_nanotons: int = Field(default=10_000_000, gt=0)
+    ton_escrow_nft_deposit_value_nanotons: int = Field(default=10_000_000, gt=0)
+    ton_escrow_nft_return_value_nanotons: int = Field(default=10_000_000, gt=0)
     ton_metadata_ipfs_gateway_url: str = "https://ipfs.io/ipfs"
     cors_allowed_origins: list[str] = [
         "http://localhost:5173",
