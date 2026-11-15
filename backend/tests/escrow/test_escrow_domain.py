@@ -313,17 +313,20 @@ def test_nft_return_attestation_requires_contract_to_seller_route(
         {"attestation_accepted": False},
         {"contract_state_reconciled": False},
     ):
+        payload: dict[str, object] = {
+            "source_address": deal.contract_address,
+            "destination_address": deal.seller_address,
+            "amount_nanotons": 0,
+            "attestation_accepted": True,
+            "contract_state_reconciled": True,
+            "observed_contract_state": EscrowDealStatus.BUYER_REFUND_PENDING.value,
+        }
+        payload.update(changes)
         with pytest.raises(EscrowDomainError):
             validate_event_against_deal(
                 evidence(
                     event_type=EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED,
-                    source_address=deal.contract_address,
-                    destination_address=deal.seller_address,
-                    amount_nanotons=0,
-                    attestation_accepted=True,
-                    contract_state_reconciled=True,
-                    observed_contract_state=EscrowDealStatus.BUYER_REFUND_PENDING.value,
-                    **changes,
+                    **payload,
                 ),
                 deal,
             )
