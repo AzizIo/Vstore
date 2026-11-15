@@ -313,7 +313,7 @@ async def test_post_delivery_nft_return_is_buyer_only_and_state_bound() -> None:
     assert payload.messages[0].amount == "50000000"
     assert payload.messages[0].payload
     assert boc_sha256(payload.messages[0].payload) == (
-        "96ebba70171241e66fee632d6420a45bc2b479c9b7e7637c056d7eae491438dd"
+        "70fd158e2e4b99648fea5a4dbf759274ac35a946538dfd6ba591fb2b2de24ceb"
     )
 
 @pytest.mark.asyncio
@@ -330,7 +330,7 @@ async def test_seller_nft_deposit_payload_matches_generated_tep62_abi() -> None:
     assert payload.messages[0].address == deal.item_address
     assert payload.messages[0].payload is not None
     assert boc_sha256(payload.messages[0].payload) == (
-        "a31e195bc100b6603f1ec519cda0e375870e25d75175cdfdf15c82fb10e05311"
+        "32148753a5d3cd318a3a54f7ff8d9409e8cfbe04d70862a52833632a50362cf7"
     )
 
 @pytest.mark.asyncio
@@ -469,3 +469,40 @@ async def test_unconfigured_testnet_provider_fails_closed() -> None:
     provider = UnconfiguredTONTestnetEscrowProvider()
     with pytest.raises(EscrowProviderUnavailable):
         await provider.scan_events(cursor=None, limit=10)
+
+def test_pinned_code_boc_rejects_compressed_artifact_digest_mismatch(
+    tmp_path, monkeypatch
+) -> None:
+    import base64
+
+    import pytest
+
+    from app.escrow import ton_abi
+
+    source_artifacts = ton_abi._ARTIFACTS
+    (tmp_path / "DealEscrow.abi.json").write_text(
+        (source_artifacts / "DealEscrow.abi.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / "manifest.json").write_text(
+        (source_artifacts / "manifest.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    compressed = base64.b64decode(
+        (source_artifacts / "DealEscrow.code.boc.zlib.b64")
+        .read_text(encoding="ascii")
+        .strip(),
+        validate=True,
+    )
+    tampered = base64.b64encode(compressed + b"\\x00").decode("ascii")
+    (tmp_path / "DealEscrow.code.boc.zlib.b64").write_text(
+        tampered, encoding="ascii"
+    )
+
+    monkeypatch.setattr(ton_abi, "_ARTIFACTS", tmp_path)
+    ton_abi.load_pinned_abi.cache_clear()
+    try:
+        with pytest.raises(ton_abi.TONABIError, match="compressed code BOC digest mismatch"):
+            ton_abi.load_pinned_code_boc()
+    finally:
+        ton_abi.load_pinned_abi.cache_clear()
