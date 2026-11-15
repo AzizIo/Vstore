@@ -113,6 +113,7 @@ function contract(): EscrowHttpContract {
     createListingIntent: (input) => operation("/test/escrow/listing-intents", input),
     createBuyerDealIntent: (input) => operation("/test/escrow/deal-intents", input),
     prepareDealEscrow: (input) => operation("/test/escrow/prepare-deal-escrow", input),
+    prepareDealActivation: (input) => operation("/test/escrow/prepare-activate-deal", input),
     prepareNftDeposit: (input) => operation("/test/escrow/prepare-nft-deposit", input),
     prepareBuyerFunding: (input) => operation("/test/escrow/prepare-buyer-funding", input),
     prepareBuyerAcceptance: (input) => operation("/test/escrow/prepare-buyer-acceptance", input),

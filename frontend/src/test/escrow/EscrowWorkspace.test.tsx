@@ -165,6 +165,7 @@ function makeApi(options: {
     createListingIntent: vi.fn(async () => listing()),
     createBuyerDealIntent: vi.fn(async () => deal({ state: "intent_created", available_actions: [] })),
     prepareDealEscrow: vi.fn(async () => prepared("create_deal_escrow")),
+    prepareDealActivation: vi.fn(async () => prepared("activate_deal")),
     prepareNftDeposit: vi.fn(async () => prepared("deposit_nft")),
     prepareBuyerFunding: vi.fn(async () => prepared("fund_deal")),
     prepareBuyerAcceptance: vi.fn(async () => prepared("accept_deal")),

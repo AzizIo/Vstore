@@ -19,6 +19,7 @@ describe("TON escrow HTTP contract", () => {
       contract.createListingIntent({ asset_id: "asset", seller_wallet_id: "wallet", price_nano: "1000000000" }),
       contract.createBuyerDealIntent({ listing_id: "listing", buyer_wallet_id: "wallet" }),
       contract.prepareDealEscrow({ deal_id: "deal", wallet_id: "wallet" }),
+      contract.prepareDealActivation({ deal_id: "deal", wallet_id: "wallet" }),
       contract.prepareNftDeposit({ deal_id: "deal", wallet_id: "wallet" }),
       contract.prepareBuyerFunding({ deal_id: "deal", wallet_id: "wallet" }),
       contract.prepareBuyerAcceptance({ deal_id: "deal", wallet_id: "wallet" }),
