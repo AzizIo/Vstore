@@ -90,7 +90,7 @@ def upgrade() -> None:
         CREATE FUNCTION guard_escrow_listing_nft_identity_terms()
         RETURNS trigger
         LANGUAGE plpgsql
-        AS $
+        AS $$
         BEGIN
             IF OLD.nft_identity_snapshot_json IS NOT NULL AND (
                 NEW.asset_id IS DISTINCT FROM OLD.asset_id
@@ -102,7 +102,7 @@ def upgrade() -> None:
             END IF;
             RETURN NEW;
         END;
-        $
+        $$
         """
     )
     op.execute(
