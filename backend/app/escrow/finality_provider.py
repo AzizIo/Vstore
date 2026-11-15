@@ -1081,7 +1081,10 @@ class PytoniqTONTestnetEscrowProvider:
             if located_transaction is None:
                 if not lookback_complete:
                     raise EscrowProviderUnavailable(
-                        "Original outbound transaction is older than the bounded LiteServer lookback"
+                        (
+                            "Original outbound transaction is older than the "
+                            "bounded LiteServer lookback"
+                        )
                     )
                 return None, "original_outbound_transaction_not_in_contract_history"
 
@@ -1641,7 +1644,10 @@ class PytoniqTONTestnetEscrowProvider:
             ) = self._verified_event(
                 event, tx, deal, getter, state_name, oracle, source, destination, amount
             )
-            if event.phase == "bounce" and event_type is EscrowChainEventType.OUTBOUND_ACTION_BOUNCED:
+            if (
+                event.phase == "bounce"
+                and event_type is EscrowChainEventType.OUTBOUND_ACTION_BOUNCED
+            ):
                 original_body_hash = str(
                     verified_details.get("bounce_original_body_hash") or ""
                 ).lower()
