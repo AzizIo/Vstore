@@ -16,6 +16,7 @@ from app.api.escrow import (
     router,
 )
 from app.escrow.contracts import EscrowWalletAction
+from app.escrow.service import canonical_request_sha256
 from app.escrow.schemas import (
     EscrowDealCreate,
     EscrowDealResponse,
@@ -320,6 +321,52 @@ async def test_prepare_action_persists_idempotency_before_incomplete_snapshot_50
     assert action_record.last_error_code == "deployment_snapshot_incomplete"
     assert session.commit_calls == 2
     assert session.refresh_calls == 1
+
+    # Exercise the actual route-level replay branch: the durable blocked action
+    # must keep both its ID and its persisted error code on a same-key retry.
+    expected_hash = canonical_request_sha256({
+        "actor_id": str(buyer_id),
+        "deal_id": str(deal.id),
+        "action_type": EscrowWalletAction.FUND_DEAL.value,
+        "network": deal.network,
+        "wallet_id": str(wallet_id),
+        "wallet_address": deal.buyer_address_snapshot,
+        "listing_key": deal.listing_key_snapshot,
+        "item_address": deal.item_address,
+        "collection_address": deal.collection_address_snapshot,
+        "seller_address": deal.seller_address_snapshot,
+        "buyer_address": deal.buyer_address_snapshot,
+        "principal_nanotons": str(deal.principal_nanotons),
+        "deal_salt": deal.deal_salt,
+        "context": {},
+    })
+    blocked_action = SimpleNamespace(
+        id=action_record.id,
+        deal_id=deal_id,
+        request_sha256=expected_hash,
+        status="blocked_abi",
+        last_error_code="deployment_snapshot_incomplete",
+    )
+    replay_session = ActionSession()
+    replay_session.scalar = replay_scalar  # type: ignore[method-assign]
+    async def replay_scalar(_statement: object) -> SimpleNamespace | None:
+        replay_session.scalar_calls += 1
+        return deal if replay_session.scalar_calls == 1 else blocked_action
+    replay_session.scalar = replay_scalar  # type: ignore[method-assign]
+
+    with pytest.raises(HTTPException) as replay_error:
+        await _prepare_action(
+            deal_id,
+            EscrowWalletAction.FUND_DEAL,
+            SimpleNamespace(id=buyer_id),
+            replay_session,
+            None,
+            "fund-action-key-0001",
+        )
+    assert replay_error.value.status_code == 503
+    assert replay_error.value.detail["code"] == "deployment_snapshot_incomplete"
+    assert replay_error.value.detail["action_id"] == str(action_record.id)
+    assert replay_error.value.detail["action_status"] == "blocked_abi"
 
 
 def test_preview_compose_is_the_only_compose_runtime_opted_into_preview_mode() -> None:
