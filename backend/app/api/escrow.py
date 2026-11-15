@@ -1908,7 +1908,13 @@ async def prepare_dispute(
     idempotency_key: IdempotencyKey,
 ):
     return await _prepare_action(
-        deal_id, EscrowWalletAction.OPEN_DISPUTE, user, session, identity_provider, idempotency_key, {"reason": payload.reason, "reason_code": payload.reason_code},
+        deal_id,
+        EscrowWalletAction.OPEN_DISPUTE,
+        user,
+        session,
+        identity_provider,
+        idempotency_key,
+        {"reason": payload.reason, "reason_code": payload.reason_code},
     )
 
 
