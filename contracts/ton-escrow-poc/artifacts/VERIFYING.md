@@ -6,19 +6,20 @@ This directory pins the ABI and compiler output for the current testnet-only Dea
 
 | Field | Value |
 |---|---|
-| Source commit | `48482bec7beeae2c59f24cbfd589067c9625c037` |
+| Source commit | `493fbd1158feb5d0e3947de56fc8cc275f5ac0a5` |
 | Toolchain | Acton `1.2.1`, Tolk `1.5.0` |
-| Strict green contract workflow | [#43759466333](https://github.com/AzizIo/Vstore/actions/runs/43759466333) |
-| Artifact ID | `14179053785` |
-| Artifact archive SHA-256 | `018c0c117e9c1914a9c76ca6cf428e990049cf725dd0789e08733bb02c3aae93` |
+| Diagnostic contract workflow (manifest refresh required) | [#43759466333](https://github.com/AzizIo/Vstore/actions/runs/43759466333) |
+| Artifact ID | `14179149717` |
+| Artifact archive SHA-256 | `8614f8183cf9f39f59956116d0ea01e5d425aff5c036a4707a24d65aa32958fa` |
 | Compact ABI SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
-| Build descriptor SHA-256 | `0c3c7dec0bbf5bb231a007e5d99e28a5c5b7285d9cbdd3324e1172cd756b2eea` |
-| Compiled code hash | `2F96C25E20D744713E72CE09A5EF209414840B52B3F06EE96E00E64884608044` |
-| BOC base64 SHA-256 | `8b7adda1bca4551050c968e97d8fed24f92554d3ab94e30b61a71fdd1fd720ee` |
-| Decoded BOC SHA-256 | `7233b9bb48f998cfe8c6c68e0b088c50b36268a423ca7039cf60a30cb7bd96fa` |
-| Deterministic StateInit hash | `5173d3e22bb3eadcc16ac2732553d3cb143250848cd4dd7866f101d82d3e6737` |
-| Deterministic raw address | `0:5173d3e22bb3eadcc16ac2732553d3cb143250848cd4dd7866f101d82d3e6737` |
-| Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
+| Build descriptor SHA-256 | `71499599b33d728d8f0ca0b5b26a49d6f557ffb2a9c5bfd20d2163bc738ea779` |
+| Compiled code hash | `1BCCBF586878F8032F4E860707B0102EC554B4E1C0CFD7DEA362E1DD391D6666` |
+| BOC base64 SHA-256 | `2ba55420e6b09c94986d51b045db92959df11f66b339cd77df4e919d30a0e50b` |
+| Decoded BOC SHA-256 | `b4a46ef78089119fb10272e1edbd152f8b5e9c337b59d759ad5e1c661dd4fbb5` |
+| Zlib-compressed BOC SHA-256 | `57eec30799e23fe30b3d54c4407949ae99c1af8ebe921e2ce053d1d4f17c80f3` |
+| Deterministic StateInit hash | `pending exact-head rebuild` |
+| Deterministic raw address | `pending exact-head rebuild` |
+| Initial data cell hash | `pending exact-head rebuild` |
 
 The source-controlled files are `frozen/DealEscrow.abi.json` and `frozen/manifest.json`. The backend pins the compressed compiler BOC as `backend/app/escrow/abi_artifacts/DealEscrow.code.boc.zlib.b64`; CI rebuilds it and verifies the code hash and BOC digests.
 
@@ -43,4 +44,4 @@ acton test --coverage --no-studio-reporting
 
 ## Important limitations
 
-The Acton emulator suite demonstrates behavior only in the pinned toolchain/test fixtures. The first diagnostic artifact generated for the late-finality source passed compilation, ABI and StateInit cross-checks, but its one added timeout regression assertion was incorrect (it expected `nftInEscrow` to clear before oracle reconciliation); this was corrected on the branch and awaits exact-head rerun. Emulator evidence is not a live chain finality proof, independent TON/Tolk security audit, or manual TON testnet/Tonkeeper acceptance. A trusted provider must prove the exact collection membership before immutable deal terms are created. Signing and deployment remain disabled.
+The Acton emulator suite demonstrates behavior only in the pinned toolchain/test fixtures. The diagnostic artifact for the late-finality and late-recovery source passed Acton compilation but stopped at the manifest hash gate before wrapper/StateInit and emulator steps. It is not a green build. A later exact-head workflow must verify the refreshed pinned code/BOC, generated StateInit/address and all emulator tests before this manifest can be treated as release evidence. Emulator evidence is not a live chain finality proof, independent TON/Tolk security audit, or manual TON testnet/Tonkeeper acceptance. A trusted provider must prove the exact collection membership before immutable deal terms are created. Signing and deployment remain disabled.
