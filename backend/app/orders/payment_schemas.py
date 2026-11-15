@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
 from decimal import Decimal
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -33,7 +33,9 @@ class PaymentIntentCreateResponse(BaseModel):
 
     order_id: UUID
     payment_intent_id: UUID
-    payment_status: Literal["pending", "paid", "refund_pending", "refunded", "failed", "expired"]
+    payment_status: Literal[
+        "pending", "paid", "refund_pending", "refunded", "failed", "expired"
+    ]
     provider: Literal["telegram_stars"] = "telegram_stars"
     amount: Decimal = Field(gt=0)
     currency: Literal["XTR"] = "XTR"
