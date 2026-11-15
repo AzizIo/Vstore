@@ -8,7 +8,12 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app.api.escrow import _listing_actions, _prepare_action, router
+from app.api.escrow import (
+    _build_deployment_snapshot,
+    _listing_actions,
+    _prepare_action,
+    router,
+)
 from app.escrow.contracts import EscrowWalletAction
 from app.escrow.schemas import (
     EscrowDealCreate,
@@ -194,3 +199,76 @@ def test_listing_available_actions_are_actor_scoped() -> None:
 
     assert _listing_actions(intent, seller_id) == []
     assert _listing_actions(intent, buyer_id) == ["create_deal_intent"]
+
+
+
+def test_deployment_snapshot_fails_closed_when_required_chain_terms_are_missing() -> None:
+    deal = SimpleNamespace(
+        network="testnet",
+        listing_key_snapshot="a" * 64,
+        seller_address_snapshot="0:" + "b" * 64,
+        buyer_address_snapshot="0:" + "c" * 64,
+        collection_address_snapshot="0:" + "d" * 64,
+        item_address="0:" + "e" * 64,
+        principal_nanotons=2_500_000_000,
+        deal_salt="f" * 64,
+    )
+
+    snapshot, missing = _build_deployment_snapshot(deal)
+
+    assert snapshot is None
+    assert "execution_reserve_nanotons" in missing
+    assert "fund_query_id" in missing
+    assert "oracle_key_a" in missing
+    assert "resolver_key_a" in missing
+    assert "contract_state" in missing
+
+
+def test_complete_immutable_deal_snapshot_is_constructed_without_defaulting_terms() -> None:
+    deal = SimpleNamespace(
+        network="testnet",
+        network_id=-3,
+        protocol_version=1,
+        listing_key_snapshot="a" * 64,
+        seller_address_snapshot="0:" + "b" * 64,
+        buyer_address_snapshot="0:" + "c" * 64,
+        collection_address_snapshot="0:" + "d" * 64,
+        item_address="0:" + "e" * 64,
+        principal_nanotons=2_500_000_000,
+        execution_reserve_nanotons=500_000_000,
+        seller_deployment_refund_nanotons=20_000_000,
+        nft_transfer_value_nanotons=50_000_000,
+        deal_salt="f" * 64,
+        activation_query_id=1,
+        fund_query_id=2,
+        nft_deposit_query_id=3,
+        nft_release_query_id=4,
+        nft_return_to_escrow_query_id=5,
+        oracle_key_a=11,
+        oracle_key_b=12,
+        oracle_key_c=13,
+        resolver_key_a=21,
+        resolver_key_b=22,
+        resolver_key_c=23,
+        deployment_value_nanotons=100_000_000,
+        activation_value_nanotons=20_000_000,
+        action_value_nanotons=20_000_000,
+        nft_deposit_value_nanotons=50_000_000,
+        nft_return_value_nanotons=50_000_000,
+        contract_state=2,
+        deadline_unix=1_800_000_000,
+        observed_chain_time_unix=1_799_999_900,
+        dispute_phase=0,
+        nft_in_escrow=False,
+        principal_locked=False,
+    )
+
+    snapshot, missing = _build_deployment_snapshot(deal)
+
+    assert missing == ()
+    assert snapshot is not None
+    assert snapshot.network_id == -3
+    assert snapshot.execution_reserve_nanotons == 500_000_000
+    assert snapshot.fund_query_id == 2
+    assert snapshot.oracle_key_c == 13
+    assert snapshot.principal_locked is False
