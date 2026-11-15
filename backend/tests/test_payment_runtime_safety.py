@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from pydantic import SecretStr
 
+from app import payments_bot_handlers
 from app.core.config import Settings
 from app.orders import payment_service
 
@@ -69,3 +72,49 @@ def test_payment_service_rejects_non_isolated_test_runtime(
 
     with pytest.raises(payment_service.PaymentConflict, match=message):
         payment_service._assert_test_stars_enabled()
+
+
+
+@pytest.mark.asyncio
+async def test_successful_payment_handler_journals_telegram_update_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeSessionContext:
+        async def __aenter__(self) -> object:
+            return object()
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class FakeMessage:
+        from_user = SimpleNamespace(id=700001)
+        successful_payment = SimpleNamespace(
+            invoice_payload="opaque-invoice-payload",
+            total_amount=25,
+            currency="XTR",
+            telegram_payment_charge_id="telegram-charge-123",
+            provider_payment_charge_id="provider-charge-456",
+        )
+
+        async def answer(self, _message: str) -> None:
+            return None
+
+    captured: dict[str, object] = {}
+
+    async def record_success(_session: object, **kwargs: object) -> str:
+        captured.update(kwargs)
+        return "captured"
+
+    monkeypatch.setattr(
+        payments_bot_handlers, "async_session_factory", FakeSessionContext
+    )
+    monkeypatch.setattr(
+        payments_bot_handlers, "record_stars_success", record_success
+    )
+
+    await payments_bot_handlers.persist_successful_payment(
+        FakeMessage(), SimpleNamespace(update_id=987654321)
+    )
+
+    assert captured["provider_event_id"] == "update:987654321"
+    assert captured["telegram_payment_charge_id"] == "telegram-charge-123"
