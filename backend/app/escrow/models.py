@@ -77,6 +77,9 @@ class EscrowListingIntent(TimestampMixin, EscrowBase):
     item_address: Mapped[str] = mapped_column(String(128), nullable=False)
     listing_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     collection_address_snapshot: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Proof-read item/collection code and canonical collection membership, bound to one MC block.
+    nft_identity_snapshot_json: Mapped[dict[str, object] | None] = mapped_column(JSON)
+    nft_identity_snapshot_sha256: Mapped[str | None] = mapped_column(String(64))
     seller_address_snapshot: Mapped[str] = mapped_column(String(128), nullable=False)
     price_amount: Mapped[Decimal] = mapped_column(Numeric(24, 9), nullable=False)
     price_currency: Mapped[str] = mapped_column(String(8), server_default="TON", nullable=False)
@@ -155,6 +158,10 @@ class EscrowDeal(TimestampMixin, EscrowBase):
     )
     last_chain_seqno: Mapped[int | None] = mapped_column(BigInteger)
     last_chain_logical_time: Mapped[int | None] = mapped_column(BigInteger)
+    # Identity evidence proves the TEP-62 item is derived from the allowlisted collection.
+    # It is immutable after creation and independent from metadata/indexer claims.
+    nft_identity_snapshot_json: Mapped[dict[str, object] | None] = mapped_column(JSON)
+    nft_identity_snapshot_sha256: Mapped[str | None] = mapped_column(String(64))
     # Frozen deployment inputs are canonical JSON with an independently checked hash.
     # They contain no signing material and can only be initialized once.
     deployment_snapshot_json: Mapped[dict[str, object] | None] = mapped_column(JSON)
@@ -190,6 +197,8 @@ _IMMUTABLE_DEAL_TERMS = (
     "price_currency",
     "principal_nanotons",
     "idempotency_key",
+    "nft_identity_snapshot_json",
+    "nft_identity_snapshot_sha256",
     "deployment_snapshot_json",
     "deployment_snapshot_sha256",
     "deployment_snapshot_version",
