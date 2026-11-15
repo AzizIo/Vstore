@@ -27,6 +27,7 @@ from app.escrow.observer import (
 )
 from app.escrow.provider import (
     ChainEventBatch,
+    EscrowProviderInvalidEvidence,
     EscrowProviderUnavailable,
     FinalityVerification,
     NormalizedChainEvent,
@@ -326,6 +327,8 @@ async def test_provider_outage_preserves_cursor_and_releases_lease() -> None:
     assert checkpoint.lease_token is None
     assert checkpoint.lease_until is None
     assert checkpoint.last_error_code == "provider_unavailable"
+    assert checkpoint.failure_count == 1
+    assert checkpoint.next_scan_at == now + timedelta(seconds=5)
 
 
 def test_observer_checkpoint_table_is_durable_and_testnet_scoped() -> None:
@@ -573,8 +576,14 @@ async def test_boolean_indexer_finality_claim_is_not_accepted() -> None:
         return sessions.pop(0)
 
     result = await run_observer_pass(factory, provider, now=now, limit=5)  # type: ignore[arg-type]
-    assert result.pending == 1
-    assert checkpoint.cursor == "cursor-before"
+    assert result.rejected == 1
+    assert result.pending == 0
+    assert checkpoint.cursor == "cursor-after-event"
+    stored = sessions[-1].added
+    assert len(stored) == 1
+    assert isinstance(stored[0], EscrowChainEvent)
+    assert stored[0].status == "rejected"
+    assert stored[0].reason_code == "invalid_verification_result"
 
 
 @pytest.mark.asyncio
@@ -609,8 +618,52 @@ async def test_mismatched_finality_proof_is_not_accepted() -> None:
         return sessions.pop(0)
 
     result = await run_observer_pass(factory, provider, now=now, limit=5)  # type: ignore[arg-type]
-    assert result.pending == 1
-    assert checkpoint.cursor == "cursor-before"
+    assert result.rejected == 1
+    assert result.pending == 0
+    assert checkpoint.cursor == "cursor-after-event"
+    stored = sessions[-1].added
+    assert len(stored) == 1
+    assert isinstance(stored[0], EscrowChainEvent)
+    assert stored[0].status == "rejected"
+    assert stored[0].reason_code == "cryptographic_proof_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_cryptographically_invalid_candidate_is_rejected_without_blocking_checkpoint() -> None:
+    now = datetime(2026, 11, 14, tzinfo=UTC)
+    checkpoint = EscrowObserverCheckpoint(
+        checkpoint_id=CHECKPOINT_ID,
+        network="testnet",
+        cursor="cursor-before",
+        last_masterchain_seqno=99,
+        lease_token=None,
+        lease_until=now - timedelta(seconds=1),
+        next_scan_at=None,
+        last_error_code=None,
+    )
+
+    class InvalidEvidenceProvider(BatchProvider):
+        async def verify_event(self, event: NormalizedChainEvent) -> FinalityVerification:
+            del event
+            raise EscrowProviderInvalidEvidence("fixture proof does not bind to candidate")
+
+    sessions = [FakeEscrowSession(checkpoint), FakeEscrowSession(checkpoint, None)]
+    provider = InvalidEvidenceProvider(make_event())
+
+    def factory() -> FakeEscrowSession:
+        return sessions.pop(0)
+
+    result = await run_observer_pass(factory, provider, now=now, limit=5)  # type: ignore[arg-type]
+    assert result.rejected == 1
+    assert result.pending == 0
+    assert result.provider_unavailable is False
+    assert checkpoint.cursor == "cursor-after-event"
+    assert checkpoint.failure_count == 0
+    stored = sessions[-1].added
+    assert len(stored) == 1
+    assert isinstance(stored[0], EscrowChainEvent)
+    assert stored[0].status == "rejected"
+    assert stored[0].reason_code == "cryptographic_proof_invalid"
 
 
 @pytest.mark.asyncio
