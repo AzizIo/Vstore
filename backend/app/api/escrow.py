@@ -7,7 +7,6 @@ import json
 import re
 import secrets
 from dataclasses import asdict
-from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -66,17 +65,17 @@ from app.escrow.schemas import (
     EscrowWalletReferenceInput,
     EscrowWithdrawalCreate,
 )
+from app.escrow.service import (
+    EscrowActionConflict,
+    canonical_request_sha256,
+    create_or_replay_action,
+)
 from app.escrow.ton_abi import (
     TONABIError,
     derive_deployment,
     load_pinned_code_boc,
     validate_snapshot,
     verify_compiled_code,
-)
-from app.escrow.service import (
-    EscrowActionConflict,
-    canonical_request_sha256,
-    create_or_replay_action,
 )
 
 
@@ -257,7 +256,10 @@ def _new_query_ids(count: int = 5) -> tuple[int, ...]:
 
 
 def _authority_keys(values: list[str], setting_name: str) -> tuple[int, int, int]:
-    if len(values) != 3 or any(not isinstance(value, str) or not _HEX_256.fullmatch(value) for value in values):
+    if len(values) != 3 or any(
+        not isinstance(value, str) or not _HEX_256.fullmatch(value)
+        for value in values
+    ):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "escrow_authority_keys_unconfigured", "setting": setting_name},
@@ -1308,7 +1310,9 @@ async def _prepare_action(
             "action_id": str(action_record.id),
             "action_status": action_record.status,
             "missing_fields": list(missing_snapshot_fields),
-            "message": "Required immutable terms or independently verified getter state are unavailable",
+            "message": (
+                "Required immutable terms or independently verified getter state are unavailable"
+            ),
         })
 
     try:
