@@ -33,7 +33,7 @@ function preparedTransaction(
     messages: [{
       address: destination,
       amount_nano: "2520000000",
-      payload_boc: "server-prepared-payload-boc",
+      payload_boc: deploymentAction ? null : "server-prepared-payload-boc",
       state_init_boc: deploymentAction ? "server-prepared-state-init-boc" : null,
     }],
     ...overrides,
@@ -116,7 +116,6 @@ describe("TON Connect escrow adapter", () => {
       messages: [{
         address: escrowAddress,
         amount: "2520000000",
-        payload: "server-prepared-payload-boc",
         stateInit: "server-prepared-state-init-boc",
       }],
     });
@@ -164,8 +163,6 @@ describe("TON Connect escrow adapter", () => {
     )).rejects.toThrow(/получатель TON-сообщения/i);
     expect(sendTransaction).not.toHaveBeenCalled();
   });
-
-
 
   it("rejects a direct deployment without its backend-derived StateInit", async () => {
     const adapter = createTonConnectEscrowAdapter({
