@@ -85,7 +85,7 @@ class EscrowDealResponse(BaseModel):
     buyer_review_deadline: datetime | None
     dispute_deadline: datetime | None
     available_actions: list[Literal[
-        "create_deal_escrow", "deposit_nft", "fund_deal", "accept_deal",
+        "create_deal_escrow", "activate_deal", "deposit_nft", "fund_deal", "accept_deal",
         "open_dispute", "return_nft_to_escrow", "withdraw_unsold_nft"
     ]]
     created_at: datetime

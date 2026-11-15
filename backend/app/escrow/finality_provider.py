@@ -746,6 +746,45 @@ class PytoniqTONTestnetEscrowProvider:
         }
         return decoded, state_name, _sha256(getter_identity)
 
+    async def verify_deployed_account(
+        self, deal: EscrowDeal
+    ) -> tuple[dict[str, object], int, str, str]:
+        """Prove that the deterministic DealEscrow is deployed and still unactivated.
+
+        The account state is read at the latest masterchain head anchored by the
+        trust-level-0 LiteServer session. _read_contract_state verifies the code
+        hash and every immutable constructor field against the persisted snapshot.
+        """
+        if deal.network != "testnet" or not deal.contract_address:
+            raise EscrowProviderInvalidEvidence(
+                "DealEscrow deployment is not bound to a testnet contract address"
+            )
+        client = await self._get_lite_client()
+        try:
+            masterchain_id = await client.get_trusted_last_mc_block()
+            if masterchain_id is None or int(getattr(masterchain_id, "seqno", 0)) <= 0:
+                raise EscrowProviderUnavailable(
+                    "Trusted testnet masterchain head is unavailable"
+                )
+            getter, state_name, _identity = await self._read_contract_state(
+                deal, masterchain_id, client
+            )
+            # Fetching the same trusted block also ensures its block metadata is
+            # available; raw_get_account_state above verifies inclusion proof.
+            await client.raw_get_block(masterchain_id)
+            block_hash = masterchain_id.root_hash.hex()
+            if state_name != "intent_created" or getter.get("contract_state") != 0:
+                raise EscrowProviderInvalidEvidence(
+                    "DealEscrow is not in its initial unactivated state"
+                )
+            return getter, int(masterchain_id.seqno), block_hash, _PROVIDER_ID
+        except (EscrowProviderInvalidEvidence, EscrowProviderUnavailable):
+            raise
+        except Exception as exc:
+            raise EscrowProviderUnavailable(
+                "Could not prove the deployed DealEscrow account state"
+            ) from exc
+
     def _decode_direct_body(
         self, body: Any, opcode: int, deal: EscrowDeal
     ) -> tuple[int, int, int | None]:

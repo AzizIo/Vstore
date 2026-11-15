@@ -112,7 +112,8 @@ async def _observe_escrow_events_periodically(
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+    application.state.ton_escrow_finality_provider = None
     runtime_settings = get_settings()
     expiration_task = asyncio.create_task(_expire_orders_periodically())
     delivery_observer_task = asyncio.create_task(
@@ -132,6 +133,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             session_factory=async_session_factory,
             settings=runtime_settings,
         )
+        application.state.ton_escrow_finality_provider = escrow_provider
         escrow_observer_task = asyncio.create_task(
             _observe_escrow_events_periodically(escrow_provider)
         )
@@ -149,6 +151,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
                 await task
             except asyncio.CancelledError:
                 pass
+        application.state.ton_escrow_finality_provider = None
         if escrow_provider is not None:
             await escrow_provider.close()
         await dispose_engine()

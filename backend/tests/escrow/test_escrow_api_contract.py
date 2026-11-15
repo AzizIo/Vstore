@@ -108,6 +108,7 @@ def test_backend_exposes_expected_deal_scoped_preparation_routes() -> None:
     assert "/escrow/buyer/deals" in paths
     assert "/escrow/seller/deals" in paths
     assert "/escrow/deals/{deal_id}/prepare/create-deal-escrow" in paths
+    assert "/escrow/deals/{deal_id}/prepare/activate-deal" in paths
     assert "/escrow/deals/{deal_id}/prepare/deposit-nft" in paths
     assert "/escrow/deals/{deal_id}/prepare/funding" in paths
     assert "/escrow/deals/{deal_id}/prepare/accept" in paths

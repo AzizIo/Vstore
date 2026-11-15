@@ -11,7 +11,9 @@ from decimal import Decimal
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,7 +99,10 @@ def _listing_actions(intent: EscrowListingIntent, actor_id: UUID) -> list[str]:
 def _deal_actions(deal: EscrowDeal, actor_id: UUID) -> list[str]:
     if actor_id == deal.seller_id:
         if deal.status == "intent_created":
-            return ["create_deal_escrow"]
+            # Activation is separately gated by a trust-level-0 account-state
+            # proof in its preparation route. It is safe to expose here while
+            # the user deploys; premature calls fail closed until deployed.
+            return ["create_deal_escrow", "activate_deal"]
         if deal.status == "awaiting_nft":
             return ["deposit_nft"]
         if deal.status == "expired":
@@ -1139,6 +1144,7 @@ async def _prepare_action(
 
     seller_states = {
         EscrowWalletAction.CREATE_DEAL_ESCROW: "intent_created",
+        EscrowWalletAction.ACTIVATE_DEAL: "intent_created",
         EscrowWalletAction.DEPOSIT_NFT: "awaiting_nft",
         EscrowWalletAction.WITHDRAW_UNSOLD_NFT: "expired",
     }
@@ -1425,6 +1431,154 @@ async def prepare_deal_escrow(deal_id: UUID, user: CurrentUser, session: DbSessi
     verifier: Verifier, idempotency_key: IdempotencyKey):
     return await _prepare_action(deal_id, EscrowWalletAction.CREATE_DEAL_ESCROW, user, session,
         verifier, idempotency_key)
+
+
+@router.post(
+    "/deals/{deal_id}/prepare/activate-deal",
+    response_model=EscrowTransactionPreparationResponse,
+)
+async def prepare_deal_activation(
+    deal_id: UUID,
+    request: Request,
+    user: CurrentUser,
+    session: DbSession,
+    verifier: Verifier,
+    idempotency_key: IdempotencyKey,
+):
+    """Prepare seller activation only after a trusted LiteServer proves deployment.
+
+    The endpoint never signs or broadcasts. It checks the deterministic escrow
+    address, pinned code hash and immutable constructor terms at a trust-level-0
+    masterchain head, then persists the getter snapshot before building the
+    idempotent unsigned ActivateDeal payload.
+    """
+    _require_testnet()
+
+    existing = await session.scalar(
+        select(EscrowWalletActionRecord)
+        .where(
+            EscrowWalletActionRecord.actor_id == user.id,
+            EscrowWalletActionRecord.action_type == EscrowWalletAction.ACTIVATE_DEAL.value,
+            EscrowWalletActionRecord.idempotency_key == idempotency_key,
+        )
+        .with_for_update()
+    )
+    if existing is not None:
+        return await _prepare_action(
+            deal_id, EscrowWalletAction.ACTIVATE_DEAL, user, session,
+            verifier, idempotency_key,
+        )
+
+    deal = await session.scalar(
+        select(EscrowDeal).where(
+            EscrowDeal.id == deal_id,
+            EscrowDeal.seller_id == user.id,
+        )
+    )
+    if deal is None:
+        raise HTTPException(status_code=404, detail={"code": "escrow_deal_not_found"})
+    if deal.status != EscrowDealStatus.INTENT_CREATED.value:
+        raise HTTPException(status_code=409, detail={"code": "activation_state_invalid"})
+    if (
+        not deal.contract_address
+        or not isinstance(deal.deployment_snapshot_json, dict)
+        or not isinstance(deal.deployment_snapshot_sha256, str)
+        or _canonical_sha256(deal.deployment_snapshot_json) != deal.deployment_snapshot_sha256
+    ):
+        raise HTTPException(
+            status_code=503, detail={"code": "deployment_snapshot_incomplete"}
+        )
+
+    provider = getattr(request.app.state, "ton_escrow_finality_provider", None)
+    if provider is None:
+        raise HTTPException(
+            status_code=503, detail={"code": "escrow_finality_provider_unavailable"}
+        )
+
+    expected_contract = deal.contract_address
+    expected_snapshot_sha = deal.deployment_snapshot_sha256
+    await session.rollback()
+    try:
+        getter, masterchain_seqno, masterchain_block_hash, provider_id = (
+            await provider.verify_deployed_account(deal)
+        )
+    except Exception as exc:
+        # Provider details and proof material are deliberately not returned.
+        from app.escrow.provider import EscrowProviderInvalidEvidence, EscrowProviderUnavailable
+
+        if isinstance(exc, EscrowProviderInvalidEvidence):
+            raise HTTPException(
+                status_code=409, detail={"code": "escrow_deployment_not_proven"}
+            ) from exc
+        if isinstance(exc, EscrowProviderUnavailable):
+            raise HTTPException(
+                status_code=503, detail={"code": "escrow_finality_provider_unavailable"}
+            ) from exc
+        raise HTTPException(
+            status_code=503, detail={"code": "escrow_deployment_proof_failed"}
+        ) from exc
+
+    if (
+        getter.get("contract_state") != 0
+        or getter.get("nft_in_escrow") is not False
+        or getter.get("principal_locked") is not False
+    ):
+        raise HTTPException(
+            status_code=409, detail={"code": "escrow_contract_not_awaiting_activation"}
+        )
+    if (
+        isinstance(masterchain_seqno, bool)
+        or not isinstance(masterchain_seqno, int)
+        or masterchain_seqno <= 0
+        or not isinstance(masterchain_block_hash, str)
+        or not _HEX_256.fullmatch(masterchain_block_hash)
+        or not isinstance(provider_id, str)
+        or not provider_id.strip()
+        or any(field not in getter for field in _GETTER_SNAPSHOT_FIELDS)
+    ):
+        raise HTTPException(
+            status_code=503, detail={"code": "escrow_deployment_proof_incomplete"}
+        )
+
+    locked_deal = await session.scalar(
+        select(EscrowDeal)
+        .where(
+            EscrowDeal.id == deal_id,
+            EscrowDeal.seller_id == user.id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if (
+        locked_deal is None
+        or locked_deal.status != EscrowDealStatus.INTENT_CREATED.value
+        or locked_deal.contract_address != expected_contract
+        or locked_deal.deployment_snapshot_sha256 != expected_snapshot_sha
+    ):
+        await session.rollback()
+        raise HTTPException(
+            status_code=409, detail={"code": "escrow_deal_changed_during_proof"}
+        )
+    current_seqno = locked_deal.getter_snapshot_masterchain_seqno or 0
+    if current_seqno > masterchain_seqno:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409, detail={"code": "stale_escrow_getter_proof"}
+        )
+
+    getter_json = dict(getter)
+    locked_deal.getter_snapshot_json = getter_json
+    locked_deal.getter_snapshot_sha256 = _canonical_sha256(getter_json)
+    locked_deal.getter_snapshot_masterchain_seqno = masterchain_seqno
+    locked_deal.getter_snapshot_block_hash = masterchain_block_hash
+    locked_deal.getter_snapshot_provider = provider_id
+    locked_deal.getter_snapshot_observed_at = datetime.now(UTC)
+    await session.commit()
+
+    return await _prepare_action(
+        deal_id, EscrowWalletAction.ACTIVATE_DEAL, user, session,
+        verifier, idempotency_key,
+    )
 
 
 @router.post("/deals/{deal_id}/prepare/deposit-nft",
