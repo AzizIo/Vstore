@@ -522,7 +522,9 @@ async def _apply_one_event(
             # it cannot move a terminal deal to another state.
             next_state = EscrowDealStatus(deal.status)
         else:
-            next_state = transition_for_verified_event(deal.status, event.event_type)
+            next_state = transition_for_verified_event(
+                deal.status, event.event_type, event.observed_contract_state
+            )
     except (EscrowDomainError, ValueError):
         await _persist_event(session, event, status="manual_review",
             reason_code="event_invariant_or_transition_failure", deal_id=deal.id, existing=existing)
