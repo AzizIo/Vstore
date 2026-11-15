@@ -34,7 +34,6 @@ from app.db.models import (
 from app.db.session import get_db_session
 from app.escrow.contracts import (
     DealEscrowDeploymentSnapshot,
-    EscrowContractABIUnavailable,
     EscrowWalletAction,
     UnconfiguredTONEscrowContractAdapter,
 )
@@ -177,7 +176,6 @@ Verifier = Annotated[TONNFTVerifier, Depends(get_ton_nft_verifier)]
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=8, max_length=128)]
 
 _NANOTON = Decimal(1_000_000_000)
-_contract_adapter = UnconfiguredTONEscrowContractAdapter()
 
 
 _DEPLOYMENT_SNAPSHOT_BINDINGS = {
@@ -222,7 +220,12 @@ _DEPLOYMENT_SNAPSHOT_BINDINGS = {
 def _build_deployment_snapshot(
     deal: EscrowDeal,
 ) -> tuple[DealEscrowDeploymentSnapshot | None, tuple[str, ...]]:
-    """Build only from a complete persisted snapshot; never invent contract terms."""
+    """Diagnostic only: inspect persisted fields; this does not enable adapter integration.
+
+    EscrowDeal currently lacks mapped columns for the full immutable deployment/getter
+    snapshot. A complete result from a synthetic object is not evidence that ORM rows
+    can supply the values. Transaction preparation remains unconditionally fail-closed.
+    """
 
     values: dict[str, object] = {}
     missing: list[str] = []
@@ -832,11 +835,18 @@ async def _prepare_action(
         ):
             await session.rollback()
             raise HTTPException(status_code=409, detail={"code": "idempotency_payload_conflict"})
+        replay_error_code = (
+            existing_action.last_error_code
+            if existing_action.status == "blocked_abi" and existing_action.last_error_code
+            else "deployment_snapshot_incomplete"
+        )
         raise HTTPException(status_code=503, detail={
-            "code": "contract_abi_pending",
+            "code": replay_error_code,
             "action_id": str(existing_action.id),
             "action_status": existing_action.status,
-            "message": "The same durable action already exists; no duplicate action was created",
+            "message": (
+                "The same durable action already exists; no duplicate action was created"
+            ),
         })
 
     seller_states = {
@@ -992,42 +1002,22 @@ async def _prepare_action(
             "message": "No reviewed ABI or message layout is available",
         })
 
-    deal_snapshot, missing_snapshot_fields = _build_deployment_snapshot(deal)
-    if deal_snapshot is None:
-        action_record.status = "blocked_abi"
-        action_record.last_error_code = "deployment_snapshot_incomplete"
-        await session.commit()
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "code": "deployment_snapshot_incomplete",
-                "action_id": str(action_record.id),
-                "missing_fields": list(missing_snapshot_fields),
-                "message": (
-                    "The full immutable DealEscrow deployment/getter snapshot is not "
-                    "persisted yet; no transaction payload was generated"
-                ),
-            },
-        )
-    try:
-        await _contract_adapter.prepare_transaction(
-            action, actor_wallet=wallet, resource_id=str(deal.id),
-            deal_snapshot=deal_snapshot,
-        )
-    except EscrowContractABIUnavailable as exc:
-        action_record.status = "blocked_abi"
-        action_record.last_error_code = "contract_abi_pending"
-        await session.commit()
-        raise HTTPException(status_code=503, detail={
-            "code": "contract_abi_pending", "action_id": str(action_record.id),
-            "message": str(exc),
-        }) from exc
+    # The current EscrowDeal ORM/migrations do not persist the complete immutable
+    # deployment/getter snapshot required by the pinned adapter. Do not let a
+    # diagnostic builder or an adapter stub imply that transaction preparation is
+    # available. Keep the durable action and fail closed until the schema, migration,
+    # immutability rules and PostgreSQL integration tests land together.
     action_record.status = "blocked_abi"
-    action_record.last_error_code = "contract_abi_pending"
+    action_record.last_error_code = "deployment_snapshot_incomplete"
     await session.commit()
-    raise HTTPException(status_code=503, detail={
-        "code": "contract_abi_pending", "action_id": str(action_record.id),
-        "message": "No reviewed ABI or message layout is available",
+    raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail={
+        "code": "deployment_snapshot_incomplete",
+        "action_id": str(action_record.id),
+        "action_status": action_record.status,
+        "message": (
+            "The immutable DealEscrow deployment/getter snapshot is not persisted; "
+            "no transaction payload was generated"
+        ),
     })
 
 
