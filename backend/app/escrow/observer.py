@@ -291,7 +291,16 @@ async def _terminal_owner_evidence(
     if deal is None:
         return event
     try:
-        next_state = transition_for_verified_event(deal.status, event.event_type)
+        if (
+            deal.status in {state.value for state in TERMINAL_DEAL_STATES}
+            and event.observed_contract_state == deal.status
+        ):
+            # The canonical event may already have advanced the deal while
+            # listing release stayed pinned on missing owner evidence. Re-query
+            # the current owner for the same terminal result on replay.
+            next_state = EscrowDealStatus(deal.status)
+        else:
+            next_state = transition_for_verified_event(deal.status, event.event_type)
     except (EscrowDomainError, ValueError):
         return event
     if (
