@@ -912,7 +912,8 @@ get fun `test timeout cannot strand a successful nft transfer before finality at
     expect(deliveryTimeout).toHaveSuccessfulTx<TimeoutDeal>({ to: escrow.address });
     expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
     expect(escrow.getProgress().principalLocked).toEqual(true);
-    expect(escrow.getProgress().nftInEscrow).toEqual(false);
+    // Keep the contract custody projection conservative until the exact outbound action is finalized.
+    expect(escrow.getProgress().nftInEscrow).toEqual(true);
     expect(nftItem.getOwner()).toEqual(buyer.address);
 
     val lateDelivery = buildTestOracleAttestation(
