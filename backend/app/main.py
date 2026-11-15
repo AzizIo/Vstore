@@ -22,7 +22,7 @@ from app.api.sellers import router as sellers_router
 from app.api.users import router as users_router
 from app.api.wallets import router as wallets_router
 from app.assets.ton_nft.observer import run_delivery_observer_pass
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.error_responses import (
     http_exception_handler,
     request_validation_exception_handler,
@@ -104,6 +104,22 @@ app = FastAPI(
 )
 
 
+def _should_mount_escrow_router(settings: Settings) -> bool:
+    """Mount testnet escrow routes only in local/test or explicit Preview runtimes.
+
+    This gate is shared with the current main-branch regression test. Production
+    deployments must not expose testnet escrow routes just because the network
+    setting was accidentally left on testnet.
+    """
+
+    if settings.ton_connect_network != "testnet":
+        return False
+    environment = settings.environment.strip().lower()
+    return environment in {"local", "development", "test", "preview"} or (
+        environment == "production" and settings.preview_mode
+    )
+
+
 async def _handle_unexpected_exception(
     request: Request, exc: Exception
 ) -> JSONResponse:
@@ -141,10 +157,10 @@ app.include_router(orders_router, prefix="/api")
 app.include_router(reviews_router, prefix="/api")
 app.include_router(sellers_router, prefix="/api")
 
-# Escrow HTTP surface is available only in an explicitly testnet-configured
-# deployment. The transaction adapter and chain provider remain fail-closed;
-# mounting this router does not enable signing, custody, or mainnet operations.
-if settings.ton_connect_network == "testnet":
+# The isolated Preview Compose runtime opts in explicitly. Ordinary production
+# deployments never mount the testnet escrow API, even if TON_CONNECT_NETWORK is
+# misconfigured. The adapter/provider remain fail-closed; no signing is enabled.
+if _should_mount_escrow_router(settings):
     app.include_router(escrow_router, prefix="/api")
 
 
