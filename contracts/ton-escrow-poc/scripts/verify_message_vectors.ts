@@ -8,6 +8,7 @@ import {
   OpenDispute,
   PayloadInline,
   RecoverUnexpectedNft,
+  RetryFailedOutboundAction,
   TimeoutDeal,
 } from "../wrappers-ts/DealEscrow.gen.ts";
 
@@ -52,6 +53,9 @@ const bodies = {
   recovery: RecoverUnexpectedNft.toCell(RecoverUnexpectedNft.create({
     queryId: 2003n, dealSalt: salt,
   })),
+  retry_failed_outbound_action: RetryFailedOutboundAction.toCell(
+    RetryFailedOutboundAction.create({ queryId: 3001n, dealSalt: salt }),
+  ),
   nft_deposit: nftDeposit,
   nft_return: nftReturn,
 };

@@ -10,6 +10,7 @@ import {
   DealRoles,
   DealSecurity,
   DealTerms,
+  OutboundActionSet,
 } from "../wrappers-ts/DealEscrow.gen.ts";
 
 const raw = (byte: string) => Address.parseRaw(`0:${byte.repeat(64 / byte.length)}`);
@@ -61,6 +62,7 @@ const progress = DealProgress.create({
     unexpectedPreviousOwner: null,
     unexpectedItemAddress: null,
   }) },
+  outboundActions: { ref: OutboundActionSet.create({ first: null, second: null }) },
 });
 const deployed = DealEscrow.fromStorage({
   terms: { ref: terms },
@@ -78,7 +80,7 @@ if (!stateInit.hash().equals(deployed.address.hash)) {
   throw new Error("StateInit hash differs from generated Acton wrapper address");
 }
 if (deployed.init.code.hash().toString("hex").toUpperCase() !==
-    "359B02C177CE033C6FE1A673C4E04B59D6D43434AF09B1CBE4BDCD8BE4779450") {
+    "23913271BD1C64389564227852B91731973ADFBD06BCC5A6D1B1E30792C0A1B3") {
   throw new Error("Generated Acton CodeCell does not match pinned manifest");
 }
 console.log(JSON.stringify({
