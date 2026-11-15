@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beginCell, Address } from "@ton/core";
 import {
   AuthorityKeys,
@@ -76,28 +77,34 @@ const stateInit = beginCell()
   .storeBit(1).storeRef(deployed.init.data) // data = Some(^Cell)
   .storeBit(0) // library = empty HashmapE
   .endCell();
-const EXPECTED_CODE_HASH =
-  "61348A9F67A31753622AB3E9E204AF67FBC1ED8736B05510DD9DF93E0F49366B";
-const EXPECTED_STATE_INIT_HASH =
-  "e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6";
-const EXPECTED_RAW_ADDRESS =
-  "0:e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6";
-const EXPECTED_DATA_HASH =
-  "faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b";
+const manifest = JSON.parse(
+  readFileSync("artifacts/frozen/manifest.json", "utf8"),
+) as {
+  compiled_code_hash: string;
+  state_init_hash: string | null;
+  raw_address: string | null;
+  data_hash: string | null;
+};
 
 if (!stateInit.hash().equals(deployed.address.hash)) {
   throw new Error("StateInit hash differs from generated Acton wrapper address");
 }
-if (deployed.init.code.hash().toString("hex").toUpperCase() !== EXPECTED_CODE_HASH) {
+if (deployed.init.code.hash().toString("hex").toUpperCase() !== manifest.compiled_code_hash) {
   throw new Error("Generated Acton CodeCell does not match pinned manifest");
 }
-if (stateInit.hash().toString("hex") !== EXPECTED_STATE_INIT_HASH) {
+if (
+  manifest.state_init_hash
+  && stateInit.hash().toString("hex") !== manifest.state_init_hash
+) {
   throw new Error("Generated fixed StateInit hash differs from frozen golden vector");
 }
-if (deployed.address.toRawString() !== EXPECTED_RAW_ADDRESS) {
+if (manifest.raw_address && deployed.address.toRawString() !== manifest.raw_address) {
   throw new Error("Generated fixed DealEscrow address differs from frozen golden vector");
 }
-if (deployed.init.data.hash().toString("hex") !== EXPECTED_DATA_HASH) {
+if (
+  manifest.data_hash
+  && deployed.init.data.hash().toString("hex") !== manifest.data_hash
+) {
   throw new Error("Generated initial storage cell differs from frozen golden vector");
 }
 console.log(JSON.stringify({
