@@ -15,7 +15,7 @@ from app.escrow.nft_identity import (
     validate_nft_identity_snapshot,
     verify_nft_identity_cells,
 )
-from app.escrow.provider import EscrowProviderInvalidEvidence
+from app.escrow.provider import EscrowProviderInvalidEvidence, EscrowProviderUnavailable
 from app.escrow.ton_abi import build_state_init_cell
 
 COLLECTION = "0:" + "c" * 64
@@ -35,8 +35,9 @@ def _fixture(
     item_code_override: Any | None = None,
     collection_item_code_override: Any | None = None,
     item_address_override: str | None = None,
+    collection_code_override: Any | None = None,
 ) -> dict[str, Any]:
-    collection_code = begin_cell().store_uint(0xCAFE, 16).end_cell()
+    collection_code = collection_code_override or begin_cell().store_uint(0xCAFE, 16).end_cell()
     item_code = item_code_override or begin_cell().store_uint(0x1234, 16).end_cell()
     collection_item_code = collection_item_code_override or item_code
     collection_content = begin_cell().store_uint(1, 1).end_cell()
@@ -336,5 +337,175 @@ async def test_provider_fails_closed_when_collection_policy_is_missing() -> None
             item_address=fixture["item_address"],
             collection_address=fixture["collection_address"],
             expected_owner_address=OWNER,
+        )
+    await provider.close()
+
+
+def test_identity_rejects_unapproved_collection_code_hash() -> None:
+    fixture = _fixture(collection_code_override=begin_cell().store_uint(0x7777, 16).end_cell())
+    fixture["policy"]["collection_code_hash"] = cell_hash(
+        begin_cell().store_uint(0xCAFE, 16).end_cell()
+    )
+
+    with pytest.raises(NFTIdentityEvidenceError, match="Collection contract code hash"):
+        _verify_fixture(fixture)
+
+
+def test_identity_rejects_unknown_derivation_and_malformed_policy_hash() -> None:
+    fixture = _fixture()
+    fixture["policy"]["derivation"] = "indexer-claims-membership"
+    with pytest.raises(NFTIdentityEvidenceError, match="Unsupported NFT collection derivation"):
+        _verify_fixture(fixture)
+
+    fixture = _fixture()
+    fixture["policy"]["item_code_hash"] = "not-a-sha256"
+    with pytest.raises(NFTIdentityEvidenceError, match="code hashes must be SHA-256"):
+        _verify_fixture(fixture)
+
+
+class _FakeScalarResult:
+    def __init__(self, rows: list[object]) -> None:
+        self.rows = rows
+
+    def all(self) -> list[object]:
+        return self.rows
+
+
+class _FakeSession:
+    def __init__(self, rows: list[object]) -> None:
+        self.rows = rows
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args: object) -> None:
+        return None
+
+    async def scalars(self, _query: object):
+        return _FakeScalarResult(self.rows)
+
+
+@pytest.mark.asyncio
+async def test_provider_refuses_stale_masterchain_head_and_provider_outage() -> None:
+    fixture = _fixture()
+    fake_client = _FakeLiteClient(fixture)
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        ton_connect_network="testnet",
+        ton_center_testnet_base_url="https://testnet.toncenter.com/api/v3",
+        ton_center_timeout_seconds=2,
+        ton_escrow_nft_collection_policies=fixture["policy_list"],
+    )
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=settings,
+        http_client=_FakeHttp(),
+        lite_client_factory=lambda: fake_client,
+    )
+    with pytest.raises(EscrowProviderUnavailable, match="requested minimum sequence"):
+        await provider.verify_nft_identity(
+            item_address=fixture["item_address"],
+            collection_address=fixture["collection_address"],
+            expected_owner_address=OWNER,
+            minimum_masterchain_seqno=501,
+        )
+    await provider.close()
+
+    class OfflineLiteClient(_FakeLiteClient):
+        async def raw_get_account_state(self, address: str, *, block: object):
+            raise RuntimeError("simulated provider outage")
+
+    offline = OfflineLiteClient(fixture)
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=settings,
+        http_client=_FakeHttp(),
+        lite_client_factory=lambda: offline,
+    )
+    with pytest.raises(EscrowProviderUnavailable, match="trusted account-state proofs"):
+        await provider.verify_nft_identity(
+            item_address=fixture["item_address"],
+            collection_address=fixture["collection_address"],
+            expected_owner_address=OWNER,
+        )
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_terminal_owner_verification_reuses_immutable_identity_anchor() -> None:
+    initial = _fixture(owner=OWNER)
+    initial_evidence = _verify_fixture(initial)
+    current = _fixture(owner=OTHER_OWNER)
+    fake_client = _FakeLiteClient(current)
+    deal = SimpleNamespace(
+        id="deal-identity",
+        network="testnet",
+        item_address=initial["item_address"],
+        collection_address_snapshot=COLLECTION,
+        nft_identity_snapshot_json=initial_evidence,
+        nft_identity_snapshot_sha256=initial_evidence["evidence_sha256"],
+        created_at=None,
+    )
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        ton_connect_network="testnet",
+        ton_center_testnet_base_url="https://testnet.toncenter.com/api/v3",
+        ton_center_timeout_seconds=2,
+        ton_escrow_nft_collection_policies=initial["policy_list"],
+    )
+    provider = PytoniqTONTestnetEscrowProvider(
+        session_factory=lambda: _FakeSession([deal]),
+        settings=settings,
+        http_client=_FakeHttp(),
+        lite_client_factory=lambda: fake_client,
+    )
+
+    proof = await provider.verify_terminal_owner(
+        item_address=initial["item_address"],
+        expected_owner_address=OTHER_OWNER,
+        minimum_masterchain_seqno=499,
+    )
+
+    assert proof is not None
+    assert proof.verified is True
+    assert proof.masterchain_seqno == 500
+    assert proof.item_address == initial["item_address"]
+    assert proof.owner_address == OTHER_OWNER
+    assert proof.proof_sha256 != initial_evidence["evidence_sha256"]
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_terminal_owner_verification_fails_closed_for_legacy_deal_without_identity() -> None:
+    fixture = _fixture()
+    deal = SimpleNamespace(
+        id="legacy-deal",
+        network="testnet",
+        item_address=fixture["item_address"],
+        collection_address_snapshot=COLLECTION,
+        nft_identity_snapshot_json=None,
+        nft_identity_snapshot_sha256=None,
+        created_at=None,
+    )
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        ton_connect_network="testnet",
+        ton_center_testnet_base_url="https://testnet.toncenter.com/api/v3",
+        ton_center_timeout_seconds=2,
+        ton_escrow_nft_collection_policies=fixture["policy_list"],
+    )
+    provider = PytoniqTONTestnetEscrowProvider(
+        session_factory=lambda: _FakeSession([deal]),
+        settings=settings,
+        http_client=_FakeHttp(),
+        lite_client_factory=lambda: _FakeLiteClient(fixture),
+    )
+
+    with pytest.raises(EscrowProviderInvalidEvidence, match="identity proof"):
+        await provider.verify_terminal_owner(
+            item_address=fixture["item_address"],
+            expected_owner_address=OWNER,
+            minimum_masterchain_seqno=499,
         )
     await provider.close()
