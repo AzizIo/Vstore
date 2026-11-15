@@ -1,7 +1,7 @@
 # Issue #225 — TON escrow contract security and lifecycle follow-up
 
 **Baseline:** `main` at `6dafdcf4c462718df14ea024f29fd277c90f6d39`  
-**Scope:** contract-only review package. No ABI, storage, opcode, frozen BOC, backend payment/provider or deployment changes are made here.
+**Scope:** historical security review plus current remediation notes. The original review was contract-only; PR #235 changes the contract storage/ABI/frozen artifacts and adds backend payment/provider reconciliation, so the original scope statement does not describe the current branch.
 
 ## Executive status
 
@@ -99,9 +99,9 @@ These are source-level observations; they do not replace an independent audit or
 
 ## Frozen artifact baseline
 
-The frozen source manifest pins Acton 1.2.1 and Tolk 1.5.0, code cell hash `359B02C177CE033C6FE1A673C4E04B59D6D43434AF09B1CBE4BDCD8BE4779450`, base64 BOC SHA-256 `9dcf1449971a1ba69e5bf59a3feac5f290eeeac011da84e279f4d93cb8be8041`, decoded BOC SHA-256 `df82a5603142e77344b3f201c13d6c77d3900893bf06cfe719bece784caf0422` and compact ABI SHA-256 `25fc5f338f45db7d7198961a75c1d5cfe04f996ae36013cca0d70f03870c3923`.
+The hashes in the original review describe the pre-remediation artifact baseline only: Acton 1.2.1 / Tolk 1.5.0, code cell hash `359B02C177CE033C6FE1A673C4E04B59D6D43434AF09B1CBE4BDCD8BE4779450`, base64 BOC SHA-256 `9dcf1449971a1ba69e5bf59a3feac5f290eeeac011da84e279f4d93cb8be8041`, decoded BOC SHA-256 `df82a5603142e77344b3f201c13d6c77d3900893bf06cfe719bece784caf0422` and compact ABI SHA-256 `25fc5f338f45db7d7198961a75c1d5cfe04f996ae36013cca0d70f03870c3923`.
 
-This PR does not alter frozen contract source, storage, ABI or compiled artifact.
+PR #235 changes `DealProgress` storage and the contract ABI/BOC/StateInit vectors. These historical hashes must not be used to deploy the current branch; use the source-controlled frozen manifest and exact-head CI artifact.
 
 ## Testnet acceptance plan — not executed
 
