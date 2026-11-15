@@ -846,12 +846,39 @@ get fun `test actual nft transfer bounce is correlated and retryable with signed
     );
     expect(allowRetry).toHaveSuccessfulTx<UpdateNftTransferPolicy>({ to: nftItem.address });
 
+    val wrongRetryCaller = testing.treasury("outbound-retry-unauthorized");
+    val unauthorizedRetry = escrow.sendAny(
+        wrongRetryCaller.address,
+        RetryFailedOutboundAction { queryId: failed.queryId, dealSalt: salt }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(unauthorizedRetry).toHaveFailedTx<RetryFailedOutboundAction>({
+        to: escrow.address,
+        exitCode: Errors.UnauthorizedRetry,
+    });
+    expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
+    expect(escrow.getProgress().oracleAttemptId).toEqual(1);
+    expect(nftItem.getOwner()).toEqual(escrow.address);
+
     val retry = escrow.sendAny(
         buyer.address,
         RetryFailedOutboundAction { queryId: failed.queryId, dealSalt: salt }.toCell(),
         { value: grams("0.03"), bounce: true },
     );
     expect(retry).toHaveSuccessfulTx<RetryFailedOutboundAction>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
+    expect(escrow.getProgress().oracleAttemptId).toEqual(2);
+    expect(nftItem.getOwner()).toEqual(buyer.address);
+
+    val replayedRetry = escrow.sendAny(
+        buyer.address,
+        RetryFailedOutboundAction { queryId: failed.queryId, dealSalt: salt }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(replayedRetry).toHaveFailedTx<RetryFailedOutboundAction>({
+        to: escrow.address,
+        exitCode: Errors.OutboundActionMissing,
+    });
     expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
     expect(escrow.getProgress().oracleAttemptId).toEqual(2);
     expect(nftItem.getOwner()).toEqual(buyer.address);
