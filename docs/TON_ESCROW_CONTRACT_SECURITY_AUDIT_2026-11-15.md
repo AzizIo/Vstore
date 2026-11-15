@@ -11,35 +11,23 @@
 
 The inspected source contains meaningful fail-closed controls: fixed per-deal roles/item/amounts, signed ConfigParam 19 testnet check, 2-of-3 signatures over typed cell hashes, distinct oracle/resolver key sets, attempt/query binding, exact NFT sender/payload checks, and manual-review transitions for bounced internal actions.
 
-This pass does **not** establish that the contract is safe to deploy. The emulator suite is materially narrower than the requested lifecycle matrix; bounce recovery loses action identity and can overwrite terminal state; oracle/resolver handlers do not enforce their state deadlines; and the reserve-accounting test bypasses signature checking for the terminal payout path. Core contract source blobs were compared between the manifest source commit and the current review baseline and found identical; exact-head rebuild and independent StateInit/BoC reproduction remain outstanding. No live testnet transactions or independent specialist review were performed. The branch adds three Acton emulator reproducers for late oracle attestation, late resolver decision and terminal-state overwrite after bounce; all 16 contract emulator tests passed in TON Contract CI run #132 (43649259704) on exact head `f38221a45fca937f67d7f2f45cf4b72bd102fd32`.
+This pass does **not** establish that the contract is safe to deploy. The current branch fixes two concrete defects from the initial review: late oracle/resolver attestations are rejected after the stored deadline, and a secondary bounce no longer overwrites an already-terminal `SETTLED`, `REFUNDED` or `EXPIRED` state. The emulator suite remains materially narrower than the requested lifecycle matrix; the terminal reserve/payout test still bypasses signature checking for accounting isolation; and oracle evidence semantics remain a 2-of-3 operator trust boundary. No live testnet transactions or independent specialist review were performed. The current reviewed test head is `6f0aee90fe760948ef9a1ab32106496e8538b636`; the exact-head TON Contract CI run #43703777523 succeeded, including build/frozen digest checks and 16/16 Acton emulator tests.
 
 ## Findings
 
-### F-01 — RESOLVED IN BRANCH: terminal state is preserved after a later bounce
+### F-01 — MITIGATED IN BRANCH: late secondary bounce no longer overwrites terminal state
 
-**Original location:** `DealEscrow.tolk:738-745`; fix is in the same handler.
+**Location:** `DealEscrow.tolk:onBouncedMessage`; regression in `DealEscrow.test.tolk`.
 
-The original handler unconditionally changed every deal to `STATE_MANUAL_REVIEW`. The branch now returns without mutation when the state is `STATE_SETTLED`, `STATE_REFUNDED` or `STATE_EXPIRED`; non-terminal bounced actions still fail closed into manual review.
-
-**Preconditions / potential impact**
-- Principal settlement has already been reconciled by the oracle and the contract has entered `STATE_SETTLED` or `STATE_REFUNDED`.
-- `settleRemainingBalanceForBuyer` also sends the fixed seller deployment allowance in a separate bounce-enabled message.
-- If the seller endpoint rejects that deployment-refund message, the resulting genuine TVM bounce is delivered after the terminal state was saved.
-- The bounce callback overwrites the terminal state with `STATE_MANUAL_REVIEW` and clears the deadline. It does not reverse the principal transfer or set `principalLocked` back to true, but it destroys the explicit terminal-state signal for reconciliation and any consumer relying on getters.
+The original handler unconditionally changed every deal to `STATE_MANUAL_REVIEW`, including after principal settlement. The branch now returns without changing storage when the current state is `STATE_SETTLED`, `STATE_REFUNDED` or `STATE_EXPIRED`. A bounce while the deal is non-terminal still moves it to manual review.
 
 **Evidence**
-- The existing bounce test exercises a synthetic bounce and expects manual review (`DealEscrow.test.tolk:615-640`).
-- The updated `test bounced message can overwrite an already terminal state` seeds `STATE_SETTLED`, delivers a bounced settlement message and asserts that the state remains `STATE_SETTLED`. A full transaction-chain test with a seller contract rejecting the actual deployment-refund message remains to be added.
-- `sendSellerDeploymentRefund` is bounce-enabled (`DealEscrow.tolk:179-195`) and is emitted during terminal settlement (`DealEscrow.tolk:223-235`); the handler does not discriminate message kind (`DealEscrow.tolk:738-745`).
+- The updated emulator test seeds `STATE_SETTLED`, submits a synthetic bounced settlement message and asserts the state remains `STATE_SETTLED`.
+- The specific seller deployment-allowance refund can be emitted after principal settlement, so preserving the terminal getter state prevents the secondary bounce from hiding the completed principal outcome.
+- This remains a callback-level synthetic bounce test. A full action-phase integration test with a rejecting seller destination, real contract-generated bounce and post-bounce balances is still missing.
 
-**Reproducer**
-- Added emulator test proves terminal-state overwrite by calling the bounced-message path after a seeded terminal state. The test is a callback-level synthetic bounce, not proof of arbitrary third-party bounce forgery or the full network action ordering.
-- Follow-up integration test should deploy a rejecting seller contract and cause the contract-controlled deployment allowance refund to bounce after the principal payout/refund message.
-
-**Recommendation**
-Decode the bounced body and bind recovery to the expected outbound operation/pending state/attempt/query/salt and trusted destination. Define a safe policy for unrecognized bounces (ignore vs manual review with recorded evidence). This is protocol/behavior-sensitive and must be coordinated with the #206 adapter owner before editing. Do not patch ABI/storage here.
-
-**Severity caveat:** MEDIUM is based on loss of terminal-state reporting after a genuine bounce of a contract-controlled, bounce-enabled refund. Exact transaction ordering and consumer impact still require an independent TON/Tolk reviewer.
+**Residual limitation**
+The handler still does not decode and correlate the bounced envelope to the outbound operation, query ID, attempt or expected destination. The terminal-state overwrite impact is mitigated, but complete bounce provenance/recovery coverage is not established. Keep this residual item in the external review scope.
 
 ### F-02 — HIGH coverage blocker: terminal/refund/dispute/expiry lifecycle is not proven by emulator tests
 
@@ -91,40 +79,19 @@ The terminal accounting test explicitly sets `testing.setChecksigIgnore(true)` b
 **Impact**
 Test suite may pass the financial settlement branch if the signature gate is accidentally bypassed in test configuration, because the existing test does bypass it. This is a validation blind spot, not proof of production bypass.
 
-### F-06 — RESOLVED IN BRANCH: oracle and resolver attestations are rejected after their state deadline
+### F-06 — MITIGATED IN BRANCH: late oracle and resolver attestations are rejected
 
-**Locations:** oracle path `DealEscrow.tolk:329-352`; resolver path `DealEscrow.tolk:456-472`; timeout path `DealEscrow.tolk:640-696`.
+**Locations:** `DealEscrow.tolk:handleOracleAttestation` and `handleDisputeResolution`.
 
-The original contract checked the deadlines for funding/acceptance, NFT notifications and dispute opening, but not in `handleOracleAttestation` or `handleDisputeResolution`. The branch now checks that a non-zero state deadline has not passed before signature processing or state mutation, using the same inclusive deadline boundary as the other contract actions.
+Both handlers now require a non-zero stored state deadline and `blockchain.now() <= progress.deadlineUnix` before signature verification or state mutation. Messages submitted after the deadline fail with `Errors.Deadline`. The inclusive boundary matches the contract's other deadline checks.
 
-**Preconditions**
-- The deal is still in an oracle- or resolver-pending state.
-- `deadlineUnix` has passed.
-- No permissionless `TimeoutDeal` transaction has yet been included.
-- A correctly signed attestation/decision for the current attempt is submitted after expiry.
+**Regression evidence**
+- The late-oracle emulator case advances time beyond the delivery-confirmation deadline, submits an oracle attestation and expects `Errors.Deadline`; state remains `STATE_NFT_RELEASE_PENDING`.
+- The late-resolver emulator case opens a pre-delivery dispute, advances beyond its arbitration deadline, submits the resolver decision and expects `Errors.Deadline`; state remains disputed and the NFT remains held by escrow.
+- These tests no longer turn on `testing.setChecksigIgnore`; the deadline guard is reached before signature processing.
 
-**Potential impact**
-The accepted outcome becomes a transaction-order race: a late oracle confirmation can advance a delivery/payout/refund path after its confirmation grace, or a late resolver decision can leave the arbitration window and still initiate NFT return/release. This weakens the documented rule that expired unresolved cases enter manual review. No loss of principal is proven from this condition alone; the impact is deadline-policy bypass and inconsistent handling of stale evidence.
-
-**Reproducers added**
-- The late-oracle test now expects `Errors.Deadline` and verifies that the deal remains in `STATE_NFT_RELEASE_PENDING`.
-- The late-resolver test opens a real pre-delivery dispute, advances time beyond the arbitration deadline, expects `Errors.Deadline`, and verifies that the NFT remains in escrow and the deal remains disputed.
-- Both tests now fail at the deadline guard without disabling signature verification.
-
-**Recommendation**
-Define whether the deadline constrains (a) the source-chain action timestamp, (b) the attestation submission time, or (c) only the time by which a permissionless timeout must be processed. If it constrains contract submission, add `blockchain.now() <= progress.deadlineUnix` before state mutation. If late proof of an in-deadline source transaction is permitted, include and validate an authenticated source timestamp/checkpoint in the signed oracle data rather than relying only on positive masterchain seqno/logical time. Coordinate semantics with #206/#213 before protocol or adapter changes.
-
-### F-05 — MEDIUM: oracle attestation evidence hashes are only checked for non-zero and persisted
-
-**Location:** `DealEscrow.tolk:334-339` and route checks in `313-443`.
-
-The contract checks that message/trace/evidence hashes are non-zero and persists the supplied evidence hash. On-chain code cannot itself prove external indexer finality or trace membership unless that evidence is independently interpreted by the oracle quorum. Therefore security rests on the actual 2-of-3 oracle governance and evidence validation procedure. This must be independently reviewed; signature quorum alone does not make the underlying observation true.
-
-**Impact**
-Compromise, collusion or correlated failure of two oracle operators can attest a false transfer/settlement observation. This is an explicit trust assumption but must not be described as trustless/finality proven.
-
-**Recommendation**
-Independent reviewer to inspect signed payload format, source evidence verification rules, operator independence and key custody. Add hostile oracle fixtures (valid signatures over wrong but internally consistent traces, conflicting observations, wrong masterchain checkpoint, false destination/amount/query). The contract only constrains fields; oracle policy validates evidence semantics.
+**Remaining boundary coverage**
+The exact `deadline - 1`, `deadline`, `deadline + 1` matrix has not been exhaustively repeated for every action/deadline type. The code-level late-message race is fixed for these handlers, but the complete deadline matrix remains part of F-02.
 
 ## Positive controls observed
 
@@ -141,7 +108,7 @@ Independent reviewer to inspect signed payload format, source evidence verificat
 
 | Requirement | Current evidence | Result |
 |---|---|---|
-| Build, format, ABI generation | TON Contract CI #132 passed build, frozen digest compare, ABI snapshot, wrapper generation, format and static checks | Passed for exact reviewed head |
+| Build, format, ABI generation | TON Contract CI run #43703777523 on `6f0aee90fe760948ef9a1ab32106496e8538b636` passed frozen verifier, source ABI snapshot, Acton build/code+BoC digest check, wrapper generation, formatting, static checks and artifact upload | Passed on current reviewed test head |
 | Exact testnet ConfigParam 19 gate | mainnet global ID fixture | Partial |
 | Exact NFT item deposit | happy path + wrong-item behavior in existing plan | Partial |
 | Buyer funding and acceptance | happy path | Partial |
@@ -149,28 +116,28 @@ Independent reviewer to inspect signed payload format, source evidence verificat
 | Full pre/post delivery dispute | no complete emulator traces | Missing |
 | Buyer principal refund | no full real-signature path | Missing |
 | Seller expiry/return | not fully exercised | Missing |
-| Every outbound bounce branch | generic bounce + terminal-state overwrite reproducer (CI passed); full real NFT/principal/refund bounce matrix absent | Partial |
-| Late oracle/resolver deadline rejection | exact post-deadline rejection regressions added; -1/exact/+1 matrix for every deadline remains incomplete | Improved; partial |
+| Bounce handling | non-terminal bounce→manual review and terminal-state preservation regression; real generated bounce/action-phase matrix absent | Partial |
+| Late oracle/resolver deadline rejection | post-deadline oracle/resolver regressions pass on current head; deadline -1/exact/+1 matrix for every deadline remains incomplete | Improved; partial |
 | Terminal principal/NFT/reserve invariants across branches | one seeded seller payout/reserve case | Missing |
 | Replay and stale attempt | stale oracle check only | Partial |
 | Live valueless testnet lifecycle | none attached | Blocked |
 | Independent TON/Tolk audit | none attached | Blocked |
 
-## Frozen artifact provenance recorded for this review
+## Frozen artifact provenance and exact-head validation
 
-- Current source review SHA: `dd7e5045450f4c95e564fae72c4200f3d921d196`
-- Manifest source commit: `2913ea7d53ea7344f57d6503142c08e0b328bc7d`
-- Workflow run ID: `43634396094`
-- Artifact ID: `14129775225`
-- Original archive SHA-256: `80db85f1dfc91450e6e7e47990bd89bf2ff80e0ecb99d17d8f40a07f33feba58`
-- Original ABI SHA-256: `05d3bc9b7aafc7fc71889cffc6d4fea2f607ea14aa48f3854c8e432747623597`
-- Build descriptor SHA-256: `f38b6c867af8ed13d95bc7fed75136961eb97c21290360197ccf9520907ffc3b`
-- Compiled code hash: `E9358DAA6FFCC8FCEC979FBD631C7FC0BE336347D1DD44F3F06113E7B2A37548`
-- Compiled BoC SHA-256: `aaaa3822a52e28410589cbd11e7e81252ea8d52b07ece73a9b5dda1c07d8a167`
-- Compact ABI SHA-256: `25fc5f338f45db7d7198961a75c1d5cfe04f996ae36013cca0d70f03870c3923`
-- Acton 1.2.1 / Tolk 1.5.0
+The frozen manifest was rebuilt after the contract-source deadline/bounce changes and now binds the compiled bytecode to source commit `079fa1f4717cde1d8963faed180b2fa1e9ea9ac6`. The final current branch head `6f0aee90fe760948ef9a1ab32106496e8538b636` adds a test-only regression isolation change after that source commit; the exact-head CI rebuild proves the compiled code and BoC still match the manifest.
 
-These are copied from the frozen manifest; this pass did not independently download/rebuild the original artifact to verify its SHA values.
+- Current reviewed/test head: `6f0aee90fe760948ef9a1ab32106496e8538b636`
+- Manifest contract-source commit: `079fa1f4717cde1d8963faed180b2fa1e9ea9ac6`
+- Latest exact-head TON Contract CI: [run #43703777523](https://github.com/AzizIo/Vstore/actions/runs/43703777523) — SUCCESS
+- CI artifact: `ton-escrow-acton-artifacts`, artifact ID `14157294381`
+- Manifest build artifact ID: `14157303414`
+- Original archive SHA-256: `82e8dc2bfda3b9418003aa6a9994c487a9086bec9416436b59db752ad2d087e5`
+- Compiled code hash: `359B02C177CE033C6FE1A673C4E04B59D6D43434AF09B1CBE4BDCD8BE4779450`
+- Compiled code BoC SHA-256: `df82a5603142e77344b3f201c13d6c77d3900893bf06cfe719bece784caf0422`
+- ABI compact SHA-256: `25fc5f338f45db7d7198961a75c1d5cfe04f996ae36013cca0d70f03870c3923`
+- Toolchain: Acton 1.2.1 / Tolk 1.5.0
+- Emulator result: 16/16 tests passed on exact reviewed test head.
 
 ## Independent reviewer status
 
