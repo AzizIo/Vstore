@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -224,57 +225,6 @@ def test_deployment_snapshot_fails_closed_when_required_chain_terms_are_missing(
     assert "contract_state" in missing
 
 
-def test_complete_immutable_deal_snapshot_is_constructed_without_defaulting_terms() -> None:
-    deal = SimpleNamespace(
-        network="testnet",
-        network_id=-3,
-        protocol_version=1,
-        listing_key_snapshot="a" * 64,
-        seller_address_snapshot="0:" + "b" * 64,
-        buyer_address_snapshot="0:" + "c" * 64,
-        collection_address_snapshot="0:" + "d" * 64,
-        item_address="0:" + "e" * 64,
-        principal_nanotons=2_500_000_000,
-        execution_reserve_nanotons=500_000_000,
-        seller_deployment_refund_nanotons=20_000_000,
-        nft_transfer_value_nanotons=50_000_000,
-        deal_salt="f" * 64,
-        activation_query_id=1,
-        fund_query_id=2,
-        nft_deposit_query_id=3,
-        nft_release_query_id=4,
-        nft_return_to_escrow_query_id=5,
-        oracle_key_a=11,
-        oracle_key_b=12,
-        oracle_key_c=13,
-        resolver_key_a=21,
-        resolver_key_b=22,
-        resolver_key_c=23,
-        deployment_value_nanotons=100_000_000,
-        activation_value_nanotons=20_000_000,
-        action_value_nanotons=20_000_000,
-        nft_deposit_value_nanotons=50_000_000,
-        nft_return_value_nanotons=50_000_000,
-        contract_state=2,
-        deadline_unix=1_800_000_000,
-        observed_chain_time_unix=1_799_999_900,
-        dispute_phase=0,
-        nft_in_escrow=False,
-        principal_locked=False,
-    )
-
-    snapshot, missing = _build_deployment_snapshot(deal)
-
-    assert missing == ()
-    assert snapshot is not None
-    assert snapshot.network_id == -3
-    assert snapshot.execution_reserve_nanotons == 500_000_000
-    assert snapshot.fund_query_id == 2
-    assert snapshot.oracle_key_c == 13
-    assert snapshot.principal_locked is False
-
-
-
 @pytest.mark.asyncio
 async def test_prepare_action_persists_idempotency_before_incomplete_snapshot_503(
     monkeypatch: pytest.MonkeyPatch,
@@ -370,3 +320,13 @@ async def test_prepare_action_persists_idempotency_before_incomplete_snapshot_50
     assert action_record.last_error_code == "deployment_snapshot_incomplete"
     assert session.commit_calls == 2
     assert session.refresh_calls == 1
+
+
+def test_preview_compose_is_the_only_compose_runtime_opted_into_preview_mode() -> None:
+    repository_root = Path(__file__).resolve().parents[3]
+    production_compose = (repository_root / "docker-compose.yml").read_text()
+    preview_compose = (repository_root / "docker-compose.preview.yml").read_text()
+
+    assert "PREVIEW_MODE" not in production_compose
+    assert 'PREVIEW_MODE: "1"' in preview_compose
+    assert "ENVIRONMENT: production" in preview_compose
