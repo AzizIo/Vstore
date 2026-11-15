@@ -110,6 +110,8 @@ def test_escrow_models_use_separate_metadata_registry() -> None:
         "price_currency",
         "principal_nanotons",
         "idempotency_key",
+        "nft_identity_snapshot_json",
+        "nft_identity_snapshot_sha256",
     ],
 )
 def test_deal_deployment_terms_cannot_be_mutated_after_creation(field: str) -> None:
@@ -131,6 +133,8 @@ def test_deal_deployment_terms_cannot_be_mutated_after_creation(field: str) -> N
         price_currency="TON",
         principal_nanotons=2_500_000_000,
         idempotency_key="deal-create-1",
+        nft_identity_snapshot_json={"evidence_sha256": "g" * 64},
+        nft_identity_snapshot_sha256="g" * 64,
     )
     for immutable_field in (
         "id",
@@ -150,6 +154,8 @@ def test_deal_deployment_terms_cannot_be_mutated_after_creation(field: str) -> N
         "price_currency",
         "principal_nanotons",
         "idempotency_key",
+        "nft_identity_snapshot_json",
+        "nft_identity_snapshot_sha256",
     ):
         set_committed_value(
             deal, immutable_field, getattr(deal, immutable_field)
@@ -173,6 +179,8 @@ def test_deal_deployment_terms_cannot_be_mutated_after_creation(field: str) -> N
         "price_currency": "XTR",
         "principal_nanotons": 2_600_000_000,
         "idempotency_key": "deal-create-2",
+        "nft_identity_snapshot_json": {"evidence_sha256": "h" * 64},
+        "nft_identity_snapshot_sha256": "h" * 64,
     }
     setattr(deal, field, replacements[field])
 
