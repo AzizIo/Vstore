@@ -1478,8 +1478,8 @@ async def _prepare_action(
     await session.rollback()
     current_identity = await _verify_escrow_nft_identity(
         identity_provider,
-        item_address=deal.item_address,
-        collection_address=deal.collection_address_snapshot,
+        item_address=str(validated_snapshot["item_address"]),
+        collection_address=str(validated_snapshot["collection_address_snapshot"]),
         expected_owner_address=ownership_check[1] if ownership_check is not None else None,
         minimum_masterchain_seqno=int(identity_snapshot["masterchain_seqno"]),
     )
@@ -1493,7 +1493,7 @@ async def _prepare_action(
     locked_deal = await session.scalar(
         select(EscrowDeal)
         .where(
-            EscrowDeal.id == deal.id,
+            EscrowDeal.id == validated_snapshot["id"],
             (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id),
         )
         .with_for_update()
