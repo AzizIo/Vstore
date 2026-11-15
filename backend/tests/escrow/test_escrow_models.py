@@ -293,6 +293,24 @@ def test_listing_intent_status_can_advance_without_mutating_its_identity() -> No
         status="intent_only",
         idempotency_key="listing-intent-create-1",
     )
+    for immutable_field in (
+        "id",
+        "marketplace_listing_id",
+        "asset_id",
+        "seller_id",
+        "seller_wallet_id",
+        "network",
+        "item_address",
+        "listing_key",
+        "collection_address_snapshot",
+        "nft_identity_snapshot_json",
+        "nft_identity_snapshot_sha256",
+        "seller_address_snapshot",
+        "price_amount",
+        "price_currency",
+        "idempotency_key",
+    ):
+        set_committed_value(intent, immutable_field, getattr(intent, immutable_field))
     set_committed_value(intent, "status", "intent_only")
     intent.status = "active"
     assert_listing_intent_terms_immutable(intent)
