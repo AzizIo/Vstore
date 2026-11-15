@@ -16,6 +16,7 @@ from app.escrow.observer import (
     _apply_one_event,
     _payload,
     _reconcile_terminal_listing,
+    _terminal_owner_evidence,
     _stored_evidence_hash,
     run_observer_pass,
 )
@@ -637,6 +638,55 @@ async def test_finalized_event_without_finality_proof_remains_pending() -> None:
     assert isinstance(stored, EscrowChainEvent)
     assert stored.status == "pending"
     assert stored.reason_code == "finality_proof_missing"
+
+
+@pytest.mark.asyncio
+async def test_terminal_owner_provider_is_requeried_after_deal_is_already_terminal() -> None:
+    deal_id = uuid4()
+    deal = SimpleNamespace(
+        id=deal_id,
+        status=EscrowDealStatus.SETTLED.value,
+        item_address="nft-item",
+        buyer_address_snapshot="buyer-wallet",
+        seller_address_snapshot="seller-wallet",
+    )
+    event = make_event(
+        deal_id=str(deal_id),
+        event_type=EscrowChainEventType.SELLER_PAYOUT_RECONCILED,
+        item_address="nft-item",
+        observed_contract_state=EscrowDealStatus.SETTLED.value,
+        contract_state_reconciled=True,
+        masterchain_seqno=200,
+    )
+    session = FakeEscrowSession(deal)
+    calls: list[tuple[str, str, int]] = []
+
+    class OwnerProvider(BatchProvider):
+        async def verify_terminal_owner(
+            self,
+            *,
+            item_address: str,
+            expected_owner_address: str,
+            minimum_masterchain_seqno: int,
+        ) -> TerminalOwnerVerification:
+            calls.append((item_address, expected_owner_address, minimum_masterchain_seqno))
+            return TerminalOwnerVerification(
+                network="testnet",
+                item_address=item_address,
+                owner_address=expected_owner_address,
+                masterchain_seqno=minimum_masterchain_seqno + 1,
+                proof_sha256="c" * 64,
+                provider_id="fixture-owner-verifier",
+                verified=True,
+            )
+
+    result = await _terminal_owner_evidence(
+        lambda: session, OwnerProvider(event), event
+    )  # type: ignore[arg-type]
+
+    assert calls == [("nft-item", "buyer-wallet", 200)]
+    assert result.terminal_owner_address == "buyer-wallet"
+    assert result.terminal_owner_masterchain_seqno == 201
 
 
 @pytest.mark.asyncio
