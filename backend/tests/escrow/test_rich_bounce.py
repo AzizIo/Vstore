@@ -35,7 +35,6 @@ def _nft_transfer_body(*, query_id: int = 42, salt: str = SALT) -> Cell:
         .store_bit(0)
         .store_coins(10_000_000)
         .store_bit(0)
-        .store_bit(0)
         .store_uint(NFT_FORWARD_MAGIC, 32)
         .store_uint(int(salt, 16), 256)
         .end_cell()

@@ -99,7 +99,6 @@ def _validate_original_body(
             payload = parser.load_ref().begin_parse() if payload_in_ref else parser
             if (
                 forward_amount != 10_000_000
-                or payload.load_bit() != 0
                 or payload.load_uint(32) != NFT_FORWARD_MAGIC
                 or payload.load_uint(256) != salt
                 or payload.remaining_bits != 0
