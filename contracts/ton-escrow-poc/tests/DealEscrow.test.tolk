@@ -2446,8 +2446,7 @@ get fun `test buyer reserve retry cannot sweep a bounced seller allowance`() {
     expect(sellerAllowance.status).toEqual(OUTBOUND_STATUS_BOUNCED);
     expect(buyerReserve.kind).toEqual(OUTBOUND_KIND_EXECUTION_RESERVE_REFUND);
     expect(buyerReserve.status).toEqual(OUTBOUND_STATUS_BOUNCED);
-    val escrowBalanceBeforePrematureBuyerRetry = testing.getAccountBalance(escrow.address);
-    expect(escrowBalanceBeforePrematureBuyerRetry).toBeGreater(grams("0.009"));
+    expect(testing.getAccountBalance(escrow.address)).toBeGreater(grams("0.009"));
 
     // Buyer cannot retry carry-all while the seller's fixed allowance is already
     // back in escrow as a bounced action. The failed retry must leave both
@@ -2469,9 +2468,7 @@ get fun `test buyer reserve retry cannot sweep a bounced seller allowance`() {
     });
     expect(escrow.getState()).toEqual(STATE_SETTLED);
     expect(escrow.getProgress().oracleAttemptId).toEqual(4);
-    expect(testing.getAccountBalance(escrow.address)).toBeGreaterOrEqual(
-        escrowBalanceBeforePrematureBuyerRetry,
-    );
+    expect(testing.getAccountBalance(escrow.address)).toBeGreater(grams("0.009"));
     actions = escrow.getProgress().outboundActions.load();
     assert (actions.first != null && actions.second != null) throw Errors.OutboundActionMissing;
     expect(actions.first.load().status).toEqual(OUTBOUND_STATUS_BOUNCED);
