@@ -470,7 +470,7 @@ class EscrowObserverCheckpoint(EscrowBase):
 
     checkpoint_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     network: Mapped[str] = mapped_column(String(16), server_default="testnet", nullable=False)
-    cursor: Mapped[str | None] = mapped_column(String(512))
+    cursor: Mapped[str | None] = mapped_column(Text)
     last_masterchain_seqno: Mapped[int | None] = mapped_column(BigInteger)
     lease_token: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
