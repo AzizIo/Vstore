@@ -1,6 +1,7 @@
 # Backend release-candidate audit — 2026-11-15
 
-**Audit baseline:** `main` at `19d50682441c06faa80622d837c4762f2d23cec1`  
+**Audit start baseline:** `main` at `19d50682441c06faa80622d837c4762f2d23cec1`  
+**Branch sync:** current `main` at `6dafdcf4c462718df14ea024f29fd277c90f6d39`, merged into this branch by `e600f4f19ce5e6ceb933779380f99828ce009ddb`.
 **Scope:** auth/session handling, API ownership boundaries, orders, Stars payment ledger/refunds, PostgreSQL migrations, escrow API/action integration boundaries.  
 **Decision:** implementation hardening is not production launch approval.
 
