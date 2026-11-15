@@ -967,21 +967,6 @@ async def create_listing_intent(
                 status_code=409,
                 detail={"code": "escrow_nft_listing_owner_mismatch"},
             )
-        if listing is None:
-            conflict = await session.scalar(
-                select(Listing.id).where(
-                    Listing.asset_id == asset.id,
-                    Listing.status.in_(
-                        (ListingStatus.RESERVED, ListingStatus.PENDING_REVIEW)
-                    ),
-                )
-            )
-            if conflict is not None:
-                raise HTTPException(
-                    status_code=409,
-                    detail="NFT already has a reserved or review-pending listing",
-                )
-
         price_nano = Decimal(payload.price_nano)
         price_amount = price_nano / _NANOTON
         if price_amount <= 0 or price_amount * _NANOTON != price_nano:
