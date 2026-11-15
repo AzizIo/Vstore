@@ -577,7 +577,6 @@ get fun `test stale oracle attempt cannot advance escrow state`() {
         }.toCell(),
     };
     val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
-    val dummySignature = Signature { data: ZERO_SIGNATURE_BITS }.toCell();
     val staleAttestation = OracleAttestation {
         data: staleData.toCell(),
         signatures: OracleSignatureSet {
