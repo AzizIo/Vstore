@@ -402,12 +402,14 @@ def decode_storage_cell(data_cell: Cell) -> dict[str, object]:
         contract_state = progress.load_uint(8)
         deadline_unix = progress.load_uint(64)
         dispute_phase = progress.load_uint(8)
-        _pending_kind = progress.load_uint(8)
+        pending_action = progress.load_uint(8)
         nft_in_escrow = bool(progress.load_bit())
         principal_locked = bool(progress.load_bit())
-        _oracle_attempt_id = progress.load_uint(64)
-        _dispute_attempt_id = progress.load_uint(64)
-        _evidence_cell = progress.load_ref()
+        oracle_attempt_id = progress.load_uint(64)
+        dispute_attempt_id = progress.load_uint(64)
+        evidence = progress.load_ref().begin_parse()
+        last_evidence_hash = evidence.load_uint(256)
+        dispute_reason_hash = evidence.load_uint(256)
         recovery = progress.load_ref().begin_parse()
         recovery_previous_owner = recovery.load_address()
         recovery_item_address = recovery.load_address()
@@ -440,8 +442,13 @@ def decode_storage_cell(data_cell: Cell) -> dict[str, object]:
         "contract_state": contract_state,
         "deadline_unix": deadline_unix,
         "dispute_phase": dispute_phase,
+        "pending_action": pending_action,
         "nft_in_escrow": nft_in_escrow,
         "principal_locked": principal_locked,
+        "oracle_attempt_id": oracle_attempt_id,
+        "dispute_attempt_id": dispute_attempt_id,
+        "last_evidence_hash": f"{last_evidence_hash:064x}",
+        "dispute_reason_hash": f"{dispute_reason_hash:064x}",
         "recovery_previous_owner": (
             recovery_previous_owner.to_str(is_user_friendly=False)
             if recovery_previous_owner is not None else None
