@@ -208,11 +208,15 @@ async def _cleanup(session_factory, ids: dict[str, object]) -> None:
         )
 
 
-def _enable_test_stars(monkeypatch: pytest.MonkeyPatch) -> None:
+def _enable_test_stars(
+    monkeypatch: pytest.MonkeyPatch, database_url: str
+) -> None:
     settings = Settings(
         environment="test",
+        database_url=database_url,
+        bot_token="654321:primary-test-token",
         telegram_stars_test_enabled=True,
-        telegram_stars_test_bot_token=SecretStr("isolated-test-token"),
+        telegram_stars_test_bot_token=SecretStr("123456:isolated-test-token"),
     )
     monkeypatch.setattr(payment_service, "get_settings", lambda: settings)
 
@@ -239,7 +243,7 @@ def _payment_evidence(intent, ids, *, update_id: str, charge_id: str):
 async def test_stars_intent_validation_and_success_are_idempotent(
     payment_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _enable_test_stars(monkeypatch)
+    _enable_test_stars(monkeypatch, payment_database)
     engine = create_async_engine(payment_database, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     ids = await _seed_order(session_factory)
@@ -311,7 +315,7 @@ async def test_stars_intent_validation_and_success_are_idempotent(
 async def test_reusable_invoice_second_charge_is_refundable(
     payment_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _enable_test_stars(monkeypatch)
+    _enable_test_stars(monkeypatch, payment_database)
     engine = create_async_engine(payment_database, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     ids = await _seed_order(session_factory)
@@ -353,7 +357,7 @@ async def test_reusable_invoice_second_charge_is_refundable(
 async def test_late_successful_charge_is_marked_for_refund(
     payment_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _enable_test_stars(monkeypatch)
+    _enable_test_stars(monkeypatch, payment_database)
     engine = create_async_engine(payment_database, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     ids = await _seed_order(session_factory)
@@ -379,7 +383,7 @@ async def test_late_successful_charge_is_marked_for_refund(
 async def test_xtr_delivery_is_blocked_without_paid_intent(
     payment_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _enable_test_stars(monkeypatch)
+    _enable_test_stars(monkeypatch, payment_database)
     engine = create_async_engine(payment_database, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     ids = await _seed_order(session_factory)
@@ -416,7 +420,7 @@ async def test_production_environment_cannot_enable_test_stars(
 async def test_migration_refuses_to_drop_payment_evidence(
     payment_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _enable_test_stars(monkeypatch)
+    _enable_test_stars(monkeypatch, payment_database)
     engine = create_async_engine(payment_database, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     ids = await _seed_order(session_factory)
@@ -447,7 +451,7 @@ async def test_migration_refuses_to_drop_payment_evidence(
 async def test_cancelling_paid_xtr_order_queues_a_refund(
     payment_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _enable_test_stars(monkeypatch)
+    _enable_test_stars(monkeypatch, payment_database)
     engine = create_async_engine(payment_database, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     ids = await _seed_order(session_factory)
@@ -493,7 +497,7 @@ async def test_cancelling_paid_xtr_order_queues_a_refund(
 async def test_payment_event_journal_is_append_only(
     payment_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _enable_test_stars(monkeypatch)
+    _enable_test_stars(monkeypatch, payment_database)
     engine = create_async_engine(payment_database, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     ids = await _seed_order(session_factory)
@@ -525,7 +529,7 @@ async def test_payment_event_journal_is_append_only(
 async def test_mismatched_successful_payment_is_queued_for_refund(
     payment_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _enable_test_stars(monkeypatch)
+    _enable_test_stars(monkeypatch, payment_database)
     engine = create_async_engine(payment_database, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     ids = await _seed_order(session_factory)
