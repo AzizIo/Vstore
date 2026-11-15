@@ -1252,9 +1252,13 @@ get fun `test seller deployment allowance bounce is correlated and retryable aft
     expect(buyerReserveRefund.status).toEqual(OUTBOUND_STATUS_PENDING);
     expect(escrow.getProgress().oracleAttemptId).toEqual(4);
 
+    // The terminal reserve from the original settlement is transaction-local;
+    // retain the floor before and after retrying the seller allowance bounce.
+    expect(testing.getAccountBalance(escrow.address)).toBeGreater(grams("0.009"));
     partySetRejectAction(sellerParty, sellerController, 0);
     partyRetryOutbound(sellerParty, sellerController, escrow, salt, bouncedAllowance.queryId);
     expect(escrow.getState()).toEqual(STATE_SETTLED);
+    expect(testing.getAccountBalance(escrow.address)).toBeGreater(grams("0.009"));
     expect(escrow.getProgress().principalLocked).toEqual(false);
     expect(escrow.getProgress().oracleAttemptId).toEqual(5);
     actions = escrow.getProgress().outboundActions.load();
