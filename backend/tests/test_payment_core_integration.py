@@ -31,7 +31,8 @@ from app.db.models import (
     Wallet,
 )
 from app.db.payments import PaymentEvent, PaymentIntent, PaymentRefund, PaymentTransaction
-from app.escrow.models import EscrowDeal, EscrowListingIntent
+from app.escrow.models import EscrowDeal, EscrowListingIntent, EscrowWalletActionRecord
+from app.escrow.service import EscrowActionConflict, canonical_request_sha256, create_or_replay_action
 from app.orders import payment_service
 from app.orders.payment_service import (
     PaymentConflict,
@@ -732,4 +733,132 @@ async def test_escrow_migration_upgrade_and_downgrade_preserve_payments(
             )
             assert revision == script.get_current_head()
     finally:
+        await engine.dispose()
+
+
+
+async def test_escrow_wallet_action_idempotency_replay_is_postgres_backed(
+    payment_database: str,
+) -> None:
+    """A durable blocked action replays by identity; changed payloads never duplicate it."""
+    engine = create_async_engine(payment_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    ids = await _seed_order(session_factory)
+    listing_intent_id = uuid4()
+    deal_id = uuid4()
+    actor_id = ids["buyer_id"]
+    idem_key = f"escrow-replay-{uuid4().hex[:20]}"
+    request_hash = canonical_request_sha256(
+        {"deal_id": str(deal_id), "action": "fund_deal", "amount": "2500000000"}
+    )
+    try:
+        async with session_factory.begin() as session:
+            session.add(
+                EscrowListingIntent(
+                    id=listing_intent_id,
+                    marketplace_listing_id=ids["listing_id"],
+                    asset_id=ids["asset_id"],
+                    seller_id=ids["seller_id"],
+                    seller_wallet_id=ids["seller_wallet_id"],
+                    network="testnet",
+                    item_address="0:" + "c" * 64,
+                    listing_key=uuid4().hex * 2,
+                    collection_address_snapshot="0:" + "d" * 64,
+                    seller_address_snapshot="0:" + "a" * 64,
+                    price_amount=Decimal("2.5"),
+                    price_currency="TON",
+                    status="reserved",
+                    idempotency_key=f"escrow-listing-{uuid4()}",
+                )
+            )
+            await session.flush()
+            session.add(
+                EscrowDeal(
+                    id=deal_id,
+                    listing_intent_id=listing_intent_id,
+                    marketplace_listing_id=ids["listing_id"],
+                    listing_key_snapshot=uuid4().hex * 2,
+                    seller_id=ids["seller_id"],
+                    buyer_id=actor_id,
+                    buyer_wallet_id=ids["buyer_wallet_id"],
+                    network="testnet",
+                    deal_salt=uuid4().hex * 2,
+                    collection_address_snapshot="0:" + "d" * 64,
+                    contract_address=None,
+                    contract_abi_version=None,
+                    item_address="0:" + "c" * 64,
+                    seller_address_snapshot="0:" + "a" * 64,
+                    buyer_address_snapshot="0:" + "b" * 64,
+                    price_amount=Decimal("2.5"),
+                    price_currency="TON",
+                    principal_nanotons=Decimal("2500000000"),
+                    status="awaiting_buyer_funds",
+                    last_chain_seqno=None,
+                    last_chain_logical_time=None,
+                    idempotency_key=f"escrow-deal-{uuid4()}",
+                )
+            )
+
+        async with session_factory.begin() as session:
+            original, created = await create_or_replay_action(
+                session,
+                actor_id=actor_id,
+                deal_id=deal_id,
+                action_type="fund_deal",
+                idempotency_key=idem_key,
+                request_sha256=request_hash,
+            )
+            assert created is True
+            original_id = original.id
+            original.status = "blocked_abi"
+            original.last_error_code = "deployment_snapshot_incomplete"
+
+        # A fresh DB session must replay the persisted row, not create another action.
+        async with session_factory.begin() as session:
+            replay, created = await create_or_replay_action(
+                session,
+                actor_id=actor_id,
+                deal_id=deal_id,
+                action_type="fund_deal",
+                idempotency_key=idem_key,
+                request_sha256=request_hash,
+            )
+            assert created is False
+            assert replay.id == original_id
+            assert replay.status == "blocked_abi"
+            assert replay.last_error_code == "deployment_snapshot_incomplete"
+
+        # Same key with a changed canonical payload is a conflict and must not mutate
+        # or add an action row.
+        changed_hash = canonical_request_sha256(
+            {"deal_id": str(deal_id), "action": "fund_deal", "amount": "3500000000"}
+        )
+        async with session_factory() as session:
+            with pytest.raises(EscrowActionConflict, match="idempotency_payload_conflict"):
+                await create_or_replay_action(
+                    session,
+                    actor_id=actor_id,
+                    deal_id=deal_id,
+                    action_type="fund_deal",
+                    idempotency_key=idem_key,
+                    request_sha256=changed_hash,
+                )
+            await session.rollback()
+
+        async with session_factory() as session:
+            rows = (
+                await session.scalars(
+                    select(EscrowWalletActionRecord).where(
+                        EscrowWalletActionRecord.actor_id == actor_id,
+                        EscrowWalletActionRecord.action_type == "fund_deal",
+                        EscrowWalletActionRecord.idempotency_key == idem_key,
+                    )
+                )
+            ).all()
+            assert len(rows) == 1
+            assert rows[0].id == original_id
+            assert rows[0].status == "blocked_abi"
+            assert rows[0].last_error_code == "deployment_snapshot_incomplete"
+    finally:
+        await _cleanup(session_factory, ids)
         await engine.dispose()
