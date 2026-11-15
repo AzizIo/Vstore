@@ -223,7 +223,11 @@ def test_payout_and_refund_only_settle_after_reconciliation() -> None:
         EscrowDealStatus.BUYER_REFUND_PENDING.value,
     )
     assert state is EscrowDealStatus.BUYER_REFUND_PENDING
-    state = transition_for_verified_event(state, EscrowChainEventType.BUYER_REFUND_RECONCILED, EscrowDealStatus.REFUNDED.value)
+    state = transition_for_verified_event(
+        state,
+        EscrowChainEventType.BUYER_REFUND_RECONCILED,
+        EscrowDealStatus.REFUNDED.value,
+    )
     assert state is EscrowDealStatus.REFUNDED
 
 
