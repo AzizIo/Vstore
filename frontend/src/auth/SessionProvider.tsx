@@ -50,7 +50,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    let refreshTimer: number | null = null;
+    let expirationTimer: number | null = null;
 
     async function loadSession() {
       try {
@@ -60,7 +60,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           setSession({ status: "unauthenticated", reason: "missing_init_data" });
           return;
         }
+        const authenticationStartedAt = Date.now();
         const authenticatedSession = await authenticateTelegram(initData, controller.signal);
+        const tokenExpiresAt = authenticationStartedAt + authenticatedSession.expiresIn * 1000;
         const user = await fetchCurrentUser(authenticatedSession.accessToken, controller.signal);
         if (!controller.signal.aborted) {
           setSession({
@@ -69,17 +71,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             user,
           });
 
-          // Refresh before the server-issued JWT expires. Telegram initData remains
-          // the only credential used to mint a replacement token.
-          const lifetimeMs = authenticatedSession.expiresIn * 1000;
-          const refreshLeadMs = Math.min(60_000, Math.max(5_000, lifetimeMs * 0.1));
-          const refreshDelayMs = Math.max(1_000, lifetimeMs - refreshLeadMs);
-          refreshTimer = window.setTimeout(() => {
+          // Telegram initData is valid only for a short server-defined window and
+          // there is no refresh-token endpoint. Do not mint a new JWT from stale
+          // initData: expire this session and require a fresh Mini App launch.
+          const remainingLifetimeMs = Math.max(0, tokenExpiresAt - Date.now());
+          if (remainingLifetimeMs === 0) {
+            clearPrivateCache(queryClient);
+            setSession({ status: "unauthenticated", reason: "invalid_init_data" });
+            return;
+          }
+          expirationTimer = window.setTimeout(() => {
             if (controller.signal.aborted) return;
             clearPrivateCache(queryClient);
-            setSession({ status: "loading" });
-            setSessionAttempt((attempt) => attempt + 1);
-          }, refreshDelayMs);
+            setSession({ status: "unauthenticated", reason: "invalid_init_data" });
+          }, remainingLifetimeMs);
         }
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -97,7 +102,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     void loadSession();
     return () => {
       controller.abort();
-      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+      if (expirationTimer !== null) window.clearTimeout(expirationTimer);
     };
   }, [queryClient, sessionAttempt]);
 
