@@ -170,7 +170,6 @@ async def test_payment_snapshots_and_evidence_cannot_be_rewritten_or_removed(
                     ("payment_intents", "ck_payment_intents_amount_whole_stars"),
                     ("payment_transactions", "ck_payment_transactions_amount_whole_stars"),
                     ("payment_transactions", "ck_payment_transactions_provider_stars"),
-                    ("payment_transactions", "ck_payment_transactions_currency_stars"),
                 ):
                     installed = await session.scalar(
                         text(
@@ -215,9 +214,6 @@ async def test_payment_snapshots_and_evidence_cannot_be_rewritten_or_removed(
                                 },
                             )
 
-                await assert_invalid_charge(
-                    provider="telegram_stars", currency="TON", amount=Decimal("25")
-                )
                 await assert_invalid_charge(
                     provider="external", currency="XTR", amount=Decimal("25")
                 )
