@@ -59,6 +59,17 @@ class NormalizedChainEvent:
     terminal_owner_proof_sha256: str | None = None
     terminal_owner_masterchain_seqno: int | None = None
     terminal_owner_provider: str | None = None
+    # Untrusted discovery locators; never treated as finality proof.
+    candidate_workchain: int | None = None
+    candidate_shard: int | None = None
+    candidate_block_seqno: int | None = None
+    # Facts decoded from the proof-verified transaction/message and account state.
+    verified_event_type: EscrowChainEventType | None = None
+    verified_source_address: str | None = None
+    verified_destination_address: str | None = None
+    verified_item_address: str | None = None
+    verified_collection_address: str | None = None
+    verified_amount_nanotons: int | None = None
 
     @property
     def event_key(self) -> str:
@@ -101,6 +112,20 @@ class FinalityVerification:
     finalized: bool
     masterchain_inclusion_verified: bool
     trace_binding_verified: bool
+    verified_event_type: EscrowChainEventType | None = None
+    source_address: str | None = None
+    destination_address: str | None = None
+    item_address: str | None = None
+    collection_address: str | None = None
+    amount_nanotons: int | None = None
+    observed_contract_state: str | None = None
+    attestation_accepted: bool = False
+    contract_state_reconciled: bool = False
+    getter_snapshot_json: dict[str, object] | None = None
+    getter_snapshot_sha256: str | None = None
+    getter_snapshot_masterchain_seqno: int | None = None
+    getter_snapshot_block_hash: str | None = None
+    getter_snapshot_provider: str | None = None
 
     def matches(self, event: NormalizedChainEvent) -> bool:
         def is_sha256(value: str) -> bool:
@@ -137,6 +162,29 @@ class FinalityVerification:
                 or event.finality_provider == self.provider_id
             )
             and bool(self.provider_id.strip())
+            and (
+                self.verified_event_type is None
+                or isinstance(self.verified_event_type, EscrowChainEventType)
+            )
+            and (
+                self.getter_snapshot_json is None
+                or (
+                    isinstance(self.getter_snapshot_sha256, str)
+                    and is_sha256(self.getter_snapshot_sha256)
+                    and hashlib.sha256(
+                        json.dumps(
+                            self.getter_snapshot_json,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            ensure_ascii=False,
+                        ).encode("utf-8")
+                    ).hexdigest() == self.getter_snapshot_sha256
+                    and self.getter_snapshot_masterchain_seqno == self.masterchain_seqno
+                    and self.getter_snapshot_block_hash == self.masterchain_block_hash
+                    and self.getter_snapshot_provider == self.provider_id
+                    and self.contract_state_reconciled
+                )
+            )
         )
 
 
