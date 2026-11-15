@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from app.escrow.models import EscrowWalletActionRecord
 from app.escrow.service import (
@@ -148,7 +149,10 @@ async def test_action_lease_uses_skip_locked_and_fences_stale_worker() -> None:
     assert claimed is action
     assert action.lease_token is not None
     assert action.lease_until == now + timedelta(seconds=60)
-    assert "SKIP LOCKED" in str(session.statements[0]).upper()
+    compiled_query = str(
+        session.statements[0].compile(dialect=postgresql.dialect())
+    ).upper()
+    assert "SKIP LOCKED" in compiled_query
 
     stale = await release_action_lease(
         FakeActionSession(action), action_id=action.id, lease_token=uuid4(),
