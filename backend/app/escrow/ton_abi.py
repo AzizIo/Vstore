@@ -22,7 +22,7 @@ from pytoniq_core import Address, Cell, begin_cell
 _ARTIFACTS = Path(__file__).resolve().parent / "abi_artifacts"
 _NETWORK_ID = -3
 _PROTOCOL_VERSION = 1
-_CODE_HASH = "1BCCBF586878F8032F4E860707B0102EC554B4E1C0CFD7DEA362E1DD391D6666"
+_CODE_HASH = "D822B8AFBB37027611A9A9DDC8E67C52F17BBBC45B4352C7F360693BD685CA54"
 _NFT_TRANSFER_OPCODE = 0x5FCC3D14
 _NFT_FORWARD_MAGIC = 0x56454E46
 _OPCODES = {
@@ -103,16 +103,24 @@ def load_pinned_abi() -> tuple[dict[str, Any], dict[str, Any]]:
 
 
 def load_pinned_code_boc() -> str:
-    """Decompress the pinned compiler BOC and return its canonical base64 text."""
+    """Verify and decompress the pinned compiler BOC into canonical base64 text."""
     try:
         compressed_b64 = (
             _ARTIFACTS / "DealEscrow.code.boc.zlib.b64"
         ).read_text(encoding="ascii").strip()
         compressed = base64.b64decode(compressed_b64, validate=True)
-        raw_boc = zlib.decompress(compressed)
-        return base64.b64encode(raw_boc).decode("ascii")
-    except (OSError, UnicodeError, zlib.error, ValueError) as exc:
+    except (OSError, UnicodeError, ValueError) as exc:
         raise TONABIError("pinned DealEscrow code BOC is unavailable or corrupt") from exc
+
+    _, manifest = load_pinned_abi()
+    if _sha256(compressed) != manifest.get("compiled_code_boc_zlib_sha256"):
+        raise TONABIError("DealEscrow compressed code BOC digest mismatch")
+
+    try:
+        raw_boc = zlib.decompress(compressed)
+    except zlib.error as exc:
+        raise TONABIError("pinned DealEscrow code BOC is unavailable or corrupt") from exc
+    return base64.b64encode(raw_boc).decode("ascii")
 
 
 def verify_compiled_code(code_boc_base64: str | None = None) -> VerifiedArtifacts:
