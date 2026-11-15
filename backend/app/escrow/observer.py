@@ -955,7 +955,11 @@ async def run_observer_pass(
                 )
                 verified_events.append((event, False, "invalid_verification_result"))
                 continue
-            if not proof.finalized or not proof.masterchain_inclusion_verified or not proof.trace_binding_verified:
+            if (
+                not proof.finalized
+                or not proof.masterchain_inclusion_verified
+                or not proof.trace_binding_verified
+            ):
                 verified_events.append((event, False, None))
                 continue
             if not proof.matches(event):

@@ -629,7 +629,7 @@ async def test_mismatched_finality_proof_is_not_accepted() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cryptographically_invalid_candidate_is_rejected_without_blocking_checkpoint() -> None:
+async def test_invalid_candidate_does_not_block_checkpoint() -> None:
     now = datetime(2026, 11, 14, tzinfo=UTC)
     checkpoint = EscrowObserverCheckpoint(
         checkpoint_id=CHECKPOINT_ID,
