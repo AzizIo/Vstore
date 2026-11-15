@@ -215,6 +215,23 @@ async def test_postgres_listing_identity_snapshot_is_immutable_but_status_can_ad
                         },
                     )
 
+        with pytest.raises(
+            DBAPIError,
+            match="Persisted escrow listing NFT identity binding is immutable",
+        ):
+            async with session_factory() as session:
+                async with session.begin():
+                    await session.execute(
+                        text(
+                            "UPDATE escrow_listing_intents SET listing_key = :new_key "
+                            "WHERE id = :intent_id"
+                        ),
+                        {
+                            "new_key": "e" * 64,
+                            "intent_id": intent.id,
+                        },
+                    )
+
         async with session_factory.begin() as session:
             stored = await session.get(EscrowListingIntent, intent.id)
             assert stored is not None
