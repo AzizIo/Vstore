@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import secrets
+from dataclasses import asdict
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -34,7 +37,9 @@ from app.db.models import (
 from app.db.session import get_db_session
 from app.escrow.contracts import (
     DealEscrowDeploymentSnapshot,
+    EscrowContractABIUnavailable,
     EscrowWalletAction,
+    PinnedTONEscrowContractAdapter,
 )
 from app.escrow.domain import EscrowDealStatus
 from app.escrow.models import (
@@ -60,6 +65,13 @@ from app.escrow.schemas import (
     EscrowTransactionPreparationResponse,
     EscrowWalletReferenceInput,
     EscrowWithdrawalCreate,
+)
+from app.escrow.ton_abi import (
+    TONABIError,
+    derive_deployment,
+    load_pinned_code_boc,
+    validate_snapshot,
+    verify_compiled_code,
 )
 from app.escrow.service import (
     EscrowActionConflict,
@@ -216,33 +228,188 @@ _DEPLOYMENT_SNAPSHOT_BINDINGS = {
 }
 
 
-def _build_deployment_snapshot(
-    deal: EscrowDeal,
-) -> tuple[DealEscrowDeploymentSnapshot | None, tuple[str, ...]]:
-    """Diagnostic only: inspect persisted fields; this does not enable adapter integration.
+_DEPLOYMENT_SNAPSHOT_VERSION = 1
+_HEX_256 = re.compile(r"^[0-9a-fA-F]{64}$")
+_GETTER_SNAPSHOT_FIELDS = (
+    "contract_state",
+    "deadline_unix",
+    "observed_chain_time_unix",
+    "dispute_phase",
+    "nft_in_escrow",
+    "principal_locked",
+    "recovery_previous_owner",
+    "recovery_item_address",
+)
 
-    EscrowDeal currently lacks mapped columns for the full immutable deployment/getter
-    snapshot. A complete result from a synthetic object is not evidence that ORM rows
-    can supply the values. Transaction preparation remains unconditionally fail-closed.
+
+def _canonical_sha256(value: object) -> str:
+    raw = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _new_query_ids(count: int = 5) -> tuple[int, ...]:
+    values: set[int] = set()
+    while len(values) < count:
+        candidate = secrets.randbits(64)
+        if candidate:
+            values.add(candidate)
+    return tuple(values)
+
+
+def _authority_keys(values: list[str], setting_name: str) -> tuple[int, int, int]:
+    if len(values) != 3 or any(not isinstance(value, str) or not _HEX_256.fullmatch(value) for value in values):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "escrow_authority_keys_unconfigured", "setting": setting_name},
+        )
+    parsed = tuple(int(value, 16) for value in values)
+    if len(set(parsed)) != 3 or any(value == 0 for value in parsed):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "escrow_authority_keys_invalid", "setting": setting_name},
+        )
+    return parsed  # type: ignore[return-value]
+
+
+def _initial_deployment_snapshot(
+    deal: EscrowDeal,
+) -> tuple[dict[str, object], str, str, str]:
+    """Build the immutable testnet terms before reserving the marketplace listing.
+
+    Missing/unapproved authority keys or invalid pinned artifacts fail the deal-intent
+    request before the listing is reserved, so the NFT cannot be stranded by a
+    deployment that is impossible to prepare.
     """
 
-    values: dict[str, object] = {}
-    missing: list[str] = []
-    for snapshot_field, deal_field in _DEPLOYMENT_SNAPSHOT_BINDINGS.items():
-        value = getattr(deal, deal_field, None)
-        if value is None:
-            missing.append(snapshot_field)
-        else:
-            values[snapshot_field] = value
-
-    if missing:
-        return None, tuple(missing)
-
-    snapshot = DealEscrowDeploymentSnapshot(
-        **values,
-        recovery_previous_owner=getattr(deal, "recovery_previous_owner", None),
-        recovery_item_address=getattr(deal, "recovery_item_address", None),
+    settings = get_settings()
+    oracle_keys = _authority_keys(
+        settings.ton_escrow_oracle_public_keys, "TON_ESCROW_ORACLE_PUBLIC_KEYS"
     )
+    resolver_keys = _authority_keys(
+        settings.ton_escrow_resolver_public_keys, "TON_ESCROW_RESOLVER_PUBLIC_KEYS"
+    )
+    if len(set((*oracle_keys, *resolver_keys))) != 6:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "escrow_authority_keys_must_be_unique"},
+        )
+    activation_id, fund_id, deposit_id, release_id, return_id = _new_query_ids()
+    snapshot = DealEscrowDeploymentSnapshot(
+        network="testnet",
+        network_id=-3,
+        protocol_version=1,
+        listing_key=deal.listing_key_snapshot,
+        seller_address=deal.seller_address_snapshot,
+        buyer_address=deal.buyer_address_snapshot,
+        collection_address=deal.collection_address_snapshot,
+        item_address=deal.item_address,
+        principal_nanotons=int(deal.principal_nanotons),
+        execution_reserve_nanotons=settings.ton_escrow_execution_reserve_nanotons,
+        seller_deployment_refund_nanotons=settings.ton_escrow_seller_deployment_refund_nanotons,
+        nft_transfer_value_nanotons=settings.ton_escrow_nft_transfer_value_nanotons,
+        deal_salt=deal.deal_salt,
+        activation_query_id=activation_id,
+        fund_query_id=fund_id,
+        nft_deposit_query_id=deposit_id,
+        nft_release_query_id=release_id,
+        nft_return_to_escrow_query_id=return_id,
+        oracle_key_a=oracle_keys[0],
+        oracle_key_b=oracle_keys[1],
+        oracle_key_c=oracle_keys[2],
+        resolver_key_a=resolver_keys[0],
+        resolver_key_b=resolver_keys[1],
+        resolver_key_c=resolver_keys[2],
+        deployment_value_nanotons=settings.ton_escrow_deployment_value_nanotons,
+        activation_value_nanotons=settings.ton_escrow_activation_value_nanotons,
+        action_value_nanotons=settings.ton_escrow_action_value_nanotons,
+        nft_deposit_value_nanotons=settings.ton_escrow_nft_deposit_value_nanotons,
+        nft_return_value_nanotons=settings.ton_escrow_nft_return_value_nanotons,
+        contract_state=0,
+        deadline_unix=0,
+        observed_chain_time_unix=0,
+        dispute_phase=0,
+        nft_in_escrow=False,
+        principal_locked=False,
+    )
+    try:
+        validate_snapshot(snapshot)
+        code_boc = load_pinned_code_boc()
+        artifacts = verify_compiled_code(code_boc)
+        deployment = derive_deployment(code_boc, snapshot)
+    except TONABIError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "escrow_deployment_snapshot_invalid"},
+        ) from exc
+    values = asdict(snapshot)
+    return values, _canonical_sha256(values), deployment.address, artifacts.abi_version
+
+
+def _build_deployment_snapshot(
+    deal: EscrowDeal,
+    *,
+    allow_initial_state: bool = False,
+) -> tuple[DealEscrowDeploymentSnapshot | None, tuple[str, ...]]:
+    """Load and cryptographically bind persisted immutable terms plus verified getter state."""
+
+    stored = getattr(deal, "deployment_snapshot_json", None)
+    stored_hash = getattr(deal, "deployment_snapshot_sha256", None)
+    version = getattr(deal, "deployment_snapshot_version", None)
+    source = getattr(deal, "deployment_snapshot_source", None)
+    if not isinstance(stored, dict) or not isinstance(stored_hash, str):
+        return None, tuple(_DEPLOYMENT_SNAPSHOT_BINDINGS)
+    if version != _DEPLOYMENT_SNAPSHOT_VERSION or source != "pinned-dealescrow-v1":
+        return None, ("deployment_snapshot_version",)
+    if not _HEX_256.fullmatch(stored_hash) or _canonical_sha256(stored) != stored_hash:
+        return None, ("deployment_snapshot_sha256",)
+
+    values: dict[str, object] = dict(stored)
+    getter = getattr(deal, "getter_snapshot_json", None)
+    if getter is not None:
+        getter_hash = getattr(deal, "getter_snapshot_sha256", None)
+        block_hash = getattr(deal, "getter_snapshot_block_hash", None)
+        seqno = getattr(deal, "getter_snapshot_masterchain_seqno", None)
+        provider = getattr(deal, "getter_snapshot_provider", None)
+        if (
+            not isinstance(getter, dict)
+            or not isinstance(getter_hash, str)
+            or not _HEX_256.fullmatch(getter_hash)
+            or _canonical_sha256(getter) != getter_hash
+            or isinstance(seqno, bool)
+            or not isinstance(seqno, int)
+            or seqno <= 0
+            or not isinstance(block_hash, str)
+            or not _HEX_256.fullmatch(block_hash)
+            or not isinstance(provider, str)
+            or not provider.strip()
+        ):
+            return None, ("getter_snapshot_integrity",)
+        if any(field not in getter for field in _GETTER_SNAPSHOT_FIELDS[:-2]):
+            return None, ("getter_snapshot_fields",)
+        values.update(getter)
+    elif not allow_initial_state or deal.status != EscrowDealStatus.INTENT_CREATED.value:
+        return None, ("finalized_getter_snapshot",)
+
+    try:
+        snapshot = DealEscrowDeploymentSnapshot(**values)
+        validate_snapshot(snapshot)
+        if (
+            snapshot.network != deal.network
+            or snapshot.listing_key != deal.listing_key_snapshot
+            or snapshot.seller_address != deal.seller_address_snapshot
+            or snapshot.buyer_address != deal.buyer_address_snapshot
+            or snapshot.collection_address != deal.collection_address_snapshot
+            or snapshot.item_address != deal.item_address
+            or snapshot.principal_nanotons != int(deal.principal_nanotons)
+            or snapshot.deal_salt != deal.deal_salt
+        ):
+            return None, ("deployment_snapshot_core_terms_mismatch",)
+        if deal.contract_address and deal.contract_address != derive_deployment(
+            load_pinned_code_boc(), snapshot
+        ).address:
+            return None, ("deployment_snapshot_contract_address_mismatch",)
+    except (TONABIError, TypeError, ValueError, KeyError):
+        return None, ("deployment_snapshot_invalid",)
     return snapshot, ()
 
 
