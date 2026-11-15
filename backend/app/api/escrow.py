@@ -786,12 +786,80 @@ async def create_listing_intent(
         except AddressError as exc:
             raise HTTPException(status_code=409,
                 detail="Stored NFT collection address is invalid") from exc
+        asset_collection_id = asset.collection_id
+        seller_wallet_id = wallet.id
+        expected_seller_address = seller_address
+        # Never hold asset/wallet row locks while waiting on the trusted chain provider.
+        await session.rollback()
         identity_snapshot = await _verify_escrow_nft_identity(
             identity_provider,
             item_address=item_address,
             collection_address=collection_address,
-            expected_owner_address=seller_address,
+            expected_owner_address=expected_seller_address,
         )
+
+        # Re-lock and verify the database inputs are unchanged from the proof request.
+        asset = await session.scalar(
+            select(NFTAsset)
+            .where(
+                NFTAsset.id == payload.asset_id,
+                NFTAsset.owner_id == user.id,
+                NFTAsset.network == "testnet",
+                NFTAsset.asset_type == AssetType.TON_NFT,
+                NFTAsset.verification_status == AssetVerificationStatus.VERIFIED,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if (
+            asset is None
+            or asset.item_address is None
+            or asset.collection_id != asset_collection_id
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_asset_changed_during_proof"},
+            )
+        try:
+            current_item_address = normalize_address(asset.item_address)
+        except AddressError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_asset_changed_during_proof"},
+            ) from exc
+        if current_item_address != item_address:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_asset_changed_during_proof"},
+            )
+        wallet, current_seller_address = await _verified_wallet(
+            session,
+            user_id=user.id,
+            wallet_id=payload.seller_wallet_id,
+        )
+        if wallet.id != seller_wallet_id or current_seller_address != expected_seller_address:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_seller_wallet_changed_during_proof"},
+            )
+        collection = await session.get(NFTCollection, asset.collection_id)
+        if collection is None or collection.network != "testnet":
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_collection_changed_during_proof"},
+            )
+        try:
+            current_collection_address = normalize_address(collection.address)
+        except AddressError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_collection_changed_during_proof"},
+            ) from exc
+        if current_collection_address != collection_address:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_collection_changed_during_proof"},
+            )
 
         price_nano = Decimal(payload.price_nano)
         price_amount = price_nano / _NANOTON
