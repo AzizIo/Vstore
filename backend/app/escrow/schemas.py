@@ -154,7 +154,10 @@ class EscrowWalletReferenceInput(BaseModel):
 class EscrowWalletReferenceResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     action_id: UUID
-    status: Literal["prepared", "submitted", "ambiguous", "finalized", "manual_review"]
+    status: Literal[
+        "pending", "prepared", "submitted", "ambiguous",
+        "finalized", "failed", "manual_review", "blocked_abi",
+    ]
     reference_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     reconciliation_status: Literal[
         "awaiting_independent_chain_reconciliation",
