@@ -175,6 +175,8 @@ def upgrade() -> None:
         "AND finality_provider IS NULL"
         ") OR ("
         "finalized_transaction_hash IS NOT NULL "
+        "AND unsigned_payload_json IS NOT NULL "
+        "AND unsigned_bocs_json IS NOT NULL "
         "AND finalized_transaction_hash ~ '^[0-9a-f]{64}$' "
         "AND finality_masterchain_seqno IS NOT NULL "
         "AND finality_masterchain_seqno > 0 "
@@ -362,7 +364,8 @@ def downgrade() -> None:
     has_payloads = connection.execute(
         sa.text(
             "SELECT EXISTS (SELECT 1 FROM escrow_wallet_actions "
-            "WHERE unsigned_payload_json IS NOT NULL OR unsigned_bocs_json IS NOT NULL)"
+            "WHERE unsigned_payload_json IS NOT NULL OR unsigned_bocs_json IS NOT NULL "
+            "OR finalized_transaction_hash IS NOT NULL OR finality_proof_sha256 IS NOT NULL)"
         )
     ).scalar_one()
     if has_snapshots or has_payloads:
