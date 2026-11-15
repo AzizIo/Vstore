@@ -111,6 +111,7 @@ async def test_main_cleans_up_worker_and_bot_session_when_polling_raises(
     dispatcher = SimpleNamespace(start_polling=AsyncMock())
     worker_started = asyncio.Event()
     worker_cancelled = asyncio.Event()
+    session_factory = Mock(return_value=fake_bot.session)
 
     async def worker(bot: object) -> None:
         assert bot is fake_bot
