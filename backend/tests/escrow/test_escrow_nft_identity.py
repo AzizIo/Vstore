@@ -59,14 +59,13 @@ def _fixture(
         .store_ref(content)
         .end_cell()
     )
-    derived_state_init = build_state_init_cell(item_code, (
+    derived_state_data = (
         begin_cell()
         .store_uint(item_index, 64)
         .store_address(Address(item_collection))
-        .store_address(Address(owner))
-        .store_ref(content)
         .end_cell()
-    ))
+    )
+    derived_state_init = build_state_init_cell(item_code, derived_state_data)
     item_address = item_address_override or Address(
         (0, derived_state_init.get_hash(0))
     ).to_str(is_user_friendly=False)
