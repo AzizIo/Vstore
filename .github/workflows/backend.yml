@@ -161,6 +161,11 @@ jobs:
             echo "Migration upgrade ended at an unexpected revision." >&2
             exit 1
           fi
+          # Exercise the escrow merge-revision downgrade and re-upgrade on this
+          # disposable, empty CI database. The migration itself refuses to drop
+          # durable wallet-action rows; populated downgrades require data export.
+          python -m alembic downgrade -1
+          python -m alembic upgrade head
 
       - name: Lint
         run: ruff check app tests migrations scripts

@@ -18,6 +18,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
@@ -351,6 +352,74 @@ class EscrowIdempotencyRecord(TimestampMixin, EscrowBase):
     request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     resource_type: Mapped[str | None] = mapped_column(String(32))
     resource_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+
+
+class EscrowWalletActionRecord(TimestampMixin, EscrowBase):
+    """Durable wallet action intent; submitted references remain untrusted hints."""
+
+    __tablename__ = "escrow_wallet_actions"
+    __table_args__ = (
+        CheckConstraint("network = 'testnet'", name="ck_escrow_action_network_testnet"),
+        CheckConstraint(
+            "status IN ('pending', 'prepared', 'submitted', 'ambiguous', 'finalized', "
+            "'failed', 'manual_review', 'blocked_abi')",
+            name="ck_escrow_action_status",
+        ),
+        CheckConstraint("length(idempotency_key) BETWEEN 8 AND 128",
+            name="ck_escrow_action_idempotency_length"),
+        CheckConstraint("length(request_sha256) = 64", name="ck_escrow_action_request_hash"),
+        CheckConstraint(
+            "unsigned_boc_sha256 IS NULL OR length(unsigned_boc_sha256) = 64",
+            name="ck_escrow_action_boc_hash"),
+        CheckConstraint(
+            "(unsigned_boc_sha256 IS NULL AND unsigned_boc_ref IS NULL) OR "
+            "(unsigned_boc_sha256 IS NOT NULL AND unsigned_boc_ref IS NOT NULL)",
+            name="ck_escrow_action_boc_pair"),
+        CheckConstraint(
+            "submission_reference_sha256 IS NULL OR length(submission_reference_sha256) = 64",
+            name="ck_escrow_action_submission_hash"),
+        CheckConstraint(
+            "(submission_reference IS NULL AND submission_reference_sha256 IS NULL) OR "
+            "(submission_reference IS NOT NULL AND submission_reference_sha256 IS NOT NULL "
+            "AND length(submission_reference) BETWEEN 1 AND 512)",
+            name="ck_escrow_action_submission_pair"),
+        CheckConstraint("attempt_count >= 0", name="ck_escrow_action_attempt_count"),
+        UniqueConstraint(
+            "actor_id", "action_type", "idempotency_key",
+            name="uq_escrow_action_actor_type_idem",
+        ),
+        Index("ix_escrow_action_deal_status", "deal_id", "status"),
+        Index("ix_escrow_action_retry", "status", "next_retry_at"),
+        Index(
+            "uq_escrow_action_submission_reference",
+            "network", "submission_reference_sha256", unique=True,
+            postgresql_where=text("submission_reference_sha256 IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    deal_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("escrow_deals.id", ondelete="RESTRICT"), nullable=False
+    )
+    actor_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey(User.__table__.c.id, ondelete="RESTRICT"), nullable=False
+    )
+    action_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    network: Mapped[str] = mapped_column(String(16), server_default="testnet", nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), server_default="pending", nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+    attempt_id: Mapped[str | None] = mapped_column(String(128))
+    query_id: Mapped[str | None] = mapped_column(String(128))
+    unsigned_boc_sha256: Mapped[str | None] = mapped_column(String(64))
+    unsigned_boc_ref: Mapped[str | None] = mapped_column(String(512))
+    submission_reference: Mapped[str | None] = mapped_column(String(512))
+    submission_reference_sha256: Mapped[str | None] = mapped_column(String(64))
+    lease_token: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(64))
 
 
 class EscrowObserverCheckpoint(EscrowBase):

@@ -15,6 +15,7 @@ from app.escrow.models import (
     EscrowIdempotencyRecord,
     EscrowListingIntent,
     EscrowObserverCheckpoint,
+    EscrowWalletActionRecord,
     EscrowWithdrawal,
     assert_deal_terms_immutable,
 )
@@ -29,6 +30,7 @@ def test_escrow_tables_are_separate_from_order_and_payment_tables() -> None:
         EscrowWithdrawal.__tablename__,
         EscrowIdempotencyRecord.__tablename__,
         EscrowObserverCheckpoint.__tablename__,
+        EscrowWalletActionRecord.__tablename__,
     } == {
         "escrow_listing_intents",
         "escrow_deals",
@@ -37,6 +39,7 @@ def test_escrow_tables_are_separate_from_order_and_payment_tables() -> None:
         "escrow_withdrawals",
         "escrow_idempotency_records",
         "escrow_observer_checkpoints",
+        "escrow_wallet_actions",
     }
     status_column = EscrowDeal.__table__.c.status
     assert status_column.default is not None or status_column.server_default is not None

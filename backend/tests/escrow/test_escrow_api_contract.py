@@ -116,27 +116,76 @@ async def test_accept_deal_is_buyer_only_and_funded_review_only(
     buyer = SimpleNamespace(id=buyer_id)
 
     class DealSession:
-        def __init__(self, deal: SimpleNamespace) -> None:
+        def __init__(
+            self,
+            deal: SimpleNamespace,
+            existing_action: SimpleNamespace | None = None,
+        ) -> None:
             self.deal = deal
+            self.existing_action = existing_action
+            self.scalar_calls = 0
+            self.get_calls = 0
 
-        async def scalar(self, statement: object) -> SimpleNamespace:
-            return self.deal
+        async def scalar(self, statement: object) -> SimpleNamespace | None:
+            self.scalar_calls += 1
+            # The first query loads the deal; the second checks for an existing
+            # durable wallet action.
+            if self.scalar_calls == 1:
+                return self.deal
+            if self.scalar_calls == 2:
+                return self.existing_action
+            return None
+
+        async def get(
+            self, model: type[object], identity: object
+        ) -> SimpleNamespace | None:
+            # _prepare_action uses AsyncSession.get() to load the listing intent
+            # while validating an idempotent replay.
+            self.get_calls += 1
+            return None
 
     deal = SimpleNamespace(
-        id=deal_id, seller_id=seller_id, buyer_id=buyer_id, status="funded_review",
+        id=deal_id,
+        seller_id=seller_id,
+        buyer_id=buyer_id,
+        status="funded_review",
+        listing_key_snapshot="a" * 64,
+        item_address="0:" + "b" * 64,
+        collection_address_snapshot="0:" + "c" * 64,
+        seller_address_snapshot="0:" + "d" * 64,
+        buyer_address_snapshot="0:" + "e" * 64,
+        principal_nanotons=2_500_000_000,
+        deal_salt="f" * 64,
+        network="testnet",
+        listing_intent_id=uuid4(),
     )
     with pytest.raises(HTTPException) as seller_error:
         await _prepare_action(
-            deal_id, EscrowWalletAction.ACCEPT_DEAL, seller, DealSession(deal), None
+            deal_id, EscrowWalletAction.ACCEPT_DEAL, seller, DealSession(deal), None,
+            "accept-key-0001",
         )
     assert seller_error.value.status_code == 409
 
     deal.status = "awaiting_buyer_funds"
     with pytest.raises(HTTPException) as buyer_error:
         await _prepare_action(
-            deal_id, EscrowWalletAction.ACCEPT_DEAL, buyer, DealSession(deal), None
+            deal_id, EscrowWalletAction.ACCEPT_DEAL, buyer, DealSession(deal), None,
+            "accept-key-0001",
         )
     assert buyer_error.value.status_code == 409
+
+    # A valid actor/state reaches the idempotent replay path, which loads the
+    # listing intent through AsyncSession.get(). A missing intent must produce
+    # the expected 404 instead of an AttributeError from an incomplete test double.
+    deal.status = "funded_review"
+    replay_session = DealSession(deal, SimpleNamespace(deal_id=deal_id))
+    with pytest.raises(HTTPException) as replay_error:
+        await _prepare_action(
+            deal_id, EscrowWalletAction.ACCEPT_DEAL, buyer, replay_session, None,
+            "accept-key-0001",
+        )
+    assert replay_error.value.status_code == 404
+    assert replay_session.get_calls == 1
 
 
 def test_listing_available_actions_are_actor_scoped() -> None:

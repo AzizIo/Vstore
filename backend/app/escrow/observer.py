@@ -10,13 +10,14 @@ import hashlib
 import json
 import logging
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.db.models import Listing, ListingStatus, NFTAsset
 from app.escrow.domain import (
     TERMINAL_DEAL_STATES,
     DealEvidenceSnapshot,
@@ -28,11 +29,18 @@ from app.escrow.domain import (
     transition_for_verified_event,
     validate_event_against_deal,
 )
-from app.escrow.models import EscrowChainEvent, EscrowDeal, EscrowObserverCheckpoint
+from app.escrow.models import (
+    EscrowChainEvent,
+    EscrowDeal,
+    EscrowListingIntent,
+    EscrowObserverCheckpoint,
+)
 from app.escrow.provider import (
     EscrowProviderInvalidEvidence,
     EscrowProviderUnavailable,
+    FinalityVerification,
     NormalizedChainEvent,
+    TerminalOwnerVerification,
     TONTestnetEscrowProvider,
 )
 
@@ -189,6 +197,143 @@ async def _persist_event(
     return existing
 
 
+async def _reconcile_terminal_listing(
+    session: AsyncSession,
+    deal: EscrowDeal,
+    next_state: EscrowDealStatus,
+    event: NormalizedChainEvent,
+) -> bool:
+    """Release/relist only when terminal getter state and current owner agree."""
+    intent_hint = await session.scalar(
+        select(EscrowListingIntent).where(EscrowListingIntent.id == deal.listing_intent_id)
+    )
+    if intent_hint is None:
+        return False
+    listing = await session.scalar(
+        select(Listing)
+        .where(Listing.id == intent_hint.marketplace_listing_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    intent = await session.scalar(
+        select(EscrowListingIntent)
+        .where(EscrowListingIntent.id == deal.listing_intent_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if listing is None or intent is None:
+        return False
+    asset = await session.scalar(
+        select(NFTAsset)
+        .where(NFTAsset.id == intent.asset_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if asset is None:
+        intent.status = "manual_review"
+        return False
+
+    expected_owner = (
+        deal.buyer_address_snapshot
+        if next_state is EscrowDealStatus.SETTLED
+        else deal.seller_address_snapshot
+    )
+    proof_hash = event.terminal_owner_proof_sha256 or ""
+    owner_proof_valid = (
+        event.terminal_owner_address == expected_owner
+        and event.terminal_owner_masterchain_seqno is not None
+        and event.terminal_owner_masterchain_seqno >= event.masterchain_seqno
+        and len(proof_hash) == 64
+        and all(char in "0123456789abcdef" for char in proof_hash.lower())
+        and bool(event.terminal_owner_provider)
+        and event.item_address == deal.item_address
+        and intent.item_address == deal.item_address
+        and asset.item_address == deal.item_address
+        and listing.status is ListingStatus.RESERVED
+    )
+    if not owner_proof_valid:
+        # Fail closed: keep the marketplace reservation and require operator review.
+        intent.status = "manual_review"
+        return False
+
+    if next_state is EscrowDealStatus.SETTLED:
+        listing.status = ListingStatus.SOLD
+        intent.status = "cancelled"
+        asset.owner_id = deal.buyer_id
+    elif next_state in {EscrowDealStatus.REFUNDED, EscrowDealStatus.EXPIRED}:
+        listing.status = ListingStatus.ACTIVE
+        intent.status = "active"
+        asset.owner_id = deal.seller_id
+    else:
+        intent.status = "manual_review"
+        return False
+    return True
+
+
+async def _terminal_owner_evidence(
+    session_factory: SessionFactory,
+    provider: TONTestnetEscrowProvider,
+    event: NormalizedChainEvent,
+) -> NormalizedChainEvent:
+    """Fetch current-owner proof outside transactions for confirmed terminal events."""
+    if (
+        not event.deal_id
+        or not event.contract_state_reconciled
+        or not event.observed_contract_state
+    ):
+        return event
+    try:
+        deal_id = uuid.UUID(event.deal_id)
+    except ValueError:
+        return event
+    async with session_factory() as session:
+        deal = await session.scalar(select(EscrowDeal).where(EscrowDeal.id == deal_id))
+    if deal is None:
+        return event
+    try:
+        if (
+            deal.status in {state.value for state in TERMINAL_DEAL_STATES}
+            and event.observed_contract_state == deal.status
+        ):
+            # The canonical event may already have advanced the deal while
+            # listing release stayed pinned on missing owner evidence. Re-query
+            # the current owner for the same terminal result on replay.
+            next_state = EscrowDealStatus(deal.status)
+        else:
+            next_state = transition_for_verified_event(deal.status, event.event_type)
+    except (EscrowDomainError, ValueError):
+        return event
+    if (
+        next_state not in TERMINAL_DEAL_STATES
+        or event.observed_contract_state != next_state.value
+        or not event.item_address
+    ):
+        return event
+    expected_owner = (
+        deal.buyer_address_snapshot
+        if next_state is EscrowDealStatus.SETTLED
+        else deal.seller_address_snapshot
+    )
+    proof = await provider.verify_terminal_owner(
+        item_address=deal.item_address,
+        expected_owner_address=expected_owner,
+        minimum_masterchain_seqno=event.masterchain_seqno,
+    )
+    if isinstance(proof, TerminalOwnerVerification) and proof.matches(
+        item_address=deal.item_address,
+        expected_owner_address=expected_owner,
+        minimum_masterchain_seqno=event.masterchain_seqno,
+    ):
+        return replace(
+            event,
+            terminal_owner_address=proof.owner_address,
+            terminal_owner_proof_sha256=proof.proof_sha256,
+            terminal_owner_masterchain_seqno=proof.masterchain_seqno,
+            terminal_owner_provider=proof.provider_id,
+        )
+    return event
+
+
 async def _apply_one_event(
     session: AsyncSession, event: NormalizedChainEvent, *, provider_verified: bool,
 ) -> str:
@@ -246,8 +391,13 @@ async def _apply_one_event(
             return "rejected"
         if existing.status in {"applied", "manual_review", "unmatched", "rejected"}:
             if existing.status == "applied":
-                return "duplicates"
-            return "rejected"
+                # A terminal chain state may be applied while marketplace release
+                # remains pinned for missing current-owner evidence. Re-query that
+                # evidence on replay instead of permanently treating the event as done.
+                if existing.reason_code != "terminal_listing_owner_unverified":
+                    return "duplicates"
+            else:
+                return "rejected"
 
     valid_shape = (
         event.network == "testnet"
@@ -269,6 +419,22 @@ async def _apply_one_event(
     if not event.finalized or event.masterchain_seqno <= 0:
         await _persist_event(session, event, status="pending",
             reason_code="awaiting_finality", deal_id=None, existing=existing)
+        return "pending"
+    if (
+        not event.masterchain_block_hash
+        or not event.finality_proof_sha256
+        or not event.finality_provider
+        or len(event.masterchain_block_hash) != 64
+        or len(event.finality_proof_sha256) != 64
+        or any(char not in "0123456789abcdef" for char in event.masterchain_block_hash.lower())
+        or any(char not in "0123456789abcdef" for char in event.finality_proof_sha256.lower())
+        or not event.message_hash
+        or not event.trace_id
+    ):
+        await _persist_event(
+            session, event, status="pending", reason_code="finality_proof_missing",
+            deal_id=None, existing=existing,
+        )
         return "pending"
     if is_raw_evidence_event(event.event_type):
         # Persist forensic evidence with its deal FK when a stable deal UUID is
@@ -331,13 +497,32 @@ async def _apply_one_event(
 
     try:
         validate_event_against_deal(_event_snapshot(event), _deal_snapshot(deal))
-        next_state = transition_for_verified_event(deal.status, event.event_type)
+        if (
+            deal.status in {state.value for state in TERMINAL_DEAL_STATES}
+            and event.contract_state_reconciled
+            and event.observed_contract_state == deal.status
+        ):
+            # Replayed terminal evidence may only retry owner/listing reconciliation;
+            # it cannot move a terminal deal to another state.
+            next_state = EscrowDealStatus(deal.status)
+        else:
+            next_state = transition_for_verified_event(deal.status, event.event_type)
     except (EscrowDomainError, ValueError):
         await _persist_event(session, event, status="manual_review",
             reason_code="event_invariant_or_transition_failure", deal_id=deal.id, existing=existing)
         if deal.status not in {s.value for s in TERMINAL_DEAL_STATES}:
             deal.status = EscrowDealStatus.MANUAL_REVIEW.value
         return "rejected"
+
+    if next_state in TERMINAL_DEAL_STATES and (
+        not event.contract_state_reconciled
+        or event.observed_contract_state != next_state.value
+    ):
+        await _persist_event(
+            session, event, status="pending", reason_code="terminal_state_not_reconciled",
+            deal_id=deal.id, existing=existing,
+        )
+        return "pending"
 
     if event.event_type is EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED:
         # Provider adapter must confirm accepted oracle evidence and reconciled
@@ -352,12 +537,17 @@ async def _apply_one_event(
             deal.status = EscrowDealStatus.MANUAL_REVIEW.value
             return "rejected"
 
-    await _persist_event(session, event, status="applied",
-        reason_code=None, deal_id=deal.id, existing=existing)
+    event_row = await _persist_event(
+        session, event, status="applied", reason_code=None,
+        deal_id=deal.id, existing=existing,
+    )
     deal.status = next_state.value
     deal.last_chain_seqno = max(deal.last_chain_seqno or 0, event.masterchain_seqno)
     if event.logical_time is not None:
         deal.last_chain_logical_time = max(deal.last_chain_logical_time or 0, event.logical_time)
+    if next_state in TERMINAL_DEAL_STATES:
+        if not await _reconcile_terminal_listing(session, deal, next_state, event):
+            event_row.reason_code = "terminal_listing_owner_unverified"
     return "applied"
 
 
@@ -439,11 +629,24 @@ async def run_observer_pass(
             ),
         )
         for event in ordered_events:
-            # Reject obvious network / hash malformation before provider work.
+            # A boolean/indexer "finalized" flag is insufficient. The provider
+            # must return a proof bound to this transaction, message, trace and
+            # masterchain sequence number.
             if event.network != "testnet":
                 verified_events.append((event, False))
                 continue
-            verified_events.append((event, await provider.verify_event(event)))
+            proof = await provider.verify_event(event)
+            if isinstance(proof, FinalityVerification) and proof.matches(event):
+                event = replace(
+                    event,
+                    masterchain_block_hash=proof.masterchain_block_hash,
+                    finality_proof_sha256=proof.proof_sha256,
+                    finality_provider=proof.provider_id,
+                )
+                event = await _terminal_owner_evidence(session_factory, provider, event)
+                verified_events.append((event, True))
+            else:
+                verified_events.append((event, False))
     except EscrowProviderUnavailable:
         await _release_lease(
             session_factory, lease_token, error_code="provider_unavailable", now=current_time
