@@ -309,7 +309,7 @@ def upgrade() -> None:
         CREATE FUNCTION guard_escrow_action_finality_evidence()
         RETURNS trigger
         LANGUAGE plpgsql
-        AS $
+        AS $$
         BEGIN
             IF OLD.finalized_transaction_hash IS NOT NULL AND (
                 NEW.finalized_transaction_hash IS DISTINCT FROM OLD.finalized_transaction_hash
@@ -323,7 +323,7 @@ def upgrade() -> None:
             END IF;
             RETURN NEW;
         END;
-        $
+        $$
         """
     )
     op.execute(
