@@ -1394,26 +1394,6 @@ async def _prepare_action(
                 },
             )
 
-    try:
-        identity_snapshot = validate_nft_identity_snapshot(
-            deal.nft_identity_snapshot_json,
-            deal.nft_identity_snapshot_sha256,
-        )
-    except NFTIdentityEvidenceError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail={"code": "escrow_nft_identity_snapshot_required"},
-        ) from exc
-    if (
-        identity_snapshot.get("item_address") != deal.item_address
-        or identity_snapshot.get("collection_address") != deal.collection_address_snapshot
-        or identity_snapshot.get("owner_address") != deal.seller_address_snapshot
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "escrow_nft_identity_snapshot_mismatch"},
-        )
-
     seller_states = {
         EscrowWalletAction.CREATE_DEAL_ESCROW: "intent_created",
         EscrowWalletAction.ACTIVATE_DEAL: "intent_created",
@@ -1472,6 +1452,26 @@ async def _prepare_action(
         ownership_check = (deal.item_address, deal.buyer_address_snapshot)
     else:
         raise HTTPException(status_code=409, detail="Unsupported escrow action")
+
+    try:
+        identity_snapshot = validate_nft_identity_snapshot(
+            deal.nft_identity_snapshot_json,
+            deal.nft_identity_snapshot_sha256,
+        )
+    except NFTIdentityEvidenceError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "escrow_nft_identity_snapshot_required"},
+        ) from exc
+    if (
+        identity_snapshot.get("item_address") != deal.item_address
+        or identity_snapshot.get("collection_address") != deal.collection_address_snapshot
+        or identity_snapshot.get("owner_address") != deal.seller_address_snapshot
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "escrow_nft_identity_snapshot_mismatch"},
+        )
 
     if not deal.collection_address_snapshot:
         raise HTTPException(status_code=503, detail={"code": "nft_collection_snapshot_unavailable"})
