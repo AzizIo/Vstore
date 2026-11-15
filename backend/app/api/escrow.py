@@ -642,15 +642,17 @@ async def _verified_wallet(
     *,
     user_id: UUID,
     wallet_id: UUID,
+    lock: bool = False,
 ) -> tuple[Wallet, str]:
-    wallet = await session.scalar(
-        select(Wallet).where(
-            Wallet.id == wallet_id,
-            Wallet.user_id == user_id,
-            Wallet.is_verified.is_(True),
-            Wallet.network == "testnet",
-        )
+    statement = select(Wallet).where(
+        Wallet.id == wallet_id,
+        Wallet.user_id == user_id,
+        Wallet.is_verified.is_(True),
+        Wallet.network == "testnet",
     )
+    if lock:
+        statement = statement.with_for_update().execution_options(populate_existing=True)
+    wallet = await session.scalar(statement)
     if wallet is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
