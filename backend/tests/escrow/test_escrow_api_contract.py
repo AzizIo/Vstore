@@ -174,7 +174,8 @@ async def test_accept_deal_is_buyer_only_and_funded_review_only(
     assert buyer_error.value.status_code == 409
 
     # A valid actor/state reaches the idempotent replay path, which loads the
-    # listing intent through AsyncSession.get().
+    # listing intent through AsyncSession.get(). A missing intent must produce
+    # the expected 404 instead of an AttributeError from an incomplete test double.
     deal.status = "funded_review"
     replay_session = DealSession(deal, SimpleNamespace(deal_id=deal_id))
     with pytest.raises(HTTPException) as replay_error:
