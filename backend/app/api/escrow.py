@@ -180,6 +180,70 @@ _NANOTON = Decimal(1_000_000_000)
 _contract_adapter = UnconfiguredTONEscrowContractAdapter()
 
 
+_DEPLOYMENT_SNAPSHOT_BINDINGS = {
+    "network": "network",
+    "network_id": "network_id",
+    "protocol_version": "protocol_version",
+    "listing_key": "listing_key_snapshot",
+    "seller_address": "seller_address_snapshot",
+    "buyer_address": "buyer_address_snapshot",
+    "collection_address": "collection_address_snapshot",
+    "item_address": "item_address",
+    "principal_nanotons": "principal_nanotons",
+    "execution_reserve_nanotons": "execution_reserve_nanotons",
+    "seller_deployment_refund_nanotons": "seller_deployment_refund_nanotons",
+    "nft_transfer_value_nanotons": "nft_transfer_value_nanotons",
+    "deal_salt": "deal_salt",
+    "activation_query_id": "activation_query_id",
+    "fund_query_id": "fund_query_id",
+    "nft_deposit_query_id": "nft_deposit_query_id",
+    "nft_release_query_id": "nft_release_query_id",
+    "nft_return_to_escrow_query_id": "nft_return_to_escrow_query_id",
+    "oracle_key_a": "oracle_key_a",
+    "oracle_key_b": "oracle_key_b",
+    "oracle_key_c": "oracle_key_c",
+    "resolver_key_a": "resolver_key_a",
+    "resolver_key_b": "resolver_key_b",
+    "resolver_key_c": "resolver_key_c",
+    "deployment_value_nanotons": "deployment_value_nanotons",
+    "activation_value_nanotons": "activation_value_nanotons",
+    "action_value_nanotons": "action_value_nanotons",
+    "nft_deposit_value_nanotons": "nft_deposit_value_nanotons",
+    "nft_return_value_nanotons": "nft_return_value_nanotons",
+    "contract_state": "contract_state",
+    "deadline_unix": "deadline_unix",
+    "observed_chain_time_unix": "observed_chain_time_unix",
+    "dispute_phase": "dispute_phase",
+    "nft_in_escrow": "nft_in_escrow",
+    "principal_locked": "principal_locked",
+}
+
+
+def _build_deployment_snapshot(
+    deal: EscrowDeal,
+) -> tuple[DealEscrowDeploymentSnapshot | None, tuple[str, ...]]:
+    """Build only from a complete persisted snapshot; never invent contract terms."""
+
+    values: dict[str, object] = {}
+    missing: list[str] = []
+    for snapshot_field, deal_field in _DEPLOYMENT_SNAPSHOT_BINDINGS.items():
+        value = getattr(deal, deal_field, None)
+        if value is None:
+            missing.append(snapshot_field)
+        else:
+            values[snapshot_field] = value
+
+    if missing:
+        return None, tuple(missing)
+
+    snapshot = DealEscrowDeploymentSnapshot(
+        **values,
+        recovery_previous_owner=getattr(deal, "recovery_previous_owner", None),
+        recovery_item_address=getattr(deal, "recovery_item_address", None),
+    )
+    return snapshot, ()
+
+
 def _request_hash(payload: object) -> str:
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -878,12 +942,23 @@ async def _prepare_action(
         raise HTTPException(
             status_code=409, detail={"code": "escrow_wallet_changed_during_validation"}
         )
-    deal_snapshot = DealEscrowDeploymentSnapshot(
-        network=deal.network, listing_key=deal.listing_key_snapshot,
-        seller_address=deal.seller_address_snapshot, buyer_address=deal.buyer_address_snapshot,
-        collection_address=deal.collection_address_snapshot, item_address=deal.item_address,
-        principal_nanotons=int(deal.principal_nanotons), deal_salt=deal.deal_salt,
-    )
+    deal_snapshot, missing_snapshot_fields = _build_deployment_snapshot(deal)
+    if deal_snapshot is None:
+        action_record.status = "blocked_abi"
+        action_record.last_error_code = "deployment_snapshot_incomplete"
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "deployment_snapshot_incomplete",
+                "action_id": str(action_record.id),
+                "missing_fields": list(missing_snapshot_fields),
+                "message": (
+                    "The full immutable DealEscrow deployment/getter snapshot is not "
+                    "persisted yet; no transaction payload was generated"
+                ),
+            },
+        )
     action_hash = canonical_request_sha256({
         "actor_id": str(user.id),
         "deal_id": str(deal.id),

@@ -82,3 +82,28 @@ Until those answers and written reviews exist, provider selection, production cr
 - The PostgreSQL guard integration test verifies the named TRUNCATE trigger exists in `pg_trigger` for all four target tables and verifies the refund DELETE trigger exists. It asserts DELETE/TRUNCATE rejection while a legitimate transaction lifecycle update remains allowed. A rejection caused only by an unrelated FK is not sufficient evidence that a trigger is installed.
 - Do not report PostgreSQL integration tests as run locally unless an isolated disposable PostgreSQL service was actually available.
 - No production credentials, production database, real payment, refund request, payout or deployment is part of this work.
+
+
+## Release-candidate addendum — 2026-11-15
+
+Audit baseline: `main` at `19d50682441c06faa80622d837c4762f2d23cec1`.
+
+### Database invariants added in the RC branch
+
+Migration `0017_payment_xtr_invariants` adds PostgreSQL CHECK constraints requiring:
+- payment-intent amounts to be whole Stars;
+- payment-transaction amounts to be whole Stars;
+- payment-transaction provider to remain `telegram_stars`.
+
+The migration performs a preflight query and refuses to change schema if historical rows violate the proposed constraints. It never rounds, rewrites or deletes financial evidence.
+
+**Important currency exception:** `PaymentIntent.currency` remains exactly `XTR`, but `PaymentTransaction.currency` intentionally is not constrained to `XTR`. A trusted provider event with an unexpected currency must still be persisted verbatim as a rejected/refund-pending charge so the refund worker can reconcile the original Telegram charge. A DB constraint that rejected the evidence would roll back the refund queue alongside it. The service still validates XTR before treating a payment as captured.
+
+### Escrow runtime and incomplete snapshot protection
+
+- Escrow routes require testnet **and** a permitted runtime. The explicit Preview Compose stack opts in with `PREVIEW_MODE=1`; normal production does not. A production deployment accidentally configured with testnet can no longer mount the escrow API.
+- The pinned adapter does not remove the requirement for a complete immutable deal deployment/getter snapshot. Before any payload preparation attempt, the API now checks that every required deployment term, query ID, authority key and getter-state field is persisted. Missing values result in a durable `blocked_abi` action and HTTP 503 `deployment_snapshot_incomplete`; the API never builds a partial dataclass, fabricates values or returns a transaction payload.
+
+### Current boundary
+
+Telegram Stars continues to use the dedicated test bot via long polling. There is no live payment webhook route to authenticate today. Production checkout/refunds and seller payouts remain disabled. TON testnet provider cryptographic finality and an active action worker remain separate release blockers. See `docs/BACKEND_RELEASE_CANDIDATE_AUDIT_2026-11-15.md` for the cross-domain audit checklist and manual gates.
