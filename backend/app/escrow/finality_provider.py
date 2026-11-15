@@ -1081,10 +1081,8 @@ class PytoniqTONTestnetEscrowProvider:
             if located_transaction is None:
                 if not lookback_complete:
                     raise EscrowProviderUnavailable(
-                        (
-                            "Original outbound transaction is older than the "
-                            "bounded LiteServer lookback"
-                        )
+                        "Original outbound transaction is older than the "
+                        "bounded LiteServer lookback"
                     )
                 return None, "original_outbound_transaction_not_in_contract_history"
 
