@@ -111,7 +111,10 @@ export function createTonConnectEscrowAdapter(options: {
       normalizedAddress(transaction.escrow_address!);
       if (
         transaction.action === "create_deal_escrow"
-        && (messages.length !== 1 || !messages[0].stateInit)
+        && (
+          transaction.messages.length !== 1
+          || !transaction.messages[0].state_init_boc
+        )
       ) {
         throw new Error("Для прямого deployment требуется один StateInit message.");
       }
