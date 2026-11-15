@@ -49,6 +49,18 @@ logger = logging.getLogger(__name__)
 CHECKPOINT_ID = "ton-testnet-escrow"
 LEASE_SECONDS = 90
 MAX_BATCH_SIZE = 100
+RETRY_BASE_SECONDS = 5
+RETRY_MAX_SECONDS = 900
+
+
+def _observer_retry_delay_seconds(failure_count: int) -> int:
+    """Bounded exponential backoff for transient provider/observer failures."""
+    if isinstance(failure_count, bool) or not isinstance(failure_count, int):
+        raise TypeError("failure_count must be an integer")
+    if failure_count < 1:
+        return RETRY_BASE_SECONDS
+    exponent = min(failure_count - 1, 16)
+    return min(RETRY_BASE_SECONDS * (2**exponent), RETRY_MAX_SECONDS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -838,7 +850,13 @@ async def _release_lease(
             checkpoint.lease_token = None
             checkpoint.lease_until = None
             checkpoint.last_error_code = error_code
-            checkpoint.next_scan_at = now + timedelta(seconds=15) if error_code else now
+            if error_code:
+                checkpoint.failure_count = max(0, int(checkpoint.failure_count or 0)) + 1
+                retry_delay = _observer_retry_delay_seconds(checkpoint.failure_count)
+                checkpoint.next_scan_at = now + timedelta(seconds=retry_delay)
+            else:
+                checkpoint.failure_count = 0
+                checkpoint.next_scan_at = now
 
 
 async def run_observer_pass(
@@ -1041,6 +1059,7 @@ async def run_observer_pass(
                     timedelta(seconds=10) if not cursor_safe else timedelta(0)
                 )
                 checkpoint.last_error_code = None
+                checkpoint.failure_count = 0
     except Exception:
         # The event writes and cursor are one transaction; on any DB failure the
         # cursor rolls back. Release the fencing lease so the same batch can retry.

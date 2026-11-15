@@ -284,7 +284,7 @@ async def test_nonfinal_event_pins_durable_cursor_for_requery() -> None:
     checkpoint = EscrowObserverCheckpoint(
         checkpoint_id=CHECKPOINT_ID, network="testnet", cursor="cursor-before",
         last_masterchain_seqno=99, lease_token=None, lease_until=now - timedelta(seconds=1),
-        next_scan_at=None, last_error_code=None,
+        next_scan_at=None, last_error_code=None, failure_count=4,
     )
     pending = make_event(finalized=False)
     sessions = [FakeEscrowSession(checkpoint), FakeEscrowSession(checkpoint, None)]
@@ -302,6 +302,7 @@ async def test_nonfinal_event_pins_durable_cursor_for_requery() -> None:
     assert checkpoint.lease_token is None
     assert checkpoint.lease_until is None
     assert checkpoint.next_scan_at == now + timedelta(seconds=10)
+    assert checkpoint.failure_count == 0
 
 
 @pytest.mark.asyncio
