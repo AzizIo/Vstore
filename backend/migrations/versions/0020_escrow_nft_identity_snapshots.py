@@ -65,8 +65,19 @@ def upgrade() -> None:
                     IS DISTINCT FROM OLD.nft_identity_snapshot_json::jsonb
                 OR NEW.nft_identity_snapshot_sha256
                     IS DISTINCT FROM OLD.nft_identity_snapshot_sha256
+                OR NEW.network IS DISTINCT FROM OLD.network
+                OR NEW.marketplace_listing_id IS DISTINCT FROM OLD.marketplace_listing_id
+                OR NEW.seller_id IS DISTINCT FROM OLD.seller_id
+                OR NEW.item_address IS DISTINCT FROM OLD.item_address
+                OR NEW.collection_address_snapshot
+                    IS DISTINCT FROM OLD.collection_address_snapshot
+                OR NEW.seller_address_snapshot
+                    IS DISTINCT FROM OLD.seller_address_snapshot
+                OR NEW.price_amount IS DISTINCT FROM OLD.price_amount
+                OR NEW.price_currency IS DISTINCT FROM OLD.price_currency
+                OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key
             ) THEN
-                RAISE EXCEPTION 'Persisted escrow NFT identity snapshot is immutable'
+                RAISE EXCEPTION 'Persisted escrow NFT identity snapshot and bound terms are immutable'
                     USING ERRCODE = 'integrity_constraint_violation';
             END IF;
             RETURN NEW;
