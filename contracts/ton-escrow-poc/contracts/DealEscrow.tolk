@@ -432,6 +432,9 @@ fun sendRemainingBalanceTo(
     });
     // BounceMode.RichBounce keeps the exact original body available for
     // action/destination/query correlation if the receiver rejects the refund.
+    // SAFETY: terminal paths reserve TERMINAL_STORAGE_RESERVE before this
+    // carry-all refund and fix the recipient to the snapshotted seller or buyer.
+    // Principal and seller allowance are sent by separate, action-correlated messages.
     refund.send(
         SEND_MODE_CARRY_ALL_BALANCE
         + SEND_MODE_PAY_FEES_SEPARATELY
