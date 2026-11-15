@@ -864,9 +864,15 @@ async def run_observer_pass(
             proof = await provider.verify_event(event)
             if isinstance(proof, FinalityVerification) and proof.matches(event):
                 await _persist_getter_snapshot(session_factory, event, proof)
+                await _reconcile_wallet_action_finality(session_factory, event, proof)
                 event = replace(
                     event,
                     event_type=proof.verified_event_type or event.event_type,
+                    query_id=(
+                        proof.verified_query_id
+                        if proof.verified_query_id is not None
+                        else event.query_id
+                    ),
                     source_address=(
                         proof.source_address
                         if proof.verified_event_type is not None
