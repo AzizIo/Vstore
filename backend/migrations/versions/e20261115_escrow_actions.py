@@ -132,6 +132,17 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # A schema rollback must never silently erase durable wallet-action history.
+    # The CI migration drill uses an empty disposable database; populated action
+    # tables require an explicit data-retention/export plan before downgrade.
+    has_actions = op.get_bind().execute(
+        sa.text("SELECT EXISTS (SELECT 1 FROM escrow_wallet_actions)")
+    ).scalar_one()
+    if has_actions:
+        raise RuntimeError(
+            "Cannot downgrade escrow wallet actions while durable action records exist"
+        )
+
     op.execute(
         "DROP TRIGGER IF EXISTS escrow_action_identity_immutable ON escrow_wallet_actions"
     )
