@@ -875,6 +875,89 @@ get fun `test 2-of-3 Ed25519 oracle and resolver signatures use distinct signer 
     expect(countValidResolverSignatures(TEST_ED25519_DIGEST, keys, duplicateResolver)).toEqual(1);
 }
 
+get fun `test timeout cannot strand a successful nft transfer before finality attestation`() {
+    testing.setNow(1_700_000_000);
+    val salt = 0xA22510;
+    val (escrow, nftItem, seller, buyer) = createFixture(salt);
+    val escrowDeploy = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
+    expect(escrowDeploy).toHaveSuccessfulDeploy({ to: escrow.address });
+    val itemDeploy = nftItem.deploy(seller.address, { value: grams("0.05"), bounce: false });
+    expect(itemDeploy).toHaveSuccessfulDeploy({ to: nftItem.address });
+
+    activateDeal(escrow, seller, salt);
+    depositExpectedNft(escrow, nftItem, seller, salt);
+    val funding = escrow.sendFundDeal(
+        buyer.address, 1001, salt, { value: grams("1.5"), bounce: true },
+    );
+    expect(funding).toHaveSuccessfulTx<FundDeal>({ to: escrow.address });
+    val accepted = escrow.sendAcceptDeal(
+        buyer.address, 1003, salt, { value: grams("0.03"), bounce: true },
+    );
+    expect(accepted).toHaveSuccessfulTx<AcceptDeal>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
+    expect(nftItem.getOwner()).toEqual(buyer.address);
+    expect(escrow.getProgress().principalLocked).toEqual(true);
+    expect(escrow.getProgress().nftInEscrow).toEqual(false);
+
+    // The NFT transfer succeeded, but the oracle worker was unavailable until
+    // after the reconciliation deadline. Timeout must not make that proof unusable.
+    val deliveryDeadline = escrow.getProgress().deadlineUnix;
+    testing.setNow((deliveryDeadline + 1) as uint32);
+    val deliveryTimeout = escrow.sendAny(
+        testing.treasury("late-delivery-timeout-keeper").address,
+        TimeoutDeal { queryId: 22510, dealSalt: salt }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(deliveryTimeout).toHaveSuccessfulTx<TimeoutDeal>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
+    expect(escrow.getProgress().principalLocked).toEqual(true);
+    expect(escrow.getProgress().nftInEscrow).toEqual(false);
+    expect(nftItem.getOwner()).toEqual(buyer.address);
+
+    val lateDelivery = buildTestOracleAttestation(
+        escrow, salt, ORACLE_ACTION_NFT_DELIVERED, 1,
+        nftItem.address, escrow.address, buyer.address, 0, 1, 0xA225101, 151, 151,
+    );
+    val acceptedLateDelivery = escrow.sendAny(
+        testing.treasury("late-delivery-oracle").address,
+        lateDelivery.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(acceptedLateDelivery).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_DELIVERED_DISPUTE_WINDOW);
+    expect(escrow.getProgress().principalLocked).toEqual(true);
+    expect(escrow.getProgress().nftInEscrow).toEqual(false);
+    expect(nftItem.getOwner()).toEqual(buyer.address);
+
+    // The later dispute-window timeout can now safely initiate the principal
+    // payout, after which the signed proof clears the locked principal exactly once.
+    val payoutDeadline = escrow.getProgress().deadlineUnix;
+    testing.setNow((payoutDeadline + 1) as uint32);
+    val payoutTimeout = escrow.sendAny(
+        testing.treasury("late-payout-timeout-keeper").address,
+        TimeoutDeal { queryId: 22511, dealSalt: salt }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(payoutTimeout).toHaveSuccessfulTx<TimeoutDeal>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_SELLER_PAYOUT_PENDING);
+    expect(escrow.getProgress().principalLocked).toEqual(true);
+
+    val payout = buildTestOracleAttestation(
+        escrow, salt, ORACLE_ACTION_SELLER_PAYOUT, 2,
+        nftItem.address, escrow.address, seller.address, grams("1"), 2, 0xA225102, 152, 152,
+    );
+    val payoutConfirmed = escrow.sendAny(
+        testing.treasury("late-payout-oracle").address,
+        payout.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(payoutConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_SETTLED);
+    expect(escrow.getProgress().principalLocked).toEqual(false);
+    expect(escrow.getProgress().nftInEscrow).toEqual(false);
+    expect(nftItem.getOwner()).toEqual(buyer.address);
+}
+
 get fun `test actual nft transfer bounce is correlated and retryable with signed delivery`() {
     testing.setNow(1_700_000_000);
     val salt = 0xA11D9;
