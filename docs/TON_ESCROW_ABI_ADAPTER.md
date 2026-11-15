@@ -31,7 +31,7 @@ Pinned provenance:
 | Deterministic raw address | `0:29a40423c7e8fa1390782bce7e94e32f2a0e14ceef6cf05bd0f1641d0ba3f423` |
 | Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
 
-At adapter initialization the code BOC is parsed by `pytoniq-core`; its base64 digest, decoded BOC digest and TVM cell hash are checked. The ABI canonical compact JSON digest and manifest network/protocol/code identity are checked before StateInit can be derived. Missing or modified artifacts fail closed.
+At adapter initialization the compressed artifact digest, decoded BOC digest and TVM cell hash are checked; the manifest also pins the canonical base64 digest. The ABI canonical compact JSON digest and manifest network/protocol/code identity are checked before StateInit can be derived. Missing or modified artifacts fail closed. The ABI canonical compact JSON digest and manifest network/protocol/code identity are checked before StateInit can be derived. Missing or modified artifacts fail closed.
 
 ## StateInit layout
 
@@ -74,8 +74,8 @@ Current fixed message BOC SHA-256 values:
 | OpenDispute (query 2001, reason hash `ab` × 32) | `687c3f5300af7371f946dd9dae1c849eede2887f167f8028aa4d1da228a709cd` |
 | TimeoutDeal (query 2002) | `2cc8443c10c2749973e51ce2e051ebfaac6e8bb191e231948104a235dc3e43f3` |
 | RecoverUnexpectedNft (query 2003) | `296bbfd9ed948575f6e8dfd31d529384e016cbfe321f73d42717b294b8b3ac34` |
-| TEP-62 seller deposit (query 1002, current escrow address) | `2422073bd457c966e27afb9851ede5ed3cdc19aaf6ffccac5b77e61d24eac52b` |
-| TEP-62 buyer return (query 1004, current escrow address) | `ef84d8803e0ac57af7d9532947862e6f45e1c0676ffbd1142661b36c0e14e639` |
+| TEP-62 seller deposit (query 1002, current escrow address) | `32148753a5d3cd318a3a54f7ff8d9409e8cfbe04d70862a52833632a50362cf7` |
+| TEP-62 buyer return (query 1004, current escrow address) | `70fd158e2e4b99648fea5a4dbf759274ac35a946538dfd6ba591fb2b2de24ceb` |
 
 ## Reproduce in CI
 
