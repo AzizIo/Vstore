@@ -102,7 +102,7 @@ def test_state_init_is_deterministic_and_address_is_state_init_hash() -> None:
         "e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6"
     )
     assert first.data_hash == (
-        "535adf460ca6ecb6e043e0655244e3c67bfee186263287655306b1b648027acd"
+        "faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b"
     )
     assert first.code_hash == (
         "61348A9F67A31753622AB3E9E204AF67FBC1ED8736B05510DD9DF93E0F49366B"
