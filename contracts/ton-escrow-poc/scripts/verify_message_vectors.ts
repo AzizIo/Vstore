@@ -17,7 +17,7 @@ const reasonHash = BigInt("0x" + "ab".repeat(32));
 const seller = Address.parseRaw("0:" + "11".repeat(32));
 const buyer = Address.parseRaw("0:" + "22".repeat(32));
 const escrow = Address.parseRaw(
-  "0:31ffca176042bdc4aa82e21949f900d2c068634306da76b1ebb335e64bd5cf52",
+  "0:024ec492b97607ed98a2c3f93a36533053d5a8cb4bb4c31c951c820e8aefdaf9",
 );
 const forwardPayload = PayloadInline.create({
   value: beginCell()

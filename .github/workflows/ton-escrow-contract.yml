@@ -53,7 +53,6 @@ jobs:
         run: acton build
 
       - name: Verify generated code and BoC against frozen manifest
-        continue-on-error: true # TEMPORARY: remove after the new frozen manifest is committed
         run: python3 scripts/verify_build_matches_manifest.py
 
       - name: Generate ABI-backed wrappers

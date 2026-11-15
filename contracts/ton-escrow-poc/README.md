@@ -29,6 +29,15 @@ The numeric opcodes and typed cell layouts are defined in `contracts/types.tolk`
 | `0x56450006` | `ResolveDispute` | 2-of-3 resolver signs a constrained outcome |
 | `0x56450007` | `TimeoutDeal` | Permissionless state-specific timeout |
 | `0x56450008` | `RecoverUnexpectedNft` | Fixed-recipient recovery for a malformed callback from the configured item |
+| `0x56450009` | `RetryFailedOutboundAction` | Recipient-authorized retry of one correlated bounced outbound action with a fresh attempt ID |
+
+### Outbound bounce correlation and retry
+
+Every contract-created NFT transfer, principal payout/refund and secondary balance refund is sent with `BounceMode.RichBounce`. Before sending, the contract persists an outbound descriptor containing action kind, exact destination and recipient, item/response addresses, query ID and monotonic attempt, deal salt, amount/value, expected state/pending action, retry window and the exact outgoing body hash. The two descriptor slots support the principal action plus a secondary terminal refund.
+
+The bounce handler accepts only a rich bounce and matches its sender/destination, exact original body hash and original message value against one pending descriptor. Classic/short bounces and unknown, stale or mismatched envelopes are ignored because they do not carry enough data to correlate safely. A matching critical failure preserves `principalLocked` and `nftInEscrow`, records the failure phase/exit code and moves the deal to manual review; it never treats a bounce as proof of payout, refund or NFT ownership finality. Only the descriptor's snapshotted recipient may request retry. Retry consumes the old descriptor, increments `oracleAttemptId`, and rebuilds the same fixed action/recipient using the new attempt ID; replaying the old query ID is rejected.
+
+The emulator suite uses real rejected TEP-62 item transfers and failed seller payout destinations to exercise bounce handling. Signed oracle/resolver lifecycle fixtures use deterministic, test-only Ed25519 seeds and do not disable checksig. These fixtures are test data only, not deployable keys.
 
 The escrow uses standard TEP-62 `transfer#5fcc3d14` and `ownership_assigned#05138d91`. The forwarded payload is inline-only for protocol v1: selector bit 0, `NFT_FORWARD_MAGIC` (32 bits), and deal salt (256 bits). Non-inline or malformed payloads never activate a deposit. The test-only NFT mock implements these message shapes and is not a public NFT collection/item.
 
