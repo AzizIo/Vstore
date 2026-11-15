@@ -569,7 +569,9 @@ async def test_boolean_indexer_finality_claim_is_not_accepted() -> None:
         async def verify_event(self, event: NormalizedChainEvent) -> bool:
             return True
 
-    sessions = [FakeEscrowSession(checkpoint), FakeEscrowSession(checkpoint, None)]
+    acquire_session = FakeEscrowSession(checkpoint)
+    persist_session = FakeEscrowSession(checkpoint, None)
+    sessions = [acquire_session, persist_session]
     provider = BooleanOnlyProvider(make_event())
 
     def factory() -> FakeEscrowSession:
@@ -579,7 +581,7 @@ async def test_boolean_indexer_finality_claim_is_not_accepted() -> None:
     assert result.rejected == 1
     assert result.pending == 0
     assert checkpoint.cursor == "cursor-after-event"
-    stored = sessions[-1].added
+    stored = persist_session.added
     assert len(stored) == 1
     assert isinstance(stored[0], EscrowChainEvent)
     assert stored[0].status == "rejected"
@@ -611,7 +613,9 @@ async def test_mismatched_finality_proof_is_not_accepted() -> None:
                 trace_binding_verified=True,
             )
 
-    sessions = [FakeEscrowSession(checkpoint), FakeEscrowSession(checkpoint, None)]
+    acquire_session = FakeEscrowSession(checkpoint)
+    persist_session = FakeEscrowSession(checkpoint, None)
+    sessions = [acquire_session, persist_session]
     provider = MismatchedProofProvider(make_event())
 
     def factory() -> FakeEscrowSession:
@@ -621,7 +625,7 @@ async def test_mismatched_finality_proof_is_not_accepted() -> None:
     assert result.rejected == 1
     assert result.pending == 0
     assert checkpoint.cursor == "cursor-after-event"
-    stored = sessions[-1].added
+    stored = persist_session.added
     assert len(stored) == 1
     assert isinstance(stored[0], EscrowChainEvent)
     assert stored[0].status == "rejected"
@@ -647,7 +651,9 @@ async def test_invalid_candidate_does_not_block_checkpoint() -> None:
             del event
             raise EscrowProviderInvalidEvidence("fixture proof does not bind to candidate")
 
-    sessions = [FakeEscrowSession(checkpoint), FakeEscrowSession(checkpoint, None)]
+    acquire_session = FakeEscrowSession(checkpoint)
+    persist_session = FakeEscrowSession(checkpoint, None)
+    sessions = [acquire_session, persist_session]
     provider = InvalidEvidenceProvider(make_event())
 
     def factory() -> FakeEscrowSession:
@@ -659,7 +665,7 @@ async def test_invalid_candidate_does_not_block_checkpoint() -> None:
     assert result.provider_unavailable is False
     assert checkpoint.cursor == "cursor-after-event"
     assert checkpoint.failure_count == 0
-    stored = sessions[-1].added
+    stored = persist_session.added
     assert len(stored) == 1
     assert isinstance(stored[0], EscrowChainEvent)
     assert stored[0].status == "rejected"
