@@ -897,7 +897,8 @@ get fun `test timeout cannot strand a successful nft transfer before finality at
     expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
     expect(nftItem.getOwner()).toEqual(buyer.address);
     expect(escrow.getProgress().principalLocked).toEqual(true);
-    expect(escrow.getProgress().nftInEscrow).toEqual(false);
+    // Custody remains locked in contract state until finalized oracle proof.
+    expect(escrow.getProgress().nftInEscrow).toEqual(true);
 
     // The NFT transfer succeeded, but the oracle worker was unavailable until
     // after the reconciliation deadline. Timeout must not make that proof unusable.
