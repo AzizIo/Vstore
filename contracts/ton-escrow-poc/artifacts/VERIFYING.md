@@ -45,3 +45,8 @@ acton test --coverage --no-studio-reporting
 ## Important limitations
 
 The Acton emulator suite demonstrates behavior only in the pinned toolchain/test fixtures. The successful exact-head contract workflow rebuilt and verified the code/BOC, generated and cross-checked StateInit and message vectors, passed Tolk formatting/static checks, and completed the emulator suite including late NFT delivery/payout and late NFT return/buyer-refund after timeout. This proves the modeled testnet contract behavior in the pinned toolchain; it is not an independent audit or live network acceptance. Emulator evidence is not a live chain finality proof, independent TON/Tolk security audit, or manual TON testnet/Tonkeeper acceptance. A trusted provider must prove the exact collection membership before immutable deal terms are created. Signing and deployment remain disabled.
+
+
+## Latest integration reproduction
+
+The backend pin PR #247 also reran the contract workflow against its exact PR head `be6716f0f17e4cead2bd4d2ed7301d1baa5226b4`: [Contract CI #43769301445](https://github.com/AzizIo/Vstore/actions/runs/43769301445) passed and produced artifact `14183516827` (archive SHA-256 `d40915733d2e97623726cf7946508bc4f32def021c923c8340601b6fed3c6ce8`). Its generated code BOC base64 and decoded BOC hashes match the frozen manifest above. This is a second reproducible build check, not an independent security audit or live network acceptance.
