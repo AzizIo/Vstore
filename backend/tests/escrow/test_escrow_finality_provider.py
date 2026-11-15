@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from pydantic import SecretStr
 
 from app.core.config import Settings
 from app.escrow.domain import EscrowChainEventType
