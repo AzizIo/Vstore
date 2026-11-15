@@ -3,16 +3,31 @@ import logging
 from contextlib import suppress
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import BotCommand
 
 from app.bot_handlers import router as user_router
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.db.session import async_session_factory
 from app.notifications.service import process_due_notifications
 from app.notifications.telegram import TelegramNotificationSender
 
 logger = logging.getLogger(__name__)
+
+# A bounded Telegram API timeout keeps claimed notification batches within
+# their database lease, even when the remote Bot API is unavailable.
+TELEGRAM_API_TIMEOUT_SECONDS = 15
+
+
+def notification_worker_batch_limit(settings: Settings) -> int:
+    """Keep worst-case sequential Telegram sends comfortably inside the claim lease."""
+    lease_safe_batch_size = max(
+        1,
+        settings.notification_claim_lease_seconds // (2 * TELEGRAM_API_TIMEOUT_SECONDS),
+    )
+    return min(settings.notification_batch_size, lease_safe_batch_size)
+
 
 BOT_COMMANDS = [
     BotCommand(command="start", description="Открыть главное меню"),
@@ -43,7 +58,11 @@ async def _run_notification_worker(bot: Bot) -> None:
     while True:
         try:
             async with async_session_factory() as session:
-                result = await process_due_notifications(session, sender)
+                result = await process_due_notifications(
+                    session,
+                    sender,
+                    limit=notification_worker_batch_limit(settings),
+                )
             if result.claimed == 0:
                 await asyncio.sleep(settings.notification_poll_seconds)
         except asyncio.CancelledError:
@@ -69,7 +88,10 @@ async def main() -> None:
         )
 
     logging.basicConfig(level=logging.INFO)
-    bot = Bot(token=settings.bot_token)
+    bot = Bot(
+        token=settings.bot_token,
+        session=AiohttpSession(timeout=TELEGRAM_API_TIMEOUT_SECONDS),
+    )
     try:
         await register_bot_commands(bot)
     except TelegramAPIError:
