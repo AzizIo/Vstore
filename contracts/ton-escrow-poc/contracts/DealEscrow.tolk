@@ -1156,9 +1156,15 @@ fun onInternalMessage(in: InMessage) {
 }
 
 fun onBouncedMessage(in: InMessageBounced) {
-    // All contract-created outbound messages use RichBounce. The returned
-    // original body hash, bounce sender and original value must match an
-    // explicitly persisted descriptor; unrelated and stale bounces are ignored.
+    // All contract-created outbound messages use RichBounce. Classic bounces
+    // carry only the 0xFFFFFFFF prefix and cannot be correlated to our full
+    // persisted descriptor, so ignore them instead of trying to parse as rich.
+    var bouncedBody = in.bouncedBody;
+    if (bouncedBody.loadUint(32) != 0xfffffffe) {
+        return;
+    }
+    // The rich original body hash, bounce sender and original value must match
+    // an explicitly persisted descriptor; unrelated and stale bounces are ignored.
     val rich = lazy RichBounceBody.fromSlice(in.bouncedBody);
     val originalBodyHash = rich.originalBody.hash();
     val originalValue = rich.originalInfo.load().valueCoins;
