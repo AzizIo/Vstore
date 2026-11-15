@@ -386,7 +386,11 @@ async def _terminal_owner_evidence(
 
 
 async def _apply_one_event(
-    session: AsyncSession, event: NormalizedChainEvent, *, provider_verified: bool,
+    session: AsyncSession,
+    event: NormalizedChainEvent,
+    *,
+    provider_verified: bool,
+    verification_error_code: str | None = None,
 ) -> str:
     existing = await session.scalar(select(EscrowChainEvent).where(
         EscrowChainEvent.network == event.network, EscrowChainEvent.event_key == event.event_key,
@@ -466,6 +470,16 @@ async def _apply_one_event(
     if not valid_shape:
         await _persist_event(session, event, status="rejected",
             reason_code="invalid_event_shape", deal_id=None, existing=existing)
+        return "rejected"
+    if verification_error_code is not None:
+        await _persist_event(
+            session,
+            event,
+            status="rejected",
+            reason_code=verification_error_code,
+            deal_id=None,
+            existing=existing,
+        )
         return "rejected"
     if not provider_verified:
         await _persist_event(session, event, status="pending",
@@ -901,7 +915,7 @@ async def run_observer_pass(
             raise EscrowProviderInvalidEvidence(
                 "A non-empty batch must provide a progressing, restartable next cursor"
             )
-        verified_events: list[tuple[NormalizedChainEvent, bool]] = []
+        verified_events: list[tuple[NormalizedChainEvent, bool, str | None]] = []
         ordered_events = sorted(
             batch.events,
             key=lambda item: (
@@ -915,14 +929,44 @@ async def run_observer_pass(
             ),
         )
         for event in ordered_events:
-            # A boolean/indexer "finalized" flag is insufficient. The provider
-            # must return a proof bound to this transaction, message, trace and
-            # masterchain sequence number.
+            # An indexer claim is never proof. A missing proof or insufficient
+            # finality remains pending; a cryptographically inconsistent proof
+            # is retained as rejected forensic evidence and cannot block the scan.
             if event.network != "testnet":
-                verified_events.append((event, False))
+                verified_events.append((event, False, "wrong_network"))
                 continue
-            proof = await provider.verify_event(event)
-            if isinstance(proof, FinalityVerification) and proof.matches(event):
+            try:
+                proof = await provider.verify_event(event)
+            except EscrowProviderInvalidEvidence:
+                logger.warning(
+                    "TON escrow candidate failed cryptographic verification",
+                    extra={"transaction_hash": event.transaction_hash},
+                )
+                verified_events.append((event, False, "cryptographic_proof_invalid"))
+                continue
+
+            if proof is None:
+                verified_events.append((event, False, None))
+                continue
+            if not isinstance(proof, FinalityVerification):
+                logger.error(
+                    "TON escrow provider returned an unsupported verification result",
+                    extra={"transaction_hash": event.transaction_hash},
+                )
+                verified_events.append((event, False, "invalid_verification_result"))
+                continue
+            if not proof.finalized or not proof.masterchain_inclusion_verified or not proof.trace_binding_verified:
+                verified_events.append((event, False, None))
+                continue
+            if not proof.matches(event):
+                logger.warning(
+                    "TON escrow proof did not bind to the discovered candidate",
+                    extra={"transaction_hash": event.transaction_hash},
+                )
+                verified_events.append((event, False, "cryptographic_proof_mismatch"))
+                continue
+
+            try:
                 await _persist_getter_snapshot(session_factory, event, proof)
                 await _reconcile_wallet_action_finality(session_factory, event, proof)
                 event = replace(
@@ -997,10 +1041,24 @@ async def run_observer_pass(
                     finality_proof_sha256=proof.proof_sha256,
                     finality_provider=proof.provider_id,
                 )
+            except EscrowProviderInvalidEvidence:
+                logger.warning(
+                    "TON escrow proof failed reconciliation with the contract snapshot",
+                    extra={"transaction_hash": event.transaction_hash},
+                )
+                verified_events.append((event, False, "contract_proof_reconciliation_failed"))
+                continue
+
+            try:
                 event = await _terminal_owner_evidence(session_factory, provider, event)
-                verified_events.append((event, True))
-            else:
-                verified_events.append((event, False))
+            except EscrowProviderInvalidEvidence:
+                # The transaction/getter proof is still valid. Missing or invalid
+                # owner evidence keeps terminal listing reconciliation fail-closed.
+                logger.warning(
+                    "TON NFT owner proof was invalid; terminal listing remains reserved",
+                    extra={"transaction_hash": event.transaction_hash},
+                )
+            verified_events.append((event, True, None))
     except EscrowProviderUnavailable:
         await _release_lease(
             session_factory, lease_token, error_code="provider_unavailable", now=current_time
@@ -1026,9 +1084,13 @@ async def run_observer_pass(
                     return EscrowObserverPassResult(scanned=len(batch.events), lease_lost=True)
                 cursor_safe = True
                 processed_events: list[tuple[NormalizedChainEvent, bool]] = []
-                for event, verified in verified_events:
-                    applied_result = await _apply_one_event(session, event,
-                        provider_verified=verified)
+                for event, verified, verification_error in verified_events:
+                    applied_result = await _apply_one_event(
+                        session,
+                        event,
+                        provider_verified=verified,
+                        verification_error_code=verification_error,
+                    )
                     result_counts[applied_result] += 1
                     processed_events.append((event, verified))
                     if applied_result in {"pending", "unmatched"}:
