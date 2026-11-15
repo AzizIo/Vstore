@@ -84,6 +84,7 @@ async def queue_stars_refund(
     transaction. The unique transaction key is the final concurrency guard.
     """
 
+    _assert_test_stars_enabled()
     if transaction.status != "refund_pending":
         raise PaymentConflict("Only refund_pending charges can be queued for refund")
     current_time = now or datetime.now(UTC)
