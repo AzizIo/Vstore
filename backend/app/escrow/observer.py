@@ -661,7 +661,8 @@ async def _reconcile_wallet_action_finality(
     """
 
     if (
-        not event.deal_id
+        not proof.matches(event)
+        or not event.deal_id
         or proof.verified_event_type is None
         or not proof.verified_query_id
         or not proof.verified_query_id.isdecimal()
