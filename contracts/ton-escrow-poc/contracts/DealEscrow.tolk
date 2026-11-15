@@ -765,7 +765,9 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         progress.deadlineUnix = 0;
         settleRemainingBalanceForBuyer(mutate progress, roles, asset, money);
     } else if (context.action == ORACLE_ACTION_UNEXPECTED_NFT_RECOVERED) {
-        assert (progress.state == STATE_NFT_RETURN_PENDING) throw Errors.InvalidState;
+        assert (
+            progress.state == STATE_NFT_RETURN_PENDING || pendingFinalityInManualReview
+        ) throw Errors.InvalidState;
         assert (progress.pendingAction == PENDING_UNEXPECTED_RECOVERY) throw Errors.InvalidState;
         assert (route.sourceAddress == contract.getAddress()) throw Errors.InvalidAttestation;
         val recovery = progress.recovery.load();
