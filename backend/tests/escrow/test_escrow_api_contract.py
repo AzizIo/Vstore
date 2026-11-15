@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,6 +18,7 @@ from app.api.escrow import (
     submit_wallet_reference,
 )
 from app.escrow.contracts import EscrowWalletAction
+from app.escrow.models import EscrowIdempotencyRecord
 from app.escrow.schemas import (
     EscrowDealCreate,
     EscrowDealResponse,
