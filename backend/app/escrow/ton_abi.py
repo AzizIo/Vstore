@@ -351,6 +351,108 @@ def build_storage_cell(snapshot: Any) -> Cell:
     return begin_cell().store_ref(terms).store_ref(progress).end_cell()
 
 
+def decode_storage_cell(data_cell: Cell) -> dict[str, object]:
+    """Decode the authenticated DealEscrow data cell without an unproved remote getter.
+
+    Callers must obtain the data cell from a trust-level-0 LiteClient account-state
+    proof at a finalized masterchain block and separately verify the deployed code
+    hash. This decoder exposes the contract terms/progress so the observer can
+    compare them with the persisted immutable snapshot.
+    """
+
+    try:
+        root = data_cell.begin_parse()
+        terms_cell = root.load_ref()
+        progress_cell = root.load_ref()
+
+        terms = terms_cell.begin_parse()
+        roles_cell = terms.load_ref()
+        asset_cell = terms.load_ref()
+        money_cell = terms.load_ref()
+        security_cell = terms.load_ref()
+        network_id = terms.load_int(32)
+        protocol_version = terms.load_uint(16)
+
+        roles = roles_cell.begin_parse()
+        seller_address = roles.load_address().to_str(is_user_friendly=False)
+        buyer_address = roles.load_address().to_str(is_user_friendly=False)
+
+        asset = asset_cell.begin_parse()
+        item_address = asset.load_address().to_str(is_user_friendly=False)
+        collection_address = asset.load_address().to_str(is_user_friendly=False)
+        deal_salt = f"{asset.load_uint(256):064x}"
+
+        money = money_cell.begin_parse()
+        principal_nanotons = money.load_coins()
+        execution_reserve_nanotons = money.load_coins()
+        seller_deployment_refund_nanotons = money.load_coins()
+        nft_transfer_value_nanotons = money.load_coins()
+        fund_query_id = money.load_uint(64)
+        nft_deposit_query_id = money.load_uint(64)
+        nft_release_query_id = money.load_uint(64)
+        nft_return_to_escrow_query_id = money.load_uint(64)
+
+        security = security_cell.begin_parse()
+        oracle = security.load_ref().begin_parse()
+        resolver = security.load_ref().begin_parse()
+        oracle_keys = tuple(oracle.load_uint(256) for _ in range(3))
+        resolver_keys = tuple(resolver.load_uint(256) for _ in range(3))
+
+        progress = progress_cell.begin_parse()
+        contract_state = progress.load_uint(8)
+        deadline_unix = progress.load_uint(64)
+        dispute_phase = progress.load_uint(8)
+        _pending_kind = progress.load_uint(8)
+        nft_in_escrow = bool(progress.load_bit())
+        principal_locked = bool(progress.load_bit())
+        _oracle_attempt_id = progress.load_uint(64)
+        _dispute_attempt_id = progress.load_uint(64)
+        _evidence_cell = progress.load_ref()
+        recovery = progress.load_ref().begin_parse()
+        recovery_previous_owner = recovery.load_address()
+        recovery_item_address = recovery.load_address()
+    except Exception as exc:
+        raise TONABIError("DealEscrow storage data cell is malformed") from exc
+
+    return {
+        "network": "testnet",
+        "network_id": network_id,
+        "protocol_version": protocol_version,
+        "seller_address": seller_address,
+        "buyer_address": buyer_address,
+        "item_address": item_address,
+        "collection_address": collection_address,
+        "deal_salt": deal_salt,
+        "principal_nanotons": principal_nanotons,
+        "execution_reserve_nanotons": execution_reserve_nanotons,
+        "seller_deployment_refund_nanotons": seller_deployment_refund_nanotons,
+        "nft_transfer_value_nanotons": nft_transfer_value_nanotons,
+        "fund_query_id": fund_query_id,
+        "nft_deposit_query_id": nft_deposit_query_id,
+        "nft_release_query_id": nft_release_query_id,
+        "nft_return_to_escrow_query_id": nft_return_to_escrow_query_id,
+        "oracle_key_a": oracle_keys[0],
+        "oracle_key_b": oracle_keys[1],
+        "oracle_key_c": oracle_keys[2],
+        "resolver_key_a": resolver_keys[0],
+        "resolver_key_b": resolver_keys[1],
+        "resolver_key_c": resolver_keys[2],
+        "contract_state": contract_state,
+        "deadline_unix": deadline_unix,
+        "dispute_phase": dispute_phase,
+        "nft_in_escrow": nft_in_escrow,
+        "principal_locked": principal_locked,
+        "recovery_previous_owner": (
+            recovery_previous_owner.to_str(is_user_friendly=False)
+            if recovery_previous_owner is not None else None
+        ),
+        "recovery_item_address": (
+            recovery_item_address.to_str(is_user_friendly=False)
+            if recovery_item_address is not None else None
+        ),
+    }
+
+
 def build_state_init_cell(code: Cell, data: Cell) -> Cell:
     """StateInit TL-B: split_depth=None, special=None, code=Some, data=Some, libraries=None."""
     return (
