@@ -326,9 +326,10 @@ class PinnedTONEscrowContractAdapter:
                 )
                 if wallet_address != previous_owner:
                     raise TONABIError("only the recorded previous NFT owner may recover this item")
-                target = parse_basechain_address(
-                    deal_snapshot.recovery_item_address, "recovery_item_address"
-                ).to_str(is_user_friendly=False)
+                # RecoverUnexpectedNft is handled by DealEscrow itself. The
+                # contract then sends the unexpected NFT to the snapshotted
+                # previous owner; sending this opcode to the NFT item is invalid.
+                target = escrow_address
                 amount = deal_snapshot.action_value_nanotons
                 body = encode_simple_action("recover_unexpected_nft", require_query_id(), salt)
             else:

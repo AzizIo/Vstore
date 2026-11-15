@@ -410,11 +410,35 @@ async def test_accept_dispute_timeout_and_recovery_bocs_match_generated_abi() ->
         query_id=2003,
         valid_until=1_800_000_000,
     )
-    assert recovery.messages[0].address == recovery_deal.recovery_item_address
+    assert recovery.messages[0].address == derive_deployment(
+        load_pinned_code_boc(), recovery_deal
+    ).address
     assert recovery.messages[0].payload is not None
     assert boc_sha256(recovery.messages[0].payload) == (
         "296bbfd9ed948575f6e8dfd31d529384e016cbfe321f73d42717b294b8b3ac34"
     )
+
+
+
+@pytest.mark.asyncio
+async def test_unexpected_nft_recovery_requires_recorded_previous_owner() -> None:
+    adapter = PinnedTONEscrowContractAdapter()
+    deal = snapshot(
+        contract_state=13,
+        nft_in_escrow=True,
+        recovery_previous_owner="0:" + "55" * 32,
+        recovery_item_address="0:" + "66" * 32,
+    )
+
+    with pytest.raises(EscrowContractABIUnavailable, match="only the recorded previous NFT owner"):
+        await adapter.prepare_transaction(
+            EscrowWalletAction.RECOVER_UNEXPECTED_NFT,
+            actor_wallet=wallet(deal.seller_address),  # type: ignore[arg-type]
+            resource_id="deal-1",
+            deal_snapshot=deal,
+            query_id=2004,
+            valid_until=1_800_000_000,
+        )
 
 
 @pytest.mark.asyncio
