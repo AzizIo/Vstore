@@ -16,6 +16,15 @@ depends_on: str | None = None
 
 
 def upgrade() -> None:
+    # The observer cursor contains a compact per-account LT map and can exceed
+    # the former 512-character limit as the watched deal set grows.
+    op.alter_column(
+        "escrow_observer_checkpoints",
+        "cursor",
+        existing_type=sa.String(length=512),
+        type_=sa.Text(),
+        existing_nullable=True,
+    )
     op.add_column(
         "escrow_deals",
         sa.Column("deployment_snapshot_json", sa.JSON(), nullable=True),
@@ -227,6 +236,24 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    connection = op.get_bind()
+    oversized_cursor = connection.execute(
+        sa.text(
+            "SELECT EXISTS (SELECT 1 FROM escrow_observer_checkpoints "
+            "WHERE length(cursor) > 512)"
+        )
+    ).scalar_one()
+    if oversized_cursor:
+        raise RuntimeError(
+            "Cannot downgrade while escrow observer cursor exceeds 512 characters"
+        )
+    op.alter_column(
+        "escrow_observer_checkpoints",
+        "cursor",
+        existing_type=sa.Text(),
+        type_=sa.String(length=512),
+        existing_nullable=True,
+    )
     connection = op.get_bind()
     has_snapshots = connection.execute(
         sa.text(
