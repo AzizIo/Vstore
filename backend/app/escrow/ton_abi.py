@@ -415,18 +415,18 @@ def encode_nft_transfer(
     new_owner: str,
     response_destination: str,
     deal_salt: int,
-    forward_amount_nanotons: int = 20_000_000,
+    forward_amount_nanotons: int = 10_000_000,
 ) -> str:
     _uint(query_id, 64, "query_id", allow_zero=False)
     _uint(deal_salt, 256, "deal_salt", allow_zero=False)
     new_owner_address = parse_basechain_address(new_owner, "new_owner")
     response_address = parse_basechain_address(response_destination, "response_destination")
     forward_amount = _coins(forward_amount_nanotons, "forward_amount_nanotons")
-    # Wallet-originated deposit/return messages use 0.02 TON as pinned by the
-    # generated Acton vectors; contract-initiated transfers use 0.01 TON on-chain.
-    if forward_amount != 20_000_000:
+    # Wallet-originated deposit/return messages use the generated Acton vector's
+    # 0.01 TON forward amount, matching the contract's TEP-62 transfer layout.
+    if forward_amount != 10_000_000:
         raise TONABIError(
-            "DealEscrow TEP-62 user-transfer payload pins forwardTonAmount to 0.02 TON"
+            "DealEscrow TEP-62 user-transfer payload pins forwardTonAmount to 0.01 TON"
         )
     return _body_boc(
         begin_cell()
