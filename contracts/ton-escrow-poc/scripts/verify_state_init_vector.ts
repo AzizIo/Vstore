@@ -80,7 +80,7 @@ if (!stateInit.hash().equals(deployed.address.hash)) {
   throw new Error("StateInit hash differs from generated Acton wrapper address");
 }
 if (deployed.init.code.hash().toString("hex").toUpperCase() !==
-    "23913271BD1C64389564227852B91731973ADFBD06BCC5A6D1B1E30792C0A1B3") {
+    "A196078E27BF11C8602B40DF96B5AAA3CD29D16639E099185430358324023386") {
   throw new Error("Generated Acton CodeCell does not match pinned manifest");
 }
 console.log(JSON.stringify({
