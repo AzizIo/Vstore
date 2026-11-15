@@ -1090,6 +1090,9 @@ get fun `test seller deployment allowance bounce is correlated and retryable aft
     expect(deliveryConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
 
     val deadline = escrow.getProgress().deadlineUnix;
+    // Capture before TimeoutDeal: it sends the principal payout. The later
+    // reconciliation sends only the seller deployment allowance and reserve.
+    val sellerBalanceBeforePayout = testing.getAccountBalance(sellerParty.address);
     testing.setNow((deadline + 1) as uint32);
     val timeout = escrow.sendAny(
         testing.treasury("seller-allowance-timeout-keeper").address,
@@ -1099,7 +1102,6 @@ get fun `test seller deployment allowance bounce is correlated and retryable aft
     expect(timeout).toHaveSuccessfulTx<TimeoutDeal>({ to: escrow.address });
     expect(escrow.getState()).toEqual(STATE_SELLER_PAYOUT_PENDING);
 
-    val sellerBalanceBeforePayout = testing.getAccountBalance(sellerParty.address);
     val buyerBalanceBeforeSettlement = testing.getAccountBalance(buyer.address);
     val payout = buildTestOracleAttestation(
         escrow, salt, ORACLE_ACTION_SELLER_PAYOUT, 2,
@@ -1186,6 +1188,8 @@ get fun `test execution reserve refund bounce is correlated and retryable after 
     expect(deliveryConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
 
     val deadline = escrow.getProgress().deadlineUnix;
+    // Capture before TimeoutDeal sends the principal payout to the seller.
+    val sellerBalanceBeforePayout = testing.getAccountBalance(seller.address);
     testing.setNow((deadline + 1) as uint32);
     val timeout = escrow.sendAny(
         testing.treasury("reserve-bounce-timeout-keeper").address,
@@ -1196,7 +1200,6 @@ get fun `test execution reserve refund bounce is correlated and retryable after 
     expect(escrow.getState()).toEqual(STATE_SELLER_PAYOUT_PENDING);
 
     val buyerBalanceBeforeRefund = testing.getAccountBalance(buyerParty.address);
-    val sellerBalanceBeforePayout = testing.getAccountBalance(seller.address);
     val payout = buildTestOracleAttestation(
         escrow, salt, ORACLE_ACTION_SELLER_PAYOUT, 2,
         nftItem.address, escrow.address, seller.address, grams("1"), 2, 0xA225022, 132, 132,
