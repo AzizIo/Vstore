@@ -761,6 +761,7 @@ async def test_terminal_event_retries_owner_reconciliation_after_restart() -> No
     contract_address = "0:" + "a" * 64
     event = make_event(
         event_type=EscrowChainEventType.SELLER_PAYOUT_RECONCILED,
+        attestation_accepted=True,
         contract_address=contract_address,
         deal_id=str(deal_id),
         source_address=contract_address,
