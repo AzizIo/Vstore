@@ -402,6 +402,25 @@ class EscrowWalletActionRecord(TimestampMixin, EscrowBase):
             "'failed', 'manual_review', 'blocked_abi')",
             name="ck_escrow_action_status",
         ),
+        CheckConstraint(
+            "(status <> 'finalized' "
+            "AND finalized_transaction_hash IS NULL "
+            "AND finality_masterchain_seqno IS NULL "
+            "AND finality_masterchain_block_hash IS NULL "
+            "AND finality_proof_sha256 IS NULL "
+            "AND finality_provider IS NULL) OR ("
+            "finalized_transaction_hash IS NOT NULL "
+            "AND length(finalized_transaction_hash) = 64 "
+            "AND finality_masterchain_seqno IS NOT NULL "
+            "AND finality_masterchain_seqno > 0 "
+            "AND finality_masterchain_block_hash IS NOT NULL "
+            "AND length(finality_masterchain_block_hash) = 64 "
+            "AND finality_proof_sha256 IS NOT NULL "
+            "AND length(finality_proof_sha256) = 64 "
+            "AND finality_provider IS NOT NULL "
+            "AND length(finality_provider) BETWEEN 1 AND 128)",
+            name="ck_escrow_action_finality_pair",
+        ),
         CheckConstraint("length(idempotency_key) BETWEEN 8 AND 128",
             name="ck_escrow_action_idempotency_length"),
         CheckConstraint("length(request_sha256) = 64", name="ck_escrow_action_request_hash"),
