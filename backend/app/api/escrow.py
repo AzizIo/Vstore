@@ -63,12 +63,14 @@ from app.escrow.schemas import (
     EscrowSellerBalanceResponse,
     EscrowTransactionPreparationResponse,
     EscrowWalletReferenceInput,
+    EscrowWalletReferenceResponse,
     EscrowWithdrawalCreate,
 )
 from app.escrow.service import (
     EscrowActionConflict,
     canonical_request_sha256,
     create_or_replay_action,
+    record_submission_reference,
 )
 from app.escrow.ton_abi import (
     TONABIError,
@@ -1484,15 +1486,154 @@ async def prepare_unsold_nft_withdrawal(
         verifier, idempotency_key)
 
 
-@router.post("/wallet-references", status_code=503)
+@router.post(
+    "/wallet-references",
+    response_model=EscrowWalletReferenceResponse,
+    status_code=status.HTTP_200_OK,
+)
 async def submit_wallet_reference(
-    payload: EscrowWalletReferenceInput, user: CurrentUser, session: DbSession,
+    payload: EscrowWalletReferenceInput,
+    user: CurrentUser,
+    session: DbSession,
     idempotency_key: IdempotencyKey,
-):
-    # No prepared action IDs exist until the ABI adapter can create an audited
-    # operation record. A client hash/BOC is never accepted as proof or state.
-    del payload, user, session, idempotency_key
-    raise HTTPException(status_code=503, detail={"code": "contract_abi_pending"})
+) -> EscrowWalletReferenceResponse:
+    """Persist one client-reported wallet reference as an untrusted reconciliation hint.
+
+    This route deliberately does not call a blockchain provider, mark the action
+    finalized, update DealEscrow state, or release a marketplace listing. Only the
+    trust-level-zero observer can reconcile a reported transaction independently.
+    """
+
+    _require_testnet()
+    normalized_reference = payload.reference.strip()
+    if not normalized_reference:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "empty_wallet_reference"},
+        )
+
+    action = await session.scalar(
+        select(EscrowWalletActionRecord)
+        .where(
+            EscrowWalletActionRecord.id == payload.action_id,
+            EscrowWalletActionRecord.actor_id == user.id,
+            EscrowWalletActionRecord.action_type == payload.action,
+            EscrowWalletActionRecord.network == "testnet",
+        )
+        .with_for_update()
+    )
+    if action is None:
+        # Do not disclose whether another user's action ID exists.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "escrow_action_not_found"},
+        )
+
+    reference_sha256 = hashlib.sha256(
+        normalized_reference.encode("utf-8")
+    ).hexdigest()
+    request_sha256 = canonical_request_sha256(
+        {
+            "actor_id": str(user.id),
+            "action_id": str(action.id),
+            "action": payload.action,
+            "reference_sha256": reference_sha256,
+        }
+    )
+    operation = "wallet_reference"
+
+    prior = await session.scalar(
+        select(EscrowIdempotencyRecord)
+        .where(
+            EscrowIdempotencyRecord.actor_id == user.id,
+            EscrowIdempotencyRecord.operation == operation,
+            EscrowIdempotencyRecord.idempotency_key == idempotency_key,
+        )
+        .with_for_update()
+    )
+    if prior is not None:
+        if (
+            prior.request_sha256 != request_sha256
+            or prior.resource_type != "wallet_action"
+            or prior.resource_id != action.id
+        ):
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "idempotency_payload_conflict"},
+            )
+        if action.submission_reference_sha256 != reference_sha256:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "stored_wallet_reference_conflict"},
+            )
+        return _wallet_reference_response(action)
+
+    # Store the idempotency receipt in the same transaction as the untrusted hint.
+    # A transaction reference can never write deal status or owner state.
+    receipt = EscrowIdempotencyRecord(
+        actor_id=user.id,
+        operation=operation,
+        idempotency_key=idempotency_key,
+        request_sha256=request_sha256,
+        resource_type="wallet_action",
+        resource_id=action.id,
+    )
+    session.add(receipt)
+    try:
+        record_submission_reference(action, reference=normalized_reference)
+    except EscrowActionConflict as exc:
+        if (
+            str(exc) == "submission_reference_conflict"
+            and action.status == "manual_review"
+        ):
+            # Persist the safety quarantine for a conflicting client claim, along
+            # with this key's receipt. The canonical deal/listing state is untouched.
+            await session.commit()
+        else:
+            await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": str(exc)},
+        ) from exc
+
+    try:
+        await session.commit()
+        await session.refresh(action)
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "wallet_reference_idempotency_race"},
+        ) from exc
+    return _wallet_reference_response(action)
+
+
+def _wallet_reference_response(
+    action: EscrowWalletActionRecord,
+) -> EscrowWalletReferenceResponse:
+    reference_hash = action.submission_reference_sha256
+    if (
+        not isinstance(reference_hash, str)
+        or not _HEX_256.fullmatch(reference_hash)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "stored_wallet_reference_integrity_failed"},
+        )
+    if action.status == "manual_review":
+        reconciliation_status = "manual_review"
+    elif action.status == "finalized":
+        reconciliation_status = "already_finalized"
+    else:
+        reconciliation_status = "awaiting_independent_chain_reconciliation"
+    return EscrowWalletReferenceResponse(
+        action_id=action.id,
+        status=action.status,
+        reference_sha256=reference_hash,
+        reconciliation_status=reconciliation_status,
+    )
 
 
 @router.get("/seller/balance", response_model=EscrowSellerBalanceResponse)
