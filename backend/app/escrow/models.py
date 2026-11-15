@@ -410,6 +410,8 @@ class EscrowWalletActionRecord(TimestampMixin, EscrowBase):
             "AND finality_proof_sha256 IS NULL "
             "AND finality_provider IS NULL) OR ("
             "finalized_transaction_hash IS NOT NULL "
+            "AND unsigned_payload_json IS NOT NULL "
+            "AND unsigned_bocs_json IS NOT NULL "
             "AND length(finalized_transaction_hash) = 64 "
             "AND finality_masterchain_seqno IS NOT NULL "
             "AND finality_masterchain_seqno > 0 "
