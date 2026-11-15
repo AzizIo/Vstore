@@ -1448,7 +1448,11 @@ class PytoniqTONTestnetEscrowProvider:
             getter, state_name, getter_identity_sha = await self._read_contract_state(
                 deal, master_id, client
             )
-            opcode = message.body.begin_parse().load_uint(32)
+            body_parser = message.body.begin_parse()
+            opcode = (
+                body_parser.load_uint(32)
+                if body_parser.remaining_bits >= 32 else None
+            )
             oracle = (
                 self._decode_oracle_attestation(message.body, deal, master_id.seqno, getter)
                 if opcode == _OP_ORACLE
