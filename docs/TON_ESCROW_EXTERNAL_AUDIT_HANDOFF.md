@@ -10,9 +10,9 @@
 
 The contract-specific CI passed on commit `2ecf38943216a773dc27fb1841f11edc3ee67b9f` (run [43762485072](https://github.com/AzizIo/Vstore/actions/runs/43762485072)). Current main `a08b3b7632e1e1d8c38ac7a896b519a595f32df8` is one later preview-runtime-gating commit ahead; the compare contains no changes to contract sources, contract tests, ABI, frozen manifest or the contract workflow.
 
-However, two known remediation branches are still Draft:
+However, two coordinated remediation branches are still Draft:
 - [PR #241 — proof-anchored allowlisted TEP-62 NFT identity](https://github.com/AzizIo/Vstore/pull/241). It adds same-masterchain-block item/collection account proofs and standard collection item-address derivation. It has not been merged/accepted. Its collection policy intentionally defaults to empty; no collection or code hash is approved by default.
-- [PR #242 — preserve storage reserve on carry-all refund retry](https://github.com/AzizIo/Vstore/pull/242). It fixes an internal finding: the execution-reserve refund retry uses `SEND_MODE_CARRY_ALL_BALANCE` without recreating the transaction-local terminal storage reserve. It adds a balance-floor assertion. Its frozen artifacts and exact-head CI are not yet verified.
+- [PR #242 — preserve storage reserve on carry-all refund retry](https://github.com/AzizIo/Vstore/pull/242). It fixes the carry-all retry reserve-floor finding and adds a balance-floor assertion. Frozen code/BOC/StateInit values have been regenerated; strict exact-head Contract CI passed on head `9b6e79de2b35aa526dc517b13eebdf73898ba02d` (run [#43766977381](https://github.com/AzizIo/Vstore/actions/runs/43766977381)), including StateInit/message vectors, static checks and 30 Acton tests. It remains Draft pending adapter BOC pin coordination with #206.
 
 **Audit recommendation:** do not start the final sign-off review against a moving branch. Review the exact post-remediation commit only after #241/#242 (or equivalent fixes) are integrated and all affected CI/artifact checks are green. The reviewer may inspect the open PRs now as pre-audit material.
 
@@ -97,7 +97,7 @@ The request for proposal must explicitly say `Tolk 1.5.0`, Acton `1.2.1`, TVM as
 ### Preconditions
 - Independent audit has no unresolved critical/high findings.
 - Final code/BOC/StateInit/ABI hashes are frozen and independently reproduced.
-- A reviewed testnet collection policy is configured (exact collection address, collection code hash, item code hash and approved derivation). No policy/hash may be guessed.
+- A reviewed testnet collection policy is configured (exact collection address, collection code hash, item code hash and approved derivation). PR #241 introduces an empty-by-default allowlist and same-block proof-backed identity checks, but no real collection is approved yet; no policy/hash may be guessed.
 - Disposable testnet wallets are provisioned separately for seller, buyer, oracle operators and resolver operators. Private keys remain with their owners/offline; never store them in GitHub, CI, backend, logs or this handoff.
 - Oracle and resolver public keys are distinct, unique, and configured only after operators confirm key custody.
 - Explicit owner authorization records the testnet deal terms, valueless NFT, tiny testnet TON amounts, operator roles and abort procedure.
@@ -119,9 +119,9 @@ Capture the network/global ID, contract/item/collection/wallet addresses, source
 
 ## 7. Current live-acceptance blockers
 
-- No actual DealEscrow deployment address or live transaction/trace/getter evidence is recorded in the repository. The frozen StateInit address is only a deterministic vector.
+- No actual DealEscrow deployment address or live transaction/trace/getter evidence is recorded in the repository. The frozen StateInit address is only a deterministic vector (and the PR #242 StateInit address is a newer deterministic vector, still not a deployed address).
 - No disposable testnet wallets, approved valueless NFT item/collection, or independently held oracle/resolver key operators are provisioned in this workstream.
-- Current repository defaults keep oracle/resolver public-key lists empty and finality observer disabled. PR #241 adds a further empty-by-default collection policy.
+- Current repository defaults keep oracle/resolver public-key lists empty and finality observer disabled. PR #241 adds a further empty-by-default collection policy. No operator public keys, collection allowlist entry, disposable wallets, live deal or transaction proof has been supplied.
 - No live transaction will be signed or broadcast by this handoff. Live wallet actions require the approved disposable-wallet setup and explicit operator execution described above.
 
 **Decision: BLOCKED.** This package enables a qualified external specialist and release operator to perform a bounded review and testnet acceptance; it does not substitute for either. Mainnet, production signing/broadcast, real TON funds, and real NFT transfers remain out of scope.
