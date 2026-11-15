@@ -16,7 +16,6 @@ from app.api.escrow import (
     router,
 )
 from app.escrow.contracts import EscrowWalletAction
-from app.escrow.service import canonical_request_sha256
 from app.escrow.schemas import (
     EscrowDealCreate,
     EscrowDealResponse,
@@ -25,6 +24,7 @@ from app.escrow.schemas import (
     EscrowNftProjection,
     EscrowPageResponse,
 )
+from app.escrow.service import canonical_request_sha256
 
 
 def test_frontend_listing_and_deal_create_inputs_match_backend_contract() -> None:
