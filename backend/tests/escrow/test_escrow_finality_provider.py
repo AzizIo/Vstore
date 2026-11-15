@@ -436,6 +436,8 @@ async def test_original_outbound_message_rejects_value_or_message_mismatch() -> 
         _transaction,
         _block_id,
     ) = _original_outbound_fixture(value=89_000_000)
+    # The bounce claims 90m, but the proved source message contains only 89m.
+    bounce_details["bounce_original_value_nanotons"] = 90_000_000
     provider = PytoniqTONTestnetEscrowProvider(
         settings=_settings(),
         http_client=_FakeHttp({"transactions": []}),
