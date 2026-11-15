@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 describe("Telegram authentication API", () => {
-  it("returns the server-issued token lifetime for proactive refresh", async () => {
+  it("returns the server-issued token lifetime for session expiry tracking", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
       access_token: "access-token",
       token_type: "bearer",
