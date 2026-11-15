@@ -122,13 +122,10 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     escrow_provider: PytoniqTONTestnetEscrowProvider | None = None
     escrow_observer_task: asyncio.Task[None] | None = None
 
-    # Never start escrow finality in production, even in Preview mode.
-    if (
-        runtime_settings.ton_escrow_finality_enabled
-        and runtime_settings.ton_connect_network == "testnet"
-        and runtime_settings.environment.strip().lower()
-        in {"local", "development", "test", "preview"}
-    ):
+    # Production deployments never start the testnet observer. The isolated
+    # Preview stack is the sole production-mode exception and must opt in via
+    # PREVIEW_MODE=1 plus TON_ESCROW_FINALITY_ENABLED=1 and testnet network.
+    if _should_start_escrow_observer(runtime_settings):
         escrow_provider = PytoniqTONTestnetEscrowProvider(
             session_factory=async_session_factory,
             settings=runtime_settings,
@@ -155,6 +152,20 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         if escrow_provider is not None:
             await escrow_provider.close()
         await dispose_engine()
+
+
+def _should_start_escrow_observer(settings: Settings) -> bool:
+    """Start proof observation only in safe non-production or isolated Preview runtimes."""
+
+    if not settings.ton_escrow_finality_enabled:
+        return False
+    if settings.ton_connect_network != "testnet":
+        return False
+
+    environment = settings.environment.strip().lower()
+    if environment in {"local", "development", "test", "preview"}:
+        return True
+    return environment == "production" and settings.preview_mode
 
 
 def _should_mount_escrow_router(settings: Settings) -> bool:
