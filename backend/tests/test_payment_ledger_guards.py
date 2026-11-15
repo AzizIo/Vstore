@@ -164,6 +164,67 @@ async def test_payment_snapshots_and_evidence_cannot_be_rewritten_or_removed(
                         async with session.begin_nested():
                             await session.execute(statement, params or {})
 
+                # Check the constraints themselves, then prove invalid financial
+                # records are rejected by PostgreSQL rather than only by the service.
+                for table, constraint_name in (
+                    ("payment_intents", "ck_payment_intents_amount_whole_stars"),
+                    ("payment_transactions", "ck_payment_transactions_amount_whole_stars"),
+                    ("payment_transactions", "ck_payment_transactions_provider_stars"),
+                    ("payment_transactions", "ck_payment_transactions_currency_stars"),
+                ):
+                    installed = await session.scalar(
+                        text(
+                            "SELECT EXISTS (SELECT 1 FROM pg_constraint "
+                            "WHERE conrelid = CAST(:table_name AS regclass) "
+                            "AND conname = :constraint_name AND contype = 'c')"
+                        ),
+                        {"table_name": table, "constraint_name": constraint_name},
+                    )
+                    assert installed is True, f"Expected PostgreSQL CHECK {constraint_name}"
+
+                async def assert_invalid_charge(
+                    *, provider: str, currency: str, amount: Decimal
+                ) -> None:
+                    with pytest.raises(DBAPIError):
+                        async with session.begin_nested():
+                            await session.execute(
+                                text(
+                                    """
+                                    INSERT INTO payment_transactions (
+                                        id, payment_intent_id, provider,
+                                        telegram_payment_charge_id,
+                                        provider_payment_charge_id, amount, currency,
+                                        payer_telegram_id, status, captured_at
+                                    ) VALUES (
+                                        :id, :intent_id, :provider, :charge_id,
+                                        :provider_charge_id, :amount, :currency,
+                                        :payer_id, 'captured', :captured_at
+                                    )
+                                    """
+                                ),
+                                {
+                                    "id": uuid4(),
+                                    "intent_id": intent_id,
+                                    "provider": provider,
+                                    "charge_id": f"invalid-charge-{uuid4()}",
+                                    "provider_charge_id": f"invalid-provider-charge-{uuid4()}",
+                                    "amount": amount,
+                                    "currency": currency,
+                                    "payer_id": telegram_id,
+                                    "captured_at": now,
+                                },
+                            )
+
+                await assert_invalid_charge(
+                    provider="telegram_stars", currency="TON", amount=Decimal("25")
+                )
+                await assert_invalid_charge(
+                    provider="external", currency="XTR", amount=Decimal("25")
+                )
+                await assert_invalid_charge(
+                    provider="telegram_stars", currency="XTR", amount=Decimal("25.5")
+                )
+
                 await assert_rejected(
                     text("UPDATE payment_intents SET amount = 26 WHERE id = :id"),
                     {"id": intent_id},
