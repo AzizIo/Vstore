@@ -50,7 +50,7 @@ The fixed cross-implementation vector `deal-escrow-v1-testnet-fixed-terms-01` is
 Wallet messages are constructed from the versioned Tolk structs, not from user-provided opcodes or payload strings:
 
 - `ActivateDeal`, `FundDeal`, `AcceptDeal`, `OpenDispute`, `TimeoutDeal`, `RecoverUnexpectedNft` use the generated ABI structs.
-- TEP-62 `NftTransfer` uses opcode `0x5fcc3d14`, null custom payload and inline payload `0x56454e46 || dealSalt`. Contract-initiated NFT transfers use 0.01 TON forward amount; backend-generated seller deposit and buyer return wallet messages use 0.02 TON, matching the generated Acton message vectors.
+- TEP-62 `NftTransfer` uses opcode `0x5fcc3d14`, null custom payload, 0.01 TON forward amount and inline payload `0x56454e46 || dealSalt`, matching the generated Acton message vectors and backend wallet message encoder.
 - All wallet payloads are unsigned TON Connect requests. Server-side signing, wallet custody and submission are not implemented.
 - Payout/refund are contract-initiated and deliberately have no user wallet encoder.
 
