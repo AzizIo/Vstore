@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from pytoniq_core import Address, Cell, begin_cell
-
 import pytest
+from pytoniq_core import Address, Cell, begin_cell
 
 from app.escrow.rich_bounce import (
     CLASSIC_BOUNCE_OPCODE,

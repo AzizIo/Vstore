@@ -1,5 +1,6 @@
 """Strict parser and correlation rules for TON's new RichBounce body."""
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any
 
