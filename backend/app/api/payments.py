@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from aiogram.exceptions import TelegramAPIError
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,7 +64,10 @@ def _test_payment_router_enabled(settings=None) -> bool:
 def _payment_conflict(exc: PaymentConflict) -> HTTPException:
     message = str(exc)
     if message == "Order not found":
-        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "order_not_found"})
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "order_not_found"},
+        )
     if message == "idempotency_payload_conflict":
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
