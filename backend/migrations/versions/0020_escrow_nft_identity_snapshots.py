@@ -48,7 +48,8 @@ def upgrade() -> None:
             "AND nft_identity_snapshot_sha256 IS NOT NULL "
             "AND nft_identity_snapshot_sha256 ~ '^[0-9a-f]{64}$' "
             "AND nft_identity_snapshot_json::jsonb ? 'evidence_sha256' "
-            "AND nft_identity_snapshot_json::jsonb ->> 'evidence_sha256' = nft_identity_snapshot_sha256"
+            "AND nft_identity_snapshot_json::jsonb ->> 'evidence_sha256' "
+            "= nft_identity_snapshot_sha256"
             ")",
         )
 
