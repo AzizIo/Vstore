@@ -359,7 +359,16 @@ def _build_deployment_snapshot(
     version = getattr(deal, "deployment_snapshot_version", None)
     source = getattr(deal, "deployment_snapshot_source", None)
     if not isinstance(stored, dict) or not isinstance(stored_hash, str):
-        return None, tuple(_DEPLOYMENT_SNAPSHOT_BINDINGS)
+        # Missing persisted evidence is an incomplete snapshot, not evidence of
+        # tampering. Keep the explicit storage-field markers so callers return a
+        # stable retryable "incomplete" code instead of "integrity failed".
+        return None, (
+            "deployment_snapshot_json",
+            "deployment_snapshot_sha256",
+            "deployment_snapshot_version",
+            "deployment_snapshot_source",
+            *tuple(_DEPLOYMENT_SNAPSHOT_BINDINGS),
+        )
     if version != _DEPLOYMENT_SNAPSHOT_VERSION or source != "pinned-dealescrow-v1":
         return None, ("deployment_snapshot_version",)
     if not _HEX_256.fullmatch(stored_hash) or _canonical_sha256(stored) != stored_hash:
