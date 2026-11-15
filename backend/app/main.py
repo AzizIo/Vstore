@@ -23,6 +23,8 @@ from app.api.sellers import router as sellers_router
 from app.api.users import router as users_router
 from app.api.wallets import router as wallets_router
 from app.assets.ton_nft.observer import run_delivery_observer_pass
+from app.escrow.finality_provider import PytoniqTONTestnetEscrowProvider
+from app.escrow.observer import run_observer_pass as run_escrow_observer_pass
 from app.core.config import Settings, get_settings
 from app.core.error_responses import (
     http_exception_handler,
@@ -76,22 +78,77 @@ async def _observe_delivery_attempts_periodically() -> None:
             )
 
 
+async def _observe_escrow_events_periodically(
+    provider: PytoniqTONTestnetEscrowProvider,
+) -> None:
+    settings = get_settings()
+    while True:
+        try:
+            await asyncio.sleep(5)
+            result = await run_escrow_observer_pass(
+                async_session_factory,
+                provider,
+                limit=settings.ton_escrow_finality_batch_deals,
+            )
+            if result.scanned or result.applied or result.rejected or result.pending:
+                logger.info(
+                    "TON escrow finality pass: scanned=%s applied=%s rejected=%s "
+                    "pending=%s lease_lost=%s provider_unavailable=%s",
+                    result.scanned,
+                    result.applied,
+                    result.rejected,
+                    result.pending,
+                    result.lease_lost,
+                    result.provider_unavailable,
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Provider/DB outages never authorize state advancement; a later pass retries.
+            logger.exception("TON escrow finality pass failed; durable cursor remains authoritative")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    runtime_settings = get_settings()
     expiration_task = asyncio.create_task(_expire_orders_periodically())
     delivery_observer_task = asyncio.create_task(
         _observe_delivery_attempts_periodically()
     )
+    escrow_provider: PytoniqTONTestnetEscrowProvider | None = None
+    escrow_observer_task: asyncio.Task[None] | None = None
+
+    # This observer is never started in production, even when the Preview router is
+    # explicitly mounted. It is opt-in and proof-verifies testnet only.
+    if (
+        runtime_settings.ton_escrow_finality_enabled
+        and runtime_settings.ton_connect_network == "testnet"
+        and runtime_settings.environment.strip().lower()
+        in {"local", "development", "test", "preview"}
+    ):
+        escrow_provider = PytoniqTONTestnetEscrowProvider(
+            session_factory=async_session_factory,
+            settings=runtime_settings,
+        )
+        escrow_observer_task = asyncio.create_task(
+            _observe_escrow_events_periodically(escrow_provider)
+        )
+
     try:
         yield
     finally:
-        expiration_task.cancel()
-        delivery_observer_task.cancel()
-        for task in (expiration_task, delivery_observer_task):
+        tasks = [expiration_task, delivery_observer_task]
+        if escrow_observer_task is not None:
+            tasks.append(escrow_observer_task)
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
             try:
                 await task
             except asyncio.CancelledError:
                 pass
+        if escrow_provider is not None:
+            await escrow_provider.close()
         await dispose_engine()
 
 
