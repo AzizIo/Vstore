@@ -28,7 +28,6 @@ import { EscrowWorkspace } from "../../escrow/EscrowWorkspace";
 const sellerAddress = "0:" + "1".repeat(64);
 const itemAddress = "0:" + "2".repeat(64);
 const escrowAddress = "0:" + "3".repeat(64);
-const factoryAddress = "0:" + "4".repeat(64);
 
 const testWallet = {
   id: "wallet-testnet",
@@ -120,15 +119,15 @@ function withdrawal(): EscrowWithdrawal {
 }
 
 function prepared(action: PreparedEscrowTransaction["action"]): PreparedEscrowTransaction {
-  const isFactoryAction = action === "create_deal_escrow";
+  const deploymentAction = action === "create_deal_escrow";
   const nftAction = action === "deposit_nft" || action === "return_nft_to_escrow";
-  const destination = isFactoryAction ? factoryAddress : nftAction ? itemAddress : escrowAddress;
+  const destination = nftAction ? itemAddress : escrowAddress;
   return {
     action_id: "operation-" + action,
     action,
     network: "testnet",
-    factory_address: isFactoryAction ? factoryAddress : null,
-    escrow_address: isFactoryAction ? null : escrowAddress,
+    factory_address: null,
+    escrow_address: escrowAddress,
     nft_item_address: itemAddress,
     price_nano: "2500000000",
     fee_bps: 0,
@@ -138,8 +137,8 @@ function prepared(action: PreparedEscrowTransaction["action"]): PreparedEscrowTr
     messages: [{
       address: destination,
       amount_nano: "2520000000",
-      payload_boc: "server-prepared-payload",
-      state_init_boc: null,
+      payload_boc: deploymentAction ? null : "server-prepared-payload",
+      state_init_boc: deploymentAction ? "server-prepared-state-init-boc" : null,
     }],
   };
 }
@@ -405,7 +404,9 @@ describe("TON Escrow workspace", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
 
     fireEvent.click(await screen.findByRole("button", { name: "Создать DealEscrow" }));
-    expect(await screen.findByRole("dialog", { name: /Создать DealEscrow/ })).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: /Создать DealEscrow/ });
+    expect(dialog).toHaveTextContent(escrowAddress);
+    expect(dialog).not.toHaveTextContent("Factory");
     expect(api.prepareDealEscrow).toHaveBeenCalledWith({
       deal_id: "deal-1",
       wallet_id: "wallet-testnet",
