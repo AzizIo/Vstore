@@ -607,6 +607,27 @@ async def test_mismatched_finality_proof_is_not_accepted() -> None:
 
 
 @pytest.mark.asyncio
+async def test_conflicting_event_finality_metadata_is_not_accepted() -> None:
+    event = make_event(masterchain_block_hash="c" * 64)
+
+    proof = FinalityVerification(
+        network=event.network,
+        transaction_hash=event.transaction_hash,
+        masterchain_seqno=event.masterchain_seqno,
+        masterchain_block_hash="a" * 64,
+        message_hash=event.message_hash or "",
+        trace_id=event.trace_id or "",
+        proof_sha256="b" * 64,
+        provider_id="fixture-masterchain-verifier",
+        finalized=True,
+        masterchain_inclusion_verified=True,
+        trace_binding_verified=True,
+    )
+
+    assert proof.matches(event) is False
+
+
+@pytest.mark.asyncio
 async def test_finalized_event_without_finality_proof_remains_pending() -> None:
     event = make_event(finality_proof_sha256=None)
     session = FakeSession(None)
@@ -616,6 +637,68 @@ async def test_finalized_event_without_finality_proof_remains_pending() -> None:
     assert isinstance(stored, EscrowChainEvent)
     assert stored.status == "pending"
     assert stored.reason_code == "finality_proof_missing"
+
+
+@pytest.mark.asyncio
+async def test_terminal_event_retries_owner_reconciliation_after_restart() -> None:
+    buyer_id, seller_id, asset_id, listing_id = uuid4(), uuid4(), uuid4(), uuid4()
+    deal_id = uuid4()
+    contract_address = "0:" + "a" * 64
+    event = make_event(
+        event_type=EscrowChainEventType.SELLER_PAYOUT_RECONCILED,
+        contract_address=contract_address,
+        deal_id=str(deal_id),
+        source_address=contract_address,
+        destination_address="seller-wallet",
+        amount_nanotons=2_500_000_000,
+        item_address="nft-item",
+        collection_address="nft-collection",
+        observed_contract_state=EscrowDealStatus.SETTLED.value,
+        contract_state_reconciled=True,
+        terminal_owner_address="buyer-wallet",
+        terminal_owner_proof_sha256="c" * 64,
+        terminal_owner_masterchain_seqno=101,
+        terminal_owner_provider="fixture-owner-verifier",
+    )
+    existing = stored_row(event, status="applied")
+    existing.reason_code = "terminal_listing_owner_unverified"
+    existing.deal_id = deal_id
+    deal = SimpleNamespace(
+        id=deal_id,
+        network="testnet",
+        contract_address=contract_address,
+        collection_address_snapshot="nft-collection",
+        item_address="nft-item",
+        seller_address_snapshot="seller-wallet",
+        buyer_address_snapshot="buyer-wallet",
+        principal_nanotons=2_500_000_000,
+        deal_salt="d" * 64,
+        status=EscrowDealStatus.SETTLED.value,
+        last_chain_seqno=100,
+        last_chain_logical_time=499,
+        listing_intent_id=uuid4(),
+        buyer_id=buyer_id,
+        seller_id=seller_id,
+    )
+    intent = SimpleNamespace(
+        id=deal.listing_intent_id,
+        marketplace_listing_id=listing_id,
+        asset_id=asset_id,
+        item_address="nft-item",
+        status="manual_review",
+    )
+    listing = SimpleNamespace(id=listing_id, status=ListingStatus.RESERVED)
+    asset = SimpleNamespace(id=asset_id, item_address="nft-item", owner_id=seller_id)
+    session = FakeSession(existing, deal, intent, listing, intent, asset)
+
+    result = await _apply_one_event(session, event, provider_verified=True)
+
+    assert result == "applied"
+    assert deal.status == EscrowDealStatus.SETTLED.value
+    assert listing.status is ListingStatus.SOLD
+    assert intent.status == "cancelled"
+    assert asset.owner_id == buyer_id
+    assert existing.reason_code is None
 
 
 @pytest.mark.asyncio
