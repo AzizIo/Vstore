@@ -382,8 +382,13 @@ async def _apply_one_event(
             return "rejected"
         if existing.status in {"applied", "manual_review", "unmatched", "rejected"}:
             if existing.status == "applied":
-                return "duplicates"
-            return "rejected"
+                # A terminal chain state may be applied while marketplace release
+                # remains pinned for missing current-owner evidence. Re-query that
+                # evidence on replay instead of permanently treating the event as done.
+                if existing.reason_code != "terminal_listing_owner_unverified":
+                    return "duplicates"
+            else:
+                return "rejected"
 
     valid_shape = (
         event.network == "testnet"
@@ -483,7 +488,16 @@ async def _apply_one_event(
 
     try:
         validate_event_against_deal(_event_snapshot(event), _deal_snapshot(deal))
-        next_state = transition_for_verified_event(deal.status, event.event_type)
+        if (
+            deal.status in {state.value for state in TERMINAL_DEAL_STATES}
+            and event.contract_state_reconciled
+            and event.observed_contract_state == deal.status
+        ):
+            # Replayed terminal evidence may only retry owner/listing reconciliation;
+            # it cannot move a terminal deal to another state.
+            next_state = EscrowDealStatus(deal.status)
+        else:
+            next_state = transition_for_verified_event(deal.status, event.event_type)
     except (EscrowDomainError, ValueError):
         await _persist_event(session, event, status="manual_review",
             reason_code="event_invariant_or_transition_failure", deal_id=deal.id, existing=existing)
