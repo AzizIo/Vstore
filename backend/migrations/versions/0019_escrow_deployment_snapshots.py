@@ -90,7 +90,9 @@ def upgrade() -> None:
         "deployment_snapshot_json IS NULL AND deployment_snapshot_sha256 IS NULL "
         "AND deployment_snapshot_version IS NULL AND deployment_snapshot_source IS NULL"
         ") OR ("
-        "deployment_snapshot_json IS NOT NULL AND deployment_snapshot_sha256 IS NOT NULL AND length(deployment_snapshot_sha256) = 64 "
+        "deployment_snapshot_json IS NOT NULL "
+        "AND deployment_snapshot_sha256 IS NOT NULL "
+        "AND length(deployment_snapshot_sha256) = 64 "
         "AND deployment_snapshot_version > 0 "
         "AND length(deployment_snapshot_source) BETWEEN 1 AND 128"
         ")",
@@ -103,7 +105,9 @@ def upgrade() -> None:
         "AND getter_snapshot_masterchain_seqno IS NULL AND getter_snapshot_block_hash IS NULL "
         "AND getter_snapshot_provider IS NULL AND getter_snapshot_observed_at IS NULL"
         ") OR ("
-        "getter_snapshot_json IS NOT NULL AND getter_snapshot_sha256 IS NOT NULL AND length(getter_snapshot_sha256) = 64 "
+        "getter_snapshot_json IS NOT NULL "
+        "AND getter_snapshot_sha256 IS NOT NULL "
+        "AND length(getter_snapshot_sha256) = 64 "
         "AND getter_snapshot_masterchain_seqno > 0 "
         "AND getter_snapshot_block_hash IS NOT NULL AND length(getter_snapshot_block_hash) = 64 "
         "AND length(getter_snapshot_provider) BETWEEN 1 AND 128 "
@@ -116,7 +120,9 @@ def upgrade() -> None:
         "("
         "unsigned_payload_json IS NULL AND unsigned_payload_sha256 IS NULL"
         ") OR ("
-        "unsigned_payload_json IS NOT NULL AND unsigned_payload_sha256 IS NOT NULL AND length(unsigned_payload_sha256) = 64"
+        "unsigned_payload_json IS NOT NULL "
+        "AND unsigned_payload_sha256 IS NOT NULL "
+        "AND length(unsigned_payload_sha256) = 64"
         ")",
     )
     op.create_check_constraint(
@@ -124,7 +130,9 @@ def upgrade() -> None:
         "escrow_wallet_actions",
         "("
         "unsigned_payload_json IS NULL AND unsigned_payload_sha256 IS NULL "
-        "AND unsigned_bocs_json IS NULL AND unsigned_boc_sha256 IS NULL AND unsigned_boc_ref IS NULL"
+        "AND unsigned_bocs_json IS NULL "
+        "AND unsigned_boc_sha256 IS NULL "
+        "AND unsigned_boc_ref IS NULL"
         ") OR ("
         "unsigned_payload_json IS NOT NULL AND unsigned_payload_sha256 IS NOT NULL "
         "AND unsigned_bocs_json IS NOT NULL AND unsigned_boc_sha256 IS NOT NULL "
@@ -204,7 +212,10 @@ def upgrade() -> None:
         LANGUAGE plpgsql
         AS $$
         BEGIN
-            IF (OLD.unsigned_payload_json IS NOT NULL OR OLD.unsigned_bocs_json IS NOT NULL) AND ROW(
+            IF (
+                OLD.unsigned_payload_json IS NOT NULL
+                OR OLD.unsigned_bocs_json IS NOT NULL
+            ) AND ROW(
                 NEW.unsigned_payload_json,
                 NEW.unsigned_payload_sha256,
                 NEW.unsigned_bocs_json,
