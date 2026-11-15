@@ -27,6 +27,7 @@ export default function TonConnectWallet({
   return (
     <TonConnectUIProvider manifestUrl={manifestUrl}>
       <WalletControls
+        key={accessToken}
         accessToken={accessToken}
         onSelectedWalletChange={onSelectedWalletChange}
       />
