@@ -6,19 +6,19 @@ This directory pins the ABI and compiler output for the current testnet-only Dea
 
 | Field | Value |
 |---|---|
-| Source commit | `979ec32f07224726532fdf48b941eda8314f32b0` |
+| Source commit | `01963603df7fb4ad819ab4a8f4a68315cec47c5d` |
 | Toolchain | Acton `1.2.1`, Tolk `1.5.0` |
-| Successful exact-head contract workflow | [#43760602962](https://github.com/AzizIo/Vstore/actions/runs/43760602962) |
-| Artifact ID | `14180230821` |
-| Artifact archive SHA-256 | `557b694b6980d1560917d7c6f1331a185c084c39c3617cea6977d3fc3dcdb9af` |
+| Successful exact-head contract workflow | [#43766860437](https://github.com/AzizIo/Vstore/actions/runs/43766860437) |
+| Artifact ID | `14181479725` |
+| Artifact archive SHA-256 | `25a4769ba2e4fee2f0ef913e2d7060524bc2143f6b060267651cab95b9fbf5be` |
 | Compact ABI SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
-| Build descriptor SHA-256 | `71499599b33d728d8f0ca0b5b26a49d6f557ffb2a9c5bfd20d2163bc738ea779` |
-| Compiled code hash | `1BCCBF586878F8032F4E860707B0102EC554B4E1C0CFD7DEA362E1DD391D6666` |
-| BOC base64 SHA-256 | `2ba55420e6b09c94986d51b045db92959df11f66b339cd77df4e919d30a0e50b` |
-| Decoded BOC SHA-256 | `b4a46ef78089119fb10272e1edbd152f8b5e9c337b59d759ad5e1c661dd4fbb5` |
-| Zlib-compressed BOC SHA-256 | `57eec30799e23fe30b3d54c4407949ae99c1af8ebe921e2ce053d1d4f17c80f3` |
-| Deterministic StateInit hash | `ffd464daa07d4fd3b99e2469520eb77624f3265de9784d103df3babc15c5199f` |
-| Deterministic raw address | `0:ffd464daa07d4fd3b99e2469520eb77624f3265de9784d103df3babc15c5199f` |
+| Build descriptor SHA-256 | `4a782edd062c83897c7e9dc62bb2f011547bbf7d371b9f822934fdf36877f5c5` |
+| Compiled code hash | `D822B8AFBB37027611A9A9DDC8E67C52F17BBBC45B4352C7F360693BD685CA54` |
+| BOC base64 SHA-256 | `2e9b43b902b1d4c26d358af79d731d7445cca3d562d77cb858a532a487b1e05e` |
+| Decoded BOC SHA-256 | `fd226adafbfe7a1e14164c59538843dd024e99e3cec2f458322ac94eaa8d7ba8` |
+| Zlib-compressed BOC SHA-256 | `301c3aa6dfb729c5a0a640dc15eb527540e282c758c69a241632d4c04fd49947` |
+| Deterministic StateInit hash | `29a40423c7e8fa1390782bce7e94e32f2a0e14ceef6cf05bd0f1641d0ba3f423` |
+| Deterministic raw address | `0:29a40423c7e8fa1390782bce7e94e32f2a0e14ceef6cf05bd0f1641d0ba3f423` |
 | Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
 
 The source-controlled files are `frozen/DealEscrow.abi.json` and `frozen/manifest.json`. The backend pins the compressed compiler BOC as `backend/app/escrow/abi_artifacts/DealEscrow.code.boc.zlib.b64`; CI rebuilds it and verifies the code hash and BOC digests.
