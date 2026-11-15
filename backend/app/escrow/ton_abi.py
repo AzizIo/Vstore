@@ -22,7 +22,7 @@ from pytoniq_core import Address, Cell, begin_cell
 _ARTIFACTS = Path(__file__).resolve().parent / "abi_artifacts"
 _NETWORK_ID = -3
 _PROTOCOL_VERSION = 1
-_CODE_HASH = "61348A9F67A31753622AB3E9E204AF67FBC1ED8736B05510DD9DF93E0F49366B"
+_CODE_HASH = "2F96C25E20D744713E72CE09A5EF209414840B52B3F06EE96E00E64884608044"
 _NFT_TRANSFER_OPCODE = 0x5FCC3D14
 _NFT_FORWARD_MAGIC = 0x56454E46
 _OPCODES = {
@@ -105,10 +105,13 @@ def load_pinned_abi() -> tuple[dict[str, Any], dict[str, Any]]:
 def load_pinned_code_boc() -> str:
     """Decompress the pinned compiler BOC and return its canonical base64 text."""
     try:
-        compressed = (_ARTIFACTS / "DealEscrow.code.boc.zlib").read_bytes()
+        compressed_b64 = (
+            _ARTIFACTS / "DealEscrow.code.boc.zlib.b64"
+        ).read_text(encoding="ascii").strip()
+        compressed = base64.b64decode(compressed_b64, validate=True)
         raw_boc = zlib.decompress(compressed)
         return base64.b64encode(raw_boc).decode("ascii")
-    except (OSError, zlib.error, ValueError) as exc:
+    except (OSError, UnicodeError, zlib.error, ValueError) as exc:
         raise TONABIError("pinned DealEscrow code BOC is unavailable or corrupt") from exc
 
 
