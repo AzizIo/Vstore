@@ -33,7 +33,7 @@ def upgrade() -> None:
 
     if invalid_intents or invalid_transactions:
         raise RuntimeError(
-            "Cannot enforce Telegram Stars XTR invariants: "
+            "Cannot enforce Telegram Stars amount/provider invariants: "
             f"{invalid_intents} fractional payment intents and "
             f"{invalid_transactions} provider-mismatched or fractional payment transactions exist. "
             "Reconcile financial evidence explicitly before retrying this migration; "
