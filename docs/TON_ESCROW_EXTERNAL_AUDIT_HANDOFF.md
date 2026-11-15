@@ -90,11 +90,13 @@ The reviewer must be independent of the implementation author, release operator,
 ## 4. External audit leads
 
 These are leads for a scoped proposal, not endorsement, booking or confirmation of availability:
-- [Hacken — TON smart contract audit](https://hacken.io/services/blockchain-security/ton-smart-contract-audit/)
-- [CertiK — TON ecosystem security](https://www.certik.com/ecosystems/ton)
-- [Trail of Bits — TON blockchain assessment reference](https://docs.ton.org/audits/TON_Blockchain_ToB.pdf), a prior TON core/TVM assessment, not a VILTARA audit.
+- [Cecuro — TON security audits](https://cecuro.ai/ecosystems/ton). Its public TON page explicitly lists Tolk, FunC and Tact among languages it reviews and mentions TON-specific asynchronous-message, bounced-message and gas/storage risks. It is the closest advertised language fit for this Tolk codebase; still require written confirmation that the team can audit Acton 1.2.1 / Tolk 1.5.0 and our exact RichBounce/provider proof scope.
+- [Hacken — TON smart contract audit](https://hacken.io/services/blockchain-security/ton-smart-contract-audit/). Its page describes TVM-focused TON audits, fuzzing, static/dynamic testing and remediation review; confirm Tolk 1.5.0 experience in the proposal.
+- [CertiK — TON ecosystem audits](https://www.certik.com/ecosystems/ton). Its page offers TON contract audits; confirm Tolk-specific reviewer availability and async TVM/bounce expertise.
+- [Trail of Bits — TON blockchain/TVM assessment reference](https://docs.ton.org/audits/TON_Blockchain_ToB.pdf). This is a prior TON core/TVM assessment, not a VILTARA contract audit or confirmation of current engagement availability.
+- [TON Audit Studio](https://ton.app/audit/ton-audit-studio?id=5315) advertises automated FunC/Tact/Tolk checks. Treat it only as a supplementary automated scan, never as the independent human audit or final sign-off.
 
-The RFP must explicitly require Tolk 1.5.0, Acton 1.2.1, TVM async-message/bounce behavior, TEP-62, TON finality proofs and the escrow/finality scope above. Do not accept a generic EVM-only report as satisfying the gate. No source has been submitted to an external auditor; no engagement has been initiated.
+The RFP must explicitly require Tolk 1.5.0, Acton 1.2.1, TVM async-message/bounce behavior, TEP-62, TON finality proofs and the escrow/finality scope above. Do not accept a generic EVM-only report as satisfying the gate. Obtain written confirmation of reviewer independence, qualifications, availability, cost and exact source/artifact scope before sharing source or commissioning work. No source has been submitted to an external auditor; no engagement has been initiated.
 
 ## 5. Valueless TON testnet acceptance procedure
 
