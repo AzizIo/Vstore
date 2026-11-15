@@ -113,3 +113,7 @@ The pinned adapter is present in the repository, but the API intentionally still
 The testnet-only router is mounted only when `TON_CONNECT_NETWORK=testnet`; this does not enable transaction preparation, signing or broadcast. No mainnet, real-value funds, server-side signing or production deployment is enabled.
 
 A successful build or matching vector proves serializer consistency against the generated compiler wrapper; it does **not** prove contract safety. Remaining gates include complete snapshot persistence and replay-safe payload storage, a provider with independently verifiable finality, getter/trace reconciliation, a valueless live testnet lifecycle run, and an independent TON contract/security review.
+
+## Latest contract CI reproduction
+
+Backend pin PR #247 reran the contract workflow against exact PR head `be6716f0f17e4cead2bd4d2ed7301d1baa5226b4`: [Contract CI #43769301445](https://github.com/AzizIo/Vstore/actions/runs/43769301445) passed and produced artifact `14183516827` (archive SHA-256 `d40915733d2e97623726cf7946508bc4f32def021c923c8340601b6fed3c6ce8`). The artifact's code BOC base64 and decoded hashes match the backend file and frozen manifest. This confirms build reproducibility on the integration head; it is not independent audit or live testnet acceptance.
