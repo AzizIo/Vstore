@@ -58,7 +58,10 @@ function isTelegramAuthResponse(value: unknown): value is TelegramAuthResponse {
   if (!value || typeof value !== "object") return false;
   const response = value as Partial<TelegramAuthResponse>;
   return typeof response.access_token === "string" && response.access_token.length > 0 &&
-    response.token_type === "bearer" && typeof response.expires_in === "number" &&
+    response.token_type === "bearer" &&
+    typeof response.expires_in === "number" &&
+    Number.isFinite(response.expires_in) &&
+    response.expires_in > 0 &&
     isAuthenticatedUser(response.user);
 }
 
