@@ -876,6 +876,18 @@ async def create_deal_intent(
             last_chain_seqno=None,
             idempotency_key=idempotency_key,
         )
+        # Freeze all constructor parameters and derive the deterministic contract
+        # address before reserving the underlying marketplace listing. Missing
+        # authority keys or invalid ABI artifacts fail without locking the NFT.
+        snapshot_values, snapshot_sha256, predicted_address, abi_version = (
+            _initial_deployment_snapshot(deal)
+        )
+        deal.deployment_snapshot_json = snapshot_values
+        deal.deployment_snapshot_sha256 = snapshot_sha256
+        deal.deployment_snapshot_version = _DEPLOYMENT_SNAPSHOT_VERSION
+        deal.deployment_snapshot_source = "pinned-dealescrow-v1"
+        deal.contract_address = predicted_address
+        deal.contract_abi_version = abi_version
         # The normal Order path locks this same Listing row. Reserve both
         # projections in the same transaction so one NFT cannot be sold twice.
         try:
