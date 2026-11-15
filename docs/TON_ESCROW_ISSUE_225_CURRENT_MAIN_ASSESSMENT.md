@@ -16,7 +16,7 @@ The source currently contains the action-aware contract changes merged through P
 - Oracle/resolver positive fixtures use deterministic test-only Ed25519 signatures; source tests no longer use checksig bypass for positive end-to-end paths.
 - Timeout-to-manual-review can be reconciled by a valid signed oracle attestation only for an exact still-PENDING action. A BOUNCED action cannot use late success and must be retried.
 - Emulator tests cover late NFT delivery and seller payout after timeouts, late NFT return and buyer refund after timeouts, real NFT transfer bounce, seller payout bounce, seller deployment allowance bounce, carry-all reserve refund bounce/retry, stale retry rejection and terminal state protection.
-- **New internal finding on current main:** the authorized retry path for `OUTBOUND_KIND_EXECUTION_RESERVE_REFUND` reuses `SEND_MODE_CARRY_ALL_BALANCE` but does not reapply `reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, ...)`. Since reserve actions apply to the current transaction, a successful retry may consume the terminal storage floor. Remediation and a balance regression assertion are isolated in Draft PR #242; until its frozen artifact is regenerated and exact-head CI passes, treat this as an unresolved financial invariant.
+- **New internal finding on current main:** the authorized retry path for `OUTBOUND_KIND_EXECUTION_RESERVE_REFUND` reused `SEND_MODE_CARRY_ALL_BALANCE` but did not reapply `reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, ...)` in the retry transaction. Because reserve actions are transaction-local, the retry could consume the terminal storage floor. This is fixed in Draft PR #242: it recreates the reserve before retry and adds a balance-floor regression assertion. The final frozen artifact and all exact-head contract CI checks now pass on PR head `9b6e79de2b35aa526dc517b13eebdf73898ba02d` (run [#43766977381](https://github.com/AzizIo/Vstore/actions/runs/43766977381); matching push run [#43766973279](https://github.com/AzizIo/Vstore/actions/runs/43766973279)). The fix is not yet merged, and the backend BOC/runtime hash pin remains a dependency of #206.
 
 ## Exact-head build evidence
 
@@ -29,7 +29,7 @@ Latest contract-specific CI completed successfully on contract commit `2ecf38943
 5. ABI message BOC golden vectors.
 6. Tolk formatting, static checks and emulator suite (30 tests).
 
-This confirms reproducibility for the current artifact baseline. It is emulator/CI evidence only.
+This confirms reproducibility for the current main contract artifact baseline. A further contract-only remediation candidate in PR #242 has also passed its final exact-head Contract CI (PR run #43766977381 on `9b6e79de2b35aa526dc517b13eebdf73898ba02d`): new code/BOC manifest, StateInit/address/data hash, message vectors, Tolk format/static checks and 30 emulator tests including the terminal reserve retry floor. PR #242 remains Draft pending #206 backend BOC pin coordination and release-lead review. CI/emulator evidence is not an independent audit or live-chain acceptance.
 
 ## Remaining contract/release gates
 
@@ -50,8 +50,8 @@ The contract pins an exact NFT item address, but collection membership is not pr
 - Invariants under action-phase failures, malformed/out-of-order/duplicate bounces, and backend observer restart/replay.
 - Whether source-level custody flags are intentionally conservative projections and how trusted getter/trace reconciliation verifies actual NFT ownership.
 
-### BLOCKED — contract balance floor after carry-all retry
-The current `main` retry helper reissues the carry-all execution-reserve refund without a new storage reserve action. Draft PR #242 adds the reserve action to the retry transaction and checks the escrow balance after bounce and retry. The code fix is not yet merged, and the frozen code hash/BOC manifest must be regenerated with pinned CI before merge.
+### REMEDIATED IN DRAFT PR #242 — merge and adapter sync still required
+The retry now re-applies `reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, RESERVE_MODE_EXACT_AMOUNT)` before the carry-all resend. The real bounce/retry emulator scenario asserts the escrow retains more than 0.009 TON both before and after the retry. Frozen code/BOC/StateInit artifacts were regenerated and exact-head Contract CI passed on PR head `9b6e79de2b35aa526dc517b13eebdf73898ba02d` (run #43766977381, 30/30 tests). Do not merge or enable the backend adapter until #206 updates/reviews its pinned compressed BOC and code-hash binding to this new artifact.
 
 ## Release posture
 
