@@ -269,6 +269,11 @@ async def test_scan_persists_bounce_candidate_without_untrusted_attempt_or_query
     event = batch.events[0]
     assert event.event_type is EscrowChainEventType.OUTBOUND_ACTION_BOUNCED
     assert event.phase == "bounce"
+    # Indexer fields are not durable correlation facts. Keep them empty until
+    # the LiteServer proof and on-chain outbound descriptor enrich this event.
+    assert event.source_address is None
+    assert event.destination_address is None
+    assert event.amount_nanotons is None
     assert event.attempt_id is None
     assert event.query_id is None
     assert event.operation_id == "0xfffffffe"

@@ -582,10 +582,15 @@ class PytoniqTONTestnetEscrowProvider:
                         event_type=event_type,
                         contract_address=address,
                         deal_id=str(deal.id),
-                        source_address=source,
-                        destination_address=destination,
+                        # Bounce sender/destination/value are only hints until
+                        # the original outbound descriptor is matched against the
+                        # proof-read contract storage. Leave them unset so a pending
+                        # event can be safely enriched on a later retry.
+                        source_address=None if bounce_candidate else source,
+                        destination_address=None if bounce_candidate else destination,
                         item_address=deal.item_address,
                         amount_nanotons=(
+                            None if bounce_candidate else
                             int(in_msg.get("value", 0))
                             if str(in_msg.get("value", "0")).isdecimal() else None
                         ),
