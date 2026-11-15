@@ -155,6 +155,20 @@ class EscrowDeal(TimestampMixin, EscrowBase):
     )
     last_chain_seqno: Mapped[int | None] = mapped_column(BigInteger)
     last_chain_logical_time: Mapped[int | None] = mapped_column(BigInteger)
+    # Frozen deployment inputs are canonical JSON with an independently checked hash.
+    # They contain no signing material and can only be initialized once.
+    deployment_snapshot_json: Mapped[dict[str, object] | None] = mapped_column(JSON)
+    deployment_snapshot_sha256: Mapped[str | None] = mapped_column(String(64))
+    deployment_snapshot_version: Mapped[int | None] = mapped_column(Integer)
+    deployment_snapshot_source: Mapped[str | None] = mapped_column(String(128))
+    deployment_snapshot_error_code: Mapped[str | None] = mapped_column(String(64))
+    # Getter state is an independently verified, monotonic observation at an MC block.
+    getter_snapshot_json: Mapped[dict[str, object] | None] = mapped_column(JSON)
+    getter_snapshot_sha256: Mapped[str | None] = mapped_column(String(64))
+    getter_snapshot_masterchain_seqno: Mapped[int | None] = mapped_column(BigInteger)
+    getter_snapshot_block_hash: Mapped[str | None] = mapped_column(String(64))
+    getter_snapshot_provider: Mapped[str | None] = mapped_column(String(128))
+    getter_snapshot_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
 
 
@@ -176,6 +190,10 @@ _IMMUTABLE_DEAL_TERMS = (
     "price_currency",
     "principal_nanotons",
     "idempotency_key",
+    "deployment_snapshot_json",
+    "deployment_snapshot_sha256",
+    "deployment_snapshot_version",
+    "deployment_snapshot_source",
 )
 
 
@@ -414,6 +432,9 @@ class EscrowWalletActionRecord(TimestampMixin, EscrowBase):
     query_id: Mapped[str | None] = mapped_column(String(128))
     unsigned_boc_sha256: Mapped[str | None] = mapped_column(String(64))
     unsigned_boc_ref: Mapped[str | None] = mapped_column(String(512))
+    unsigned_payload_json: Mapped[dict[str, object] | None] = mapped_column(JSON)
+    unsigned_payload_sha256: Mapped[str | None] = mapped_column(String(64))
+    unsigned_bocs_json: Mapped[dict[str, object] | None] = mapped_column(JSON)
     submission_reference: Mapped[str | None] = mapped_column(String(512))
     submission_reference_sha256: Mapped[str | None] = mapped_column(String(64))
     lease_token: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
