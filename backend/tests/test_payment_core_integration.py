@@ -385,74 +385,6 @@ async def test_same_charge_on_distinct_telegram_updates_is_not_recaptured(
 
 
 @pytest.mark.asyncio
-async def test_payment_intent_api_key_is_durable_and_payload_bound(
-    payment_database: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _enable_test_stars(monkeypatch, payment_database)
-    engine = create_async_engine(payment_database, pool_pre_ping=True)
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
-    ids = await _seed_order(session_factory)
-    idempotency_key = f"payment-api-{uuid4()}"
-    try:
-        async with session_factory() as session:
-            intent = await create_stars_payment_intent(
-                session,
-                order_id=ids["order_id"],
-                buyer_id=ids["buyer_id"],
-                idempotency_key=idempotency_key,
-            )
-
-        # A retry must resolve the receipt before current payment status checks.
-        async with session_factory.begin() as session:
-            persisted = await session.get(PaymentIntent, intent.id)
-            assert persisted is not None
-            persisted.status = "paid"
-            persisted.paid_at = datetime.now(UTC)
-
-        async with session_factory() as session:
-            replay = await create_stars_payment_intent(
-                session,
-                order_id=ids["order_id"],
-                buyer_id=ids["buyer_id"],
-                idempotency_key=idempotency_key,
-            )
-        assert replay.id == intent.id
-        assert replay.status == "paid"
-
-        async with session_factory() as session:
-            with pytest.raises(PaymentConflict, match="idempotency_payload_conflict"):
-                await create_stars_payment_intent(
-                    session,
-                    order_id=uuid4(),
-                    buyer_id=ids["buyer_id"],
-                    idempotency_key=idempotency_key,
-                )
-
-        async with session_factory() as session:
-            receipts = (
-                await session.scalars(
-                    select(PaymentIntentRequest).where(
-                        PaymentIntentRequest.buyer_id == ids["buyer_id"],
-                        PaymentIntentRequest.idempotency_key == idempotency_key,
-                    )
-                )
-            ).all()
-            intents = (
-                await session.scalars(
-                    select(PaymentIntent).where(
-                        PaymentIntent.order_id == ids["order_id"]
-                    )
-                )
-            ).all()
-            assert len(receipts) == 1
-            assert receipts[0].payment_intent_id == intent.id
-            assert len(intents) == 1
-            assert intents[0].status == "paid"
-    finally:
-        await _cleanup(session_factory, ids)
-        await engine.dispose()
-
-
 async def test_reusable_invoice_second_charge_is_refundable(
     payment_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1002,6 +934,74 @@ async def test_escrow_wallet_action_idempotency_replay_is_postgres_backed(
             assert rows[0].id == original_id
             assert rows[0].status == "blocked_abi"
             assert rows[0].last_error_code == "deployment_snapshot_incomplete"
+    finally:
+        await _cleanup(session_factory, ids)
+        await engine.dispose()
+
+
+async def test_payment_intent_api_key_is_durable_and_payload_bound(
+    payment_database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_test_stars(monkeypatch, payment_database)
+    engine = create_async_engine(payment_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    ids = await _seed_order(session_factory)
+    idempotency_key = f"payment-api-{uuid4()}"
+    try:
+        async with session_factory() as session:
+            intent = await create_stars_payment_intent(
+                session,
+                order_id=ids["order_id"],
+                buyer_id=ids["buyer_id"],
+                idempotency_key=idempotency_key,
+            )
+
+        # A retry must resolve the receipt before current payment status checks.
+        async with session_factory.begin() as session:
+            persisted = await session.get(PaymentIntent, intent.id)
+            assert persisted is not None
+            persisted.status = "paid"
+            persisted.paid_at = datetime.now(UTC)
+
+        async with session_factory() as session:
+            replay = await create_stars_payment_intent(
+                session,
+                order_id=ids["order_id"],
+                buyer_id=ids["buyer_id"],
+                idempotency_key=idempotency_key,
+            )
+        assert replay.id == intent.id
+        assert replay.status == "paid"
+
+        async with session_factory() as session:
+            with pytest.raises(PaymentConflict, match="idempotency_payload_conflict"):
+                await create_stars_payment_intent(
+                    session,
+                    order_id=uuid4(),
+                    buyer_id=ids["buyer_id"],
+                    idempotency_key=idempotency_key,
+                )
+
+        async with session_factory() as session:
+            receipts = (
+                await session.scalars(
+                    select(PaymentIntentRequest).where(
+                        PaymentIntentRequest.buyer_id == ids["buyer_id"],
+                        PaymentIntentRequest.idempotency_key == idempotency_key,
+                    )
+                )
+            ).all()
+            intents = (
+                await session.scalars(
+                    select(PaymentIntent).where(
+                        PaymentIntent.order_id == ids["order_id"]
+                    )
+                )
+            ).all()
+            assert len(receipts) == 1
+            assert receipts[0].payment_intent_id == intent.id
+            assert len(intents) == 1
+            assert intents[0].status == "paid"
     finally:
         await _cleanup(session_factory, ids)
         await engine.dispose()
