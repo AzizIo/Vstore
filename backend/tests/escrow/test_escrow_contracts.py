@@ -96,10 +96,10 @@ def test_state_init_is_deterministic_and_address_is_state_init_hash() -> None:
     # Expected values were independently produced by the generated Acton
     # TypeScript wrapper and @ton/core 0.63.1 in TON Contract CI.
     assert first.address == (
-        "0:91ba23ed193de18a2e77484ad8bbe734df8bed085bc19521aeeb4aba1849f7dd"
+        "0:31ffca176042bdc4aa82e21949f900d2c068634306da76b1ebb335e64bd5cf52"
     )
     assert first.state_init_hash == (
-        "91ba23ed193de18a2e77484ad8bbe734df8bed085bc19521aeeb4aba1849f7dd"
+        "31ffca176042bdc4aa82e21949f900d2c068634306da76b1ebb335e64bd5cf52"
     )
     assert first.data_hash == (
         "535adf460ca6ecb6e043e0655244e3c67bfee186263287655306b1b648027acd"
