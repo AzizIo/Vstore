@@ -8,6 +8,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "VILTARA SHOP API"
     environment: str = "local"
+    # Explicit opt-in for the isolated Preview deployment; never enabled by default.
+    preview_mode: bool = False
     database_url: str = "postgresql+asyncpg://viltara:viltara@localhost:5432/viltara"
     redis_url: str = "redis://localhost:6379/0"
     bot_token: str | None = None
