@@ -21,6 +21,7 @@ from app.escrow.observer import (
     _payload,
     _reconcile_terminal_listing,
     _reconcile_wallet_action_finality,
+    _sha256_json,
     _stored_evidence_hash,
     _terminal_owner_evidence,
     run_observer_pass,
@@ -885,6 +886,15 @@ async def test_proof_verified_query_finalizes_only_matching_durable_action() -> 
         trace_binding_verified=True,
         verified_event_type=EscrowChainEventType.BUYER_PAYMENT_ACCEPTED,
         verified_query_id="77",
+        observed_contract_state=EscrowDealStatus.FUNDED_REVIEW.value,
+        contract_state_reconciled=True,
+        getter_snapshot_json={"contract_state": 3, "observed_chain_time_unix": 1},
+        getter_snapshot_sha256=_sha256_json(
+            {"contract_state": 3, "observed_chain_time_unix": 1}
+        ),
+        getter_snapshot_masterchain_seqno=event.masterchain_seqno,
+        getter_snapshot_block_hash="b" * 64,
+        getter_snapshot_provider="pytoniq-trust0-testnet-v1",
     )
 
     await _reconcile_wallet_action_finality(
