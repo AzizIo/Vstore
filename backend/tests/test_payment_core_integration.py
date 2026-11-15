@@ -312,6 +312,68 @@ async def test_stars_intent_validation_and_success_are_idempotent(
         await engine.dispose()
 
 
+async def test_same_charge_on_distinct_telegram_updates_is_not_recaptured(
+    payment_database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_test_stars(monkeypatch, payment_database)
+    engine = create_async_engine(payment_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    ids = await _seed_order(session_factory)
+    try:
+        intent = await _create_intent(session_factory, ids)
+        evidence = _payment_evidence(
+            intent, ids, update_id="update:10001", charge_id=f"charge-{uuid4()}"
+        )
+        async with session_factory() as session:
+            assert await record_stars_success(session, **evidence) == "captured"
+
+        replay_with_new_update_id = {
+            **evidence,
+            "provider_event_id": "update:10002",
+        }
+        async with session_factory() as session:
+            assert (
+                await record_stars_success(session, **replay_with_new_update_id)
+                == "captured"
+            )
+
+        conflicting_replay = {
+            **evidence,
+            "provider_event_id": "update:10003",
+            "total_amount": 26,
+        }
+        async with session_factory() as session:
+            with pytest.raises(PaymentConflict, match="charge ID was replayed"):
+                await record_stars_success(session, **conflicting_replay)
+
+        async with session_factory() as session:
+            transactions = (
+                await session.scalars(
+                    select(PaymentTransaction).where(
+                        PaymentTransaction.payment_intent_id == intent.id
+                    )
+                )
+            ).all()
+            events = (
+                await session.scalars(
+                    select(PaymentEvent).where(
+                        PaymentEvent.payment_intent_id == intent.id
+                    )
+                )
+            ).all()
+            assert len(transactions) == 1
+            assert transactions[0].status == "captured"
+            assert {event.provider_event_id for event in events} == {
+                f"intent:{intent.id}",
+                "update:10001",
+                "update:10002",
+            }
+    finally:
+        await _cleanup(session_factory, ids)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_reusable_invoice_second_charge_is_refundable(
     payment_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
