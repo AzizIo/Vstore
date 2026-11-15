@@ -1077,6 +1077,7 @@ async def create_deal_intent(
             "verification_status": asset.verification_status,
             "item_address": asset_item_address,
             "collection_id": asset.collection_id,
+            "collection_address": asset_collection_address,
         }
         # Require identity evidence from the seller intent before repeating a
         # trusted, same-block proof immediately before the reservation.
@@ -1136,8 +1137,61 @@ async def create_deal_intent(
                 detail={"code": "escrow_nft_identity_changed_since_listing"},
             )
 
-        # Lock in the same order as ordinary order reservation: Listing first,
-        # then escrow intent. Concurrent reservations serialize on Listing.
+        # Keep lock ordering consistent with listing creation: NFTAsset, then
+        # Listing, then escrow intent. Never hold these locks across provider I/O.
+        asset = await session.scalar(
+            select(NFTAsset)
+            .where(NFTAsset.id == intent_snapshot["asset_id"])
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if (
+            asset is None
+            or asset.owner_id != asset_snapshot["owner_id"]
+            or asset.network != asset_snapshot["network"]
+            or asset.asset_type != asset_snapshot["asset_type"]
+            or asset.verification_status != asset_snapshot["verification_status"]
+            or asset.collection_id != asset_snapshot["collection_id"]
+            or asset.item_address is None
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_asset_changed_during_proof"},
+            )
+        try:
+            locked_asset_item_address = normalize_address(asset.item_address)
+        except AddressError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_asset_changed_during_proof"},
+            ) from exc
+        collection = await session.scalar(
+            select(NFTCollection)
+            .where(NFTCollection.id == asset.collection_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if collection is None or collection.network != "testnet":
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_collection_changed_during_proof"},
+            )
+        try:
+            locked_collection_address = normalize_address(collection.address)
+        except AddressError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_collection_changed_during_proof"},
+            ) from exc
+        if (
+            locked_asset_item_address != asset_snapshot["item_address"]
+            or locked_collection_address != asset_snapshot["collection_address"]
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_identity_snapshot_mismatch"},
+            )
+
         listing = await session.scalar(
             select(Listing)
             .where(Listing.id == payload.listing_id)
