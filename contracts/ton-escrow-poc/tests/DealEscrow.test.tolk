@@ -944,6 +944,20 @@ get fun `test timeout cannot strand a successful nft transfer before finality at
     expect(escrow.getState()).toEqual(STATE_SELLER_PAYOUT_PENDING);
     expect(escrow.getProgress().principalLocked).toEqual(true);
 
+    // The seller payout transfer may succeed while its confirmation worker is
+    // offline too. A second timeout must preserve principal until late proof.
+    val payoutConfirmationDeadline = escrow.getProgress().deadlineUnix;
+    testing.setNow((payoutConfirmationDeadline + 1) as uint32);
+    val payoutConfirmationTimeout = escrow.sendAny(
+        testing.treasury("late-payout-confirmation-timeout-keeper").address,
+        TimeoutDeal { queryId: 22512, dealSalt: salt }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(payoutConfirmationTimeout).toHaveSuccessfulTx<TimeoutDeal>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
+    expect(escrow.getProgress().principalLocked).toEqual(true);
+    expect(escrow.getProgress().nftInEscrow).toEqual(false);
+
     val payout = buildTestOracleAttestation(
         escrow, salt, ORACLE_ACTION_SELLER_PAYOUT, 2,
         nftItem.address, escrow.address, seller.address, grams("1"), 2, 0xA225102, 152, 152,
