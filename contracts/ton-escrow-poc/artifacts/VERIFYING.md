@@ -18,8 +18,8 @@ This directory pins the ABI and compiler output for the current testnet-only Dea
 | Decoded BOC SHA-256 | `b4a46ef78089119fb10272e1edbd152f8b5e9c337b59d759ad5e1c661dd4fbb5` |
 | Zlib-compressed BOC SHA-256 | `57eec30799e23fe30b3d54c4407949ae99c1af8ebe921e2ce053d1d4f17c80f3` |
 | Deterministic StateInit hash | `ffd464daa07d4fd3b99e2469520eb77624f3265de9784d103df3babc15c5199f` |
-| Deterministic raw address | `ffd464daa07d4fd3b99e2469520eb77624f3265de9784d103df3babc15c5199f` |
-| Initial data cell hash | `ffd464daa07d4fd3b99e2469520eb77624f3265de9784d103df3babc15c5199f` |
+| Deterministic raw address | `0:ffd464daa07d4fd3b99e2469520eb77624f3265de9784d103df3babc15c5199f` |
+| Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
 
 The source-controlled files are `frozen/DealEscrow.abi.json` and `frozen/manifest.json`. The backend pins the compressed compiler BOC as `backend/app/escrow/abi_artifacts/DealEscrow.code.boc.zlib.b64`; CI rebuilds it and verifies the code hash and BOC digests.
 
