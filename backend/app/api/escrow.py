@@ -413,6 +413,90 @@ def _build_deployment_snapshot(
     return snapshot, ()
 
 
+def _prepared_action_response(
+    action_record: EscrowWalletActionRecord,
+) -> EscrowTransactionPreparationResponse:
+    payload = action_record.unsigned_payload_json
+    bocs = action_record.unsigned_bocs_json
+    if (
+        not isinstance(payload, dict)
+        or not isinstance(bocs, dict)
+        or not isinstance(action_record.unsigned_payload_sha256, str)
+        or not isinstance(action_record.unsigned_boc_sha256, str)
+        or not _HEX_256.fullmatch(action_record.unsigned_payload_sha256)
+        or not _HEX_256.fullmatch(action_record.unsigned_boc_sha256)
+        or _canonical_sha256(payload) != action_record.unsigned_payload_sha256
+        or _canonical_sha256(bocs) != action_record.unsigned_boc_sha256
+        or not action_record.unsigned_boc_ref
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "stored_unsigned_payload_integrity_failed"},
+        )
+    return EscrowTransactionPreparationResponse(
+        status="prepared",
+        network="testnet",
+        action_id=action_record.id,
+        payload=payload,
+        payload_sha256=action_record.unsigned_payload_sha256,
+        unsigned_boc_sha256=action_record.unsigned_boc_sha256,
+    )
+
+
+def _action_query_id(
+    action: EscrowWalletAction,
+    snapshot: DealEscrowDeploymentSnapshot,
+    action_record: EscrowWalletActionRecord,
+) -> int | None:
+    fixed_ids = {
+        EscrowWalletAction.ACTIVATE_DEAL: snapshot.activation_query_id,
+        EscrowWalletAction.DEPOSIT_NFT: snapshot.nft_deposit_query_id,
+        EscrowWalletAction.FUND_DEAL: snapshot.fund_query_id,
+        EscrowWalletAction.ACCEPT_DEAL: snapshot.nft_release_query_id,
+        EscrowWalletAction.RETURN_NFT_TO_ESCROW: snapshot.nft_return_to_escrow_query_id,
+    }
+    if action in fixed_ids:
+        expected = fixed_ids[action]
+        if action_record.query_id is not None and action_record.query_id != str(expected):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "stored_action_query_id_conflict"},
+            )
+        action_record.query_id = str(expected)
+        return expected
+    if action in {
+        EscrowWalletAction.OPEN_DISPUTE,
+        EscrowWalletAction.TIMEOUT_DEAL,
+        EscrowWalletAction.RECOVER_UNEXPECTED_NFT,
+    }:
+        if action_record.query_id is None:
+            used = {
+                snapshot.activation_query_id,
+                snapshot.fund_query_id,
+                snapshot.nft_deposit_query_id,
+                snapshot.nft_release_query_id,
+                snapshot.nft_return_to_escrow_query_id,
+            }
+            query_id = secrets.randbits(64)
+            while query_id == 0 or query_id in used:
+                query_id = secrets.randbits(64)
+            action_record.query_id = str(query_id)
+        try:
+            query_id = int(action_record.query_id)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"code": "stored_action_query_id_invalid"},
+            ) from exc
+        if not 0 < query_id < (1 << 64):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"code": "stored_action_query_id_invalid"},
+            )
+        return query_id
+    return None
+
+
 def _request_hash(payload: object) -> str:
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
