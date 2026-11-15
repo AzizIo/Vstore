@@ -212,6 +212,12 @@ def transition_for_verified_event(
             "buyer_refund_pending": EscrowDealStatus.BUYER_REFUND_PENDING,
             "expired": EscrowDealStatus.EXPIRED,
         },
+        EscrowChainEventType.SELLER_PAYOUT_RECONCILED: {
+            "settled": EscrowDealStatus.SETTLED,
+        },
+        EscrowChainEventType.BUYER_REFUND_RECONCILED: {
+            "refunded": EscrowDealStatus.REFUNDED,
+        },
         EscrowChainEventType.DISPUTE_RESOLUTION_ACCEPTED: {
             "nft_release_pending": EscrowDealStatus.NFT_RELEASE_PENDING,
             "nft_return_pending": EscrowDealStatus.NFT_RETURN_PENDING,
@@ -235,9 +241,19 @@ def transition_for_verified_event(
         allowed_sources = {
             EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED: {
                 EscrowDealStatus.NFT_RELEASE_PENDING,
+                EscrowDealStatus.MANUAL_REVIEW,
             },
             EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED: {
                 EscrowDealStatus.NFT_RETURN_PENDING,
+                EscrowDealStatus.MANUAL_REVIEW,
+            },
+            EscrowChainEventType.SELLER_PAYOUT_RECONCILED: {
+                EscrowDealStatus.SELLER_PAYOUT_PENDING,
+                EscrowDealStatus.MANUAL_REVIEW,
+            },
+            EscrowChainEventType.BUYER_REFUND_RECONCILED: {
+                EscrowDealStatus.BUYER_REFUND_PENDING,
+                EscrowDealStatus.MANUAL_REVIEW,
             },
             EscrowChainEventType.DISPUTE_RESOLUTION_ACCEPTED: {
                 EscrowDealStatus.DISPUTED,
@@ -399,7 +415,10 @@ def validate_event_against_deal(event: NormalizedEventEvidence, deal: DealEviden
             "Oracle return attestation must prove the escrow-to-seller route and state"
         )
     if event.event_type is EscrowChainEventType.SELLER_PAYOUT_RECONCILED and (
-        event.source_address != deal.contract_address
+        not event.attestation_accepted
+        or not event.contract_state_reconciled
+        or event.observed_contract_state != EscrowDealStatus.SETTLED.value
+        or event.source_address != deal.contract_address
         or event.destination_address != deal.seller_address
         or event.amount_nanotons != deal.principal_nanotons
     ):
@@ -407,7 +426,10 @@ def validate_event_against_deal(event: NormalizedEventEvidence, deal: DealEviden
             "Seller payout does not match contract, fixed recipient and principal"
         )
     if event.event_type is EscrowChainEventType.BUYER_REFUND_RECONCILED and (
-        event.source_address != deal.contract_address
+        not event.attestation_accepted
+        or not event.contract_state_reconciled
+        or event.observed_contract_state != EscrowDealStatus.REFUNDED.value
+        or event.source_address != deal.contract_address
         or event.destination_address != deal.buyer_address
         or event.amount_nanotons != deal.principal_nanotons
     ):
