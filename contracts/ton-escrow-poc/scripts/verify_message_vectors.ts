@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { beginCell, Address } from "@ton/core";
 import {
@@ -8,6 +9,7 @@ import {
   OpenDispute,
   PayloadInline,
   RecoverUnexpectedNft,
+  RetryFailedOutboundAction,
   TimeoutDeal,
 } from "../wrappers-ts/DealEscrow.gen.ts";
 
@@ -15,9 +17,10 @@ const salt = BigInt("0x" + "01".repeat(32));
 const reasonHash = BigInt("0x" + "ab".repeat(32));
 const seller = Address.parseRaw("0:" + "11".repeat(32));
 const buyer = Address.parseRaw("0:" + "22".repeat(32));
-const escrow = Address.parseRaw(
-  "0:31ffca176042bdc4aa82e21949f900d2c068634306da76b1ebb335e64bd5cf52",
-);
+const stateInitVector = JSON.parse(
+  readFileSync("build/state_init_vector.json", "utf8"),
+) as { address: string };
+const escrow = Address.parseRaw(stateInitVector.address);
 const forwardPayload = PayloadInline.create({
   value: beginCell()
     .storeUint(0x56454e46, 32)
@@ -52,6 +55,9 @@ const bodies = {
   recovery: RecoverUnexpectedNft.toCell(RecoverUnexpectedNft.create({
     queryId: 2003n, dealSalt: salt,
   })),
+  retry_failed_outbound_action: RetryFailedOutboundAction.toCell(
+    RetryFailedOutboundAction.create({ queryId: 3001n, dealSalt: salt }),
+  ),
   nft_deposit: nftDeposit,
   nft_return: nftReturn,
 };

@@ -10,18 +10,24 @@ import pytest
 
 from app.db.models import ListingStatus
 from app.escrow.domain import EscrowChainEventType, EscrowDealStatus
-from app.escrow.models import EscrowChainEvent, EscrowObserverCheckpoint
+from app.escrow.models import (
+    EscrowChainEvent,
+    EscrowObserverCheckpoint,
+)
 from app.escrow.observer import (
     CHECKPOINT_ID,
     _apply_one_event,
     _payload,
     _reconcile_terminal_listing,
+    _reconcile_wallet_action_finality,
+    _sha256_json,
     _stored_evidence_hash,
     _terminal_owner_evidence,
     run_observer_pass,
 )
 from app.escrow.provider import (
     ChainEventBatch,
+    EscrowProviderInvalidEvidence,
     EscrowProviderUnavailable,
     FinalityVerification,
     NormalizedChainEvent,
@@ -279,7 +285,7 @@ async def test_nonfinal_event_pins_durable_cursor_for_requery() -> None:
     checkpoint = EscrowObserverCheckpoint(
         checkpoint_id=CHECKPOINT_ID, network="testnet", cursor="cursor-before",
         last_masterchain_seqno=99, lease_token=None, lease_until=now - timedelta(seconds=1),
-        next_scan_at=None, last_error_code=None,
+        next_scan_at=None, last_error_code=None, failure_count=4,
     )
     pending = make_event(finalized=False)
     sessions = [FakeEscrowSession(checkpoint), FakeEscrowSession(checkpoint, None)]
@@ -297,6 +303,7 @@ async def test_nonfinal_event_pins_durable_cursor_for_requery() -> None:
     assert checkpoint.lease_token is None
     assert checkpoint.lease_until is None
     assert checkpoint.next_scan_at == now + timedelta(seconds=10)
+    assert checkpoint.failure_count == 0
 
 
 @pytest.mark.asyncio
@@ -320,6 +327,8 @@ async def test_provider_outage_preserves_cursor_and_releases_lease() -> None:
     assert checkpoint.lease_token is None
     assert checkpoint.lease_until is None
     assert checkpoint.last_error_code == "provider_unavailable"
+    assert checkpoint.failure_count == 1
+    assert checkpoint.next_scan_at == now + timedelta(seconds=5)
 
 
 def test_observer_checkpoint_table_is_durable_and_testnet_scoped() -> None:
@@ -560,15 +569,23 @@ async def test_boolean_indexer_finality_claim_is_not_accepted() -> None:
         async def verify_event(self, event: NormalizedChainEvent) -> bool:
             return True
 
-    sessions = [FakeEscrowSession(checkpoint), FakeEscrowSession(checkpoint, None)]
+    acquire_session = FakeEscrowSession(checkpoint)
+    persist_session = FakeEscrowSession(checkpoint, None)
+    sessions = [acquire_session, persist_session]
     provider = BooleanOnlyProvider(make_event())
 
     def factory() -> FakeEscrowSession:
         return sessions.pop(0)
 
     result = await run_observer_pass(factory, provider, now=now, limit=5)  # type: ignore[arg-type]
-    assert result.pending == 1
-    assert checkpoint.cursor == "cursor-before"
+    assert result.rejected == 1
+    assert result.pending == 0
+    assert checkpoint.cursor == "cursor-after-event"
+    stored = persist_session.added
+    assert len(stored) == 1
+    assert isinstance(stored[0], EscrowChainEvent)
+    assert stored[0].status == "rejected"
+    assert stored[0].reason_code == "invalid_verification_result"
 
 
 @pytest.mark.asyncio
@@ -596,15 +613,63 @@ async def test_mismatched_finality_proof_is_not_accepted() -> None:
                 trace_binding_verified=True,
             )
 
-    sessions = [FakeEscrowSession(checkpoint), FakeEscrowSession(checkpoint, None)]
+    acquire_session = FakeEscrowSession(checkpoint)
+    persist_session = FakeEscrowSession(checkpoint, None)
+    sessions = [acquire_session, persist_session]
     provider = MismatchedProofProvider(make_event())
 
     def factory() -> FakeEscrowSession:
         return sessions.pop(0)
 
     result = await run_observer_pass(factory, provider, now=now, limit=5)  # type: ignore[arg-type]
-    assert result.pending == 1
-    assert checkpoint.cursor == "cursor-before"
+    assert result.rejected == 1
+    assert result.pending == 0
+    assert checkpoint.cursor == "cursor-after-event"
+    stored = persist_session.added
+    assert len(stored) == 1
+    assert isinstance(stored[0], EscrowChainEvent)
+    assert stored[0].status == "rejected"
+    assert stored[0].reason_code == "cryptographic_proof_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_invalid_candidate_does_not_block_checkpoint() -> None:
+    now = datetime(2026, 11, 14, tzinfo=UTC)
+    checkpoint = EscrowObserverCheckpoint(
+        checkpoint_id=CHECKPOINT_ID,
+        network="testnet",
+        cursor="cursor-before",
+        last_masterchain_seqno=99,
+        lease_token=None,
+        lease_until=now - timedelta(seconds=1),
+        next_scan_at=None,
+        last_error_code=None,
+    )
+
+    class InvalidEvidenceProvider(BatchProvider):
+        async def verify_event(self, event: NormalizedChainEvent) -> FinalityVerification:
+            del event
+            raise EscrowProviderInvalidEvidence("fixture proof does not bind to candidate")
+
+    acquire_session = FakeEscrowSession(checkpoint)
+    persist_session = FakeEscrowSession(checkpoint, None)
+    sessions = [acquire_session, persist_session]
+    provider = InvalidEvidenceProvider(make_event())
+
+    def factory() -> FakeEscrowSession:
+        return sessions.pop(0)
+
+    result = await run_observer_pass(factory, provider, now=now, limit=5)  # type: ignore[arg-type]
+    assert result.rejected == 1
+    assert result.pending == 0
+    assert result.provider_unavailable is False
+    assert checkpoint.cursor == "cursor-after-event"
+    assert checkpoint.failure_count == 0
+    stored = persist_session.added
+    assert len(stored) == 1
+    assert isinstance(stored[0], EscrowChainEvent)
+    assert stored[0].status == "rejected"
+    assert stored[0].reason_code == "cryptographic_proof_invalid"
 
 
 @pytest.mark.asyncio
@@ -696,6 +761,7 @@ async def test_terminal_event_retries_owner_reconciliation_after_restart() -> No
     contract_address = "0:" + "a" * 64
     event = make_event(
         event_type=EscrowChainEventType.SELLER_PAYOUT_RECONCILED,
+        attestation_accepted=True,
         contract_address=contract_address,
         deal_id=str(deal_id),
         source_address=contract_address,
@@ -809,3 +875,242 @@ async def test_terminal_listing_stays_reserved_without_current_owner_proof() -> 
     assert listing.status is ListingStatus.RESERVED
     assert intent.status == "manual_review"
     assert asset.owner_id == seller_id
+
+class _ActionScalars:
+    def __init__(self, rows: list[object]) -> None:
+        self.rows = rows
+
+    def all(self) -> list[object]:
+        return self.rows
+
+
+class _ActionFinalitySession:
+    def __init__(self, rows: list[object]) -> None:
+        self.rows = rows
+
+    async def __aenter__(self) -> _ActionFinalitySession:
+        return self
+
+    async def __aexit__(self, *_args: object) -> None:
+        return None
+
+    def begin(self) -> _ActionFinalitySession:
+        return self
+
+    async def scalars(self, _query: object) -> _ActionScalars:
+        return _ActionScalars(self.rows)
+
+
+@pytest.mark.asyncio
+async def test_proof_verified_query_finalizes_only_matching_durable_action() -> None:
+    deal_id = uuid4()
+    action = SimpleNamespace(
+        id=uuid4(),
+        deal_id=deal_id,
+        action_type="fund_deal",
+        network="testnet",
+        query_id="77",
+        status="ambiguous",
+        unsigned_payload_json={"validUntil": 1, "messages": [{"address": "0:" + "a" * 64}]},
+        unsigned_payload_sha256="1" * 64,
+        unsigned_bocs_json={"format": "tonconnect-message-bocs-v1", "messages": [{}]},
+        unsigned_boc_sha256="2" * 64,
+        unsigned_boc_ref="db://escrow_wallet_actions/action/unsigned_bocs_json",
+        finalized_transaction_hash=None,
+        finality_masterchain_seqno=None,
+        finality_masterchain_block_hash=None,
+        finality_proof_sha256=None,
+        finality_provider=None,
+        last_error_code="awaiting_independent_chain_reconciliation",
+        next_retry_at=datetime.now(UTC),
+        lease_token=uuid4(),
+        lease_until=datetime.now(UTC) + timedelta(seconds=5),
+    )
+    event = make_event(
+        deal_id=str(deal_id),
+        transaction_hash="a" * 64,
+        event_type=EscrowChainEventType.BUYER_PAYMENT_ACCEPTED,
+        query_id="77",
+        masterchain_block_hash="b" * 64,
+        finality_proof_sha256="c" * 64,
+        finality_provider="pytoniq-trust0-testnet-v1",
+    )
+    proof = FinalityVerification(
+        network="testnet",
+        transaction_hash=event.transaction_hash,
+        masterchain_seqno=event.masterchain_seqno,
+        masterchain_block_hash="b" * 64,
+        message_hash=event.message_hash or "",
+        trace_id=event.trace_id or "",
+        proof_sha256="c" * 64,
+        provider_id="pytoniq-trust0-testnet-v1",
+        finalized=True,
+        masterchain_inclusion_verified=True,
+        trace_binding_verified=True,
+        verified_event_type=EscrowChainEventType.BUYER_PAYMENT_ACCEPTED,
+        verified_query_id="77",
+        observed_contract_state=EscrowDealStatus.FUNDED_REVIEW.value,
+        contract_state_reconciled=True,
+        getter_snapshot_json={"contract_state": 3, "observed_chain_time_unix": 1},
+        getter_snapshot_sha256=_sha256_json(
+            {"contract_state": 3, "observed_chain_time_unix": 1}
+        ),
+        getter_snapshot_masterchain_seqno=event.masterchain_seqno,
+        getter_snapshot_block_hash="b" * 64,
+        getter_snapshot_provider="pytoniq-trust0-testnet-v1",
+    )
+
+    await _reconcile_wallet_action_finality(
+        lambda: _ActionFinalitySession([action]),  # type: ignore[arg-type]
+        event,
+        proof,
+    )
+
+    assert action.status == "finalized"
+    assert action.finalized_transaction_hash == event.transaction_hash
+    assert action.finality_masterchain_seqno == proof.masterchain_seqno
+    assert action.finality_masterchain_block_hash == proof.masterchain_block_hash
+    assert action.finality_proof_sha256 == proof.proof_sha256
+    assert action.finality_provider == proof.provider_id
+    assert action.last_error_code is None
+    assert action.next_retry_at is None
+    assert action.lease_token is None
+    assert action.lease_until is None
+
+
+@pytest.mark.asyncio
+async def test_query_id_mismatch_never_finalizes_an_action() -> None:
+    deal_id = uuid4()
+    action = SimpleNamespace(
+        id=uuid4(),
+        deal_id=deal_id,
+        action_type="fund_deal",
+        network="testnet",
+        query_id="77",
+        status="prepared",
+        unsigned_payload_json={"messages": [{}]},
+        unsigned_payload_sha256="1" * 64,
+        unsigned_bocs_json={"messages": [{}]},
+        unsigned_boc_sha256="2" * 64,
+        unsigned_boc_ref="db://escrow_wallet_actions/action/unsigned_bocs_json",
+        finalized_transaction_hash=None,
+        finality_masterchain_seqno=None,
+        finality_masterchain_block_hash=None,
+        finality_proof_sha256=None,
+        finality_provider=None,
+        last_error_code=None,
+        next_retry_at=None,
+        lease_token=None,
+        lease_until=None,
+    )
+    event = make_event(
+        deal_id=str(deal_id),
+        transaction_hash="a" * 64,
+        event_type=EscrowChainEventType.BUYER_PAYMENT_ACCEPTED,
+        query_id="77",
+    )
+    proof = FinalityVerification(
+        network="testnet",
+        transaction_hash=event.transaction_hash,
+        masterchain_seqno=event.masterchain_seqno,
+        masterchain_block_hash="b" * 64,
+        message_hash=event.message_hash or "",
+        trace_id=event.trace_id or "",
+        proof_sha256="c" * 64,
+        provider_id="pytoniq-trust0-testnet-v1",
+        finalized=True,
+        masterchain_inclusion_verified=True,
+        trace_binding_verified=True,
+        verified_event_type=EscrowChainEventType.BUYER_PAYMENT_ACCEPTED,
+        verified_query_id="78",
+    )
+
+    await _reconcile_wallet_action_finality(
+        lambda: _ActionFinalitySession([action]),  # type: ignore[arg-type]
+        event,
+        proof,
+    )
+
+    assert action.status == "prepared"
+    assert action.finalized_transaction_hash is None
+
+
+
+
+@pytest.mark.asyncio
+async def test_unmatched_proof_verified_bounce_is_audited_without_mutating_deal_state() -> None:
+    event = make_event(
+        event_type=EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED,
+        phase="bounce",
+        attempt_id=None,
+        query_id=None,
+        bounce_match_reason="outbound_action_descriptor_not_found",
+    )
+    deal_id = uuid4()
+    event = replace(event, deal_id=str(deal_id))
+    deal = SimpleNamespace(
+        id=deal_id,
+        network="testnet",
+        contract_address=event.contract_address,
+        deal_salt=event.deal_salt,
+        status=EscrowDealStatus.AWAITING_NFT.value,
+        last_chain_seqno=None,
+        last_chain_logical_time=None,
+    )
+    session = FakeSession(None, deal)
+
+    result = await _apply_one_event(session, event, provider_verified=True)
+
+    assert result == "rejected"
+    assert deal.status == EscrowDealStatus.AWAITING_NFT.value
+    row = session.added[0]
+    assert isinstance(row, EscrowChainEvent)
+    assert row.status == "manual_review"
+    assert row.reason_code == "outbound_action_descriptor_not_found"
+    assert row.deal_id == deal_id
+
+
+
+@pytest.mark.asyncio
+async def test_pending_bounce_candidate_can_be_proof_reclassified_as_unmatched() -> None:
+    deal_id = uuid4()
+    candidate = make_event(
+        deal_id=str(deal_id),
+        event_type=EscrowChainEventType.OUTBOUND_ACTION_BOUNCED,
+        phase="bounce",
+        attempt_id=None,
+        query_id=None,
+        operation_id="0xfffffffe",
+        source_address=None,
+        destination_address=None,
+        amount_nanotons=None,
+    )
+    existing = stored_row(candidate, status="pending")
+    existing.deal_id = deal_id
+    unmatched = replace(
+        candidate,
+        event_type=EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED,
+        source_address="0:" + "b" * 64,
+        destination_address=candidate.contract_address,
+        observed_contract_state=EscrowDealStatus.AWAITING_NFT.value,
+        contract_state_reconciled=True,
+        bounce_match_reason="outbound_action_descriptor_not_found",
+    )
+    deal = SimpleNamespace(
+        id=deal_id,
+        network="testnet",
+        contract_address=candidate.contract_address,
+        deal_salt=candidate.deal_salt,
+        status=EscrowDealStatus.AWAITING_NFT.value,
+        last_chain_seqno=None,
+        last_chain_logical_time=None,
+    )
+    session = FakeSession(existing, deal)
+
+    result = await _apply_one_event(session, unmatched, provider_verified=True)
+
+    assert result == "rejected"
+    assert existing.event_type == EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED.value
+    assert existing.status == "manual_review"
+    assert existing.reason_code == "outbound_action_descriptor_not_found"
+    assert deal.status == EscrowDealStatus.AWAITING_NFT.value

@@ -85,7 +85,7 @@ class EscrowDealResponse(BaseModel):
     buyer_review_deadline: datetime | None
     dispute_deadline: datetime | None
     available_actions: list[Literal[
-        "create_deal_escrow", "deposit_nft", "fund_deal", "accept_deal",
+        "create_deal_escrow", "activate_deal", "deposit_nft", "fund_deal", "accept_deal",
         "open_dispute", "return_nft_to_escrow", "withdraw_unsold_nft"
     ]]
     created_at: datetime
@@ -100,11 +100,16 @@ class EscrowPageResponse(BaseModel):
 
 
 class EscrowTransactionPreparationResponse(BaseModel):
-    status: Literal["unavailable"] = "unavailable"
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["prepared", "unavailable"] = "unavailable"
     network: Literal["testnet"] = "testnet"
-    payload: None = None
-    reason_code: Literal["contract_abi_pending"] = "contract_abi_pending"
-    detail: str = "Unsigned TON Connect payload is unavailable until ABI/API review is approved."
+    action_id: UUID | None = None
+    payload: dict[str, object] | None = None
+    payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    unsigned_boc_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    reason_code: str | None = None
+    detail: str | None = None
 
 
 class EscrowSellerBalanceResponse(BaseModel):
@@ -144,3 +149,18 @@ class EscrowWalletReferenceInput(BaseModel):
         "open_dispute", "return_nft_to_escrow", "withdraw_unsold_nft"
     ]
     reference: str = Field(min_length=1, max_length=512)
+
+
+class EscrowWalletReferenceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action_id: UUID
+    status: Literal[
+        "pending", "prepared", "submitted", "ambiguous",
+        "finalized", "failed", "manual_review", "blocked_abi",
+    ]
+    reference_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reconciliation_status: Literal[
+        "awaiting_independent_chain_reconciliation",
+        "already_finalized",
+        "manual_review",
+    ]

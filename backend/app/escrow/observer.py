@@ -34,6 +34,7 @@ from app.escrow.models import (
     EscrowDeal,
     EscrowListingIntent,
     EscrowObserverCheckpoint,
+    EscrowWalletActionRecord,
 )
 from app.escrow.provider import (
     EscrowProviderInvalidEvidence,
@@ -48,6 +49,18 @@ logger = logging.getLogger(__name__)
 CHECKPOINT_ID = "ton-testnet-escrow"
 LEASE_SECONDS = 90
 MAX_BATCH_SIZE = 100
+RETRY_BASE_SECONDS = 5
+RETRY_MAX_SECONDS = 900
+
+
+def _observer_retry_delay_seconds(failure_count: int) -> int:
+    """Bounded exponential backoff for transient provider/observer failures."""
+    if isinstance(failure_count, bool) or not isinstance(failure_count, int):
+        raise TypeError("failure_count must be an integer")
+    if failure_count < 1:
+        return RETRY_BASE_SECONDS
+    exponent = min(failure_count - 1, 16)
+    return min(RETRY_BASE_SECONDS * (2**exponent), RETRY_MAX_SECONDS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +97,23 @@ def _stored_evidence_hash(event: NormalizedChainEvent) -> str:
     return _sha256_json(_payload(event))
 
 
+def _compatible_event_type(
+    old_payload: dict[str, Any], event: NormalizedChainEvent
+) -> bool:
+    old_type = old_payload.get("event_type")
+    new_type = event.event_type.value
+    if old_type == new_type:
+        return True
+    # Discovery uses a generic bounced opcode as a candidate. Only proof
+    # verification may reclassify it as unmatched forensic evidence.
+    return (
+        event.phase == "bounce"
+        and old_payload.get("phase") == "bounce"
+        and old_type == EscrowChainEventType.OUTBOUND_ACTION_BOUNCED.value
+        and new_type == EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED.value
+    )
+
+
 def _event_snapshot(event: NormalizedChainEvent) -> NormalizedEventEvidence:
     return NormalizedEventEvidence(
         network=event.network, contract_address=event.contract_address, event_type=event.event_type,
@@ -101,11 +131,25 @@ def _event_snapshot(event: NormalizedChainEvent) -> NormalizedEventEvidence:
 
 
 def _deal_snapshot(deal: EscrowDeal) -> DealEvidenceSnapshot:
+    snapshot = getattr(deal, "deployment_snapshot_json", None)
+    execution_reserve = (
+        snapshot.get("execution_reserve_nanotons")
+        if isinstance(snapshot, dict)
+        else None
+    )
     return DealEvidenceSnapshot(
-        network=deal.network, contract_address=deal.contract_address,
-        collection_address=deal.collection_address_snapshot, item_address=deal.item_address,
-        seller_address=deal.seller_address_snapshot, buyer_address=deal.buyer_address_snapshot,
+        network=deal.network,
+        contract_address=deal.contract_address,
+        collection_address=deal.collection_address_snapshot,
+        item_address=deal.item_address,
+        seller_address=deal.seller_address_snapshot,
+        buyer_address=deal.buyer_address_snapshot,
         principal_nanotons=int(deal.principal_nanotons),
+        execution_reserve_nanotons=(
+            int(execution_reserve)
+            if isinstance(execution_reserve, int) and not isinstance(execution_reserve, bool)
+            else None
+        ),
     )
 
 
@@ -141,7 +185,6 @@ async def _persist_event(
     immutable_fields = (
         "transaction_hash",
         "event_index",
-        "event_type",
         "contract_address",
         "deal_id",
         "account_address",
@@ -159,9 +202,14 @@ async def _persist_event(
         "query_id",
         "operation_id",
         "deal_salt",
+        "outbound_transaction_hash",
+        "outbound_block_hash",
+        "outbound_block_seqno",
+        "outbound_message_hash",
     )
     if (
-        any(old.get(field) not in (None, payload.get(field)) for field in immutable_fields)
+        not _compatible_event_type(old, event)
+        or any(old.get(field) not in (None, payload.get(field)) for field in immutable_fields)
         or (old.get("finalized") and not event.finalized)
         or (
             old.get("finalized")
@@ -186,6 +234,7 @@ async def _persist_event(
     )
     existing.masterchain_seqno = max(existing.masterchain_seqno, event.masterchain_seqno)
     existing.evidence_sha256 = _stored_evidence_hash(event)
+    existing.event_type = event.event_type.value
     existing.payload_json = payload
     existing.observed_contract_state = (
         event.observed_contract_state or existing.observed_contract_state
@@ -300,7 +349,9 @@ async def _terminal_owner_evidence(
             # the current owner for the same terminal result on replay.
             next_state = EscrowDealStatus(deal.status)
         else:
-            next_state = transition_for_verified_event(deal.status, event.event_type)
+            next_state = transition_for_verified_event(
+                deal.status, event.event_type, event.observed_contract_state
+            )
     except (EscrowDomainError, ValueError):
         return event
     if (
@@ -335,7 +386,11 @@ async def _terminal_owner_evidence(
 
 
 async def _apply_one_event(
-    session: AsyncSession, event: NormalizedChainEvent, *, provider_verified: bool,
+    session: AsyncSession,
+    event: NormalizedChainEvent,
+    *,
+    provider_verified: bool,
+    verification_error_code: str | None = None,
 ) -> str:
     existing = await session.scalar(select(EscrowChainEvent).where(
         EscrowChainEvent.network == event.network, EscrowChainEvent.event_key == event.event_key,
@@ -346,7 +401,6 @@ async def _apply_one_event(
         stable = (
             "transaction_hash",
             "event_index",
-            "event_type",
             "contract_address",
             "deal_id",
             "account_address",
@@ -364,9 +418,14 @@ async def _apply_one_event(
             "query_id",
             "operation_id",
             "deal_salt",
+            "outbound_transaction_hash",
+            "outbound_block_hash",
+            "outbound_block_seqno",
+            "outbound_message_hash",
         )
-        conflict = any(
-            old.get(key) not in (None, new.get(key)) for key in stable
+        conflict = (
+            not _compatible_event_type(old, event)
+            or any(old.get(key) not in (None, new.get(key)) for key in stable)
         )
         conflict = conflict or (
             old.get("finalized")
@@ -411,6 +470,16 @@ async def _apply_one_event(
     if not valid_shape:
         await _persist_event(session, event, status="rejected",
             reason_code="invalid_event_shape", deal_id=None, existing=existing)
+        return "rejected"
+    if verification_error_code is not None:
+        await _persist_event(
+            session,
+            event,
+            status="rejected",
+            reason_code=verification_error_code,
+            deal_id=None,
+            existing=existing,
+        )
         return "rejected"
     if not provider_verified:
         await _persist_event(session, event, status="pending",
@@ -495,6 +564,20 @@ async def _apply_one_event(
             reason_code="stale_chain_event", deal_id=deal.id, existing=existing)
         return "pending"
 
+    if event.event_type is EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED:
+        # The block/message is genuine, but its relationship to a persisted
+        # outbound action was not proven. Keep forensic evidence without changing
+        # the canonical deal, NFT custody or financial state.
+        await _persist_event(
+            session,
+            event,
+            status="manual_review",
+            reason_code=event.bounce_match_reason or "unmatched_rich_bounce",
+            deal_id=deal.id,
+            existing=existing,
+        )
+        return "rejected"
+
     try:
         validate_event_against_deal(_event_snapshot(event), _deal_snapshot(deal))
         if (
@@ -506,7 +589,9 @@ async def _apply_one_event(
             # it cannot move a terminal deal to another state.
             next_state = EscrowDealStatus(deal.status)
         else:
-            next_state = transition_for_verified_event(deal.status, event.event_type)
+            next_state = transition_for_verified_event(
+                deal.status, event.event_type, event.observed_contract_state
+            )
     except (EscrowDomainError, ValueError):
         await _persist_event(session, event, status="manual_review",
             reason_code="event_invariant_or_transition_failure", deal_id=deal.id, existing=existing)
@@ -548,7 +633,216 @@ async def _apply_one_event(
     if next_state in TERMINAL_DEAL_STATES:
         if not await _reconcile_terminal_listing(session, deal, next_state, event):
             event_row.reason_code = "terminal_listing_owner_unverified"
+            # Do not advance the durable scan cursor: the same terminal evidence
+            # must be rechecked until current NFT owner is cryptographically proven.
+            return "pending"
     return "applied"
+
+
+async def _persist_getter_snapshot(
+    session_factory: SessionFactory,
+    event: NormalizedChainEvent,
+    proof: FinalityVerification,
+) -> None:
+    """Persist only getter-equivalent state tied to this verified masterchain proof."""
+
+    snapshot = proof.getter_snapshot_json
+    if snapshot is None:
+        return
+    digest = hashlib.sha256(
+        json.dumps(snapshot, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    ).hexdigest()
+    if (
+        digest != proof.getter_snapshot_sha256
+        or proof.getter_snapshot_masterchain_seqno != proof.masterchain_seqno
+        or proof.getter_snapshot_block_hash != proof.masterchain_block_hash
+        or proof.getter_snapshot_provider != proof.provider_id
+    ):
+        raise EscrowProviderInvalidEvidence(
+            "Getter snapshot is not bound to the event finality proof"
+        )
+    if not event.deal_id:
+        raise EscrowProviderInvalidEvidence("Verified getter snapshot has no deal identity")
+    try:
+        deal_id = uuid.UUID(event.deal_id)
+    except (ValueError, TypeError) as exc:
+        raise EscrowProviderInvalidEvidence(
+            "Verified getter snapshot has an invalid deal identity"
+        ) from exc
+
+    async with session_factory() as session:
+        async with session.begin():
+            deal = await session.scalar(
+                select(EscrowDeal).where(EscrowDeal.id == deal_id).with_for_update()
+            )
+            if deal is None:
+                raise EscrowProviderInvalidEvidence(
+                    "Verified getter snapshot references an unknown deal"
+                )
+            current_seqno = deal.getter_snapshot_masterchain_seqno
+            if current_seqno is not None and proof.masterchain_seqno < current_seqno:
+                # Old events may be replayed while a newer authoritative snapshot is
+                # already stored; never overwrite current state with historical data.
+                return
+            if current_seqno == proof.masterchain_seqno:
+                if (
+                    deal.getter_snapshot_sha256 != digest
+                    or deal.getter_snapshot_block_hash != proof.masterchain_block_hash
+                ):
+                    raise EscrowProviderInvalidEvidence(
+                        "Getter snapshot conflicts at an already-recorded masterchain sequence"
+                    )
+                return
+            deal.getter_snapshot_json = snapshot
+            deal.getter_snapshot_sha256 = digest
+            deal.getter_snapshot_masterchain_seqno = proof.masterchain_seqno
+            deal.getter_snapshot_block_hash = proof.masterchain_block_hash
+            deal.getter_snapshot_provider = proof.provider_id
+            deal.getter_snapshot_observed_at = datetime.now(UTC)
+
+
+_ACTION_TYPE_FOR_VERIFIED_EVENT = {
+    EscrowChainEventType.CONTRACT_ACTIVATED: "activate_deal",
+    EscrowChainEventType.NFT_DEPOSIT_ACCEPTED: "deposit_nft",
+    EscrowChainEventType.BUYER_PAYMENT_ACCEPTED: "fund_deal",
+    EscrowChainEventType.BUYER_ACCEPTANCE_RECORDED: "accept_deal",
+    EscrowChainEventType.DISPUTE_OPENED_ONCHAIN: "open_dispute",
+    EscrowChainEventType.DEAL_TIMEOUT_ACCEPTED: "timeout_deal",
+    EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED: "recover_unexpected_nft",
+    EscrowChainEventType.NFT_RETURN_EVIDENCE_OBSERVED: "return_nft_to_escrow",
+}
+
+
+async def _reconcile_wallet_action_finality(
+    session_factory: SessionFactory,
+    event: NormalizedChainEvent,
+    proof: FinalityVerification,
+) -> None:
+    """Finalize only the durable action whose operation and query ID match proved chain facts.
+
+    The submitted wallet reference is not read here. The authority is the provider's
+    proof-decoded query id plus the exact event type, deal binding and transaction /
+    masterchain proof. Ambiguous client hints can therefore never substitute for chain
+    finality, and a client reference conflict keeps an action in manual review.
+    """
+
+    if (
+        not proof.matches(event)
+        or proof.getter_snapshot_json is None
+        or proof.verified_event_type is None
+        or not event.deal_id
+        or not proof.verified_query_id
+        or not proof.verified_query_id.isdecimal()
+        or int(proof.verified_query_id) <= 0
+    ):
+        return
+    action_type = _ACTION_TYPE_FOR_VERIFIED_EVENT.get(proof.verified_event_type)
+    if action_type is None:
+        return
+    try:
+        deal_id = uuid.UUID(event.deal_id)
+    except (TypeError, ValueError):
+        return
+
+    digest_fields = (
+        proof.masterchain_block_hash,
+        proof.proof_sha256,
+        event.transaction_hash,
+    )
+    if any(
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(char not in "0123456789abcdef" for char in value.lower())
+        for value in digest_fields
+    ):
+        raise EscrowProviderInvalidEvidence(
+            "Finalized wallet action is missing a canonical transaction/masterchain hash"
+        )
+    if not proof.provider_id.strip() or proof.masterchain_seqno <= 0:
+        raise EscrowProviderInvalidEvidence(
+            "Finalized wallet action is missing its trusted masterchain identity"
+        )
+
+    async with session_factory() as session:
+        async with session.begin():
+            actions = list(
+                (
+                    await session.scalars(
+                        select(EscrowWalletActionRecord)
+                        .where(
+                            EscrowWalletActionRecord.deal_id == deal_id,
+                            EscrowWalletActionRecord.action_type == action_type,
+                            EscrowWalletActionRecord.query_id == proof.verified_query_id,
+                            EscrowWalletActionRecord.network == "testnet",
+                        )
+                        .order_by(
+                            EscrowWalletActionRecord.created_at,
+                            EscrowWalletActionRecord.id,
+                        )
+                        .with_for_update()
+                    )
+                ).all()
+            )
+            if not actions:
+                return
+            if len(actions) != 1:
+                # Different idempotency keys must not cause one proved transaction
+                # to silently finalize several prepared actions with the same query.
+                for action in actions:
+                    if action.status != "finalized":
+                        action.status = "manual_review"
+                        action.last_error_code = "action_query_id_collision"
+                return
+            action = actions[0]
+            if action.status == "finalized":
+                if (
+                    action.finalized_transaction_hash != event.transaction_hash
+                    or action.finality_masterchain_seqno != proof.masterchain_seqno
+                    or action.finality_masterchain_block_hash != proof.masterchain_block_hash
+                    or action.finality_proof_sha256 != proof.proof_sha256
+                    or action.finality_provider != proof.provider_id
+                ):
+                    action.status = "manual_review"
+                    action.last_error_code = "action_finality_evidence_conflict"
+                return
+            if action.status not in {"prepared", "submitted", "ambiguous", "manual_review"}:
+                return
+            if (
+                action.unsigned_payload_json is None
+                or action.unsigned_payload_sha256 is None
+                or action.unsigned_bocs_json is None
+                or action.unsigned_boc_sha256 is None
+                or action.unsigned_boc_ref is None
+            ):
+                if action.status != "manual_review":
+                    action.status = "manual_review"
+                    action.last_error_code = "finality_without_persisted_unsigned_payload"
+                return
+            if action.finalized_transaction_hash is not None:
+                same_proof = (
+                    action.finalized_transaction_hash == event.transaction_hash
+                    and action.finality_masterchain_seqno == proof.masterchain_seqno
+                    and action.finality_masterchain_block_hash == proof.masterchain_block_hash
+                    and action.finality_proof_sha256 == proof.proof_sha256
+                    and action.finality_provider == proof.provider_id
+                )
+                if not same_proof:
+                    action.status = "manual_review"
+                    action.last_error_code = "action_finality_evidence_conflict"
+                    return
+            else:
+                action.finalized_transaction_hash = event.transaction_hash
+                action.finality_masterchain_seqno = proof.masterchain_seqno
+                action.finality_masterchain_block_hash = proof.masterchain_block_hash
+                action.finality_proof_sha256 = proof.proof_sha256
+                action.finality_provider = proof.provider_id
+
+            if action.status != "manual_review":
+                action.status = "finalized"
+                action.last_error_code = None
+                action.next_retry_at = None
+                action.lease_token = None
+                action.lease_until = None
 
 
 async def _release_lease(
@@ -570,7 +864,13 @@ async def _release_lease(
             checkpoint.lease_token = None
             checkpoint.lease_until = None
             checkpoint.last_error_code = error_code
-            checkpoint.next_scan_at = now + timedelta(seconds=15) if error_code else now
+            if error_code:
+                checkpoint.failure_count = max(0, int(checkpoint.failure_count or 0)) + 1
+                retry_delay = _observer_retry_delay_seconds(checkpoint.failure_count)
+                checkpoint.next_scan_at = now + timedelta(seconds=retry_delay)
+            else:
+                checkpoint.failure_count = 0
+                checkpoint.next_scan_at = now
 
 
 async def run_observer_pass(
@@ -615,7 +915,7 @@ async def run_observer_pass(
             raise EscrowProviderInvalidEvidence(
                 "A non-empty batch must provide a progressing, restartable next cursor"
             )
-        verified_events: list[tuple[NormalizedChainEvent, bool]] = []
+        verified_events: list[tuple[NormalizedChainEvent, bool, str | None]] = []
         ordered_events = sorted(
             batch.events,
             key=lambda item: (
@@ -629,24 +929,140 @@ async def run_observer_pass(
             ),
         )
         for event in ordered_events:
-            # A boolean/indexer "finalized" flag is insufficient. The provider
-            # must return a proof bound to this transaction, message, trace and
-            # masterchain sequence number.
+            # An indexer claim is never proof. A missing proof or insufficient
+            # finality remains pending; a cryptographically inconsistent proof
+            # is retained as rejected forensic evidence and cannot block the scan.
             if event.network != "testnet":
-                verified_events.append((event, False))
+                verified_events.append((event, False, "wrong_network"))
                 continue
-            proof = await provider.verify_event(event)
-            if isinstance(proof, FinalityVerification) and proof.matches(event):
+            try:
+                proof = await provider.verify_event(event)
+            except EscrowProviderInvalidEvidence:
+                logger.warning(
+                    "TON escrow candidate failed cryptographic verification",
+                    extra={"transaction_hash": event.transaction_hash},
+                )
+                verified_events.append((event, False, "cryptographic_proof_invalid"))
+                continue
+
+            if proof is None:
+                verified_events.append((event, False, None))
+                continue
+            if not isinstance(proof, FinalityVerification):
+                logger.error(
+                    "TON escrow provider returned an unsupported verification result",
+                    extra={"transaction_hash": event.transaction_hash},
+                )
+                verified_events.append((event, False, "invalid_verification_result"))
+                continue
+            if (
+                not proof.finalized
+                or not proof.masterchain_inclusion_verified
+                or not proof.trace_binding_verified
+            ):
+                verified_events.append((event, False, None))
+                continue
+            if not proof.matches(event):
+                logger.warning(
+                    "TON escrow proof did not bind to the discovered candidate",
+                    extra={"transaction_hash": event.transaction_hash},
+                )
+                verified_events.append((event, False, "cryptographic_proof_mismatch"))
+                continue
+
+            try:
+                await _persist_getter_snapshot(session_factory, event, proof)
+                await _reconcile_wallet_action_finality(session_factory, event, proof)
                 event = replace(
                     event,
+                    event_type=proof.verified_event_type or event.event_type,
+                    attempt_id=(
+                        proof.verified_attempt_id
+                        if proof.verified_attempt_id is not None
+                        else event.attempt_id
+                    ),
+                    query_id=(
+                        proof.verified_query_id
+                        if proof.verified_query_id is not None
+                        else event.query_id
+                    ),
+                    bounce_phase=proof.bounce_phase,
+                    bounce_exit_code=proof.bounce_exit_code,
+                    bounce_original_body_hash=proof.bounce_original_body_hash,
+                    bounce_original_value_nanotons=proof.bounce_original_value_nanotons,
+                    bounce_original_created_lt=proof.bounce_original_created_lt,
+                    bounce_original_created_at=proof.bounce_original_created_at,
+                    bounce_gas_used=proof.bounce_gas_used,
+                    bounce_vm_steps=proof.bounce_vm_steps,
+                    outbound_action_kind=proof.outbound_action_kind,
+                    outbound_action_status=proof.outbound_action_status,
+                    outbound_action_expected_state=proof.outbound_action_expected_state,
+                    bounce_match_reason=proof.bounce_match_reason,
+                    outbound_transaction_hash=proof.outbound_transaction_hash,
+                    outbound_block_hash=proof.outbound_block_hash,
+                    outbound_block_seqno=proof.outbound_block_seqno,
+                    outbound_message_hash=proof.outbound_message_hash,
+                    source_address=(
+                        proof.source_address
+                        if proof.verified_event_type is not None
+                        else event.source_address
+                    ),
+                    destination_address=(
+                        proof.destination_address
+                        if proof.verified_event_type is not None
+                        else event.destination_address
+                    ),
+                    item_address=(
+                        proof.item_address if proof.verified_event_type is not None
+                        else event.item_address
+                    ),
+                    collection_address=(
+                        proof.collection_address if proof.verified_event_type is not None
+                        else event.collection_address
+                    ),
+                    amount_nanotons=(
+                        proof.amount_nanotons if proof.verified_event_type is not None
+                        else event.amount_nanotons
+                    ),
+                    observed_contract_state=(
+                        proof.observed_contract_state
+                        if proof.verified_event_type is not None
+                        else event.observed_contract_state
+                    ),
+                    # A verified False is meaningful. Do not OR with untrusted
+                    # indexer values or a legacy event's persisted booleans.
+                    attestation_accepted=(
+                        proof.attestation_accepted
+                        if proof.verified_event_type is not None
+                        else event.attestation_accepted
+                    ),
+                    contract_state_reconciled=(
+                        proof.contract_state_reconciled
+                        if proof.verified_event_type is not None
+                        else event.contract_state_reconciled
+                    ),
                     masterchain_block_hash=proof.masterchain_block_hash,
                     finality_proof_sha256=proof.proof_sha256,
                     finality_provider=proof.provider_id,
                 )
+            except EscrowProviderInvalidEvidence:
+                logger.warning(
+                    "TON escrow proof failed reconciliation with the contract snapshot",
+                    extra={"transaction_hash": event.transaction_hash},
+                )
+                verified_events.append((event, False, "contract_proof_reconciliation_failed"))
+                continue
+
+            try:
                 event = await _terminal_owner_evidence(session_factory, provider, event)
-                verified_events.append((event, True))
-            else:
-                verified_events.append((event, False))
+            except EscrowProviderInvalidEvidence:
+                # The transaction/getter proof is still valid. Missing or invalid
+                # owner evidence keeps terminal listing reconciliation fail-closed.
+                logger.warning(
+                    "TON NFT owner proof was invalid; terminal listing remains reserved",
+                    extra={"transaction_hash": event.transaction_hash},
+                )
+            verified_events.append((event, True, None))
     except EscrowProviderUnavailable:
         await _release_lease(
             session_factory, lease_token, error_code="provider_unavailable", now=current_time
@@ -672,9 +1088,13 @@ async def run_observer_pass(
                     return EscrowObserverPassResult(scanned=len(batch.events), lease_lost=True)
                 cursor_safe = True
                 processed_events: list[tuple[NormalizedChainEvent, bool]] = []
-                for event, verified in verified_events:
-                    applied_result = await _apply_one_event(session, event,
-                        provider_verified=verified)
+                for event, verified, verification_error in verified_events:
+                    applied_result = await _apply_one_event(
+                        session,
+                        event,
+                        provider_verified=verified,
+                        verification_error_code=verification_error,
+                    )
                     result_counts[applied_result] += 1
                     processed_events.append((event, verified))
                     if applied_result in {"pending", "unmatched"}:
@@ -705,6 +1125,7 @@ async def run_observer_pass(
                     timedelta(seconds=10) if not cursor_safe else timedelta(0)
                 )
                 checkpoint.last_error_code = None
+                checkpoint.failure_count = 0
     except Exception:
         # The event writes and cursor are one transaction; on any DB failure the
         # cursor rolls back. Release the fencing lease so the same batch can retry.

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beginCell, Address } from "@ton/core";
 import {
   AuthorityKeys,
@@ -10,6 +11,7 @@ import {
   DealRoles,
   DealSecurity,
   DealTerms,
+  OutboundActionSet,
 } from "../wrappers-ts/DealEscrow.gen.ts";
 
 const raw = (byte: string) => Address.parseRaw(`0:${byte.repeat(64 / byte.length)}`);
@@ -61,6 +63,7 @@ const progress = DealProgress.create({
     unexpectedPreviousOwner: null,
     unexpectedItemAddress: null,
   }) },
+  outboundActions: { ref: OutboundActionSet.create({ first: null, second: null }) },
 });
 const deployed = DealEscrow.fromStorage({
   terms: { ref: terms },
@@ -74,12 +77,35 @@ const stateInit = beginCell()
   .storeBit(1).storeRef(deployed.init.data) // data = Some(^Cell)
   .storeBit(0) // library = empty HashmapE
   .endCell();
+const manifest = JSON.parse(
+  readFileSync("artifacts/frozen/manifest.json", "utf8"),
+) as {
+  compiled_code_hash: string;
+  state_init_hash: string | null;
+  raw_address: string | null;
+  data_hash: string | null;
+};
+
 if (!stateInit.hash().equals(deployed.address.hash)) {
   throw new Error("StateInit hash differs from generated Acton wrapper address");
 }
-if (deployed.init.code.hash().toString("hex").toUpperCase() !==
-    "359B02C177CE033C6FE1A673C4E04B59D6D43434AF09B1CBE4BDCD8BE4779450") {
+if (deployed.init.code.hash().toString("hex").toUpperCase() !== manifest.compiled_code_hash) {
   throw new Error("Generated Acton CodeCell does not match pinned manifest");
+}
+if (
+  manifest.state_init_hash
+  && stateInit.hash().toString("hex") !== manifest.state_init_hash
+) {
+  throw new Error("Generated fixed StateInit hash differs from frozen golden vector");
+}
+if (manifest.raw_address && deployed.address.toRawString() !== manifest.raw_address) {
+  throw new Error("Generated fixed DealEscrow address differs from frozen golden vector");
+}
+if (
+  manifest.data_hash
+  && deployed.init.data.hash().toString("hex") !== manifest.data_hash
+) {
+  throw new Error("Generated initial storage cell differs from frozen golden vector");
 }
 console.log(JSON.stringify({
   vector: "deal-escrow-v1-testnet-fixed-terms-01",

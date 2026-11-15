@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -14,8 +15,10 @@ from app.api.escrow import (
     _listing_actions,
     _prepare_action,
     router,
+    submit_wallet_reference,
 )
 from app.escrow.contracts import EscrowWalletAction
+from app.escrow.models import EscrowIdempotencyRecord
 from app.escrow.schemas import (
     EscrowDealCreate,
     EscrowDealResponse,
@@ -23,6 +26,7 @@ from app.escrow.schemas import (
     EscrowListingIntentResponse,
     EscrowNftProjection,
     EscrowPageResponse,
+    EscrowWalletReferenceInput,
 )
 from app.escrow.service import canonical_request_sha256
 
@@ -104,6 +108,7 @@ def test_backend_exposes_expected_deal_scoped_preparation_routes() -> None:
     assert "/escrow/buyer/deals" in paths
     assert "/escrow/seller/deals" in paths
     assert "/escrow/deals/{deal_id}/prepare/create-deal-escrow" in paths
+    assert "/escrow/deals/{deal_id}/prepare/activate-deal" in paths
     assert "/escrow/deals/{deal_id}/prepare/deposit-nft" in paths
     assert "/escrow/deals/{deal_id}/prepare/funding" in paths
     assert "/escrow/deals/{deal_id}/prepare/accept" in paths
@@ -376,3 +381,227 @@ def test_preview_compose_is_the_only_compose_runtime_opted_into_preview_mode() -
     assert "PREVIEW_MODE" not in production_compose
     assert 'PREVIEW_MODE: "1"' in preview_compose
     assert "ENVIRONMENT: production" in preview_compose
+
+
+class WalletReferenceSession:
+    def __init__(self, *results: object) -> None:
+        self.results = list(results)
+        self.added: list[object] = []
+        self.commit_calls = 0
+        self.rollback_calls = 0
+        self.refresh_calls = 0
+
+    async def scalar(self, _statement: object) -> object:
+        return self.results.pop(0) if self.results else None
+
+    def add(self, value: object) -> None:
+        self.added.append(value)
+
+    async def commit(self) -> None:
+        self.commit_calls += 1
+
+    async def rollback(self) -> None:
+        self.rollback_calls += 1
+
+    async def refresh(self, _record: object) -> None:
+        self.refresh_calls += 1
+
+
+def _prepared_wallet_action(*, actor_id: UUID, action_type: str = "fund_deal"):
+    return SimpleNamespace(
+        id=uuid4(),
+        actor_id=actor_id,
+        action_type=action_type,
+        network="testnet",
+        status="prepared",
+        attempt_count=0,
+        unsigned_boc_sha256="b" * 64,
+        unsigned_boc_ref="db://escrow_wallet_actions/action/unsigned_bocs_json",
+        submission_reference=None,
+        submission_reference_sha256=None,
+        last_error_code=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_wallet_reference_is_a_durable_hint_not_chain_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    actor_id = uuid4()
+    action = _prepared_wallet_action(actor_id=actor_id)
+    session = WalletReferenceSession(action, None)
+    reference = "a" * 64
+
+    response = await submit_wallet_reference(
+        EscrowWalletReferenceInput(
+            action_id=action.id,
+            action="fund_deal",
+            reference=reference,
+        ),
+        SimpleNamespace(id=actor_id),
+        session,  # type: ignore[arg-type]
+        "wallet-reference-key-0001",
+    )
+
+    expected_hash = hashlib.sha256(reference.encode("utf-8")).hexdigest()
+    assert response.action_id == action.id
+    assert response.status == "ambiguous"
+    assert response.reference_sha256 == expected_hash
+    assert response.reconciliation_status == "awaiting_independent_chain_reconciliation"
+    assert action.status == "ambiguous"
+    assert action.last_error_code == "awaiting_independent_chain_reconciliation"
+    assert len(session.added) == 1
+    assert isinstance(session.added[0], EscrowIdempotencyRecord)
+    assert session.added[0].resource_id == action.id
+    assert session.commit_calls == 1
+    # The endpoint does not call the observer, set a deal status or release a listing.
+
+
+@pytest.mark.asyncio
+async def test_wallet_reference_hides_actions_owned_by_another_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    session = WalletReferenceSession(None)
+
+    with pytest.raises(HTTPException) as error:
+        await submit_wallet_reference(
+            EscrowWalletReferenceInput(
+                action_id=uuid4(),
+                action="fund_deal",
+                reference="a" * 64,
+            ),
+            SimpleNamespace(id=uuid4()),
+            session,  # type: ignore[arg-type]
+            "wallet-reference-key-0002",
+        )
+
+    assert error.value.status_code == 404
+    assert error.value.detail["code"] == "escrow_action_not_found"
+    assert session.added == []
+    assert session.commit_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_wallet_reference_exact_idempotency_replay_returns_current_chain_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    actor_id = uuid4()
+    action = _prepared_wallet_action(actor_id=actor_id)
+    reference = "c" * 64
+    reference_hash = hashlib.sha256(reference.encode("utf-8")).hexdigest()
+    action.status = "finalized"
+    action.submission_reference = reference
+    action.submission_reference_sha256 = reference_hash
+    key = "wallet-reference-replay-0001"
+    request_hash = canonical_request_sha256(
+        {
+            "actor_id": str(actor_id),
+            "action_id": str(action.id),
+            "action": "fund_deal",
+            "reference_sha256": reference_hash,
+        }
+    )
+    receipt = SimpleNamespace(
+        request_sha256=request_hash,
+        resource_type="wallet_action",
+        resource_id=action.id,
+    )
+    session = WalletReferenceSession(action, receipt)
+
+    response = await submit_wallet_reference(
+        EscrowWalletReferenceInput(
+            action_id=action.id,
+            action="fund_deal",
+            reference=reference,
+        ),
+        SimpleNamespace(id=actor_id),
+        session,  # type: ignore[arg-type]
+        key,
+    )
+
+    assert response.status == "finalized"
+    assert response.reconciliation_status == "already_finalized"
+    assert response.reference_sha256 == reference_hash
+    assert session.added == []
+    assert session.commit_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_wallet_reference_idempotency_key_cannot_be_reused_for_another_reference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    actor_id = uuid4()
+    action = _prepared_wallet_action(actor_id=actor_id)
+    original_ref_hash = hashlib.sha256(("d" * 64).encode()).hexdigest()
+    request_hash = canonical_request_sha256(
+        {
+            "actor_id": str(actor_id),
+            "action_id": str(action.id),
+            "action": "fund_deal",
+            "reference_sha256": original_ref_hash,
+        }
+    )
+    receipt = SimpleNamespace(
+        request_sha256=request_hash,
+        resource_type="wallet_action",
+        resource_id=action.id,
+    )
+    session = WalletReferenceSession(action, receipt)
+
+    with pytest.raises(HTTPException) as error:
+        await submit_wallet_reference(
+            EscrowWalletReferenceInput(
+                action_id=action.id,
+                action="fund_deal",
+                reference="e" * 64,
+            ),
+            SimpleNamespace(id=actor_id),
+            session,  # type: ignore[arg-type]
+            "wallet-reference-replay-0002",
+        )
+
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "idempotency_payload_conflict"
+    assert action.status == "prepared"
+    assert action.submission_reference is None
+    assert session.rollback_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_conflicting_second_wallet_reference_quarantines_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    actor_id = uuid4()
+    old_reference = "f" * 64
+    old_hash = hashlib.sha256(old_reference.encode()).hexdigest()
+    action = _prepared_wallet_action(actor_id=actor_id)
+    action.status = "ambiguous"
+    action.submission_reference = old_reference
+    action.submission_reference_sha256 = old_hash
+    session = WalletReferenceSession(action, None)
+
+    with pytest.raises(HTTPException) as error:
+        await submit_wallet_reference(
+            EscrowWalletReferenceInput(
+                action_id=action.id,
+                action="fund_deal",
+                reference="9" * 64,
+            ),
+            SimpleNamespace(id=actor_id),
+            session,  # type: ignore[arg-type]
+            "wallet-reference-conflict-0001",
+        )
+
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "submission_reference_conflict"
+    assert action.status == "manual_review"
+    assert action.last_error_code == "submission_reference_conflict"
+    assert action.submission_reference_sha256 == old_hash
+    assert session.commit_calls == 1
+    assert len(session.added) == 1
+

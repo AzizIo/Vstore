@@ -11,6 +11,7 @@ import base64
 import hashlib
 import json
 import re
+import zlib
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -21,7 +22,7 @@ from pytoniq_core import Address, Cell, begin_cell
 _ARTIFACTS = Path(__file__).resolve().parent / "abi_artifacts"
 _NETWORK_ID = -3
 _PROTOCOL_VERSION = 1
-_CODE_HASH = "359B02C177CE033C6FE1A673C4E04B59D6D43434AF09B1CBE4BDCD8BE4779450"
+_CODE_HASH = "1BCCBF586878F8032F4E860707B0102EC554B4E1C0CFD7DEA362E1DD391D6666"
 _NFT_TRANSFER_OPCODE = 0x5FCC3D14
 _NFT_FORWARD_MAGIC = 0x56454E46
 _OPCODES = {
@@ -102,11 +103,16 @@ def load_pinned_abi() -> tuple[dict[str, Any], dict[str, Any]]:
 
 
 def load_pinned_code_boc() -> str:
-    """Read the checked-in compiler BOC; whitespace is not part of its digest."""
+    """Decompress the pinned compiler BOC and return its canonical base64 text."""
     try:
-        return (_ARTIFACTS / "DealEscrow.code.boc.b64").read_text(encoding="ascii").strip()
-    except (OSError, UnicodeError) as exc:
-        raise TONABIError("pinned DealEscrow code BOC is unavailable") from exc
+        compressed_b64 = (
+            _ARTIFACTS / "DealEscrow.code.boc.zlib.b64"
+        ).read_text(encoding="ascii").strip()
+        compressed = base64.b64decode(compressed_b64, validate=True)
+        raw_boc = zlib.decompress(compressed)
+        return base64.b64encode(raw_boc).decode("ascii")
+    except (OSError, UnicodeError, zlib.error, ValueError) as exc:
+        raise TONABIError("pinned DealEscrow code BOC is unavailable or corrupt") from exc
 
 
 def verify_compiled_code(code_boc_base64: str | None = None) -> VerifiedArtifacts:
@@ -334,6 +340,9 @@ def build_storage_cell(snapshot: Any) -> Cell:
     )
     evidence = begin_cell().store_uint(0, 256).store_uint(0, 256).end_cell()
     recovery = begin_cell().store_address(None).store_address(None).end_cell()
+    # The third reference is the persisted OutboundActionSet introduced by
+    # DealProgress v1. Both maybe-ref slots start empty in a fresh deployment.
+    outbound_actions = begin_cell().store_bit(0).store_bit(0).end_cell()
     progress = (
         begin_cell()
         .store_uint(0, 8)  # STATE_INTENT_CREATED
@@ -346,9 +355,197 @@ def build_storage_cell(snapshot: Any) -> Cell:
         .store_uint(0, 64)  # disputeAttemptId
         .store_ref(evidence)
         .store_ref(recovery)
+        .store_ref(outbound_actions)
         .end_cell()
     )
     return begin_cell().store_ref(terms).store_ref(progress).end_cell()
+
+
+def decode_storage_cell(data_cell: Cell) -> dict[str, object]:
+    """Decode the authenticated DealEscrow data cell without an unproved remote getter.
+
+    Callers must obtain the data cell from a trust-level-0 LiteClient account-state
+    proof at a finalized masterchain block and separately verify the deployed code
+    hash. This decoder exposes the contract terms/progress so the observer can
+    compare them with the persisted immutable snapshot.
+    """
+
+    try:
+        root = data_cell.begin_parse()
+        terms_cell = root.load_ref()
+        progress_cell = root.load_ref()
+
+        terms = terms_cell.begin_parse()
+        roles_cell = terms.load_ref()
+        asset_cell = terms.load_ref()
+        money_cell = terms.load_ref()
+        security_cell = terms.load_ref()
+        network_id = terms.load_int(32)
+        protocol_version = terms.load_uint(16)
+
+        roles = roles_cell.begin_parse()
+        seller_address = roles.load_address().to_str(is_user_friendly=False)
+        buyer_address = roles.load_address().to_str(is_user_friendly=False)
+
+        asset = asset_cell.begin_parse()
+        item_address = asset.load_address().to_str(is_user_friendly=False)
+        collection_address = asset.load_address().to_str(is_user_friendly=False)
+        deal_salt = f"{asset.load_uint(256):064x}"
+
+        money = money_cell.begin_parse()
+        principal_nanotons = money.load_coins()
+        execution_reserve_nanotons = money.load_coins()
+        seller_deployment_refund_nanotons = money.load_coins()
+        nft_transfer_value_nanotons = money.load_coins()
+        fund_query_id = money.load_uint(64)
+        nft_deposit_query_id = money.load_uint(64)
+        nft_release_query_id = money.load_uint(64)
+        nft_return_to_escrow_query_id = money.load_uint(64)
+
+        security = security_cell.begin_parse()
+        oracle = security.load_ref().begin_parse()
+        resolver = security.load_ref().begin_parse()
+        oracle_keys = tuple(oracle.load_uint(256) for _ in range(3))
+        resolver_keys = tuple(resolver.load_uint(256) for _ in range(3))
+
+        progress = progress_cell.begin_parse()
+        contract_state = progress.load_uint(8)
+        deadline_unix = progress.load_uint(64)
+        dispute_phase = progress.load_uint(8)
+        pending_action = progress.load_uint(8)
+        nft_in_escrow = bool(progress.load_bit())
+        principal_locked = bool(progress.load_bit())
+        oracle_attempt_id = progress.load_uint(64)
+        dispute_attempt_id = progress.load_uint(64)
+        evidence = progress.load_ref().begin_parse()
+        last_evidence_hash = evidence.load_uint(256)
+        dispute_reason_hash = evidence.load_uint(256)
+        recovery = progress.load_ref().begin_parse()
+        recovery_previous_owner = recovery.load_address()
+        recovery_item_address = recovery.load_address()
+
+        # DealProgress now stores a mandatory OutboundActionSet cell with two
+        # optional references. Parse the option bits so the observer rejects an
+        # old/truncated storage layout instead of silently accepting it.
+        outbound_actions = progress.load_ref().begin_parse()
+        outbound_first_present = bool(outbound_actions.load_bit())
+        outbound_action_cells = []
+        if outbound_first_present:
+            outbound_action_cells.append(("first", outbound_actions.load_ref()))
+        outbound_second_present = bool(outbound_actions.load_bit())
+        if outbound_second_present:
+            outbound_action_cells.append(("second", outbound_actions.load_ref()))
+        if outbound_actions.remaining_bits != 0 or outbound_actions.remaining_refs != 0:
+            raise ValueError("OutboundActionSet contains trailing data")
+        outbound_action_rows = []
+        for slot, action_cell in outbound_action_cells:
+            action = action_cell.begin_parse()
+            kind = action.load_uint(8)
+            query_id = action.load_uint(64)
+            action_deal_salt = f"{action.load_uint(256):064x}"
+            attempt_id = action.load_uint(64)
+            amount_nanotons = action.load_coins()
+            message_value_nanotons = action.load_coins()
+            expected_state = action.load_uint(8)
+            expected_pending_action = action.load_uint(8)
+            retry_window_seconds = action.load_uint(32)
+            message_body_hash = f"{action.load_uint(256):064x}"
+            status = action.load_uint(8)
+            bounce_phase = action.load_uint(8)
+            exit_code = action.load_int(32)
+            addresses_cell = action.load_ref()
+            if action.remaining_bits != 0 or action.remaining_refs != 0:
+                raise ValueError("OutboundAction contains trailing data")
+            addresses = addresses_cell.begin_parse()
+            item_pair = addresses.load_ref().begin_parse()
+            item_address = item_pair.load_address().to_str(is_user_friendly=False)
+            destination_address = item_pair.load_address().to_str(is_user_friendly=False)
+            recipient_pair = addresses.load_ref().begin_parse()
+            recipient_address = recipient_pair.load_address().to_str(is_user_friendly=False)
+            response_address = recipient_pair.load_address().to_str(is_user_friendly=False)
+            if (
+                item_pair.remaining_bits != 0 or item_pair.remaining_refs != 0
+                or recipient_pair.remaining_bits != 0 or recipient_pair.remaining_refs != 0
+                or addresses.remaining_bits != 0 or addresses.remaining_refs != 0
+            ):
+                raise ValueError("OutboundAction addresses contain trailing data")
+            if (
+                kind not in {1, 2, 3, 4, 5, 6, 7}
+                or query_id <= 0 or attempt_id <= 0
+                or action_deal_salt == "0" * 64
+                or status not in {0, 1}
+                or expected_state > 13
+                or bounce_phase not in {0, 1, 2}
+                or (status == 0 and (bounce_phase != 0 or exit_code != 0))
+            ):
+                raise ValueError("OutboundAction contains invalid protocol values")
+            outbound_action_rows.append({
+                "slot": slot,
+                "kind": kind,
+                "query_id": query_id,
+                "deal_salt": action_deal_salt,
+                "attempt_id": attempt_id,
+                "amount_nanotons": amount_nanotons,
+                "message_value_nanotons": message_value_nanotons,
+                "expected_state": expected_state,
+                "expected_pending_action": expected_pending_action,
+                "retry_window_seconds": retry_window_seconds,
+                "message_body_hash": message_body_hash,
+                "status": status,
+                "bounce_phase": bounce_phase,
+                "exit_code": exit_code,
+                "item_address": item_address,
+                "destination_address": destination_address,
+                "recipient_address": recipient_address,
+                "response_address": response_address,
+            })
+    except Exception as exc:
+        raise TONABIError("DealEscrow storage data cell is malformed") from exc
+
+    return {
+        "network": "testnet",
+        "network_id": network_id,
+        "protocol_version": protocol_version,
+        "seller_address": seller_address,
+        "buyer_address": buyer_address,
+        "item_address": item_address,
+        "collection_address": collection_address,
+        "deal_salt": deal_salt,
+        "principal_nanotons": principal_nanotons,
+        "execution_reserve_nanotons": execution_reserve_nanotons,
+        "seller_deployment_refund_nanotons": seller_deployment_refund_nanotons,
+        "nft_transfer_value_nanotons": nft_transfer_value_nanotons,
+        "fund_query_id": fund_query_id,
+        "nft_deposit_query_id": nft_deposit_query_id,
+        "nft_release_query_id": nft_release_query_id,
+        "nft_return_to_escrow_query_id": nft_return_to_escrow_query_id,
+        "oracle_key_a": oracle_keys[0],
+        "oracle_key_b": oracle_keys[1],
+        "oracle_key_c": oracle_keys[2],
+        "resolver_key_a": resolver_keys[0],
+        "resolver_key_b": resolver_keys[1],
+        "resolver_key_c": resolver_keys[2],
+        "contract_state": contract_state,
+        "deadline_unix": deadline_unix,
+        "dispute_phase": dispute_phase,
+        "pending_action": pending_action,
+        "nft_in_escrow": nft_in_escrow,
+        "principal_locked": principal_locked,
+        "oracle_attempt_id": oracle_attempt_id,
+        "dispute_attempt_id": dispute_attempt_id,
+        "last_evidence_hash": f"{last_evidence_hash:064x}",
+        "dispute_reason_hash": f"{dispute_reason_hash:064x}",
+        "recovery_previous_owner": (
+            recovery_previous_owner.to_str(is_user_friendly=False)
+            if recovery_previous_owner is not None else None
+        ),
+        "recovery_item_address": (
+            recovery_item_address.to_str(is_user_friendly=False)
+            if recovery_item_address is not None else None
+        ),
+        "outbound_action_slots": [outbound_first_present, outbound_second_present],
+        "outbound_actions": outbound_action_rows,
+    }
 
 
 def build_state_init_cell(code: Cell, data: Cell) -> Cell:

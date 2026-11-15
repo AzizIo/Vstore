@@ -1,13 +1,50 @@
 # Issue #225 — TON escrow contract security and lifecycle follow-up
 
 **Baseline:** `main` at `6dafdcf4c462718df14ea024f29fd277c90f6d39`  
-**Scope:** contract-only review package. No ABI, storage, opcode, frozen BOC, backend payment/provider or deployment changes are made here.
+**Scope:** historical security review plus current remediation notes. The original review was contract-only; PR #235 changes the contract storage/ABI/frozen artifacts and adds backend payment/provider reconciliation, so the original scope statement does not describe the current branch.
 
 ## Executive status
 
-The contract is a testnet-only immutable single-deal PoC. The repository has a reproducible Acton/Tolk build and 25 emulator tests, but the present evidence is insufficient to call it a defensible testnet release candidate. This report distinguishes implemented guards from behavior that is not yet proven.
+The contract is a testnet-only immutable single-deal PoC. This document retains the original pre-remediation findings as an audit trail; those findings must not be read as a description of the current PR branch. The latest implementation and remaining release gates are summarized below. CI/emulator success is not a live-network or independent-audit claim.
 
-## Confirmed findings
+## Implementation update — PR #234 (2026-11-15)
+
+The initial findings below describe the pre-implementation baseline. The implementation branch has since added:
+
+- A persisted two-slot outbound-action descriptor. Each action includes kind, exact destination/recipient and item/response addresses, query ID and monotonic attempt ID, deal salt, amount/value, expected state/pending action, retry window and original outbound body hash.
+- RichBounce-only correlation: match the bounce sender/destination, exact original body hash and original message value. Classic/short bounces, unknown descriptors, stale envelopes and mismatches do not mutate state.
+- A correlated critical bounce records phase and exit code, preserves NFT/principal custody flags, and moves to manual review. It does not infer finality from a bounce.
+- `RetryFailedOutboundAction` opcode `0x56450009`: only the descriptor's snapshotted recipient may retry; the failed descriptor is consumed, a fresh monotonic attempt/query ID is used, and old-query replay is rejected.
+- Positive lifecycle oracle/resolver fixtures now sign each exact typed-cell hash using deterministic Acton `crypto.rawSign` test seeds; the test file contains no `testing.setChecksigIgnore` calls. Deliberately invalid zero-signature fixtures remain only in negative tests.
+- Actual failing TEP-62 item transfer and seller payout destination emulator scenarios. NFT retry succeeds and is attested with a signed oracle message; payout bounce preserves `principalLocked=true`. Unauthorized retry and replay tests are included.
+- The `DealProgress` storage extension changes StateInit and every derived deal address. The new frozen ABI/manifest and StateInit/message vectors are regenerated from Acton 1.2.1 / Tolk 1.5.0.
+
+### Exact-head validation
+
+The final exact-head run [#43732705509](https://github.com/AzizIo/Vstore/actions/runs/43732705509) on `61755265e85f5f136d22f2414b350d65b55c9549` passed **all steps with no continue-on-error bypass**: frozen ABI verifier, fresh build/code/BOC comparison, generated wrappers, independent StateInit/address/data-hash cross-check, message BOC vectors, `acton fmt --check`, `acton check`, and the full emulator suite. This run also includes the unauthorized-retry and old-query replay assertions. The action uploaded reproducible artifact `14168644387` (archive SHA-256 `d39f01b327ba575c8d5558e1ef6eb3417fde97458de45b8727fff0f5c7157f7d`). The suite contains 26 emulator tests; the signed end-to-end test cases no longer disable checksig.
+
+### Remaining gates
+
+- Add explicit out-of-order, duplicate, stale and mismatched RichBounce envelopes across both descriptor slots, and broaden action-phase failure assertions. Actual seller deployment-allowance and carry-all execution-reserve bounce/retry scenarios are now covered by emulator tests.
+- Expand the timeout/recovery state × custody × principal/reserve matrix. A late, still-pending NFT delivery attestation after timeout is now exercised end-to-end; late NFT return, buyer refund, seller payout and recovery paths still need the same matrix-level coverage.
+- Independent TON/Tolk audit and actual valueless testnet transaction traces/getter reconciliation are not performed.
+- The observer's trusted TEP-62 owner check also decodes and compares the item's collection address, but this proof is currently exercised only by provider fixtures/terminal reconciliation logic. A live testnet proof and an explicit pre-activation collection-approval gate remain required.
+
+## Latest remediation status — PR #235 (2026-11-15)
+
+The current branch has moved materially beyond the historical baseline findings above:
+
+- `onBouncedMessage` parses RichBounce and matches the original body hash, destination and message value to a persisted outbound descriptor. It records phase/exit code, does not mutate NFT ownership or principal custody, and cannot reopen terminal states.
+- Actual emulator-generated bounce tests cover NFT release, seller principal payout, seller deployment allowance and carry-all execution-reserve refund. Retry is restricted to the snapshotted recipient, uses a fresh monotonic attempt/query ID, and rejects stale replay.
+- Oracle/resolver positive test fixtures use deterministic Ed25519 signatures over the exact typed-cell digest. The test file contains no `testing.setChecksigIgnore` calls; zero-signature fixtures remain for negative coverage.
+- A new regression test covers the timeout/restart failure mode: NFT transfer succeeds, its deadline passes before backend finality reconciliation, the contract enters manual review, then a still-`PENDING` action can be reconciled with a valid 2-of-3 oracle attestation and the principal can complete payout. The same bypass is explicitly unavailable for an action already marked `BOUNCED`; that path requires recipient-authorized retry.
+- Backend state reconciliation now permits a proof-finalized delivery/return/payout/refund attestation to resume a deal from `manual_review` only when the event's proof-read contract state is the corresponding allowed target. Payout/refund events also require accepted attestation and getter reconciliation.
+
+This update does not remove the independent-review, live-testnet, complete timeout/action-failure matrix, or pre-activation collection authenticity gates.
+
+## Historical confirmed findings — pre-remediation baseline
+
+The findings below describe the original baseline and are retained for audit traceability. Do not use their historical descriptions as an assessment of the current PR #235 branch; consult the latest remediation status and remaining gates above.
 
 ### HIGH — bounced outbound actions are not correlated to their originating action
 
@@ -62,9 +99,9 @@ These are source-level observations; they do not replace an independent audit or
 
 ## Frozen artifact baseline
 
-The frozen source manifest pins Acton 1.2.1 and Tolk 1.5.0, code cell hash `359B02C177CE033C6FE1A673C4E04B59D6D43434AF09B1CBE4BDCD8BE4779450`, base64 BOC SHA-256 `9dcf1449971a1ba69e5bf59a3feac5f290eeeac011da84e279f4d93cb8be8041`, decoded BOC SHA-256 `df82a5603142e77344b3f201c13d6c77d3900893bf06cfe719bece784caf0422` and compact ABI SHA-256 `25fc5f338f45db7d7198961a75c1d5cfe04f996ae36013cca0d70f03870c3923`.
+The hashes in the original review describe the pre-remediation artifact baseline only: Acton 1.2.1 / Tolk 1.5.0, code cell hash `359B02C177CE033C6FE1A673C4E04B59D6D43434AF09B1CBE4BDCD8BE4779450`, base64 BOC SHA-256 `9dcf1449971a1ba69e5bf59a3feac5f290eeeac011da84e279f4d93cb8be8041`, decoded BOC SHA-256 `df82a5603142e77344b3f201c13d6c77d3900893bf06cfe719bece784caf0422` and compact ABI SHA-256 `25fc5f338f45db7d7198961a75c1d5cfe04f996ae36013cca0d70f03870c3923`.
 
-This PR does not alter frozen contract source, storage, ABI or compiled artifact.
+PR #235 changes `DealProgress` storage and the contract ABI/BOC/StateInit vectors. These historical hashes must not be used to deploy the current branch; use the source-controlled frozen manifest and exact-head CI artifact.
 
 ## Testnet acceptance plan — not executed
 
