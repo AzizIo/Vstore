@@ -101,7 +101,7 @@ def _event_snapshot(event: NormalizedChainEvent) -> NormalizedEventEvidence:
 
 
 def _deal_snapshot(deal: EscrowDeal) -> DealEvidenceSnapshot:
-    snapshot = deal.deployment_snapshot_json
+    snapshot = getattr(deal, "deployment_snapshot_json", None)
     execution_reserve = (
         snapshot.get("execution_reserve_nanotons")
         if isinstance(snapshot, dict)
