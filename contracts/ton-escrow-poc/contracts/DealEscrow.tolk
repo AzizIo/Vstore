@@ -262,7 +262,7 @@ fun sendNftTo(
             OUTBOUND_STATUS_PENDING,
             0,
             0
-        )));
+        ));
     val transfer = createMessage({
         bounce: BounceMode.RichBounce,
         value: transferValue,
@@ -302,7 +302,7 @@ fun sendSellerPayout(
             OUTBOUND_STATUS_PENDING,
             0,
             0
-        )));
+        ));
     val payout = createMessage({
         bounce: BounceMode.RichBounce,
         value: money.principalNanotons,
@@ -342,7 +342,7 @@ fun sendBuyerRefund(
             OUTBOUND_STATUS_PENDING,
             0,
             0
-        )));
+        ));
     val refund = createMessage({
         bounce: BounceMode.RichBounce,
         value: money.principalNanotons,
@@ -383,7 +383,7 @@ fun sendSellerDeploymentRefund(
             OUTBOUND_STATUS_PENDING,
             0,
             0
-        )));
+        ));
     val refund = createMessage({
         bounce: BounceMode.RichBounce,
         value: money.sellerDeploymentRefundNanotons,
@@ -423,7 +423,7 @@ fun sendRemainingBalanceTo(
             OUTBOUND_STATUS_PENDING,
             0,
             0
-        )));
+        ));
     val refund = createMessage({
         bounce: BounceMode.RichBounce,
         value: 0,
