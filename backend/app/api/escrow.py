@@ -35,7 +35,6 @@ from app.db.session import get_db_session
 from app.escrow.contracts import (
     DealEscrowDeploymentSnapshot,
     EscrowWalletAction,
-    UnconfiguredTONEscrowContractAdapter,
 )
 from app.escrow.domain import EscrowDealStatus
 from app.escrow.models import (
