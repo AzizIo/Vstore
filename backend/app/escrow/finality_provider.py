@@ -1914,7 +1914,7 @@ class PytoniqTONTestnetEscrowProvider:
             deal for deal in deals
             if getattr(deal, "nft_identity_snapshot_json", None) is not None
         ]
-        if len(collections) != 1 or not identity_deals:
+        if len(collections) != 1 or not identity_deals or len(identity_deals) != len(deals):
             raise EscrowProviderInvalidEvidence(
                 "NFT item is not uniquely bound to a persisted collection identity"
             )
