@@ -86,16 +86,21 @@ def record_submission_reference(
     if not normalized or len(normalized) > 512:
         raise EscrowActionConflict("invalid_submission_reference")
     digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    if action.submission_reference_sha256 is not None:
+        if action.submission_reference_sha256 == digest:
+            # A duplicate client report is harmless and remains idempotent even if
+            # the observer has already reconciled/finalized the real chain event.
+            return
+        # Conflicting claims are suspicious, but they cannot rewrite a finalized
+        # chain fact. For non-terminal actions, park the action for manual review.
+        if action.status != "finalized":
+            action.status = "manual_review"
+            action.last_error_code = "submission_reference_conflict"
+        raise EscrowActionConflict("submission_reference_conflict")
     if action.unsigned_boc_sha256 is None or action.status not in {
         "prepared", "submitted", "ambiguous"
     }:
         raise EscrowActionConflict("action_not_prepared")
-    if action.submission_reference_sha256 is not None:
-        if action.submission_reference_sha256 != digest:
-            action.status = "manual_review"
-            action.last_error_code = "submission_reference_conflict"
-            raise EscrowActionConflict("submission_reference_conflict")
-        return
     action.submission_reference = normalized
     action.submission_reference_sha256 = digest
     action.status = "ambiguous"
