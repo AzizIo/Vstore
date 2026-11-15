@@ -1553,9 +1553,9 @@ async def _prepare_action(
 @router.post("/deals/{deal_id}/prepare/create-deal-escrow",
     response_model=EscrowTransactionPreparationResponse)
 async def prepare_deal_escrow(deal_id: UUID, user: CurrentUser, session: DbSession,
-    verifier: Verifier, idempotency_key: IdempotencyKey):
+    verifier: Verifier, identity_provider: IdentityProvider, idempotency_key: IdempotencyKey):
     return await _prepare_action(deal_id, EscrowWalletAction.CREATE_DEAL_ESCROW, user, session,
-        verifier, idempotency_key)
+        verifier, identity_provider, idempotency_key)
 
 
 @router.post(
@@ -1568,6 +1568,7 @@ async def prepare_deal_activation(
     user: CurrentUser,
     session: DbSession,
     verifier: Verifier,
+    identity_provider: IdentityProvider,
     idempotency_key: IdempotencyKey,
 ):
     """Prepare seller activation only after a trusted LiteServer proves deployment.
@@ -1736,7 +1737,8 @@ async def prepare_buyer_acceptance(deal_id: UUID, user: CurrentUser, session: Db
     response_model=EscrowTransactionPreparationResponse)
 async def prepare_dispute(
     deal_id: UUID, payload: EscrowDisputeCreate, user: CurrentUser,
-    session: DbSession, verifier: Verifier, idempotency_key: IdempotencyKey,
+    session: DbSession, verifier: Verifier, identity_provider: IdentityProvider,
+    idempotency_key: IdempotencyKey,
 ):
     return await _prepare_action(
         deal_id, EscrowWalletAction.OPEN_DISPUTE, user, session, verifier,
