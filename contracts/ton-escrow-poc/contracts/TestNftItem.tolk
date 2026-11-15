@@ -3,11 +3,15 @@
 
 import "types"
 
+struct TestNftTransferPolicy {
+    adminAddress: address
+    rejectRecipient: address?
+}
+
 struct TestNftStorage {
     ownerAddress: address
     fixtureSalt: uint256
-    adminAddress: address
-    rejectRecipient: address?
+    policy: Cell<TestNftTransferPolicy>
 }
 
 struct (0x5645ff01) UpdateNftTransferPolicy {
@@ -42,9 +46,10 @@ fun onInternalMessage(in: InMessage) {
             var storage = TestNftStorage.load();
             assert (in.senderAddress == storage.ownerAddress) throw 401;
             assert (msg.forwardTonAmount > 0) throw 402;
+            val policy = storage.policy.load();
             assert (
-                storage.rejectRecipient == null
-                || msg.newOwnerAddress != storage.rejectRecipient
+                policy.rejectRecipient == null
+                || msg.newOwnerAddress != policy.rejectRecipient
             ) throw 403;
             val previousOwner = storage.ownerAddress;
             storage.ownerAddress = msg.newOwnerAddress;
@@ -64,8 +69,10 @@ fun onInternalMessage(in: InMessage) {
         }
         UpdateNftTransferPolicy => {
             var storage = TestNftStorage.load();
-            assert (in.senderAddress == storage.adminAddress) throw 404;
-            storage.rejectRecipient = msg.rejectRecipient;
+            var policy = storage.policy.load();
+            assert (in.senderAddress == policy.adminAddress) throw 404;
+            policy.rejectRecipient = msg.rejectRecipient;
+            storage.policy = policy.toCell();
             storage.save();
         }
         else => {

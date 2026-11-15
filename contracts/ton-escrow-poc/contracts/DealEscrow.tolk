@@ -82,6 +82,52 @@ fun asManualReview(progress: DealProgress): DealProgress {
     return next;
 }
 
+fun makeOutboundAction(
+    kind: uint8,
+    itemAddress: address,
+    destination: address,
+    recipient: address,
+    responseDestination: address,
+    queryId: uint64,
+    dealSalt: uint256,
+    attemptId: uint64,
+    amountNanotons: coins,
+    messageValueNanotons: coins,
+    expectedState: uint8,
+    expectedPendingAction: uint8,
+    retryWindowSeconds: uint32,
+    messageBodyHash: uint256,
+    status: uint8,
+    bouncePhase: uint8,
+    exitCode: int32,
+): OutboundAction {
+    return OutboundAction {
+        kind,
+        queryId,
+        dealSalt,
+        attemptId,
+        amountNanotons,
+        messageValueNanotons,
+        expectedState,
+        expectedPendingAction,
+        retryWindowSeconds,
+        messageBodyHash,
+        status,
+        bouncePhase,
+        exitCode,
+        addresses: OutboundActionAddresses {
+            itemAndDestination: OutboundActionAddressPair {
+                first: itemAddress,
+                second: destination,
+            }.toCell(),
+            recipientAndResponse: OutboundActionAddressPair {
+                first: recipient,
+                second: responseDestination,
+            }.toCell(),
+        }.toCell(),
+    };
+}
+
 fun recordOutboundAction(mutate progress: DealProgress, action: OutboundAction) {
     var actions = progress.outboundActions.load();
     if (actions.first == null) {
@@ -106,11 +152,14 @@ fun consumeOutboundAction(
     var actions = progress.outboundActions.load();
     if (actions.first != null) {
         val action = actions.first.load();
+        val addresses = action.addresses.load();
+        val itemAndDestination = addresses.itemAndDestination.load();
+        val recipientAndResponse = addresses.recipientAndResponse.load();
         if (
             action.status == OUTBOUND_STATUS_PENDING
             && action.kind == kind
-            && action.itemAddress == itemAddress
-            && action.recipient == recipient
+            && itemAndDestination.first == itemAddress
+            && recipientAndResponse.first == recipient
             && action.queryId == queryId
             && action.attemptId == queryId
             && (!verifyAmount || action.amountNanotons == amountNanotons)
@@ -122,11 +171,14 @@ fun consumeOutboundAction(
     }
     if (actions.second != null) {
         val action = actions.second.load();
+        val addresses = action.addresses.load();
+        val itemAndDestination = addresses.itemAndDestination.load();
+        val recipientAndResponse = addresses.recipientAndResponse.load();
         if (
             action.status == OUTBOUND_STATUS_PENDING
             && action.kind == kind
-            && action.itemAddress == itemAddress
-            && action.recipient == recipient
+            && itemAndDestination.first == itemAddress
+            && recipientAndResponse.first == recipient
             && action.queryId == queryId
             && action.attemptId == queryId
             && (!verifyAmount || action.amountNanotons == amountNanotons)
@@ -192,25 +244,25 @@ fun sendNftTo(
         forwardTonAmount: grams("0.01"),
         forwardPayload: makeNftPayload(asset),
     };
-    recordOutboundAction(mutate progress, OutboundAction {
-        kind,
-        itemAddress,
-        destination: itemAddress,
-        recipient: newOwnerAddress,
-        responseDestination,
-        queryId,
-        dealSalt: asset.dealSalt,
-        attemptId: queryId,
-        amountNanotons: transferValue,
-        messageValueNanotons: transferValue,
-        expectedState,
-        expectedPendingAction,
-        retryWindowSeconds,
-        messageBodyHash: body.toCell().hash(),
-        status: OUTBOUND_STATUS_PENDING,
-        bouncePhase: 0,
-        exitCode: 0,
-    });
+    recordOutboundAction(mutate progress, makeOutboundAction(
+            kind,
+            itemAddress,
+            itemAddress,
+            newOwnerAddress,
+            responseDestination,
+            queryId,
+            asset.dealSalt,
+            queryId,
+            transferValue,
+            transferValue,
+            expectedState,
+            expectedPendingAction,
+            retryWindowSeconds,
+            body.toCell().hash(),
+            OUTBOUND_STATUS_PENDING,
+            0,
+            0
+        )));
     val transfer = createMessage({
         bounce: BounceMode.RichBounce,
         value: transferValue,
@@ -232,25 +284,25 @@ fun sendSellerPayout(
         dealSalt: asset.dealSalt,
         action: ORACLE_ACTION_SELLER_PAYOUT,
     };
-    recordOutboundAction(mutate progress, OutboundAction {
-        kind: OUTBOUND_KIND_SELLER_PAYOUT,
-        itemAddress: asset.itemAddress,
-        destination: roles.seller,
-        recipient: roles.seller,
-        responseDestination: roles.seller,
-        queryId: attemptId,
-        dealSalt: asset.dealSalt,
-        attemptId,
-        amountNanotons: money.principalNanotons,
-        messageValueNanotons: money.principalNanotons,
-        expectedState: STATE_SELLER_PAYOUT_PENDING,
-        expectedPendingAction: PENDING_PAYOUT_RECONCILIATION,
-        retryWindowSeconds: SETTLEMENT_RECONCILIATION_GRACE_SECONDS,
-        messageBodyHash: body.toCell().hash(),
-        status: OUTBOUND_STATUS_PENDING,
-        bouncePhase: 0,
-        exitCode: 0,
-    });
+    recordOutboundAction(mutate progress, makeOutboundAction(
+            OUTBOUND_KIND_SELLER_PAYOUT,
+            asset.itemAddress,
+            roles.seller,
+            roles.seller,
+            roles.seller,
+            attemptId,
+            asset.dealSalt,
+            attemptId,
+            money.principalNanotons,
+            money.principalNanotons,
+            STATE_SELLER_PAYOUT_PENDING,
+            PENDING_PAYOUT_RECONCILIATION,
+            SETTLEMENT_RECONCILIATION_GRACE_SECONDS,
+            body.toCell().hash(),
+            OUTBOUND_STATUS_PENDING,
+            0,
+            0
+        )));
     val payout = createMessage({
         bounce: BounceMode.RichBounce,
         value: money.principalNanotons,
@@ -272,25 +324,25 @@ fun sendBuyerRefund(
         dealSalt: asset.dealSalt,
         action: ORACLE_ACTION_BUYER_REFUND,
     };
-    recordOutboundAction(mutate progress, OutboundAction {
-        kind: OUTBOUND_KIND_BUYER_REFUND,
-        itemAddress: asset.itemAddress,
-        destination: roles.buyer,
-        recipient: roles.buyer,
-        responseDestination: roles.buyer,
-        queryId: attemptId,
-        dealSalt: asset.dealSalt,
-        attemptId,
-        amountNanotons: money.principalNanotons,
-        messageValueNanotons: money.principalNanotons,
-        expectedState: STATE_BUYER_REFUND_PENDING,
-        expectedPendingAction: PENDING_REFUND_RECONCILIATION,
-        retryWindowSeconds: SETTLEMENT_RECONCILIATION_GRACE_SECONDS,
-        messageBodyHash: body.toCell().hash(),
-        status: OUTBOUND_STATUS_PENDING,
-        bouncePhase: 0,
-        exitCode: 0,
-    });
+    recordOutboundAction(mutate progress, makeOutboundAction(
+            OUTBOUND_KIND_BUYER_REFUND,
+            asset.itemAddress,
+            roles.buyer,
+            roles.buyer,
+            roles.buyer,
+            attemptId,
+            asset.dealSalt,
+            attemptId,
+            money.principalNanotons,
+            money.principalNanotons,
+            STATE_BUYER_REFUND_PENDING,
+            PENDING_REFUND_RECONCILIATION,
+            SETTLEMENT_RECONCILIATION_GRACE_SECONDS,
+            body.toCell().hash(),
+            OUTBOUND_STATUS_PENDING,
+            0,
+            0
+        )));
     val refund = createMessage({
         bounce: BounceMode.RichBounce,
         value: money.principalNanotons,
@@ -313,25 +365,25 @@ fun sendSellerDeploymentRefund(
         dealSalt: asset.dealSalt,
         action: SETTLEMENT_ACTION_SELLER_DEPLOYMENT_REFUND,
     };
-    recordOutboundAction(mutate progress, OutboundAction {
-        kind: OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND,
-        itemAddress: asset.itemAddress,
-        destination: roles.seller,
-        recipient: roles.seller,
-        responseDestination: roles.seller,
-        queryId,
-        dealSalt: asset.dealSalt,
-        attemptId: queryId,
-        amountNanotons: money.sellerDeploymentRefundNanotons,
-        messageValueNanotons: money.sellerDeploymentRefundNanotons,
-        expectedState,
-        expectedPendingAction: PENDING_NONE,
-        retryWindowSeconds: 0,
-        messageBodyHash: body.toCell().hash(),
-        status: OUTBOUND_STATUS_PENDING,
-        bouncePhase: 0,
-        exitCode: 0,
-    });
+    recordOutboundAction(mutate progress, makeOutboundAction(
+            OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND,
+            asset.itemAddress,
+            roles.seller,
+            roles.seller,
+            roles.seller,
+            queryId,
+            asset.dealSalt,
+            queryId,
+            money.sellerDeploymentRefundNanotons,
+            money.sellerDeploymentRefundNanotons,
+            expectedState,
+            PENDING_NONE,
+            0,
+            body.toCell().hash(),
+            OUTBOUND_STATUS_PENDING,
+            0,
+            0
+        )));
     val refund = createMessage({
         bounce: BounceMode.RichBounce,
         value: money.sellerDeploymentRefundNanotons,
@@ -353,25 +405,25 @@ fun sendRemainingBalanceTo(
         dealSalt: asset.dealSalt,
         action: SETTLEMENT_ACTION_EXECUTION_RESERVE_REFUND,
     };
-    recordOutboundAction(mutate progress, OutboundAction {
-        kind: OUTBOUND_KIND_EXECUTION_RESERVE_REFUND,
-        itemAddress: asset.itemAddress,
-        destination: recipient,
-        recipient,
-        responseDestination: recipient,
-        queryId,
-        dealSalt: asset.dealSalt,
-        attemptId: queryId,
-        amountNanotons: 0,
-        messageValueNanotons: 0,
-        expectedState,
-        expectedPendingAction: PENDING_NONE,
-        retryWindowSeconds: 0,
-        messageBodyHash: body.toCell().hash(),
-        status: OUTBOUND_STATUS_PENDING,
-        bouncePhase: 0,
-        exitCode: 0,
-    });
+    recordOutboundAction(mutate progress, makeOutboundAction(
+            OUTBOUND_KIND_EXECUTION_RESERVE_REFUND,
+            asset.itemAddress,
+            recipient,
+            recipient,
+            recipient,
+            queryId,
+            asset.dealSalt,
+            queryId,
+            0,
+            0,
+            expectedState,
+            PENDING_NONE,
+            0,
+            body.toCell().hash(),
+            OUTBOUND_STATUS_PENDING,
+            0,
+            0
+        )));
     val refund = createMessage({
         bounce: BounceMode.RichBounce,
         value: 0,
@@ -762,6 +814,9 @@ fun retryBouncedOutboundAction(
     assert (action.status == OUTBOUND_STATUS_BOUNCED) throw Errors.RetryNotReady;
     val retryAttemptId = progress.startOracleAttempt();
 
+    val addresses = action.addresses.load();
+    val itemAndDestination = addresses.itemAndDestination.load();
+    val recipientAndResponse = addresses.recipientAndResponse.load();
     if (action.kind <= OUTBOUND_KIND_BUYER_REFUND) {
         progress.state = action.expectedState;
         progress.pendingAction = action.expectedPendingAction;
@@ -778,9 +833,9 @@ fun retryBouncedOutboundAction(
         sendNftTo(
             mutate progress,
             action.kind,
-            action.itemAddress,
-            action.recipient,
-            action.responseDestination,
+            itemAndDestination.first,
+            recipientAndResponse.first,
+            recipientAndResponse.second,
             retryAttemptId,
             asset,
             action.amountNanotons,
@@ -804,7 +859,7 @@ fun retryBouncedOutboundAction(
     } else if (action.kind == OUTBOUND_KIND_EXECUTION_RESERVE_REFUND) {
         sendRemainingBalanceTo(
             mutate progress,
-            action.recipient,
+            recipientAndResponse.first,
             asset,
             retryAttemptId,
             action.expectedState,
@@ -1030,17 +1085,19 @@ fun onInternalMessage(in: InMessage) {
             var actions = progress.outboundActions.load();
             if (actions.first != null && actions.first.load().queryId == msg.queryId) {
                 val action = actions.first.load();
+                val recipient = action.addresses.load().recipientAndResponse.load().first;
                 assert (action.dealSalt == msg.dealSalt) throw Errors.InvalidDeal;
                 assert (action.status == OUTBOUND_STATUS_BOUNCED) throw Errors.RetryNotReady;
-                assert (in.senderAddress == action.recipient) throw Errors.UnauthorizedRetry;
+                assert (in.senderAddress == recipient) throw Errors.UnauthorizedRetry;
                 actions.first = null;
                 progress.outboundActions = actions.toCell();
                 retryBouncedOutboundAction(mutate progress, action, roles, asset, money);
             } else if (actions.second != null && actions.second.load().queryId == msg.queryId) {
                 val action = actions.second.load();
+                val recipient = action.addresses.load().recipientAndResponse.load().first;
                 assert (action.dealSalt == msg.dealSalt) throw Errors.InvalidDeal;
                 assert (action.status == OUTBOUND_STATUS_BOUNCED) throw Errors.RetryNotReady;
-                assert (in.senderAddress == action.recipient) throw Errors.UnauthorizedRetry;
+                assert (in.senderAddress == recipient) throw Errors.UnauthorizedRetry;
                 actions.second = null;
                 progress.outboundActions = actions.toCell();
                 retryBouncedOutboundAction(mutate progress, action, roles, asset, money);
@@ -1111,9 +1168,10 @@ fun onBouncedMessage(in: InMessageBounced) {
 
     if (actions.first != null) {
         var action = actions.first.load();
+        val destination = action.addresses.load().itemAndDestination.load().second;
         if (
             action.status == OUTBOUND_STATUS_PENDING
-            && action.destination == in.senderAddress
+            && destination == in.senderAddress
             && action.messageBodyHash == originalBodyHash
             && (
                 action.kind == OUTBOUND_KIND_EXECUTION_RESERVE_REFUND
@@ -1134,9 +1192,10 @@ fun onBouncedMessage(in: InMessageBounced) {
 
     if (!matched && actions.second != null) {
         var action = actions.second.load();
+        val destination = action.addresses.load().itemAndDestination.load().second;
         if (
             action.status == OUTBOUND_STATUS_PENDING
-            && action.destination == in.senderAddress
+            && destination == in.senderAddress
             && action.messageBodyHash == originalBodyHash
             && (
                 action.kind == OUTBOUND_KIND_EXECUTION_RESERVE_REFUND

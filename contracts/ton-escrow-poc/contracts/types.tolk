@@ -138,12 +138,18 @@ struct DealRecovery {
     unexpectedItemAddress: address?
 }
 
+struct OutboundActionAddressPair {
+    first: address
+    second: address
+}
+
+struct OutboundActionAddresses {
+    itemAndDestination: Cell<OutboundActionAddressPair>
+    recipientAndResponse: Cell<OutboundActionAddressPair>
+}
+
 struct OutboundAction {
     kind: uint8
-    itemAddress: address
-    destination: address
-    recipient: address
-    responseDestination: address
     queryId: uint64
     dealSalt: uint256
     attemptId: uint64
@@ -156,8 +162,8 @@ struct OutboundAction {
     status: uint8
     bouncePhase: uint8
     exitCode: int32
+    addresses: Cell<OutboundActionAddresses>
 }
-
 struct OutboundActionSet {
     first: Cell<OutboundAction>?
     second: Cell<OutboundAction>?

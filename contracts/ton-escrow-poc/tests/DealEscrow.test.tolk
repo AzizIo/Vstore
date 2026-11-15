@@ -64,8 +64,10 @@ fun createFixture(
     val nftItem = TestNftItem.fromStorage({
         ownerAddress: seller.address,
         fixtureSalt: salt,
-        adminAddress: admin.address,
-        rejectRecipient,
+        policy: TestNftTransferPolicy {
+            adminAddress: admin.address,
+            rejectRecipient,
+        }.toCell(),
     });
 
     val roles: DealRoles = {
@@ -127,10 +129,6 @@ fun createFixture(
         };
         outboundActions.first = OutboundAction {
             kind: OUTBOUND_KIND_NFT_RELEASE,
-            itemAddress: nftItem.address,
-            destination: nftItem.address,
-            recipient: buyer.address,
-            responseDestination: seller.address,
             queryId: oracleAttemptId,
             dealSalt: salt,
             attemptId: oracleAttemptId,
@@ -143,6 +141,16 @@ fun createFixture(
             status: OUTBOUND_STATUS_PENDING,
             bouncePhase: 0,
             exitCode: 0,
+            addresses: OutboundActionAddresses {
+                itemAndDestination: OutboundActionAddressPair {
+                    first: nftItem.address,
+                    second: nftItem.address,
+                }.toCell(),
+                recipientAndResponse: OutboundActionAddressPair {
+                    first: buyer.address,
+                    second: seller.address,
+                }.toCell(),
+            }.toCell(),
         }.toCell();
     }
     val progress: DealProgress = {
@@ -817,8 +825,9 @@ get fun `test actual nft transfer bounce is correlated and retryable with signed
     val failed = escrow.getProgress().outboundActions.load().first.load();
     expect(failed.kind).toEqual(OUTBOUND_KIND_NFT_RELEASE);
     expect(failed.status).toEqual(OUTBOUND_STATUS_BOUNCED);
-    expect(failed.destination).toEqual(nftItem.address);
-    expect(failed.recipient).toEqual(buyer.address);
+    val failedAddresses = failed.addresses.load();
+    expect(failedAddresses.itemAndDestination.load().second).toEqual(nftItem.address);
+    expect(failedAddresses.recipientAndResponse.load().first).toEqual(buyer.address);
     expect(failed.queryId).toEqual(1);
 
     val admin = testing.treasury("test-nft-policy-admin");
@@ -912,7 +921,7 @@ get fun `test seller payout bounce is correlated and keeps principal locked`() {
     val failed = actions.first.load();
     expect(failed.kind).toEqual(OUTBOUND_KIND_SELLER_PAYOUT);
     expect(failed.status).toEqual(OUTBOUND_STATUS_BOUNCED);
-    expect(failed.destination).toEqual(uninitializedSeller);
+    expect(failed.addresses.load().itemAndDestination.load().second).toEqual(uninitializedSeller);
     expect(failed.queryId).toEqual(1);
 }
 
