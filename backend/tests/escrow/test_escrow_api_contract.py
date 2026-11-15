@@ -123,7 +123,18 @@ async def test_accept_deal_is_buyer_only_and_funded_review_only(
             return self.deal
 
     deal = SimpleNamespace(
-        id=deal_id, seller_id=seller_id, buyer_id=buyer_id, status="funded_review",
+        id=deal_id,
+        seller_id=seller_id,
+        buyer_id=buyer_id,
+        status="funded_review",
+        listing_key_snapshot="a" * 64,
+        item_address="0:" + "b" * 64,
+        collection_address_snapshot="0:" + "c" * 64,
+        seller_address_snapshot="0:" + "d" * 64,
+        buyer_address_snapshot="0:" + "e" * 64,
+        principal_nanotons=2_500_000_000,
+        deal_salt="f" * 64,
+        network="testnet",
     )
     with pytest.raises(HTTPException) as seller_error:
         await _prepare_action(
