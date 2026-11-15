@@ -7,6 +7,7 @@ import "@acton/types/transaction"
 
 import "@contracts/types"
 import "@contracts/signatures"
+import "@contracts/TestNftItem"
 import "@wrappers/DealEscrow.gen"
 import "@wrappers/TestNftItem.gen"
 
@@ -403,7 +404,15 @@ get fun `test a different NFT item sender cannot unlock buyer funding`() {
     activateDeal(escrow, seller, 0xA11D2);
 
     val fakeOwner = testing.treasury("fake-item-owner");
-    val fakeItem = TestNftItem.fromStorage({ ownerAddress: fakeOwner.address, fixtureSalt: 0xA11D2 + 100 });
+    val fakeAdmin = testing.treasury("fake-item-admin");
+    val fakeItem = TestNftItem.fromStorage({
+        ownerAddress: fakeOwner.address,
+        fixtureSalt: 0xA11D2 + 100,
+        policy: TestNftTransferPolicy {
+            adminAddress: fakeAdmin.address,
+            rejectRecipient: null,
+        }.toCell(),
+    });
     val fakeDeploy = fakeItem.deploy(fakeOwner.address, { value: grams("0.05"), bounce: false });
     expect(fakeDeploy).toHaveSuccessfulDeploy({ to: fakeItem.address });
     val fakeDeposit = fakeItem.sendAny(
@@ -819,7 +828,9 @@ get fun `test actual nft transfer bounce is correlated and retryable with signed
     expect(escrow.getProgress().principalLocked).toEqual(true);
     expect(escrow.getProgress().nftInEscrow).toEqual(true);
 
-    val failed = escrow.getProgress().outboundActions.load().first.load();
+    val failedActions = escrow.getProgress().outboundActions.load();
+    assert (failedActions.first != null) throw Errors.OutboundActionMissing;
+    val failed = failedActions.first.load();
     expect(failed.kind).toEqual(OUTBOUND_KIND_NFT_RELEASE);
     expect(failed.status).toEqual(OUTBOUND_STATUS_BOUNCED);
     val failedAddresses = failed.addresses.load();
