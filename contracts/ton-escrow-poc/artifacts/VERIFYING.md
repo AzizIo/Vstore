@@ -6,21 +6,21 @@ This directory pins the ABI and compiler output for the current testnet-only Dea
 
 | Field | Value |
 |---|---|
-| Source commit | `42b94ea121d7a04e71a7dc9f4268be0744c8e778` |
+| Source commit | `48482bec7beeae2c59f24cbfd589067c9625c037` |
 | Toolchain | Acton `1.2.1`, Tolk `1.5.0` |
-| Strict green contract workflow | [#43738313655](https://github.com/AzizIo/Vstore/actions/runs/43732705509) |
-| Artifact ID | `14169431583` |
-| Artifact archive SHA-256 | `1a08426a6d6fbdbe5608358962e058d070def036408a7fd420c8d25c9d6dda4a` |
+| Strict green contract workflow | [#43759466333](https://github.com/AzizIo/Vstore/actions/runs/43759466333) |
+| Artifact ID | `14179053785` |
+| Artifact archive SHA-256 | `018c0c117e9c1914a9c76ca6cf428e990049cf725dd0789e08733bb02c3aae93` |
 | Compact ABI SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
 | Build descriptor SHA-256 | `0c3c7dec0bbf5bb231a007e5d99e28a5c5b7285d9cbdd3324e1172cd756b2eea` |
-| Compiled code hash | `61348A9F67A31753622AB3E9E204AF67FBC1ED8736B05510DD9DF93E0F49366B` |
-| BOC base64 SHA-256 | `ab0fdad1ca51d84b5df77f64a34eedac0e41f0c328aeffd5984e0dde0b381a40` |
-| Decoded BOC SHA-256 | `33f6f2e25bf541720eaab59e39aea98a53e2a622a1a569b91d318932dc092153` |
-| Deterministic StateInit hash | `e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6` |
-| Deterministic raw address | `0:e97848a3d9e691bd0b78c7a6085d836821e459b347b15ecd0d10c645427768c6` |
+| Compiled code hash | `2F96C25E20D744713E72CE09A5EF209414840B52B3F06EE96E00E64884608044` |
+| BOC base64 SHA-256 | `8b7adda1bca4551050c968e97d8fed24f92554d3ab94e30b61a71fdd1fd720ee` |
+| Decoded BOC SHA-256 | `7233b9bb48f998cfe8c6c68e0b088c50b36268a423ca7039cf60a30cb7bd96fa` |
+| Deterministic StateInit hash | `5173d3e22bb3eadcc16ac2732553d3cb143250848cd4dd7866f101d82d3e6737` |
+| Deterministic raw address | `0:5173d3e22bb3eadcc16ac2732553d3cb143250848cd4dd7866f101d82d3e6737` |
 | Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
 
-The source-controlled files are `frozen/DealEscrow.abi.json` and `frozen/manifest.json`. The compiled BOC itself is not manually checked in as a text file; CI rebuilds it and verifies the exact compiler code hash and BOC digests.
+The source-controlled files are `frozen/DealEscrow.abi.json` and `frozen/manifest.json`. The backend pins the compressed compiler BOC as `backend/app/escrow/abi_artifacts/DealEscrow.code.boc.zlib.b64`; CI rebuilds it and verifies the code hash and BOC digests.
 
 ## Local verification
 
@@ -43,4 +43,4 @@ acton test --coverage --no-studio-reporting
 
 ## Important limitations
 
-The green Acton emulator suite demonstrates behavior only in the pinned toolchain/test fixtures. It is not a live chain finality proof, independent TON/Tolk security audit, or manual TON testnet/Tonkeeper acceptance. The collection/item membership assertion must be checked by the future trusted provider before creating immutable deal terms. Signing and deployment remain disabled.
+The Acton emulator suite demonstrates behavior only in the pinned toolchain/test fixtures. The first diagnostic artifact generated for the late-finality source passed compilation, ABI and StateInit cross-checks, but its one added timeout regression assertion was incorrect (it expected `nftInEscrow` to clear before oracle reconciliation); this was corrected on the branch and awaits exact-head rerun. Emulator evidence is not a live chain finality proof, independent TON/Tolk security audit, or manual TON testnet/Tonkeeper acceptance. A trusted provider must prove the exact collection membership before immutable deal terms are created. Signing and deployment remain disabled.
