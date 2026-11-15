@@ -782,7 +782,7 @@ get fun `test expired resolver decision is still accepted before timeout transac
 
 get fun `test timeout requires time strictly after the deadline`() {
     testing.setNow(1_700_000_000);
-    val deadline = testing.getNow();
+    val deadline = testing.getNow() as uint64;
     val salt = 0xA11DD;
     val (escrow, _, seller, _) = createFixture(
         salt,
@@ -824,7 +824,7 @@ get fun `test timeout requires time strictly after the deadline`() {
 
 get fun `test oracle attestation is accepted at the exact state deadline`() {
     testing.setNow(1_700_000_000);
-    val deadline = testing.getNow();
+    val deadline = testing.getNow() as uint64;
     val salt = 0xA11DE;
     val (escrow, nftItem, seller, buyer) = createFixture(
         salt,
