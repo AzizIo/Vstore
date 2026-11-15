@@ -6,11 +6,11 @@ This directory pins the ABI and compiler output for the current testnet-only Dea
 
 | Field | Value |
 |---|---|
-| Contract source baseline | `bc2c7cae2fc4dfb0f116cff72b4f5da2d3547f38` |
+| Source commit | `61755265e85f5f136d22f2414b350d65b55c9549` |
 | Toolchain | Acton `1.2.1`, Tolk `1.5.0` |
-| Green contract workflow | [#43732214688](https://github.com/AzizIo/Vstore/actions/runs/43732214688) |
-| Artifact ID | `14169156752` |
-| Artifact archive SHA-256 | `1cf4c140484383964f0062a5a72590efbec776d7eb8bee24568157e449d310cc` |
+| Strict green contract workflow | [#43732705509](https://github.com/AzizIo/Vstore/actions/runs/43732705509) |
+| Artifact ID | `14168644387` |
+| Artifact archive SHA-256 | `d39f01b327ba575c8d5558e1ef6eb3417fde97458de45b8727fff0f5c7157f7d` |
 | Compact ABI SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
 | Build descriptor SHA-256 | `f78fd9d9a22798f687ebd494c55d8301ceeb6146bb94123fea3a4b6d3f2f389d` |
 | Compiled code hash | `A196078E27BF11C8602B40DF96B5AAA3CD29D16639E099185430358324023386` |

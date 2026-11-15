@@ -21,7 +21,7 @@ The initial findings below describe the pre-implementation baseline. The impleme
 
 ### Exact-head validation
 
-The initial implementation head `bc2c7cae2fc4dfb0f116cff72b4f5da2d3547f38` passed Acton build, wrapper generation, cross-check of StateInit against `@ton/core`, ABI message-vector generation, formatting, `acton check` and the full emulator suite. Its emulator suite reports 26 passing tests. A follow-up exact-head run is in progress for the added unauthorized-retry/replay assertions; the frozen ABI/manifest refresh must still pass with the temporary CI bypass removed before this branch is considered complete.
+The final exact-head run [#43732705509](https://github.com/AzizIo/Vstore/actions/runs/43732705509) on `61755265e85f5f136d22f2414b350d65b55c9549` passed **all steps with no continue-on-error bypass**: frozen ABI verifier, fresh build/code/BOC comparison, generated wrappers, independent StateInit/address/data-hash cross-check, message BOC vectors, `acton fmt --check`, `acton check`, and the full emulator suite. This run also includes the unauthorized-retry and old-query replay assertions. The action uploaded reproducible artifact `14168644387` (archive SHA-256 `d39f01b327ba575c8d5558e1ef6eb3417fde97458de45b8727fff0f5c7157f7d`). The suite contains 26 emulator tests; the signed end-to-end test cases no longer disable checksig.
 
 ### Remaining gates
 
