@@ -171,3 +171,54 @@ async def test_action_lease_uses_skip_locked_and_fences_stale_worker() -> None:
     assert action.next_retry_at == now + timedelta(seconds=5)
     assert action.last_error_code == "provider_error"
     assert action.status == "ambiguous"
+
+def test_same_wallet_reference_replay_after_finalization_is_noop() -> None:
+    reference = "0:" + "c" * 64
+    reference_hash = hashlib.sha256(reference.encode("utf-8")).hexdigest()
+    action = EscrowWalletActionRecord(
+        id=uuid4(),
+        actor_id=uuid4(),
+        deal_id=uuid4(),
+        action_type="fund_deal",
+        network="testnet",
+        idempotency_key="action-key-finalized",
+        request_sha256="a" * 64,
+        status="finalized",
+        attempt_count=1,
+        unsigned_boc_sha256="b" * 64,
+        unsigned_boc_ref="db://escrow_wallet_actions/action/unsigned_bocs_json",
+        submission_reference=reference,
+        submission_reference_sha256=reference_hash,
+    )
+
+    record_submission_reference(action, reference=reference)
+
+    assert action.status == "finalized"
+    assert action.submission_reference_sha256 == reference_hash
+
+
+def test_conflicting_wallet_reference_does_not_rewrite_finalized_chain_fact() -> None:
+    reference = "0:" + "c" * 64
+    reference_hash = hashlib.sha256(reference.encode("utf-8")).hexdigest()
+    action = EscrowWalletActionRecord(
+        id=uuid4(),
+        actor_id=uuid4(),
+        deal_id=uuid4(),
+        action_type="fund_deal",
+        network="testnet",
+        idempotency_key="action-key-finalized",
+        request_sha256="a" * 64,
+        status="finalized",
+        attempt_count=1,
+        unsigned_boc_sha256="b" * 64,
+        unsigned_boc_ref="db://escrow_wallet_actions/action/unsigned_bocs_json",
+        submission_reference=reference,
+        submission_reference_sha256=reference_hash,
+    )
+
+    with pytest.raises(EscrowActionConflict, match="submission_reference_conflict"):
+        record_submission_reference(action, reference="0:" + "d" * 64)
+
+    assert action.status == "finalized"
+    assert action.submission_reference_sha256 == reference_hash
+
