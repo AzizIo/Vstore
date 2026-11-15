@@ -13,7 +13,6 @@ from app.escrow.domain import EscrowChainEventType, EscrowDealStatus
 from app.escrow.models import (
     EscrowChainEvent,
     EscrowObserverCheckpoint,
-    EscrowWalletActionRecord,
 )
 from app.escrow.observer import (
     CHECKPOINT_ID,
