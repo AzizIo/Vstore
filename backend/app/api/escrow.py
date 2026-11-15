@@ -1318,7 +1318,7 @@ async def _prepare_action(
         "nft_identity_snapshot_json", "nft_identity_snapshot_sha256",
     )
     validated_snapshot = {
-        field: getattr(deal, field) for field in immutable_snapshot_fields
+        field: getattr(deal, field, None) for field in immutable_snapshot_fields
     }
     ownership_check: tuple[str, str] | None = None
 
