@@ -547,13 +547,94 @@ fun handleNftOwnershipNotification(
     storage.save();
 }
 
+fun oracleOutboundActionKind(action: uint8): uint8 {
+    if (action == ORACLE_ACTION_NFT_DELIVERED) {
+        return OUTBOUND_KIND_NFT_RELEASE;
+    }
+    if (action == ORACLE_ACTION_NFT_RETURNED_TO_SELLER) {
+        return OUTBOUND_KIND_NFT_RETURN;
+    }
+    if (action == ORACLE_ACTION_SELLER_PAYOUT) {
+        return OUTBOUND_KIND_SELLER_PAYOUT;
+    }
+    if (action == ORACLE_ACTION_BUYER_REFUND) {
+        return OUTBOUND_KIND_BUYER_REFUND;
+    }
+    if (action == ORACLE_ACTION_UNEXPECTED_NFT_RECOVERED) {
+        return OUTBOUND_KIND_UNEXPECTED_NFT_RECOVERY;
+    }
+    return 0;
+}
+
+fun hasPendingOracleOutboundAction(
+    progress: DealProgress,
+    actionKind: uint8,
+    queryId: uint64,
+): bool {
+    if (actionKind == 0 || queryId == 0) {
+        return false;
+    }
+    val actions = progress.outboundActions.load();
+    if (actions.first != null) {
+        val action = actions.first.load();
+        if (
+            action.status == OUTBOUND_STATUS_PENDING
+            && action.kind == actionKind
+            && action.queryId == queryId
+            && action.attemptId == queryId
+        ) {
+            return true;
+        }
+    }
+    if (actions.second != null) {
+        val action = actions.second.load();
+        if (
+            action.status == OUTBOUND_STATUS_PENDING
+            && action.kind == actionKind
+            && action.queryId == queryId
+            && action.attemptId == queryId
+        ) {
+            return true;
+        }
+    }
+    return false;
+}
+
 fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
     var progress = storage.progress.load();
-    assert (
-        progress.deadlineUnix > 0
-        && blockchain.now() <= progress.deadlineUnix
-    ) throw Errors.Deadline;
     val terms = storage.terms.load();
+    assertTestnet(terms);
+
+    val roles = terms.roles.load();
+    val asset = terms.asset.load();
+    val money = terms.money.load();
+    val security = terms.security.load();
+
+    val data = msg.data.load();
+    val context = data.context.load();
+    val route = data.route.load();
+    // A timeout can move an in-flight action to manual review while the transfer
+    // itself has already succeeded. Permit only its exact, still-PENDING descriptor
+    // to finish reconciliation; a BOUNCED descriptor must go through recipient-
+    // authorized RetryFailedOutboundAction and a fresh query ID.
+    val pendingFinalityInManualReview = (
+        progress.state == STATE_MANUAL_REVIEW
+        && context.attemptId == progress.oracleAttemptId
+        && route.queryId == progress.oracleAttemptId
+        && hasPendingOracleOutboundAction(
+            progress,
+            oracleOutboundActionKind(context.action),
+            route.queryId,
+        )
+    );
+    assert (
+        pendingFinalityInManualReview
+        || (
+            progress.deadlineUnix > 0
+            && blockchain.now() <= progress.deadlineUnix
+        )
+    ) throw Errors.Deadline;
+
     assertTestnet(terms);
 
     val roles = terms.roles.load();
@@ -597,7 +678,7 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
     progress.evidence = evidence.toCell();
 
     if (context.action == ORACLE_ACTION_NFT_DELIVERED) {
-        assert (progress.state == STATE_NFT_RELEASE_PENDING) throw Errors.InvalidState;
+        assert (progress.state == STATE_NFT_RELEASE_PENDING || pendingFinalityInManualReview) throw Errors.InvalidState;
         assert (route.sourceAddress == contract.getAddress()) throw Errors.InvalidAttestation;
         assert (route.destinationAddress == roles.buyer) throw Errors.InvalidAttestation;
         assert (route.amountNanotons == 0) throw Errors.InvalidAttestation;
@@ -624,7 +705,7 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
             progress.deadlineUnix = (blockchain.now() + POST_DELIVERY_DISPUTE_WINDOW_SECONDS) as uint64;
         }
     } else if (context.action == ORACLE_ACTION_NFT_RETURNED_TO_SELLER) {
-        assert (progress.state == STATE_NFT_RETURN_PENDING) throw Errors.InvalidState;
+        assert (progress.state == STATE_NFT_RETURN_PENDING || pendingFinalityInManualReview) throw Errors.InvalidState;
         assert (route.sourceAddress == contract.getAddress()) throw Errors.InvalidAttestation;
         assert (route.destinationAddress == roles.seller) throw Errors.InvalidAttestation;
         assert (route.amountNanotons == 0) throw Errors.InvalidAttestation;
@@ -655,7 +736,7 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
             throw Errors.InvalidState;
         }
     } else if (context.action == ORACLE_ACTION_SELLER_PAYOUT) {
-        assert (progress.state == STATE_SELLER_PAYOUT_PENDING) throw Errors.InvalidState;
+        assert (progress.state == STATE_SELLER_PAYOUT_PENDING || pendingFinalityInManualReview) throw Errors.InvalidState;
         assert (progress.pendingAction == PENDING_PAYOUT_RECONCILIATION) throw Errors.InvalidState;
         assert (route.sourceAddress == contract.getAddress()) throw Errors.InvalidAttestation;
         assert (route.destinationAddress == roles.seller) throw Errors.InvalidAttestation;
@@ -675,7 +756,7 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         progress.deadlineUnix = 0;
         settleRemainingBalanceForBuyer(mutate progress, roles, asset, money);
     } else if (context.action == ORACLE_ACTION_BUYER_REFUND) {
-        assert (progress.state == STATE_BUYER_REFUND_PENDING) throw Errors.InvalidState;
+        assert (progress.state == STATE_BUYER_REFUND_PENDING || pendingFinalityInManualReview) throw Errors.InvalidState;
         assert (progress.pendingAction == PENDING_REFUND_RECONCILIATION) throw Errors.InvalidState;
         assert (route.sourceAddress == contract.getAddress()) throw Errors.InvalidAttestation;
         assert (route.destinationAddress == roles.buyer) throw Errors.InvalidAttestation;
