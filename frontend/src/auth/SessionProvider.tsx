@@ -43,12 +43,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [sessionAttempt, setSessionAttempt] = useState(0);
 
   function retrySession() {
+    clearPrivateCache(queryClient);
     setSession({ status: "loading" });
     setSessionAttempt((attempt) => attempt + 1);
   }
 
   useEffect(() => {
     const controller = new AbortController();
+    let refreshTimer: number | null = null;
+
     async function loadSession() {
       try {
         const initData = await getTelegramInitData(controller.signal);
@@ -57,12 +60,30 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           setSession({ status: "unauthenticated", reason: "missing_init_data" });
           return;
         }
-        const accessToken = await authenticateTelegram(initData, controller.signal);
-        const user = await fetchCurrentUser(accessToken, controller.signal);
-        if (!controller.signal.aborted) setSession({ status: "authenticated", accessToken, user });
+        const authenticatedSession = await authenticateTelegram(initData, controller.signal);
+        const user = await fetchCurrentUser(authenticatedSession.accessToken, controller.signal);
+        if (!controller.signal.aborted) {
+          setSession({
+            status: "authenticated",
+            accessToken: authenticatedSession.accessToken,
+            user,
+          });
+
+          // Refresh before the server-issued JWT expires. Telegram initData remains
+          // the only credential used to mint a replacement token.
+          const lifetimeMs = authenticatedSession.expiresIn * 1000;
+          const refreshLeadMs = Math.min(60_000, Math.max(5_000, lifetimeMs * 0.1));
+          const refreshDelayMs = Math.max(1_000, lifetimeMs - refreshLeadMs);
+          refreshTimer = window.setTimeout(() => {
+            if (controller.signal.aborted) return;
+            clearPrivateCache(queryClient);
+            setSession({ status: "loading" });
+            setSessionAttempt((attempt) => attempt + 1);
+          }, refreshDelayMs);
+        }
       } catch (error) {
         if (controller.signal.aborted) return;
-        if (error instanceof AuthApiError && error.status === 401) clearPrivateCache(queryClient);
+        clearPrivateCache(queryClient);
         setSession(error instanceof TypeError
           ? {
               status: "error",
@@ -74,7 +95,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
 
     void loadSession();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+    };
   }, [queryClient, sessionAttempt]);
 
   return (
