@@ -9,6 +9,7 @@ import secrets
 from dataclasses import asdict
 from datetime import UTC, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -1437,7 +1438,11 @@ async def _prepare_action(
         if wallet_address != deal.seller_address_snapshot:
             raise HTTPException(status_code=409,
                 detail="Verified seller wallet snapshot has changed")
-        if action in {EscrowWalletAction.CREATE_DEAL_ESCROW, EscrowWalletAction.DEPOSIT_NFT}:
+        if action in {
+            EscrowWalletAction.CREATE_DEAL_ESCROW,
+            EscrowWalletAction.ACTIVATE_DEAL,
+            EscrowWalletAction.DEPOSIT_NFT,
+        }:
             ownership_check = (deal.item_address, deal.seller_address_snapshot)
         if action is EscrowWalletAction.WITHDRAW_UNSOLD_NFT:
             if not deal.contract_address:
@@ -1776,10 +1781,16 @@ async def prepare_deal_activation(
 
     expected_contract = deal.contract_address
     expected_snapshot_sha = deal.deployment_snapshot_sha256
+    deployment_proof_input = SimpleNamespace(
+        network=deal.network,
+        contract_address=expected_contract,
+        deployment_snapshot_json=dict(deal.deployment_snapshot_json),
+        deployment_snapshot_sha256=expected_snapshot_sha,
+    )
     await session.rollback()
     try:
         getter, masterchain_seqno, masterchain_block_hash, provider_id = (
-            await provider.verify_deployed_account(deal)
+            await provider.verify_deployed_account(deployment_proof_input)  # type: ignore[arg-type]
         )
     except Exception as exc:
         # Provider details and proof material are deliberately not returned.
