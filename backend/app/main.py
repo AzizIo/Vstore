@@ -22,7 +22,7 @@ from app.api.sellers import router as sellers_router
 from app.api.users import router as users_router
 from app.api.wallets import router as wallets_router
 from app.assets.ton_nft.observer import run_delivery_observer_pass
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.error_responses import (
     http_exception_handler,
     request_validation_exception_handler,
@@ -94,6 +94,22 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await dispose_engine()
 
 
+def _should_mount_escrow_router(settings: Settings) -> bool:
+    """Expose the escrow API only in local/test or the explicitly marked Preview stack.
+
+    A production deployment must not publish testnet escrow routes merely because
+    TON_CONNECT_NETWORK was accidentally set to testnet. The Preview Compose stack
+    is the only production-mode runtime allowed to opt in via PREVIEW_MODE=1.
+    """
+
+    if settings.ton_connect_network != "testnet":
+        return False
+    environment = settings.environment.strip().lower()
+    return environment in {"local", "development", "test", "preview"} or (
+        environment == "production" and settings.preview_mode
+    )
+
+
 settings = get_settings()
 
 app = FastAPI(
@@ -141,10 +157,10 @@ app.include_router(orders_router, prefix="/api")
 app.include_router(reviews_router, prefix="/api")
 app.include_router(sellers_router, prefix="/api")
 
-# Escrow HTTP surface is available only in an explicitly testnet-configured
-# deployment. The transaction adapter and chain provider remain fail-closed;
-# mounting this router does not enable signing, custody, or mainnet operations.
-if settings.ton_connect_network == "testnet":
+# The production runtime never mounts testnet escrow routes. The isolated Preview
+# Compose stack sets PREVIEW_MODE=1 explicitly; the production Compose stack does not.
+# The adapter/provider remain fail-closed and no server-side signing is permitted.
+if _should_mount_escrow_router(settings):
     app.include_router(escrow_router, prefix="/api")
 
 

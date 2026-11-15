@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -8,7 +9,12 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app.api.escrow import _listing_actions, _prepare_action, router
+from app.api.escrow import (
+    _build_deployment_snapshot,
+    _listing_actions,
+    _prepare_action,
+    router,
+)
 from app.escrow.contracts import EscrowWalletAction
 from app.escrow.schemas import (
     EscrowDealCreate,
@@ -18,6 +24,7 @@ from app.escrow.schemas import (
     EscrowNftProjection,
     EscrowPageResponse,
 )
+from app.escrow.service import canonical_request_sha256
 
 
 def test_frontend_listing_and_deal_create_inputs_match_backend_contract() -> None:
@@ -194,3 +201,178 @@ def test_listing_available_actions_are_actor_scoped() -> None:
 
     assert _listing_actions(intent, seller_id) == []
     assert _listing_actions(intent, buyer_id) == ["create_deal_intent"]
+
+
+
+def test_deployment_snapshot_fails_closed_when_required_chain_terms_are_missing() -> None:
+    deal = SimpleNamespace(
+        network="testnet",
+        listing_key_snapshot="a" * 64,
+        seller_address_snapshot="0:" + "b" * 64,
+        buyer_address_snapshot="0:" + "c" * 64,
+        collection_address_snapshot="0:" + "d" * 64,
+        item_address="0:" + "e" * 64,
+        principal_nanotons=2_500_000_000,
+        deal_salt="f" * 64,
+    )
+
+    snapshot, missing = _build_deployment_snapshot(deal)
+
+    assert snapshot is None
+    assert "execution_reserve_nanotons" in missing
+    assert "fund_query_id" in missing
+    assert "oracle_key_a" in missing
+    assert "resolver_key_a" in missing
+    assert "contract_state" in missing
+
+
+@pytest.mark.asyncio
+async def test_prepare_action_persists_idempotency_before_incomplete_snapshot_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    buyer_id = uuid4()
+    deal_id = uuid4()
+    wallet_id = uuid4()
+    listing_intent_id = uuid4()
+    deal = SimpleNamespace(
+        id=deal_id,
+        seller_id=uuid4(),
+        buyer_id=buyer_id,
+        status="awaiting_buyer_funds",
+        listing_key_snapshot="a" * 64,
+        item_address="0:" + "b" * 64,
+        collection_address_snapshot="0:" + "c" * 64,
+        seller_address_snapshot="0:" + "d" * 64,
+        buyer_address_snapshot="0:" + "e" * 64,
+        principal_nanotons=2_500_000_000,
+        deal_salt="f" * 64,
+        network="testnet",
+        listing_intent_id=listing_intent_id,
+        buyer_wallet_id=wallet_id,
+    )
+    wallet = SimpleNamespace(id=wallet_id)
+    listing_intent = SimpleNamespace(seller_wallet_id=uuid4())
+    action_record = SimpleNamespace(
+        id=uuid4(),
+        status="pending",
+        last_error_code=None,
+    )
+
+    class ActionSession:
+        def __init__(self) -> None:
+            self.scalar_calls = 0
+            self.commit_calls = 0
+            self.refresh_calls = 0
+
+        async def scalar(self, _statement: object) -> SimpleNamespace | None:
+            self.scalar_calls += 1
+            if self.scalar_calls == 1:
+                return deal
+            if self.scalar_calls == 2:
+                return None
+            if self.scalar_calls == 3:
+                return deal
+            return None
+
+        async def get(self, _model: type[object], _identity: object) -> SimpleNamespace:
+            return listing_intent
+
+        async def commit(self) -> None:
+            self.commit_calls += 1
+
+        async def refresh(self, _record: object) -> None:
+            self.refresh_calls += 1
+
+    session = ActionSession()
+
+    async def verified_wallet(
+        _session: object, *, user_id: object, wallet_id: object
+    ) -> tuple[SimpleNamespace, str]:
+        assert user_id == buyer_id
+        assert wallet_id == wallet_id_expected
+        return wallet, deal.buyer_address_snapshot
+
+    wallet_id_expected = wallet_id
+
+    async def create_action(
+        _session: object, **_kwargs: object
+    ) -> tuple[SimpleNamespace, bool]:
+        return action_record, True
+
+    monkeypatch.setattr("app.api.escrow._verified_wallet", verified_wallet)
+    monkeypatch.setattr("app.api.escrow.create_or_replay_action", create_action)
+
+    with pytest.raises(HTTPException) as error:
+        await _prepare_action(
+            deal_id,
+            EscrowWalletAction.FUND_DEAL,
+            SimpleNamespace(id=buyer_id),
+            session,
+            None,
+            "fund-action-key-0001",
+        )
+
+    assert error.value.status_code == 503
+    assert error.value.detail["code"] == "deployment_snapshot_incomplete"
+    assert error.value.detail["action_id"] == str(action_record.id)
+    assert "fund_query_id" in error.value.detail["missing_fields"]
+    assert action_record.status == "blocked_abi"
+    assert action_record.last_error_code == "deployment_snapshot_incomplete"
+    assert session.commit_calls == 2
+    assert session.refresh_calls == 1
+
+    # Exercise the actual route-level replay branch: the durable blocked action
+    # must keep both its ID and its persisted error code on a same-key retry.
+    expected_hash = canonical_request_sha256({
+        "actor_id": str(buyer_id),
+        "deal_id": str(deal.id),
+        "action_type": EscrowWalletAction.FUND_DEAL.value,
+        "network": deal.network,
+        "wallet_id": str(wallet_id),
+        "wallet_address": deal.buyer_address_snapshot,
+        "listing_key": deal.listing_key_snapshot,
+        "item_address": deal.item_address,
+        "collection_address": deal.collection_address_snapshot,
+        "seller_address": deal.seller_address_snapshot,
+        "buyer_address": deal.buyer_address_snapshot,
+        "principal_nanotons": str(deal.principal_nanotons),
+        "deal_salt": deal.deal_salt,
+        "context": {},
+    })
+    blocked_action = SimpleNamespace(
+        id=action_record.id,
+        deal_id=deal_id,
+        request_sha256=expected_hash,
+        status="blocked_abi",
+        last_error_code="deployment_snapshot_incomplete",
+    )
+    replay_session = ActionSession()
+    async def replay_scalar(_statement: object) -> SimpleNamespace | None:
+        replay_session.scalar_calls += 1
+        return deal if replay_session.scalar_calls == 1 else blocked_action
+    replay_session.scalar = replay_scalar  # type: ignore[method-assign]
+
+    with pytest.raises(HTTPException) as replay_error:
+        await _prepare_action(
+            deal_id,
+            EscrowWalletAction.FUND_DEAL,
+            SimpleNamespace(id=buyer_id),
+            replay_session,
+            None,
+            "fund-action-key-0001",
+        )
+    assert replay_error.value.status_code == 503
+    assert replay_error.value.detail["code"] == "deployment_snapshot_incomplete"
+    assert replay_error.value.detail["action_id"] == str(action_record.id)
+    assert replay_error.value.detail["action_status"] == "blocked_abi"
+
+
+def test_preview_compose_is_the_only_compose_runtime_opted_into_preview_mode() -> None:
+    repository_root = Path(__file__).resolve().parents[3]
+    production_compose = (repository_root / "docker-compose.yml").read_text()
+    preview_compose = (repository_root / "docker-compose.preview.yml").read_text()
+
+    assert "PREVIEW_MODE" not in production_compose
+    assert 'PREVIEW_MODE: "1"' in preview_compose
+    assert "ENVIRONMENT: production" in preview_compose

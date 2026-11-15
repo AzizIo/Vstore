@@ -6,7 +6,7 @@ from uuid import UUID
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
-from aiogram.types import Message, PreCheckoutQuery
+from aiogram.types import Message, PreCheckoutQuery, Update
 from sqlalchemy import select
 
 from app.db.models import User
@@ -102,7 +102,7 @@ async def validate_pre_checkout(query: PreCheckoutQuery) -> None:
 
 
 @router.message(F.successful_payment)
-async def persist_successful_payment(message: Message) -> None:
+async def persist_successful_payment(message: Message, event_update: Update) -> None:
     """Persist Telegram's successful_payment evidence; client messages are ignored."""
 
     if message.from_user is None or message.successful_payment is None:
@@ -119,7 +119,7 @@ async def persist_successful_payment(message: Message) -> None:
                 currency=payment.currency,
                 telegram_payment_charge_id=charge_id,
                 provider_payment_charge_id=payment.provider_payment_charge_id or None,
-                provider_event_id=charge_id,
+                provider_event_id=f"update:{event_update.update_id}",
             )
     except PaymentConflict:
         logger.exception("Stars successful_payment could not be reconciled")

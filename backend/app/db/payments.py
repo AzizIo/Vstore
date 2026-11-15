@@ -28,6 +28,10 @@ class PaymentIntent(TimestampMixin, Base):
     __tablename__ = "payment_intents"
     __table_args__ = (
         CheckConstraint("amount > 0", name="ck_payment_intents_amount_positive"),
+        CheckConstraint(
+            "amount = trunc(amount)",
+            name="ck_payment_intents_amount_whole_stars",
+        ),
         CheckConstraint("currency = 'XTR'", name="ck_payment_intents_currency_stars"),
         CheckConstraint("provider = 'telegram_stars'", name="ck_payment_intents_provider"),
         CheckConstraint(
@@ -71,6 +75,14 @@ class PaymentTransaction(TimestampMixin, Base):
     __tablename__ = "payment_transactions"
     __table_args__ = (
         CheckConstraint("amount > 0", name="ck_payment_transactions_amount_positive"),
+        CheckConstraint(
+            "amount = trunc(amount)",
+            name="ck_payment_transactions_amount_whole_stars",
+        ),
+        CheckConstraint(
+            "provider = 'telegram_stars'",
+            name="ck_payment_transactions_provider_stars",
+        ),
         CheckConstraint(
             "status IN ('captured', 'refund_pending', 'refunded')",
             name="ck_payment_transactions_status",
