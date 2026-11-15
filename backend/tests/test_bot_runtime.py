@@ -94,7 +94,7 @@ async def test_main_starts_worker_and_closes_bot_session_after_polling(
         session=fake_bot.session,
     )
     session_factory.assert_called_once_with(
-        timeout=bot_runtime.TELEGRAM_API_TIMEOUT_SECONDS
+        timeout=bot_runtime.telegram_api_timeout_seconds(_settings())
     )
     dispatcher_factory.assert_called_once_with()
     dispatcher.start_polling.assert_awaited_once_with(fake_bot)
@@ -245,7 +245,7 @@ async def test_main_continues_when_telegram_command_menu_registration_fails(
     await bot_runtime.main()
 
     session_factory.assert_called_once_with(
-        timeout=bot_runtime.TELEGRAM_API_TIMEOUT_SECONDS
+        timeout=bot_runtime.telegram_api_timeout_seconds(_settings())
     )
     fake_bot.set_my_commands.assert_awaited_once_with(bot_runtime.BOT_COMMANDS)
     dispatcher.start_polling.assert_awaited_once_with(fake_bot)
@@ -253,18 +253,24 @@ async def test_main_continues_when_telegram_command_menu_registration_fails(
 
 
 @pytest.mark.parametrize(
-    ("lease_seconds", "configured_batch_size", "expected_batch_size"),
+    (
+        "lease_seconds",
+        "configured_batch_size",
+        "expected_batch_size",
+        "expected_timeout",
+    ),
     [
-        (300, 10, 10),
-        (300, 100, 10),
-        (60, 10, 2),
-        (15, 10, 1),
+        (300, 10, 10, 15),
+        (300, 100, 10, 15),
+        (60, 10, 2, 15),
+        (15, 10, 2, 3),
     ],
 )
 def test_notification_batch_is_bounded_by_claim_lease(
     lease_seconds: int,
     configured_batch_size: int,
     expected_batch_size: int,
+    expected_timeout: int,
 ) -> None:
     settings = Settings(
         _env_file=None,
@@ -272,5 +278,5 @@ def test_notification_batch_is_bounded_by_claim_lease(
         notification_batch_size=configured_batch_size,
     )
 
-    assert bot_runtime.TELEGRAM_API_TIMEOUT_SECONDS == 15
+    assert bot_runtime.telegram_api_timeout_seconds(settings) == expected_timeout
     assert bot_runtime.notification_worker_batch_limit(settings) == expected_batch_size
