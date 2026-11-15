@@ -1901,27 +1901,44 @@ class PytoniqTONTestnetEscrowProvider:
                     )
                 ).all()
             )
-        identity_deal = next(
-            (
-                deal for deal in deals
-                if getattr(deal, "nft_identity_snapshot_json", None) is not None
-            ),
-            None,
-        )
-        if identity_deal is None:
+        if not deals:
             raise EscrowProviderInvalidEvidence(
-                "No persisted NFT identity proof is bound to this escrow item"
+                "No escrow deal is bound to this terminal NFT owner request"
             )
+        collections = {
+            _canonical_address(deal.collection_address_snapshot)
+            for deal in deals
+        }
+        collections.discard(None)
+        identity_deals = [
+            deal for deal in deals
+            if getattr(deal, "nft_identity_snapshot_json", None) is not None
+        ]
+        if len(collections) != 1 or not identity_deals:
+            raise EscrowProviderInvalidEvidence(
+                "NFT item is not uniquely bound to a persisted collection identity"
+            )
+        identity_deal = identity_deals[0]
         try:
             initial_identity = validate_nft_identity_snapshot(
                 identity_deal.nft_identity_snapshot_json,
                 identity_deal.nft_identity_snapshot_sha256,
             )
+            for other_deal in identity_deals[1:]:
+                other_identity = validate_nft_identity_snapshot(
+                    other_deal.nft_identity_snapshot_json,
+                    other_deal.nft_identity_snapshot_sha256,
+                )
+                if not same_nft_identity_anchor(initial_identity, other_identity):
+                    raise NFTIdentityEvidenceError(
+                        "Escrow deals for this item disagree on the immutable NFT identity anchor"
+                    )
         except NFTIdentityEvidenceError as exc:
             raise EscrowProviderInvalidEvidence(str(exc)) from exc
         collection = _canonical_address(identity_deal.collection_address_snapshot)
         if (
             collection is None
+            or collection != next(iter(collections))
             or _canonical_address(identity_deal.item_address) != item
             or initial_identity.get("item_address") != item
             or initial_identity.get("collection_address") != collection
