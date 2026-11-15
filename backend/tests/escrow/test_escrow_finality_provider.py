@@ -5,11 +5,10 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from pytoniq_core.tl.block import BlockIdExt
 
 from app.core.config import Settings
 from app.escrow.domain import EscrowChainEventType
-from pytoniq_core.tl.block import BlockIdExt
-
 from app.escrow.finality_provider import (
     PytoniqTONTestnetEscrowProvider,
     _candidate_type,
