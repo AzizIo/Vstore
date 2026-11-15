@@ -21,6 +21,11 @@ async def get_escrow_nft_identity_provider() -> AsyncIterator[PytoniqTONTestnetE
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "escrow_nft_identity_requires_testnet"},
         )
+    if not settings.ton_escrow_nft_collection_policies:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "escrow_nft_collection_policy_unconfigured"},
+        )
     try:
         provider = PytoniqTONTestnetEscrowProvider(settings=settings)
     except ValueError as exc:
