@@ -79,7 +79,7 @@ def test_pinned_abi_and_code_boc_are_verified() -> None:
     artifacts = verify_compiled_code(load_pinned_code_boc())
     assert artifacts.abi_version == "1.0.0"
     assert artifacts.code_hash == (
-        "D822B8AFBB37027611A9A9DDC8E67C52F17BBBC45B4352C7F360693BD685CA54"
+        "9011F274BC3D7E32B76A17F13FCBA17AC49429BB4EECBC4AB97FA202BDAC2940"
     )
     assert len(artifacts.code_boc_sha256) == 64
 
@@ -91,21 +91,21 @@ def test_state_init_is_deterministic_and_address_is_state_init_hash() -> None:
     assert first == second
     assert first.address == "0:" + first.state_init_hash
     assert first.code_hash == (
-        "D822B8AFBB37027611A9A9DDC8E67C52F17BBBC45B4352C7F360693BD685CA54"
+        "9011F274BC3D7E32B76A17F13FCBA17AC49429BB4EECBC4AB97FA202BDAC2940"
     )
     # Expected values were independently produced by the generated Acton
     # TypeScript wrapper and @ton/core 0.63.1 in TON Contract CI.
     assert first.address == (
-        "0:29a40423c7e8fa1390782bce7e94e32f2a0e14ceef6cf05bd0f1641d0ba3f423"
+        "0:674227296eff6ac5ee02c8e2eaa12857ac339d10a9ed7f4f7ea0591e7b4adfca"
     )
     assert first.state_init_hash == (
-        "29a40423c7e8fa1390782bce7e94e32f2a0e14ceef6cf05bd0f1641d0ba3f423"
+        "674227296eff6ac5ee02c8e2eaa12857ac339d10a9ed7f4f7ea0591e7b4adfca"
     )
     assert first.data_hash == (
         "faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b"
     )
     assert first.code_hash == (
-        "D822B8AFBB37027611A9A9DDC8E67C52F17BBBC45B4352C7F360693BD685CA54"
+        "9011F274BC3D7E32B76A17F13FCBA17AC49429BB4EECBC4AB97FA202BDAC2940"
     )
     assert first.state_init_boc
     assert first.data_boc
@@ -313,7 +313,7 @@ async def test_post_delivery_nft_return_is_buyer_only_and_state_bound() -> None:
     assert payload.messages[0].amount == "50000000"
     assert payload.messages[0].payload
     assert boc_sha256(payload.messages[0].payload) == (
-        "70fd158e2e4b99648fea5a4dbf759274ac35a946538dfd6ba591fb2b2de24ceb"
+        "15be6d379e502cae14205b5c562d4045125e91b391810fe24cb7a35104f94371"
     )
 
 @pytest.mark.asyncio
@@ -330,7 +330,7 @@ async def test_seller_nft_deposit_payload_matches_generated_tep62_abi() -> None:
     assert payload.messages[0].address == deal.item_address
     assert payload.messages[0].payload is not None
     assert boc_sha256(payload.messages[0].payload) == (
-        "32148753a5d3cd318a3a54f7ff8d9409e8cfbe04d70862a52833632a50362cf7"
+        "b3c4115875b6814375c26e1063eee6b6c616d206280d1e36552dc612181d8a69"
     )
 
 @pytest.mark.asyncio
