@@ -113,6 +113,7 @@ class FinalityVerification:
     masterchain_inclusion_verified: bool
     trace_binding_verified: bool
     verified_event_type: EscrowChainEventType | None = None
+    verified_query_id: str | None = None
     source_address: str | None = None
     destination_address: str | None = None
     item_address: str | None = None
