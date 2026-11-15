@@ -1349,10 +1349,15 @@ get fun `test execution reserve refund bounce is correlated and retryable after 
     expect(bouncedReserve.exitCode).toEqual(911);
     expect(escrow.getProgress().oracleAttemptId).toEqual(4);
 
+    // The reserve survived the first bounce and must survive the new retry
+    // transaction as well; reserve actions are transaction-local.
+    expect(testing.getAccountBalance(escrow.address)).toBeGreater(grams("0.009"));
+
     partySetRejectAction(buyerParty, buyerController, 0);
     partyRetryOutbound(buyerParty, buyerController, escrow, salt, bouncedReserve.queryId);
     expect(escrow.getState()).toEqual(STATE_SETTLED);
     expect(escrow.getProgress().oracleAttemptId).toEqual(5);
+    expect(testing.getAccountBalance(escrow.address)).toBeGreater(grams("0.009"));
     actions = escrow.getProgress().outboundActions.load();
     assert (actions.first != null && actions.second != null) throw Errors.OutboundActionMissing;
     expect(actions.first.load().kind).toEqual(OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND);
