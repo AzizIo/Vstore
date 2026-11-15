@@ -16,8 +16,8 @@ from app.escrow.observer import (
     _apply_one_event,
     _payload,
     _reconcile_terminal_listing,
-    _terminal_owner_evidence,
     _stored_evidence_hash,
+    _terminal_owner_evidence,
     run_observer_pass,
 )
 from app.escrow.provider import (
