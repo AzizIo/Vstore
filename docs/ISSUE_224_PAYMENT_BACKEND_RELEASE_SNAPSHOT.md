@@ -1,7 +1,7 @@
 # Issue #224 — release payment backend snapshot
 
 **Snapshot date:** 2026-11-15  
-**Implementation base:** `main` at `6dafdcf4c462718df14ea024f29fd277c90f6d39`  
+**Implementation base:** `main` at `d29e52182e2d7a8a7cce8fb14544a0e56fa5e279`  
 **Scope:** backend payment authority, Telegram Stars transport, ledger, refunds and reconciliation.  
 **Release posture:** sandbox/test only. This document does not approve live sales, production credentials, real charges/refunds, seller payouts or custody.
 
@@ -43,21 +43,19 @@ Telegram's Stars refund method returns the **full** charge. The current adapter 
 
 ## 4. Backend API contract status
 
-There is **no public HTTP payment-intent, payment-status or webhook endpoint** in the current backend API. Existing HTTP order routes reserve/read/cancel orders and manage delivery; they do not accept client payment-success or refund claims. The current payment entry point is the test bot's `/pay ORDER_UUID` command.
+This PR adds an authenticated, test-only HTTP contract over the existing ledger:
 
-The payment tables and internal statuses are not a frontend API contract. Do not have the Mini App read database-shaped models or infer payment success from an order status. The following is the **proposed frontend-facing contract for coordination only**; none of these routes are implemented by this PR:
-
-| Operation | Proposed contract | Authorization / effects |
+| Operation | Implemented contract | Authorization / effects |
 |---|---|---|
-| Create checkout | `POST /api/orders/{order_id}/payment-intent` | Authenticated order buyer only; server reads amount/currency from immutable order, requires a live reserved XTR order, creates/reuses one intent, and returns a provider checkout URL plus expiry. |
-| Read payment | `GET /api/orders/{order_id}/payment` | Authenticated order buyer (seller/admin read rules require separate approval); returns the server-derived payment state and safe refund summary. |
-| Provider notification | No public route while the bot uses long polling | A future webhook requires a separately approved secret-validation/replay contract and must not run alongside polling for the same bot. |
+| Create/replay checkout | `POST /api/orders/{order_id}/payment-intent` with `Idempotency-Key` (8–128 chars) | Current authenticated buyer only; service verifies order ownership, XTR, live reserved order, immutable amount and payer identity. A durable PostgreSQL receipt binds the key to the buyer/request. Returns a hosted invoice URL created through Telegram's Test Bot API. |
+| Read payment state | `GET /api/orders/{order_id}/payment` | Buyer-owned order only; blocked users can read existing payment state. Returns server-derived status and safe refund summary. |
+| Provider callback | No HTTP webhook | Payment confirmation stays in dedicated test-bot long polling. The endpoint never accepts client-supplied success/refund evidence. |
 
-Proposed response fields: `order_id`, `payment_status`, `provider`, `amount`, `currency`, `expires_at`, and an optional `checkout_url` on intent creation. A safe refund summary may expose `refund_status` and a non-sensitive support/error code; do not expose bot tokens, invoice payloads, raw updates, provider charge IDs, payer Telegram IDs or database rows. The client may request checkout or read status, but must never submit a claimed `paid`, `captured` or `refunded` state.
+The routes are registered in FastAPI **only** when the test Stars flag is enabled, the environment is local/development/test, the test token differs from `BOT_TOKEN`, and `DATABASE_URL` is a local test-named PostgreSQL database. The service layer repeats its own guards. This PR does not expose these endpoints in production, does not introduce a new provider and does not use a production Telegram API endpoint.
 
-Stable public payment statuses should be `pending`, `paid`, `refund_pending`, `refunded`, `failed` and `expired`; internal refund worker states (`queued`, `processing`, `retry_wait`, `reconciliation_required`, `manual_review`) should be mapped to a safe refund summary and must not be mistaken for a completed refund. Unknown provider outcomes remain `refund_pending` / manual review, never success.
+Create response fields: `order_id`, `payment_intent_id`, `payment_status`, `provider`, `amount`, `currency`, `expires_at`, `checkout_url`, and a safe `last_error_code`. Status response fields include `order_id`, `payment_intent_id`, `payment_status`, `provider`, `amount`, `currency`, `expires_at`, `paid_at`, `refunded_at`, `refund_status`, and `last_error_code`. Neither route exposes invoice payloads, raw updates, Telegram/provider charge IDs, payer Telegram IDs, bot tokens or ORM rows.
 
-Expected API errors: `401` unauthenticated, `404` unknown or non-owned order, `409` non-XTR/expired/non-reserved order or incompatible existing intent, and `503` when the configured payment provider is unavailable. The final request/response envelope, status naming and seller/admin read permissions must be agreed with the frontend owner (Issue #227) before implementation.
+Public payment statuses: `not_started`, `pending`, `paid`, `refund_pending`, `refunded`, `failed`, `expired`, `unsupported`. Refund status is a separately mapped summary: `none`, `pending`, `processing`, `reconciliation_required`, `manual_review`, `succeeded`. A recorded `pending` intent past its expiry is reported as `expired` without inventing provider success. A conflicting idempotency payload returns `409`; unknown/non-owned order returns `404`; provider/test-runtime unavailability returns `503`; invalid/missing key is rejected by validation. The Mini App still must not treat payment as proof of NFT delivery.
 
 ## 5. Runtime isolation
 
@@ -75,7 +73,8 @@ The test bot and refund worker add their stricter `ENVIRONMENT=test` checks and 
 - `backend/app/payments_bot_handlers.py` — test-bot handlers; journals Telegram update identity separately from the charge ID.
 - `backend/app/orders/refund_worker.py` — leased refund execution and reconciliation.
 - `backend/app/db/payments.py` — intents, transactions, events and refund workflow records.
-- `backend/migrations/versions/0012_telegram_stars_payments.py`, `0013_payment_refund_workflow.py`, `0015_payment_ledger_guards.py`, `0016_refund_evidence_delete_guard.py` — schema and evidence protections.
+- `backend/migrations/versions/0012_telegram_stars_payments.py`, `0013_payment_refund_workflow.py`, `0015_payment_ledger_guards.py`, `0016_refund_evidence_delete_guard.py`, `0017_payment_xtr_invariants.py`, `0018_payment_intent_api_requests.py` — schema and evidence protections.
+- `backend/tests/test_payment_api.py` — authenticated routes, idempotency header, safe response and runtime gates.
 - `backend/tests/test_payment_runtime_safety.py` — service-level token/database isolation and update-ID handling.
 - `backend/tests/test_payment_core_integration.py`, `backend/tests/test_payment_refund_worker.py`, `backend/tests/test_payment_ledger_guards.py` — PostgreSQL payment/refund invariants and failure recovery.
 
@@ -83,7 +82,7 @@ Run the unit/safety checks with:
 
 ```bash
 cd backend
-pytest -q tests/test_payment_runtime_safety.py tests/test_payments_test_bot.py
+pytest -q tests/test_payment_api.py tests/test_payment_runtime_safety.py tests/test_payments_test_bot.py
 ```
 
 Run the payment and refund PostgreSQL suites only against a disposable local, test-named database:
@@ -100,7 +99,7 @@ Do not use a shared, staging or production database for these tests.
 - Manual Telegram Test Server acceptance of invoice → pre-checkout → successful-payment → refund.
 - Written product/platform/legal decision for peer-to-peer NFT resale and irreversible delivery.
 - Confirmed legal entity, seller/buyer countries, merchant-of-record and settlement model before evaluating any external PSP or seller payouts.
-- Explicit frontend/backend HTTP contract review before exposing payment intent/status endpoints.
+- Frontend review of the implemented test-only payment response schema before any future non-test API or production rollout.
 - Independent review of production credentials, DB roles/grants, backups, operational refund handling and alerting.
 - Exact-head CI and PostgreSQL acceptance in the focused Draft PR; no production rollout is part of this work.
 

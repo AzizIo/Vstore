@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -9,11 +10,18 @@ from decimal import Decimal
 from urllib.parse import urlsplit
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.models import Order, OrderStatus, PriceCurrency, User
-from app.db.payments import PaymentEvent, PaymentIntent, PaymentRefund, PaymentTransaction
+from app.db.payments import (
+    PaymentEvent,
+    PaymentIntent,
+    PaymentIntentRequest,
+    PaymentRefund,
+    PaymentTransaction,
+)
 
 
 class PaymentConflict(Exception):
@@ -112,71 +120,154 @@ async def create_stars_payment_intent(
     *,
     order_id: uuid.UUID,
     buyer_id: uuid.UUID,
+    idempotency_key: str | None = None,
     now: datetime | None = None,
 ) -> PaymentIntent:
-    """Create or return the single immutable Stars intent for an XTR order."""
+    """Create/replay the single immutable Stars intent for an XTR order.
+
+    With an idempotency key, an immutable PostgreSQL receipt binds that key to
+    the buyer and request payload. Reusing it for another order conflicts; the
+    same request returns its original intent even after its status changes.
+    The bot polling path may omit the key because the order's unique intent
+    remains its natural idempotency boundary.
+    """
 
     _assert_test_stars_enabled()
     current_time = now or datetime.now(UTC)
+    if idempotency_key is not None and not 8 <= len(idempotency_key) <= 128:
+        raise PaymentConflict("Idempotency-Key must contain 8 to 128 characters")
 
-    async with session.begin():
-        order = await session.scalar(
-            select(Order).where(Order.id == order_id).with_for_update()
+    request_sha256 = _digest(
+        json.dumps(
+            {
+                "operation": "create_stars_payment_intent",
+                "buyer_id": str(buyer_id),
+                "order_id": str(order_id),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
         )
-        if order is None or order.buyer_id != buyer_id:
-            raise PaymentConflict("Order not found")
-        if order.price_currency is not PriceCurrency.XTR:
-            raise PaymentConflict("Only XTR orders can use Telegram Stars")
-        if order.status is not OrderStatus.RESERVED or order.expires_at <= current_time:
-            raise PaymentConflict("Order is no longer available for payment")
+    )
 
-        buyer = await session.scalar(select(User).where(User.id == buyer_id))
-        if buyer is None or buyer.telegram_id <= 0:
-            raise PaymentConflict("The order buyer has no valid Telegram identity")
+    try:
+        async with session.begin():
+            if idempotency_key is not None:
+                prior_request = await session.scalar(
+                    select(PaymentIntentRequest)
+                    .where(
+                        PaymentIntentRequest.buyer_id == buyer_id,
+                        PaymentIntentRequest.idempotency_key == idempotency_key,
+                    )
+                    .with_for_update()
+                )
+                if prior_request is not None:
+                    if (
+                        prior_request.order_id != order_id
+                        or prior_request.request_sha256 != request_sha256
+                    ):
+                        raise PaymentConflict("idempotency_payload_conflict")
+                    prior_intent = await session.get(
+                        PaymentIntent, prior_request.payment_intent_id
+                    )
+                    if prior_intent is None:
+                        raise PaymentConflict("Payment intent request receipt is orphaned")
+                    return prior_intent
 
-        existing = await session.scalar(
-            select(PaymentIntent)
-            .where(PaymentIntent.order_id == order.id)
-            .with_for_update()
-        )
-        if existing is not None:
-            if (
-                existing.payer_telegram_id != buyer.telegram_id
-                or existing.amount != Decimal(order.price_amount)
-                or existing.currency != "XTR"
-            ):
-                raise PaymentConflict("Existing payment intent does not match the order")
-            if existing.status != "pending":
-                raise PaymentConflict("Existing Stars invoice is no longer accepting payments")
-            return existing
-
-        amount = Decimal(order.price_amount)
-        if amount != amount.to_integral_value():
-            raise PaymentConflict("Telegram Stars order amount must be a whole number")
-        payload = secrets.token_urlsafe(32)
-        intent = PaymentIntent(
-            order_id=order.id,
-            status="pending",
-            amount=amount,
-            currency="XTR",
-            payer_telegram_id=buyer.telegram_id,
-            invoice_payload=payload,
-            expires_at=order.expires_at,
-        )
-        session.add(intent)
-        await session.flush()
-        session.add(
-            PaymentEvent(
-                payment_intent_id=intent.id,
-                provider="telegram_stars",
-                provider_event_id=f"intent:{intent.id}",
-                event_type="intent_created",
-                payload_sha256=_digest(
-                    f"{intent.id}:{intent.order_id}:{intent.amount}:XTR:{intent.payer_telegram_id}"
-                ),
+            order = await session.scalar(
+                select(Order).where(Order.id == order_id).with_for_update()
             )
-        )
-        return intent
+            if order is None or order.buyer_id != buyer_id:
+                raise PaymentConflict("Order not found")
+            if order.price_currency is not PriceCurrency.XTR:
+                raise PaymentConflict("Only XTR orders can use Telegram Stars")
+            if order.status is not OrderStatus.RESERVED or order.expires_at <= current_time:
+                raise PaymentConflict("Order is no longer available for payment")
+
+            buyer = await session.scalar(select(User).where(User.id == buyer_id))
+            if buyer is None or buyer.telegram_id <= 0:
+                raise PaymentConflict("The order buyer has no valid Telegram identity")
+
+            intent = await session.scalar(
+                select(PaymentIntent)
+                .where(PaymentIntent.order_id == order.id)
+                .with_for_update()
+            )
+            if intent is not None:
+                if (
+                    intent.payer_telegram_id != buyer.telegram_id
+                    or intent.amount != Decimal(order.price_amount)
+                    or intent.currency != "XTR"
+                ):
+                    raise PaymentConflict("Existing payment intent does not match the order")
+                if intent.status != "pending":
+                    raise PaymentConflict(
+                        "Existing Stars invoice is no longer accepting payments"
+                    )
+            else:
+                amount = Decimal(order.price_amount)
+                if amount != amount.to_integral_value():
+                    raise PaymentConflict("Telegram Stars order amount must be a whole number")
+                payload = secrets.token_urlsafe(32)
+                intent = PaymentIntent(
+                    order_id=order.id,
+                    status="pending",
+                    amount=amount,
+                    currency="XTR",
+                    payer_telegram_id=buyer.telegram_id,
+                    invoice_payload=payload,
+                    expires_at=order.expires_at,
+                )
+                session.add(intent)
+                await session.flush()
+                session.add(
+                    PaymentEvent(
+                        payment_intent_id=intent.id,
+                        provider="telegram_stars",
+                        provider_event_id=f"intent:{intent.id}",
+                        event_type="intent_created",
+                        payload_sha256=_digest(
+                            f"{intent.id}:{intent.order_id}:{intent.amount}:XTR:"
+                            f"{intent.payer_telegram_id}"
+                        ),
+                    )
+                )
+
+            if idempotency_key is not None:
+                session.add(
+                    PaymentIntentRequest(
+                        buyer_id=buyer_id,
+                        order_id=order_id,
+                        payment_intent_id=intent.id,
+                        idempotency_key=idempotency_key,
+                        request_sha256=request_sha256,
+                    )
+                )
+                await session.flush()
+            return intent
+    except IntegrityError as exc:
+        # Concurrent callers may race to bind the same key. The unique key is
+        # authoritative; after the losing transaction rolls back, resolve only
+        # an identical durable receipt, otherwise report a conflict.
+        await session.rollback()
+        if idempotency_key is not None:
+            prior_request = await session.scalar(
+                select(PaymentIntentRequest).where(
+                    PaymentIntentRequest.buyer_id == buyer_id,
+                    PaymentIntentRequest.idempotency_key == idempotency_key,
+                )
+            )
+            if prior_request is not None:
+                if (
+                    prior_request.order_id != order_id
+                    or prior_request.request_sha256 != request_sha256
+                ):
+                    raise PaymentConflict("idempotency_payload_conflict") from exc
+                prior_intent = await session.get(
+                    PaymentIntent, prior_request.payment_intent_id
+                )
+                if prior_intent is not None:
+                    return prior_intent
+        raise
 
 
 async def validate_stars_pre_checkout(

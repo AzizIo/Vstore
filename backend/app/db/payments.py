@@ -235,3 +235,50 @@ class PaymentRefund(TimestampMixin, Base):
     last_reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error_code: Mapped[str | None] = mapped_column(String(64))
+
+
+
+class PaymentIntentRequest(Base):
+    """Immutable idempotency receipt for authenticated payment-intent API requests."""
+
+    __tablename__ = "payment_intent_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "length(idempotency_key) BETWEEN 8 AND 128",
+            name="ck_payment_intent_requests_idempotency_key_length",
+        ),
+        CheckConstraint(
+            "length(request_sha256) = 64",
+            name="ck_payment_intent_requests_request_sha256",
+        ),
+        UniqueConstraint(
+            "buyer_id",
+            "idempotency_key",
+            name="uq_payment_intent_requests_buyer_key",
+        ),
+        Index(
+            "ix_payment_intent_requests_order_created",
+            "order_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    buyer_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False
+    )
+    payment_intent_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("payment_intents.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
