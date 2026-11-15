@@ -35,6 +35,9 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"app/escrow/abi_artifacts" = "app/escrow/abi_artifacts"
+
 [tool.ruff]
 line-length = 100
 target-version = "py313"

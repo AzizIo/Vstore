@@ -1,0 +1,18 @@
+{
+  "contract": "DealEscrow",
+  "protocol_version": 1,
+  "network_scope": "TON testnet only",
+  "source_commit": "079fa1f4717cde1d8963faed180b2fa1e9ea9ac6",
+  "workflow_run_id": 43703399250,
+  "artifact_id": 14157303414,
+  "original_archive_sha256": "82e8dc2bfda3b9418003aa6a9994c487a9086bec9416436b59db752ad2d087e5",
+  "abi_original_sha256": "05d3bc9b7aafc7fc71889cffc6d4fea2f607ea14aa48f3854c8e432747623597",
+  "build_descriptor_original_sha256": "330f8d3d6eb85a08c919122f2fc8926de5f7bd5438930f11d3487ae878278bfa",
+  "compiled_code_hash": "359B02C177CE033C6FE1A673C4E04B59D6D43434AF09B1CBE4BDCD8BE4779450",
+  "compiled_code_boc_base64_sha256": "9dcf1449971a1ba69e5bf59a3feac5f290eeeac011da84e279f4d93cb8be8041",
+  "compiled_code_boc_sha256": "df82a5603142e77344b3f201c13d6c77d3900893bf06cfe719bece784caf0422",
+  "abi_compact_sha256": "25fc5f338f45db7d7198961a75c1d5cfe04f996ae36013cca0d70f03870c3923",
+  "acton_version": "1.2.1",
+  "tolk_version": "1.5.0",
+  "warning": "Updated pinned Acton build artifact for the branch's deadline and terminal-bounce fixes. This does not prove independent audit safety or live testnet acceptance."
+}
