@@ -384,9 +384,12 @@ def _build_deployment_snapshot(
             or not provider.strip()
         ):
             return None, ("getter_snapshot_integrity",)
-        if any(field not in getter for field in _GETTER_SNAPSHOT_FIELDS[:-2]):
+        if any(field not in getter for field in _GETTER_SNAPSHOT_FIELDS):
             return None, ("getter_snapshot_fields",)
-        values.update(getter)
+        # The getter evidence JSON also retains other authenticated storage fields
+        # (e.g. attempt counters and evidence hashes), but the immutable constructor
+        # dataclass only receives the snapshot's documented getter members.
+        values.update({field: getter[field] for field in _GETTER_SNAPSHOT_FIELDS})
     elif not allow_initial_state or deal.status != EscrowDealStatus.INTENT_CREATED.value:
         return None, ("finalized_getter_snapshot",)
 
