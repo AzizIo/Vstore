@@ -1160,7 +1160,19 @@ fun onBouncedMessage(in: InMessageBounced) {
     // carry only the 0xFFFFFFFF prefix and cannot be correlated to our full
     // persisted descriptor, so ignore them instead of trying to parse as rich.
     var bouncedBody = in.bouncedBody;
+    // A malformed/truncated bounce must never abort the handler or mutate
+    // custody/accounting. RichBounce has a 32-bit tag, two mandatory refs and
+    // at least 41 remaining header bits (phase, exit code, compute-phase flag).
+    if (
+        bouncedBody.remainingBitsCount() < 32
+        || bouncedBody.remainingRefsCount() < 2
+    ) {
+        return;
+    }
     if (bouncedBody.loadUint(32) != 0xfffffffe) {
+        return;
+    }
+    if (bouncedBody.remainingBitsCount() < 41) {
         return;
     }
     // The rich original body hash, bounce sender and original value must match
