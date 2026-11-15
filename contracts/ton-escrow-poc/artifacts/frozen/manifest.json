@@ -17,6 +17,6 @@
   "state_init_hash": "674227296eff6ac5ee02c8e2eaa12857ac339d10a9ed7f4f7ea0591e7b4adfca",
   "raw_address": "0:674227296eff6ac5ee02c8e2eaa12857ac339d10a9ed7f4f7ea0591e7b4adfca",
   "data_hash": "faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b",
-  "warning": "Intermediate manifest refresh for seller allowance retry storage-floor fix. Code/BOC digests are verified from Acton 1.2.1 / Tolk 1.5.0 artifact 14182678077 (run 43767661650); StateInit vector comes from prior green exact-source build 14183046417. Strict exact-head CI must pass after this manifest update before merge.",
+  "warning": null,
   "compiled_code_boc_zlib_sha256": "58a888105143cf27c02e5beae8d724fca92fb7b89f00c77fbfc54ad5828cf365"
 }
