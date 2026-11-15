@@ -2357,6 +2357,151 @@ get fun `test post-delivery buyer dispute outcome returns NFT and refunds buyer`
 }
 
 
+get fun `test buyer reserve retry cannot sweep a bounced seller allowance`() {
+    testing.setNow(1_700_000_000);
+    val salt = 0xA22503;
+    val sellerController = testing.treasury("combined-bounce-seller-controller");
+    val buyerController = testing.treasury("combined-bounce-buyer-controller");
+    val sellerParty = TestEscrowParty.fromStorage({
+        controllerAddress: sellerController.address,
+        rejectSettlementAction: SETTLEMENT_ACTION_SELLER_DEPLOYMENT_REFUND,
+    });
+    val buyerParty = TestEscrowParty.fromStorage({
+        controllerAddress: buyerController.address,
+        rejectSettlementAction: SETTLEMENT_ACTION_EXECUTION_RESERVE_REFUND,
+    });
+    val sellerPartyDeploy = sellerParty.deploy(
+        sellerController.address, { value: grams("0.5"), bounce: false },
+    );
+    expect(sellerPartyDeploy).toHaveSuccessfulDeploy({ to: sellerParty.address });
+    val buyerPartyDeploy = buyerParty.deploy(
+        buyerController.address, { value: grams("2"), bounce: false },
+    );
+    expect(buyerPartyDeploy).toHaveSuccessfulDeploy({ to: buyerParty.address });
+
+    val (escrow, nftItem, deployer, _) = createFixture(
+        salt,
+        STATE_INTENT_CREATED,
+        0,
+        0,
+        false,
+        false,
+        null,
+        sellerParty.address,
+        buyerParty.address,
+    );
+    val escrowDeploy = escrow.deploy(deployer.address, { value: grams("0.2"), bounce: false });
+    expect(escrowDeploy).toHaveSuccessfulDeploy({ to: escrow.address });
+    val itemDeploy = nftItem.deploy(deployer.address, { value: grams("0.05"), bounce: false });
+    expect(itemDeploy).toHaveSuccessfulDeploy({ to: nftItem.address });
+
+    partyActivateEscrow(sellerParty, sellerController, escrow, salt);
+    partyDepositNft(sellerParty, sellerController, escrow, nftItem, salt, 1002);
+    expect(escrow.getState()).toEqual(STATE_AWAITING_BUYER_FUNDS);
+    partyFundEscrow(buyerParty, buyerController, escrow, salt, 1001, grams("1.5"));
+    expect(escrow.getState()).toEqual(STATE_FUNDED_REVIEW);
+    partyAcceptEscrow(buyerParty, buyerController, escrow, salt, 1003);
+    expect(nftItem.getOwner()).toEqual(buyerParty.address);
+
+    val delivered = buildTestOracleAttestation(
+        escrow, salt, ORACLE_ACTION_NFT_DELIVERED, 1,
+        nftItem.address, escrow.address, buyerParty.address, 0, 1, 0xA225031, 141, 141,
+    );
+    val deliveryConfirmed = escrow.sendAny(
+        testing.treasury("combined-bounce-delivery-oracle").address,
+        delivered.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(deliveryConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
+
+    val deadline = escrow.getProgress().deadlineUnix;
+    testing.setNow((deadline + 1) as uint32);
+    val timeout = escrow.sendAny(
+        testing.treasury("combined-bounce-timeout-keeper").address,
+        TimeoutDeal { queryId: 2253, dealSalt: salt }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(timeout).toHaveSuccessfulTx<TimeoutDeal>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_SELLER_PAYOUT_PENDING);
+
+    val payout = buildTestOracleAttestation(
+        escrow, salt, ORACLE_ACTION_SELLER_PAYOUT, 2,
+        nftItem.address, escrow.address, sellerParty.address, grams("1"), 2, 0xA225032, 142, 142,
+    );
+    val payoutConfirmed = escrow.sendAny(
+        testing.treasury("combined-bounce-payout-oracle").address,
+        payout.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(payoutConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_SETTLED);
+    expect(escrow.getProgress().principalLocked).toEqual(false);
+    expect(nftItem.getOwner()).toEqual(buyerParty.address);
+
+    var actions = escrow.getProgress().outboundActions.load();
+    assert (actions.first != null && actions.second != null) throw Errors.OutboundActionMissing;
+    var sellerAllowance = actions.first.load();
+    var buyerReserve = actions.second.load();
+    expect(sellerAllowance.kind).toEqual(OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND);
+    expect(sellerAllowance.status).toEqual(OUTBOUND_STATUS_BOUNCED);
+    expect(buyerReserve.kind).toEqual(OUTBOUND_KIND_EXECUTION_RESERVE_REFUND);
+    expect(buyerReserve.status).toEqual(OUTBOUND_STATUS_BOUNCED);
+    expect(testing.getAccountBalance(escrow.address)).toBeGreater(grams("0.009"));
+
+    // Buyer cannot retry carry-all while the seller's fixed allowance is already
+    // back in escrow as a bounced action. The failed retry must leave both
+    // descriptors and the monotonic attempt counter unchanged.
+    val prematureRetry = buyerParty.sendAny(
+        buyerController.address,
+        PartyRetryOutbound {
+            escrowAddress: escrow.address,
+            dealSalt: salt,
+            queryId: buyerReserve.queryId,
+        }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(prematureRetry).toHaveSuccessfulTx<PartyRetryOutbound>({ to: buyerParty.address });
+    expect(prematureRetry).toHaveFailedTx<RetryFailedOutboundAction>({
+        from: buyerParty.address,
+        to: escrow.address,
+        exitCode: Errors.RetryNotReady,
+    });
+    expect(escrow.getState()).toEqual(STATE_SETTLED);
+    expect(escrow.getProgress().oracleAttemptId).toEqual(4);
+    expect(testing.getAccountBalance(escrow.address)).toBeGreater(grams("0.009"));
+    actions = escrow.getProgress().outboundActions.load();
+    assert (actions.first != null && actions.second != null) throw Errors.OutboundActionMissing;
+    expect(actions.first.load().status).toEqual(OUTBOUND_STATUS_BOUNCED);
+    expect(actions.second.load().status).toEqual(OUTBOUND_STATUS_BOUNCED);
+
+    // Seller first retries and receives its fixed allowance. Only then may the
+    // buyer retry the carry-all reserve refund.
+    partySetRejectAction(sellerParty, sellerController, 0);
+    val sellerBalanceBeforeRetry = testing.getAccountBalance(sellerParty.address);
+    partyRetryOutbound(sellerParty, sellerController, escrow, salt, sellerAllowance.queryId);
+    expect(escrow.getProgress().oracleAttemptId).toEqual(5);
+    expect(testing.getAccountBalance(sellerParty.address)).toBeGreater(
+        sellerBalanceBeforeRetry + grams("0.04"),
+    );
+    actions = escrow.getProgress().outboundActions.load();
+    assert (actions.first != null && actions.second != null) throw Errors.OutboundActionMissing;
+    expect(actions.first.load().kind).toEqual(OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND);
+    expect(actions.first.load().status).toEqual(OUTBOUND_STATUS_PENDING);
+    expect(actions.second.load().kind).toEqual(OUTBOUND_KIND_EXECUTION_RESERVE_REFUND);
+    expect(actions.second.load().status).toEqual(OUTBOUND_STATUS_BOUNCED);
+
+    partySetRejectAction(buyerParty, buyerController, 0);
+    partyRetryOutbound(buyerParty, buyerController, escrow, salt, buyerReserve.queryId);
+    expect(escrow.getState()).toEqual(STATE_SETTLED);
+    expect(escrow.getProgress().oracleAttemptId).toEqual(6);
+    expect(testing.getAccountBalance(escrow.address)).toBeGreater(grams("0.009"));
+    expect(testing.getAccountBalance(buyerParty.address)).toBeGreater(grams("1.5"));
+    actions = escrow.getProgress().outboundActions.load();
+    assert (actions.first != null && actions.second != null) throw Errors.OutboundActionMissing;
+    expect(actions.first.load().status).toEqual(OUTBOUND_STATUS_PENDING);
+    expect(actions.second.load().status).toEqual(OUTBOUND_STATUS_PENDING);
+}
+
 get fun `test bounced message cannot overwrite an already terminal state`() {
     val (escrow, _, seller, _) = createFixture(
         0xA11DC,
