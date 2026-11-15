@@ -17,11 +17,19 @@ Pinned provenance:
 | Contract / protocol | `DealEscrow` / v1 |
 | Network scope | TON testnet only |
 | Source commit in frozen manifest | `01963603df7fb4ad819ab4a8f4a68315cec47c5d` |
+| Successful contract workflow | [#43766860437](https://github.com/AzizIo/Vstore/actions/runs/43766860437) |
+| Artifact ID | `14181479725` |
+| Artifact archive SHA-256 | `25a4769ba2e4fee2f0ef913e2d7060524bc2143f6b060267651cab95b9fbf5be` |
+| Build descriptor SHA-256 | `4a782edd062c83897c7e9dc62bb2f011547bbf7d371b9f822934fdf36877f5c5` |
 | Acton / Tolk | `1.2.1` / `1.5.0` |
 | ABI compact SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
 | Code cell hash | `D822B8AFBB37027611A9A9DDC8E67C52F17BBBC45B4352C7F360693BD685CA54` |
 | Code BOC base64 SHA-256 | `2e9b43b902b1d4c26d358af79d731d7445cca3d562d77cb858a532a487b1e05e` |
 | Decoded code BOC SHA-256 | `fd226adafbfe7a1e14164c59538843dd024e99e3cec2f458322ac94eaa8d7ba8` |
+| Zlib-compressed BOC SHA-256 | `301c3aa6dfb729c5a0a640dc15eb527540e282c758c69a241632d4c04fd49947` |
+| Deterministic StateInit hash | `29a40423c7e8fa1390782bce7e94e32f2a0e14ceef6cf05bd0f1641d0ba3f423` |
+| Deterministic raw address | `0:29a40423c7e8fa1390782bce7e94e32f2a0e14ceef6cf05bd0f1641d0ba3f423` |
+| Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
 
 At adapter initialization the code BOC is parsed by `pytoniq-core`; its base64 digest, decoded BOC digest and TVM cell hash are checked. The ABI canonical compact JSON digest and manifest network/protocol/code identity are checked before StateInit can be derived. Missing or modified artifacts fail closed.
 
