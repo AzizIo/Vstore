@@ -1,7 +1,9 @@
 # Payment backend security audit — Issue #199
 
-**Baseline:** `main` at `2138d2b69c86507f05cec7ee768b4cc11ad00e47`  
-**Scope:** backend payment/refund evidence only. This is an implementation audit, not legal advice or approval for live sales.
+**Baseline:** `main` at `6dafdcf4c462718df14ea024f29fd277c90f6d39` (2026-11-15)  
+**Scope:** backend payment/refund evidence for Issues #199 and #224. This is an implementation audit, not legal advice or approval for live sales.
+
+**Issue #224 release snapshot:** [`ISSUE_224_PAYMENT_BACKEND_RELEASE_SNAPSHOT.md`](ISSUE_224_PAYMENT_BACKEND_RELEASE_SNAPSHOT.md) records the current provider/transport decision, frontend API boundary and service-level isolation requirements.
 
 ## Current payment flow (source map)
 
