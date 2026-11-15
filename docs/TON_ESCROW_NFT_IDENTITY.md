@@ -58,3 +58,18 @@ Legacy rows without identity evidence are not silently blessed. Such deals requi
 ## Migration and tests
 
 Migration 0020_escrow_nft_identity_snapshots adds nullable evidence columns for safe rollout; it does not manufacture evidence for old rows. The migration is reversible only while both identity columns are empty. Run backend CI's PostgreSQL upgrade/downgrade test, then the escrow tests covering allowlist failure, forged collection, same-index/wrong-address, item/collection code mismatch, owner change, stale digest, provider failure, and same-block account reads before accepting a policy or enabling the flow.
+
+
+## Cryptographic finality boundary
+
+Indexer observations are discovery hints only. The existing testnet finality provider:
+
+1. Creates a Pytoniq LiteClient with `trust_level=0`; when using the default factory, its configured init key block must match the built-in trusted testnet key-block set.
+2. Resolves the candidate workchain/shard/sequence to a LiteServer block ID and rejects a locator mismatch.
+3. Requests the shard-block inclusion proof, follows the masterchain proof chain from the trusted key block (including the validator/config signatures checked by Pytoniq), and separately checks the shard inclusion proof against the masterchain.
+4. Requires the proof-returned masterchain sequence to match the discovered candidate's sequence, then requires the latest trusted masterchain head to be at least `TON_ESCROW_FINALITY_MIN_DEPTH` blocks beyond that inclusion block.
+5. Retrieves the transaction list with proof from the shard block, uniquely matches the escrow account/LT/transaction-cell hash, and verifies the inbound message hash/destination and derived trace binding. It reads contract getters from the same proven masterchain anchor and reconciles them with the immutable deal snapshot before the observer can advance canonical state.
+
+The discovery candidate's `finalized` bit never authorizes state advancement. If the locator conflicts with the proof-returned block, the transaction/message is absent or ambiguous, validator/config proof validation fails, the current head lacks the configured depth, or any contract getter disagrees with the snapshot, the provider returns invalid/unavailable evidence and the observer leaves the event pending/retryable or routes it to manual review. It must not turn an indexer status into a successful terminal event.
+
+Adversarial tests now cover a mismatched shard locator, an indexed/masterchain sequence conflict, insufficient masterchain depth, validator/config-proof failure, and shard-inclusion-proof failure. These exercise the fail-closed boundary with controlled proof-client doubles; they are not a live testnet acceptance test and do not substitute for an owner-approved end-to-end test using disposable wallets.
