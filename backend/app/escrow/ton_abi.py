@@ -425,7 +425,9 @@ def encode_nft_transfer(
     # Wallet-originated deposit/return messages use 0.02 TON as pinned by the
     # generated Acton vectors; contract-initiated transfers use 0.01 TON on-chain.
     if forward_amount != 20_000_000:
-        raise TONABIError("DealEscrow TEP-62 user-transfer payload pins forwardTonAmount to 0.02 TON")
+        raise TONABIError(
+            "DealEscrow TEP-62 user-transfer payload pins forwardTonAmount to 0.02 TON"
+        )
     return _body_boc(
         begin_cell()
         .store_uint(_NFT_TRANSFER_OPCODE, 32)
