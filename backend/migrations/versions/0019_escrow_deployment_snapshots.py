@@ -314,7 +314,8 @@ def upgrade() -> None:
             IF OLD.finalized_transaction_hash IS NOT NULL AND (
                 NEW.finalized_transaction_hash IS DISTINCT FROM OLD.finalized_transaction_hash
                 OR NEW.finality_masterchain_seqno IS DISTINCT FROM OLD.finality_masterchain_seqno
-                OR NEW.finality_masterchain_block_hash IS DISTINCT FROM OLD.finality_masterchain_block_hash
+                OR NEW.finality_masterchain_block_hash
+                    IS DISTINCT FROM OLD.finality_masterchain_block_hash
                 OR NEW.finality_proof_sha256 IS DISTINCT FROM OLD.finality_proof_sha256
                 OR NEW.finality_provider IS DISTINCT FROM OLD.finality_provider
             ) THEN
