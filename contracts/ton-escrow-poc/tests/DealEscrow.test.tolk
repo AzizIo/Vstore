@@ -692,19 +692,17 @@ get fun `test expired oracle attestation is still accepted before timeout transa
         }.toCell(),
     };
 
-    // Isolate the missing on-chain deadline guard from signature validation.
-    testing.setChecksigIgnore(true);
     val result = escrow.sendAny(
         testing.treasury("late-oracle-keeper").address,
         attestation.toCell(),
         { value: grams("0.03"), bounce: true },
     );
-    testing.setChecksigIgnore(false);
 
-    expect(result).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
-    // This documents the current behavior: late evidence wins unless a timeout
-    // transaction reaches the contract first.
-    expect(escrow.getState()).toEqual(STATE_DELIVERED_DISPUTE_WINDOW);
+    expect(result).toHaveFailedTx<OracleAttestation>({
+        to: escrow.address,
+        exitCode: Errors.Deadline,
+    });
+    expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
 }
 
 get fun `test expired resolver decision is still accepted before timeout transaction`() {
@@ -766,18 +764,18 @@ get fun `test expired resolver decision is still accepted before timeout transac
         }.toCell(),
     };
 
-    // Isolate the missing deadline guard from resolver signature validation.
-    testing.setChecksigIgnore(true);
     val result = escrow.sendAny(
         testing.treasury("late-resolver-keeper").address,
         resolution.toCell(),
         { value: grams("0.03"), bounce: true },
     );
-    testing.setChecksigIgnore(false);
 
-    expect(result).toHaveSuccessfulTx<ResolveDispute>({ to: escrow.address });
-    expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
-    expect(nftItem.getOwner()).toEqual(buyer.address);
+    expect(result).toHaveFailedTx<ResolveDispute>({
+        to: escrow.address,
+        exitCode: Errors.Deadline,
+    });
+    expect(escrow.getState()).toEqual(STATE_DISPUTED);
+    expect(nftItem.getOwner()).toEqual(escrow.address);
 }
 
 get fun `test bounced message can overwrite an already terminal state`() {
@@ -807,6 +805,6 @@ get fun `test bounced message can overwrite an already terminal state`() {
     val result = net.send(bounceOrigin.address, bouncedMessage);
     expect(result).toHaveSuccessfulTx({ to: escrow.address });
 
-    // The current callback unconditionally rewrites the terminal state.
-    expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
+    // A secondary refund bounce cannot erase a reconciled terminal result.
+    expect(escrow.getState()).toEqual(STATE_SETTLED);
 }
