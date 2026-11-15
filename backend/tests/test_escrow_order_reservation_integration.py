@@ -200,7 +200,7 @@ async def test_postgres_listing_identity_snapshot_is_immutable_but_status_can_ad
     try:
         with pytest.raises(
             DBAPIError,
-            match="Persisted escrow NFT identity snapshot and bound terms are immutable",
+            match="Persisted escrow NFT identity and bound terms are immutable",
         ):
             async with session_factory() as session:
                 async with session.begin():
