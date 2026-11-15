@@ -69,6 +69,7 @@ from app.escrow.service import (
     create_or_replay_action,
 )
 
+
 def _ton_nano(value: Decimal) -> str:
     amount = value * _NANOTON
     if amount <= 0 or amount != amount.to_integral_value():
