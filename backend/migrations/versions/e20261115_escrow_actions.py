@@ -9,7 +9,10 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "e20261115_escrow_actions"
-down_revision: tuple[str, str] = ("e20261114_ton_escrow", "0016_refund_evidence")
+# 0016_refund_evidence already descends from e20261114_ton_escrow. Using both
+# revisions here would create a redundant ancestor edge and an ambiguous
+# downgrade walk; this migration follows the actual latest predecessor.
+down_revision: str = "0016_refund_evidence"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | None = None
 
