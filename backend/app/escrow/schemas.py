@@ -100,11 +100,16 @@ class EscrowPageResponse(BaseModel):
 
 
 class EscrowTransactionPreparationResponse(BaseModel):
-    status: Literal["unavailable"] = "unavailable"
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["prepared", "unavailable"] = "unavailable"
     network: Literal["testnet"] = "testnet"
-    payload: None = None
-    reason_code: Literal["contract_abi_pending"] = "contract_abi_pending"
-    detail: str = "Unsigned TON Connect payload is unavailable until ABI/API review is approved."
+    action_id: UUID | None = None
+    payload: dict[str, object] | None = None
+    payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    unsigned_boc_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    reason_code: str | None = None
+    detail: str | None = None
 
 
 class EscrowSellerBalanceResponse(BaseModel):

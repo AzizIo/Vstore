@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import secrets
+from dataclasses import asdict
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -34,7 +37,9 @@ from app.db.models import (
 from app.db.session import get_db_session
 from app.escrow.contracts import (
     DealEscrowDeploymentSnapshot,
+    EscrowContractABIUnavailable,
     EscrowWalletAction,
+    PinnedTONEscrowContractAdapter,
 )
 from app.escrow.domain import EscrowDealStatus
 from app.escrow.models import (
@@ -60,6 +65,13 @@ from app.escrow.schemas import (
     EscrowTransactionPreparationResponse,
     EscrowWalletReferenceInput,
     EscrowWithdrawalCreate,
+)
+from app.escrow.ton_abi import (
+    TONABIError,
+    derive_deployment,
+    load_pinned_code_boc,
+    validate_snapshot,
+    verify_compiled_code,
 )
 from app.escrow.service import (
     EscrowActionConflict,
@@ -216,34 +228,276 @@ _DEPLOYMENT_SNAPSHOT_BINDINGS = {
 }
 
 
-def _build_deployment_snapshot(
-    deal: EscrowDeal,
-) -> tuple[DealEscrowDeploymentSnapshot | None, tuple[str, ...]]:
-    """Diagnostic only: inspect persisted fields; this does not enable adapter integration.
+_DEPLOYMENT_SNAPSHOT_VERSION = 1
+_HEX_256 = re.compile(r"^[0-9a-fA-F]{64}$")
+_GETTER_SNAPSHOT_FIELDS = (
+    "contract_state",
+    "deadline_unix",
+    "observed_chain_time_unix",
+    "dispute_phase",
+    "nft_in_escrow",
+    "principal_locked",
+    "recovery_previous_owner",
+    "recovery_item_address",
+)
 
-    EscrowDeal currently lacks mapped columns for the full immutable deployment/getter
-    snapshot. A complete result from a synthetic object is not evidence that ORM rows
-    can supply the values. Transaction preparation remains unconditionally fail-closed.
+
+def _canonical_sha256(value: object) -> str:
+    raw = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _new_query_ids(count: int = 5) -> tuple[int, ...]:
+    values: set[int] = set()
+    while len(values) < count:
+        candidate = secrets.randbits(64)
+        if candidate:
+            values.add(candidate)
+    return tuple(values)
+
+
+def _authority_keys(values: list[str], setting_name: str) -> tuple[int, int, int]:
+    if len(values) != 3 or any(not isinstance(value, str) or not _HEX_256.fullmatch(value) for value in values):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "escrow_authority_keys_unconfigured", "setting": setting_name},
+        )
+    parsed = tuple(int(value, 16) for value in values)
+    if len(set(parsed)) != 3 or any(value == 0 for value in parsed):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "escrow_authority_keys_invalid", "setting": setting_name},
+        )
+    return parsed  # type: ignore[return-value]
+
+
+def _initial_deployment_snapshot(
+    deal: EscrowDeal,
+) -> tuple[dict[str, object], str, str, str]:
+    """Build the immutable testnet terms before reserving the marketplace listing.
+
+    Missing/unapproved authority keys or invalid pinned artifacts fail the deal-intent
+    request before the listing is reserved, so the NFT cannot be stranded by a
+    deployment that is impossible to prepare.
     """
 
-    values: dict[str, object] = {}
-    missing: list[str] = []
-    for snapshot_field, deal_field in _DEPLOYMENT_SNAPSHOT_BINDINGS.items():
-        value = getattr(deal, deal_field, None)
-        if value is None:
-            missing.append(snapshot_field)
-        else:
-            values[snapshot_field] = value
-
-    if missing:
-        return None, tuple(missing)
-
-    snapshot = DealEscrowDeploymentSnapshot(
-        **values,
-        recovery_previous_owner=getattr(deal, "recovery_previous_owner", None),
-        recovery_item_address=getattr(deal, "recovery_item_address", None),
+    settings = get_settings()
+    oracle_keys = _authority_keys(
+        settings.ton_escrow_oracle_public_keys, "TON_ESCROW_ORACLE_PUBLIC_KEYS"
     )
+    resolver_keys = _authority_keys(
+        settings.ton_escrow_resolver_public_keys, "TON_ESCROW_RESOLVER_PUBLIC_KEYS"
+    )
+    if len(set((*oracle_keys, *resolver_keys))) != 6:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "escrow_authority_keys_must_be_unique"},
+        )
+    activation_id, fund_id, deposit_id, release_id, return_id = _new_query_ids()
+    snapshot = DealEscrowDeploymentSnapshot(
+        network="testnet",
+        network_id=-3,
+        protocol_version=1,
+        listing_key=deal.listing_key_snapshot,
+        seller_address=deal.seller_address_snapshot,
+        buyer_address=deal.buyer_address_snapshot,
+        collection_address=deal.collection_address_snapshot,
+        item_address=deal.item_address,
+        principal_nanotons=int(deal.principal_nanotons),
+        execution_reserve_nanotons=settings.ton_escrow_execution_reserve_nanotons,
+        seller_deployment_refund_nanotons=settings.ton_escrow_seller_deployment_refund_nanotons,
+        nft_transfer_value_nanotons=settings.ton_escrow_nft_transfer_value_nanotons,
+        deal_salt=deal.deal_salt,
+        activation_query_id=activation_id,
+        fund_query_id=fund_id,
+        nft_deposit_query_id=deposit_id,
+        nft_release_query_id=release_id,
+        nft_return_to_escrow_query_id=return_id,
+        oracle_key_a=oracle_keys[0],
+        oracle_key_b=oracle_keys[1],
+        oracle_key_c=oracle_keys[2],
+        resolver_key_a=resolver_keys[0],
+        resolver_key_b=resolver_keys[1],
+        resolver_key_c=resolver_keys[2],
+        deployment_value_nanotons=settings.ton_escrow_deployment_value_nanotons,
+        activation_value_nanotons=settings.ton_escrow_activation_value_nanotons,
+        action_value_nanotons=settings.ton_escrow_action_value_nanotons,
+        nft_deposit_value_nanotons=settings.ton_escrow_nft_deposit_value_nanotons,
+        nft_return_value_nanotons=settings.ton_escrow_nft_return_value_nanotons,
+        contract_state=0,
+        deadline_unix=0,
+        observed_chain_time_unix=0,
+        dispute_phase=0,
+        nft_in_escrow=False,
+        principal_locked=False,
+    )
+    try:
+        validate_snapshot(snapshot)
+        code_boc = load_pinned_code_boc()
+        artifacts = verify_compiled_code(code_boc)
+        deployment = derive_deployment(code_boc, snapshot)
+    except TONABIError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "escrow_deployment_snapshot_invalid"},
+        ) from exc
+    values = asdict(snapshot)
+    return values, _canonical_sha256(values), deployment.address, artifacts.abi_version
+
+
+def _build_deployment_snapshot(
+    deal: EscrowDeal,
+    *,
+    allow_initial_state: bool = False,
+) -> tuple[DealEscrowDeploymentSnapshot | None, tuple[str, ...]]:
+    """Load and cryptographically bind persisted immutable terms plus verified getter state."""
+
+    stored = getattr(deal, "deployment_snapshot_json", None)
+    stored_hash = getattr(deal, "deployment_snapshot_sha256", None)
+    version = getattr(deal, "deployment_snapshot_version", None)
+    source = getattr(deal, "deployment_snapshot_source", None)
+    if not isinstance(stored, dict) or not isinstance(stored_hash, str):
+        return None, tuple(_DEPLOYMENT_SNAPSHOT_BINDINGS)
+    if version != _DEPLOYMENT_SNAPSHOT_VERSION or source != "pinned-dealescrow-v1":
+        return None, ("deployment_snapshot_version",)
+    if not _HEX_256.fullmatch(stored_hash) or _canonical_sha256(stored) != stored_hash:
+        return None, ("deployment_snapshot_sha256",)
+
+    values: dict[str, object] = dict(stored)
+    getter = getattr(deal, "getter_snapshot_json", None)
+    if getter is not None:
+        getter_hash = getattr(deal, "getter_snapshot_sha256", None)
+        block_hash = getattr(deal, "getter_snapshot_block_hash", None)
+        seqno = getattr(deal, "getter_snapshot_masterchain_seqno", None)
+        provider = getattr(deal, "getter_snapshot_provider", None)
+        if (
+            not isinstance(getter, dict)
+            or not isinstance(getter_hash, str)
+            or not _HEX_256.fullmatch(getter_hash)
+            or _canonical_sha256(getter) != getter_hash
+            or isinstance(seqno, bool)
+            or not isinstance(seqno, int)
+            or seqno <= 0
+            or not isinstance(block_hash, str)
+            or not _HEX_256.fullmatch(block_hash)
+            or not isinstance(provider, str)
+            or not provider.strip()
+        ):
+            return None, ("getter_snapshot_integrity",)
+        if any(field not in getter for field in _GETTER_SNAPSHOT_FIELDS):
+            return None, ("getter_snapshot_fields",)
+        # The getter evidence JSON also retains other authenticated storage fields
+        # (e.g. attempt counters and evidence hashes), but the immutable constructor
+        # dataclass only receives the snapshot's documented getter members.
+        values.update({field: getter[field] for field in _GETTER_SNAPSHOT_FIELDS})
+    elif not allow_initial_state or deal.status != EscrowDealStatus.INTENT_CREATED.value:
+        return None, ("finalized_getter_snapshot",)
+
+    try:
+        snapshot = DealEscrowDeploymentSnapshot(**values)
+        validate_snapshot(snapshot)
+        if (
+            snapshot.network != deal.network
+            or snapshot.listing_key != deal.listing_key_snapshot
+            or snapshot.seller_address != deal.seller_address_snapshot
+            or snapshot.buyer_address != deal.buyer_address_snapshot
+            or snapshot.collection_address != deal.collection_address_snapshot
+            or snapshot.item_address != deal.item_address
+            or snapshot.principal_nanotons != int(deal.principal_nanotons)
+            or snapshot.deal_salt != deal.deal_salt
+        ):
+            return None, ("deployment_snapshot_core_terms_mismatch",)
+        if deal.contract_address and deal.contract_address != derive_deployment(
+            load_pinned_code_boc(), snapshot
+        ).address:
+            return None, ("deployment_snapshot_contract_address_mismatch",)
+    except (TONABIError, TypeError, ValueError, KeyError):
+        return None, ("deployment_snapshot_invalid",)
     return snapshot, ()
+
+
+def _prepared_action_response(
+    action_record: EscrowWalletActionRecord,
+) -> EscrowTransactionPreparationResponse:
+    payload = action_record.unsigned_payload_json
+    bocs = action_record.unsigned_bocs_json
+    if (
+        not isinstance(payload, dict)
+        or not isinstance(bocs, dict)
+        or not isinstance(action_record.unsigned_payload_sha256, str)
+        or not isinstance(action_record.unsigned_boc_sha256, str)
+        or not _HEX_256.fullmatch(action_record.unsigned_payload_sha256)
+        or not _HEX_256.fullmatch(action_record.unsigned_boc_sha256)
+        or _canonical_sha256(payload) != action_record.unsigned_payload_sha256
+        or _canonical_sha256(bocs) != action_record.unsigned_boc_sha256
+        or not action_record.unsigned_boc_ref
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "stored_unsigned_payload_integrity_failed"},
+        )
+    return EscrowTransactionPreparationResponse(
+        status="prepared",
+        network="testnet",
+        action_id=action_record.id,
+        payload=payload,
+        payload_sha256=action_record.unsigned_payload_sha256,
+        unsigned_boc_sha256=action_record.unsigned_boc_sha256,
+    )
+
+
+def _action_query_id(
+    action: EscrowWalletAction,
+    snapshot: DealEscrowDeploymentSnapshot,
+    action_record: EscrowWalletActionRecord,
+) -> int | None:
+    fixed_ids = {
+        EscrowWalletAction.ACTIVATE_DEAL: snapshot.activation_query_id,
+        EscrowWalletAction.DEPOSIT_NFT: snapshot.nft_deposit_query_id,
+        EscrowWalletAction.FUND_DEAL: snapshot.fund_query_id,
+        EscrowWalletAction.ACCEPT_DEAL: snapshot.nft_release_query_id,
+        EscrowWalletAction.RETURN_NFT_TO_ESCROW: snapshot.nft_return_to_escrow_query_id,
+    }
+    if action in fixed_ids:
+        expected = fixed_ids[action]
+        if action_record.query_id is not None and action_record.query_id != str(expected):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "stored_action_query_id_conflict"},
+            )
+        action_record.query_id = str(expected)
+        return expected
+    if action in {
+        EscrowWalletAction.OPEN_DISPUTE,
+        EscrowWalletAction.TIMEOUT_DEAL,
+        EscrowWalletAction.RECOVER_UNEXPECTED_NFT,
+    }:
+        if action_record.query_id is None:
+            used = {
+                snapshot.activation_query_id,
+                snapshot.fund_query_id,
+                snapshot.nft_deposit_query_id,
+                snapshot.nft_release_query_id,
+                snapshot.nft_return_to_escrow_query_id,
+            }
+            query_id = secrets.randbits(64)
+            while query_id == 0 or query_id in used:
+                query_id = secrets.randbits(64)
+            action_record.query_id = str(query_id)
+        try:
+            query_id = int(action_record.query_id)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"code": "stored_action_query_id_invalid"},
+            ) from exc
+        if not 0 < query_id < (1 << 64):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"code": "stored_action_query_id_invalid"},
+            )
+        return query_id
+    return None
 
 
 def _request_hash(payload: object) -> str:
@@ -709,6 +963,18 @@ async def create_deal_intent(
             last_chain_seqno=None,
             idempotency_key=idempotency_key,
         )
+        # Freeze all constructor parameters and derive the deterministic contract
+        # address before reserving the underlying marketplace listing. Missing
+        # authority keys or invalid ABI artifacts fail without locking the NFT.
+        snapshot_values, snapshot_sha256, predicted_address, abi_version = (
+            _initial_deployment_snapshot(deal)
+        )
+        deal.deployment_snapshot_json = snapshot_values
+        deal.deployment_snapshot_sha256 = snapshot_sha256
+        deal.deployment_snapshot_version = _DEPLOYMENT_SNAPSHOT_VERSION
+        deal.deployment_snapshot_source = "pinned-dealescrow-v1"
+        deal.contract_address = predicted_address
+        deal.contract_abi_version = abi_version
         # The normal Order path locks this same Listing row. Reserve both
         # projections in the same transaction so one NFT cannot be sold twice.
         try:
@@ -834,19 +1100,29 @@ async def _prepare_action(
         ):
             await session.rollback()
             raise HTTPException(status_code=409, detail={"code": "idempotency_payload_conflict"})
-        replay_error_code = (
-            existing_action.last_error_code
-            if existing_action.status == "blocked_abi" and existing_action.last_error_code
-            else "deployment_snapshot_incomplete"
-        )
-        raise HTTPException(status_code=503, detail={
-            "code": replay_error_code,
-            "action_id": str(existing_action.id),
-            "action_status": existing_action.status,
-            "message": (
-                "The same durable action already exists; no duplicate action was created"
-            ),
-        })
+        if existing_action.unsigned_payload_json is not None:
+            # Return the byte-for-byte persisted payload on every exact retry, even
+            # if its chain submission is being reconciled by another worker.
+            return _prepared_action_response(existing_action)
+        if existing_action.status == "blocked_abi":
+            replay_error_code = (
+                existing_action.last_error_code or "deployment_snapshot_incomplete"
+            )
+            raise HTTPException(status_code=503, detail={
+                "code": replay_error_code,
+                "action_id": str(existing_action.id),
+                "action_status": existing_action.status,
+                "message": "This durable action remains blocked; no new payload was generated",
+            })
+        if existing_action.status not in {"pending"}:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "escrow_action_not_retryable",
+                    "action_id": str(existing_action.id),
+                    "action_status": existing_action.status,
+                },
+            )
 
     seller_states = {
         EscrowWalletAction.CREATE_DEAL_ESCROW: "intent_created",
@@ -991,35 +1267,141 @@ async def _prepare_action(
                 status_code=409, detail={"code": "escrow_action_idempotency_race"}
             ) from exc
 
-    # The durable identity is committed before any future wallet/broadcast side effect.
-    if created:
+    # Commit the durable action identity before constructing its response. No
+    # signing, message submission or network broadcast happens in this endpoint.
+    if created or action_record.status == "pending":
         await session.commit()
         await session.refresh(action_record)
+
+    if action_record.unsigned_payload_json is not None:
+        return _prepared_action_response(action_record)
     if action_record.status == "blocked_abi":
         raise HTTPException(status_code=503, detail={
-            "code": "contract_abi_pending", "action_id": str(action_record.id),
-            "message": "No reviewed ABI or message layout is available",
+            "code": action_record.last_error_code or "contract_abi_pending",
+            "action_id": str(action_record.id),
+            "action_status": action_record.status,
+            "message": "This durable action is blocked and has no unsigned payload",
+        })
+    if action_record.status != "pending":
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "escrow_action_not_retryable", "action_id": str(action_record.id)},
+        )
+
+    snapshot, missing_snapshot_fields = _build_deployment_snapshot(
+        deal,
+        allow_initial_state=(action is EscrowWalletAction.CREATE_DEAL_ESCROW),
+    )
+    if snapshot is None:
+        error_code = (
+            "deployment_snapshot_incomplete"
+            if "deployment_snapshot_json" in missing_snapshot_fields
+            or "finalized_getter_snapshot" in missing_snapshot_fields
+            or "deployment_snapshot_sha256" in missing_snapshot_fields
+            else "deployment_snapshot_integrity_failed"
+        )
+        action_record.status = "blocked_abi"
+        action_record.last_error_code = error_code
+        await session.commit()
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail={
+            "code": error_code,
+            "action_id": str(action_record.id),
+            "action_status": action_record.status,
+            "missing_fields": list(missing_snapshot_fields),
+            "message": "Required immutable terms or independently verified getter state are unavailable",
         })
 
-    # The current EscrowDeal ORM/migrations do not persist the complete immutable
-    # deployment/getter snapshot required by the pinned adapter. Do not let a
-    # diagnostic builder or an adapter stub imply that transaction preparation is
-    # available. Keep the durable action and fail closed until the schema, migration,
-    # immutability rules and PostgreSQL integration tests land together.
-    _, missing_snapshot_fields = _build_deployment_snapshot(deal)
-    action_record.status = "blocked_abi"
-    action_record.last_error_code = "deployment_snapshot_incomplete"
-    await session.commit()
-    raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail={
-        "code": "deployment_snapshot_incomplete",
-        "action_id": str(action_record.id),
-        "action_status": action_record.status,
-        "missing_fields": list(missing_snapshot_fields),
-        "message": (
-            "The immutable DealEscrow deployment/getter snapshot is not persisted; "
-            "no transaction payload was generated"
-        ),
-    })
+    try:
+        if action_record.attempt_id is None:
+            action_record.attempt_id = uuid4().hex
+        query_id = _action_query_id(action, snapshot, action_record)
+        if action_record.attempt_count == 0:
+            action_record.attempt_count = 1
+        # Persist attempt/query identity before local serialization. A process crash
+        # can resume the same durable action rather than minting a second query ID.
+        await session.commit()
+        await session.refresh(action_record)
+
+        adapter = PinnedTONEscrowContractAdapter()
+        reason_hash: int | None = None
+        if action is EscrowWalletAction.OPEN_DISPUTE:
+            reason = (request_context or {}).get("reason")
+            if not isinstance(reason, str) or len(reason.strip()) < 5:
+                raise EscrowContractABIUnavailable("a bounded dispute reason is required")
+            reason_hash = int(hashlib.sha256(reason.encode("utf-8")).hexdigest(), 16)
+
+        prepared = await adapter.prepare_transaction(
+            action,
+            actor_wallet=wallet,
+            resource_id=str(deal.id),
+            deal_snapshot=snapshot,
+            reason_hash=reason_hash,
+            query_id=query_id,
+        )
+        payload_dict = prepared.to_tonconnect_dict()
+        unsigned_bocs = {
+            "format": "tonconnect-message-bocs-v1",
+            "network": "testnet",
+            "messages": [
+                {
+                    "index": index,
+                    "address": message.address,
+                    "amount_nanotons": message.amount,
+                    "payload_boc_base64": message.payload,
+                    "state_init_boc_base64": message.state_init,
+                }
+                for index, message in enumerate(prepared.messages)
+            ],
+        }
+        if not unsigned_bocs["messages"] or not any(
+            item["payload_boc_base64"] or item["state_init_boc_base64"]
+            for item in unsigned_bocs["messages"]
+        ):
+            raise EscrowContractABIUnavailable("adapter returned no exact unsigned BOC")
+        action_record.unsigned_payload_json = payload_dict
+        action_record.unsigned_payload_sha256 = _canonical_sha256(payload_dict)
+        action_record.unsigned_bocs_json = unsigned_bocs
+        action_record.unsigned_boc_sha256 = _canonical_sha256(unsigned_bocs)
+        action_record.unsigned_boc_ref = (
+            f"db://escrow_wallet_actions/{action_record.id}/unsigned_bocs_json"
+        )
+        action_record.status = "prepared"
+        action_record.last_error_code = None
+        action_record.next_retry_at = None
+        action_record.lease_token = None
+        action_record.lease_until = None
+        await session.commit()
+        await session.refresh(action_record)
+        return _prepared_action_response(action_record)
+    except EscrowContractABIUnavailable as exc:
+        action_record.status = "blocked_abi"
+        action_record.last_error_code = "contract_abi_unavailable"
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "contract_abi_unavailable",
+                "action_id": str(action_record.id),
+                "action_status": action_record.status,
+                "message": "The pinned DealEscrow adapter refused transaction preparation",
+            },
+        ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # Do not expose provider/client details or BOCs in the error response. There
+        # is deliberately no signing or broadcast in this handler.
+        action_record.status = "manual_review"
+        action_record.last_error_code = "unsigned_payload_persistence_failed"
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "unsigned_payload_persistence_failed",
+                "action_id": str(action_record.id),
+                "message": "Unsigned transaction evidence could not be persisted safely",
+            },
+        ) from exc
 
 
 @router.post("/deals/{deal_id}/prepare/create-deal-escrow",
