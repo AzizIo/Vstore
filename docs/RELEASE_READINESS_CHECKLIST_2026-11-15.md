@@ -1,77 +1,99 @@
 # VILTARA SHOP — release lead checklist (2026-11-15)
 
-**Decision: BLOCKED — not ready for production.** This is a repository/CI evidence review. It is not live VPS, Telegram policy, payment-provider, or TON testnet acceptance.
+**Decision: BLOCKED — not ready for production or live escrow.** This document records repository evidence only. It does not claim live VPS, Telegram, payment-provider, TON testnet or independent security acceptance.
 
 ## 1. Current baseline
 
 - Repository: `AzizIo/Vstore`
 - Default branch: `main`
-- Main SHA after the payment integration merge: `ef3d280f52cd03a1c6ead4e60527b4fd0badd078`
-- Production credentials, VPS/SSH, DNS, production DB, Telegram API, payment accounts and TON signing keys were not accessed.
+- Current main SHA: `19d50682441c06faa80622d837c4762f2d23cec1`
+- Latest code-bearing integration SHA: `7c09523c44bf0193553bd5ae1ef38b661b7a650d`
+- The latest commit after that integration is documentation-only (`19d5068`).
+- Open PR inventory checked on 2026-11-15: only Draft PR #197 is open.
+- Open implementation/release issues include #199, #200, #201, #202, #208, #213 and #214. Their kickoff comments exist, but no GitHub assignees or agent-authored progress reports were present at audit time.
+- No production credentials, VPS/SSH, DNS, production DB, Telegram API, payment accounts or TON signing keys were accessed.
 
-## 2. Merged implementation
+## 2. Merged implementation and exact evidence
 
-| PR | Merge commit | Delivered scope | Evidence |
-|---|---|---|---|
-| [#198](https://github.com/AzizIo/Vstore/pull/198) | `96d7d7ac0cf3ff2589a0e1f50a3196c8603235af` | Lockfile/dependency CI hardening, npm/pip audits, production Compose validation, local PostgreSQL backup and isolated restore-drill scripts, dynamic Alembic head check | Original PR CI: [Backend](https://github.com/AzizIo/Vstore/actions/runs/43643690794), [Frontend](https://github.com/AzizIo/Vstore/actions/runs/43643690753), [Compose](https://github.com/AzizIo/Vstore/actions/runs/43643690738). Push-to-main verification: [Backend](https://github.com/AzizIo/Vstore/actions/runs/43647498512), [Frontend](https://github.com/AzizIo/Vstore/actions/runs/43647498549), [Compose](https://github.com/AzizIo/Vstore/actions/runs/43647498517). |
-| [#204](https://github.com/AzizIo/Vstore/pull/204) | `1ccaaeb2a2f955f029276b22b111580c02ccbc11` | Production operations runbook and static infrastructure guardrails | [Guardrails CI](https://github.com/AzizIo/Vstore/actions/runs/43643388858); [push CI](https://github.com/AzizIo/Vstore/actions/runs/43647523603). |
-| [#211](https://github.com/AzizIo/Vstore/pull/211) | `d93056531373fa178a1047cf187eaa2fb0b7b8f9` | 16 Prometheus alert rules, provider-neutral configs, safe endpoint probes, alert-state simulation, native `promtool`/`amtool` validators with pinned and SHA-256-verified releases | [Monitoring PR CI](https://github.com/AzizIo/Vstore/actions/runs/43647093265); [push CI](https://github.com/AzizIo/Vstore/actions/runs/43647552312). |
-| [#210](https://github.com/AzizIo/Vstore/pull/210) | `33d94628819cb3b3d4c61565e4af06c95b2a53c8` | Frozen TON escrow ABI provenance and fail-closed artifact/build verifier; generated code/BOC digest checks | [TON artifact CI](https://github.com/AzizIo/Vstore/actions/runs/43646458754); [push CI](https://github.com/AzizIo/Vstore/actions/runs/43647588989). Does not complete escrow lifecycle or make signing safe. |
-| [#209](https://github.com/AzizIo/Vstore/pull/209), incorporating [#203](https://github.com/AzizIo/Vstore/pull/203) | `ef3d280f52cd03a1c6ead4e60527b4fd0badd078` | Payment snapshot/transaction immutability, TRUNCATE guards, PostgreSQL refund row DELETE guard, downgrade protection, retained evidence fixtures and isolated migration history tests | Combined head `7447e052ee896567a455a17eadea3ab7f42b0267`: [Backend](https://github.com/AzizIo/Vstore/actions/runs/43647950625), [Frontend + API-backed E2E](https://github.com/AzizIo/Vstore/actions/runs/43647950616) — all jobs passed with `pip-audit`, `npm audit`, clean `npm ci`, migration upgrade, PostgreSQL tests, Playwright and API-backed checks. |
-
-PR #203 is now closed/merged as part of the combined #209 merge; its ledger migration is in the same final history. No standalone payment PR remains open.
-
-## 3. Current open PRs and parallel work
-
-| PR / issue | State | Remaining acceptance |
+| PR | Scope now in main | Evidence / boundary |
 |---|---|---|
-| [#197 TON escrow](https://github.com/AzizIo/Vstore/pull/197) | Draft; not merged | ABI-backed backend adapter, full StateInit/address/BOC generation, durable idempotent wallet actions, independent finality proof, getter/trace reconciliation, PostgreSQL order-vs-escrow reservation concurrency, live valueless testnet lifecycle evidence and independent contract review. Keep signing disabled. |
-| [#205 release checklist](https://github.com/AzizIo/Vstore/pull/205) | This audit update | Tracks merged baseline and all outstanding release gates. |
-| [#201 Frontend/QA](https://github.com/AzizIo/Vstore/issues/201) | No dedicated reviewable implementation PR found in the current open PR inventory | Telegram initData trust-boundary review, UI payment-state review, TonConnect network guard and critical product E2E acceptance not independently delivered as a dedicated PR. |
+| #198 | Dependency/CI hardening, Compose validation, local PostgreSQL backup and isolated restore-drill scripts, dynamic Alembic head check | Earlier PR and main-push checks recorded in the prior release audit. Does not prove encrypted off-site backup or live restore. |
+| #204 | Production operations runbook and static infrastructure guardrails | Earlier Guardrails CI and push CI recorded in the prior release audit. Does not prove live VPS configuration. |
+| #209 (incorporating #203) | Payment ledger snapshot/transaction immutability, TRUNCATE/DELETE guards, downgrade protection and isolated migration evidence | Exact combined-head Backend and Frontend/API-backed E2E passed. No live provider or seller payouts. |
+| #211 | Provider-neutral Prometheus/Blackbox/Alertmanager templates, 16 alert rules, read-only probes, simulation and native config validation | Monitoring CI passed; no live receiver, private exporters or real alert delivery. |
+| #215 | Durable escrow wallet-action records, idempotency/replay conflict protection, reservation serialization, observer evidence gates and PostgreSQL race tests | Backend CI passed (715 tests, Ruff, pip-audit and migration drill); Frontend CI passed. No cryptographic TON finality provider or live broadcaster. |
+| #216 | TON escrow lifecycle hardening: terminal bounce protection and deadline enforcement with emulator regressions | TON Contract CI passed; 25 emulator tests passed on the merged contract track. Not an independent audit or live testnet acceptance. |
+| #218 | Pinned testnet ABI/BOC, reproducible Acton/Tolk artifact, deterministic StateInit/address derivation and unsigned TON Connect message construction | Exact PR-head Backend CI, Frontend CI/API-backed E2E and TON Contract CI passed. This is not an enabled payment flow. |
+| #219 | Escrow ABI/API documentation synchronization | Documentation-only; no additional runtime capability. |
 
-Issue [#207](https://github.com/AzizIo/Vstore/issues/207) refund-evidence retention is implemented by merged #209. Issue [#199](https://github.com/AzizIo/Vstore/issues/199) broader payment-provider/seller settlement decisions remain open. Infrastructure issues [#200](https://github.com/AzizIo/Vstore/issues/200) and [#208](https://github.com/AzizIo/Vstore/issues/208) remain open for live owner acceptance.
+The latest code-bearing main push at `7c09523c44bf0193553bd5ae1ef38b661b7a650d` has successful exact-SHA checks:
+- Backend CI: [run 43712693611](https://github.com/AzizIo/Vstore/actions/runs/43712693611)
+- Frontend CI: [run 43712693656](https://github.com/AzizIo/Vstore/actions/runs/43712693656)
+- TON Escrow Contract CI: [run 43712693618](https://github.com/AzizIo/Vstore/actions/runs/43712693618)
 
-## 4. Independent technical findings and limits
+These runs validate code at `7c09523`; they are not checks on the subsequent docs-only `19d5068` commit and do not establish production readiness.
 
-1. **Payment ledger:** migration `0015_payment_ledger_guards` protects financial snapshots and TRUNCATE operations; migration `0016_refund_evidence` blocks row-level DELETE from `payment_refunds`. Lifecycle/lease/reconciliation fields remain mutable by design. Test fixtures never delete ledger rows or disable guards; they retain rows in disposable CI databases, move unfinished test refunds to `manual_review`, cancel fixture orders and release listings. Migration downgrade/legacy-upgrade tests run in uniquely named disposable PostgreSQL databases.
-2. **Payment-provider and policy gates:** repository CI does not establish seller legal entity/status, seller/buyer countries, merchant of record, underwriting, settlement model or written Telegram policy classification. There is no live charge, refund, payout or seller settlement evidence. Keep public paid checkout disabled while [Issue #155](https://github.com/AzizIo/Vstore/issues/155) has no written Telegram ruling.
-3. **Backup/restore:** merged scripts provide a local/manual PostgreSQL dump and disposable restore drill. They do not implement encrypted off-host upload, retention/rotation, scheduled backups, remote metadata monitoring or a real production-like VPS restore. Their CI is not evidence of recovery from the live service.
-4. **Monitoring:** merged templates contain 16 alert rules and native config validation. No private production exporters/adapters, approved secret-backed receiver or real firing/resolved notification delivery has been configured or tested. Container/restart metrics do not prove the bot polling loop is processing updates.
-5. **VPS hardening:** merged runbook/static guardrails do not prove live firewall, SSH, TLS, reverse proxy, volume, disk, secret-store or production network state. No live VPS inspection was performed.
-6. **TON escrow:** the merged #210 verifier makes artifact provenance reproducible and checks code/BOC digests. It does not implement the remaining #197 adapter, address derivation/complete StateInit, finality, wallet action idempotency, live testnet lifecycle or independent security audit. No mainnet signing or real escrow.
+## 3. Current open PR and parallel work
 
-## 5. Release gate checklist
-
-| Gate | Status | Evidence / remaining work |
+| Item | State observed | Remaining work |
 |---|---|---|
-| Repository backend/frontend hardening | **PASS on merged PRs** | #198 and #209 CI success on exact PR heads; a fresh main push validation for #209 is tracked below. |
-| Python dependency audit | **PASS** | `pip-audit` succeeded on final combined PR #209 head. |
-| Frontend dependency/install audit | **PASS** | `npm ci`, committed lockfile validation and `npm audit` succeeded on final combined PR #209 head. |
-| PostgreSQL migration/payment evidence | **PASS in CI** | Combined Backend CI passed migration upgrade, PostgreSQL guards, refund retention and full backend tests on #209 head. |
-| Frontend/API journeys | **PASS in CI** | Frontend Playwright and separate API-backed Playwright/PostgreSQL/Redis journey passed on #209 head. |
-| Main push validation after #209 merge | **PASS** | On exact code-bearing main commit `ef3d280f52cd03a1c6ead4e60527b4fd0badd078`: [Backend](https://github.com/AzizIo/Vstore/actions/runs/43648129456) and [Frontend/API E2E](https://github.com/AzizIo/Vstore/actions/runs/43648129496) both completed successfully, including pip-audit, npm audit, migration upgrade, backend suite, Playwright and API-backed PostgreSQL/Redis journey. Current main is `631645588dffb50d2fed41a9781c88eb22274503`; the only later commit is this documentation audit merge. |
-| Telegram Stars live test invoice/payment cycle | **NOT VERIFIED** | Dedicated test bot real invoice → pre-checkout → successful-payment round trip against disposable DB still needs explicit safe acceptance. |
-| Written Telegram policy ruling | **BLOCKED** | Issue #155 has no written response. Public paid checkout stays disabled. |
-| Provider/seller settlement/legal model | **BLOCKED** | Legal entity, jurisdictions, merchant-of-record, seller payouts and provider underwriting facts unresolved. |
-| TON escrow testnet acceptance | **BLOCKED** | PR #197 remains Draft; full lifecycle, finality, concurrency and independent review open. Mainnet signing remains disabled. |
-| Encrypted off-site backup and real restore | **PARTIAL / NOT VERIFIED LIVE** | Need remote encryption/upload, retention, locking, monitoring and production-like restore drill. |
-| External monitoring and real alerts | **PARTIAL / NOT VERIFIED LIVE** | Need private exporters, bot processing heartbeat, approved secret receiver and actual firing/resolved delivery cycle. |
-| VPS TLS/firewall/volumes/reverse proxy | **NOT VERIFIED LIVE** | Owner-authorized inspection required. |
-| Production migration/deployment/secrets | **NOT RUN** | No production operations were performed. |
+| [#197 TON escrow acceptance](https://github.com/AzizIo/Vstore/pull/197) | Open Draft; explicitly NOT testnet-ready or production-ready | Complete immutable deployment snapshot; activate pinned adapter only with replay-safe payload persistence; cryptographic testnet finality provider; finalized trace/getter reconciliation; restartable action/recovery workers; PostgreSQL Order-vs-escrow concurrency evidence; valueless live testnet lifecycle; independent qualified TON/Tolk audit. |
+| [#199 payment backend](https://github.com/AzizIo/Vstore/issues/199) | Open; kickoff comment present, no assignee or agent progress report observed | Finish safe payment/provider audit. Do not enable live charges, payouts or seller settlement. |
+| [#200 production infrastructure](https://github.com/AzizIo/Vstore/issues/200) | Open; kickoff comment present, no assignee or agent progress report observed | Off-site encrypted backup/restore design, VPS runbook and owner-authorized live acceptance. |
+| [#201 frontend / Mini App QA](https://github.com/AzizIo/Vstore/issues/201) | Open; kickoff comment present, no assignee or agent progress report observed | Independent auth/session, payment-state, wallet/network and critical E2E review. |
+| [#208 monitoring](https://github.com/AzizIo/Vstore/issues/208) | Open; templates merged, live acceptance outstanding | Private exporters, bot processing heartbeat, approved secret-backed receiver and verified firing/resolved delivery. |
+| [#213 backend escrow](https://github.com/AzizIo/Vstore/issues/213) | Open; implementation substantially merged via #215 | Remaining provider/finality/action worker/reconciliation and complete immutable snapshot requirements must be tracked against #197. |
+| [#214 contract security](https://github.com/AzizIo/Vstore/issues/214) | Open; implementation substantially merged via #216 | Full terminal financial/NFT/reserve invariant matrix, signed end-to-end settlement fixture, independent qualified audit and owner-approved valueless testnet evidence. |
+| [#202 release candidate audit](https://github.com/AzizIo/Vstore/issues/202) | Open | Consolidate evidence, findings and explicit owner gates; do not mark release complete while any critical gate remains open. |
 
-## 6. Required owner actions before production
+## 4. Technical and operational blockers
 
-1. Obtain and preserve written Telegram guidance for the exact TON NFT secondary-sale flow in Issue #155.
-2. Confirm legal entity, country coverage, merchant-of-record, refund/dispute obligations and a permitted provider/settlement model.
-3. Perform a dedicated real Telegram test-bot invoice/payment acceptance using valueless/test accounts and disposable storage.
-4. Configure encrypted off-site backup storage, retention/rotation, collision-safe locking, alerting and complete a production-like restore drill.
-5. Install private metrics exporters/adapters, prove bot polling/message-processing heartbeat, configure an approved secret-backed Alertmanager receiver and verify a real alert/recovery cycle.
-6. Inspect VPS firewall, SSH, TLS, reverse proxy, storage volumes, database/Redis isolation and permissions with explicit owner authorization.
-7. Finish #197 testnet adapter, state/address, idempotency, finality and concurrency work; obtain independent TON/Tolk contract review before any signing enablement.
-8. Deliver the dedicated #201 frontend/QA review and test evidence if the product still requires that scope.
+1. **TON escrow is not an executable payment service.** Backend route remains fail-closed; unsigned payload construction is not signing or broadcast. No configured cryptographic finality provider independently proves masterchain/shard inclusion and finality. Indexer-only status is insufficient.
+2. **Immutable deal snapshot is incomplete.** Persist all oracle/resolver public keys, reserve/refund/transfer economics, query IDs, protocol/network identifiers and exact deployment terms before preparing a transaction.
+3. **Payload/action lifecycle is incomplete.** Persist the exact unsigned payload/BOC and bind it to durable idempotent actions; provide restartable workers and safe recovery without repeating settlement.
+4. **Chain reconciliation is incomplete.** Reconcile finalized transaction traces and all required contract getters before changing deal state; retain NFT ownership and principal/reserve invariants for every terminal path.
+5. **Independent contract review is missing.** Internal code review and emulator tests are not an independent qualified TON/Tolk security audit.
+6. **Payment policy and settlement model are unresolved.** No written Telegram ruling for the exact NFT resale flow, approved merchant-of-record/provider model, seller jurisdiction/underwriting or real settlement/refund evidence.
+7. **Stars remains test-only.** The isolated test harness is not public checkout. A real test-bot invoice → pre-checkout → successful-payment round trip and refund acceptance still require controlled owner-led verification.
+8. **Backup/restore is partial.** Local/manual PostgreSQL backup and disposable restore scripts do not establish encrypted off-host upload, retention/rotation, scheduled execution, remote monitoring or production-like restore.
+9. **Monitoring is partial.** Templates and alert simulation do not prove private exporters, bot processing heartbeat or actual delivery to an approved external receiver.
+10. **VPS and production cutover are unverified.** Firewall, SSH, TLS, reverse proxy, volumes, database/Redis exposure, secret storage and live migration/restore state require owner-authorized inspection.
+11. **Live wallet/NFT acceptance remains separate.** CI and local fixtures do not prove Telegram WebView, BotFather manifest, Tonkeeper, real network switching or live NFT delivery acceptance.
 
-## 7. Safety and decision
+## 5. Release gates
 
-**BLOCKED — NOT READY FOR PRODUCTION.** Repository hardening and CI work have been merged, including monitoring templates, payment ledger protections and TON artifact verification. That does not constitute live operational, legal/platform, testnet or production acceptance.
+| Gate | Status | Required evidence |
+|---|---|---|
+| Backend/frontend/contract repository CI | **PASS on code-bearing main SHA 7c09523** | Exact-SHA Backend, Frontend and TON Contract CI runs listed above. |
+| Python and npm dependency audit | **PASS in recorded CI** | pip-audit/npm audit and lockfile checks on merged implementation heads. |
+| PostgreSQL migration and concurrency coverage | **PASS for merged tested scope; escrow acceptance remains open** | Migration upgrade/downgrade drills and Order-vs-escrow race tests on #215. |
+| Frontend/API-backed E2E | **PASS in recorded CI** | Exact PR #218 frontend/API-backed E2E checks. |
+| TON artifact reproducibility | **PASS for pinned testnet artifact** | ABI/BOC digests, Acton build and deterministic StateInit/address checks. |
+| TON finality provider and restartable live action lifecycle | **BLOCKED** | Independent cryptographic inclusion/finality proof, worker/recovery and finalized trace/getter reconciliation. |
+| Full contract adversarial lifecycle coverage | **PARTIAL / BLOCKED** | Full signed settlement/refund, dispute, expiry, bounce/action-failure and principal/NFT/reserve invariant matrix. |
+| Independent TON/Tolk audit | **BLOCKED** | Written report by qualified reviewer independent of implementation. |
+| Valueless TON testnet lifecycle | **NOT RUN / OWNER-GATED** | Explicit owner approval, disposable wallets/assets and transaction/trace/getter/ownership evidence. |
+| Telegram Stars live test cycle | **NOT VERIFIED** | Dedicated test bot and disposable DB invoice/pre-checkout/payment/refund acceptance. |
+| Telegram policy and legal/provider model | **BLOCKED** | Written platform guidance and approved legal/provider/settlement decision. |
+| Encrypted off-site backup and real restore | **PARTIAL / NOT VERIFIED LIVE** | Encryption, remote upload, retention, lock/monitoring and production-like restore drill. |
+| Monitoring and real alerts | **PARTIAL / NOT VERIFIED LIVE** | Private exporters, bot processing heartbeat and real firing/resolved receiver delivery. |
+| VPS hardening and production cutover | **NOT VERIFIED LIVE** | Owner-authorized inspection and reviewed deployment/rollback evidence. |
+| Production migration/deployment/secrets | **NOT RUN** | No production operation performed or approved. |
 
-No production credentials, VPS, DNS, production database, Telegram/payment account or signing keys were accessed. No deployment, production migration, live payment/refund, seller payout, TON transfer or mainnet signing was performed.
+## 6. Required owner decisions and approvals
+
+- Obtain and preserve written Telegram guidance for the exact TON NFT secondary-sale flow (Issue #155).
+- Confirm legal entity, supported countries, merchant-of-record, refund/dispute obligations and an approved provider/settlement model.
+- Authorize a controlled Telegram test-bot invoice/payment/refund acceptance using test accounts and disposable storage.
+- Approve disposable TON testnet wallets and valueless NFT lifecycle testing only after the contract/security prerequisites are satisfied.
+- Arrange an independent qualified TON/Tolk reviewer; internal self-review is not sufficient.
+- Authorize any live VPS/DNS/production database inspection separately. No production credentials or private keys should be shared in chat or committed.
+- Approve production cutover, migrations and secret configuration only after backup/restore and rollback evidence is reviewed.
+
+## 7. Safety decision
+
+**BLOCKED — NOT READY FOR PRODUCTION, LIVE PAYMENTS OR LIVE ESCROW.**
+
+The repository has a substantially stronger marketplace, payment-ledger safety, monitoring-template and TON artifact baseline. The merged escrow work currently supports reproducible unsigned message construction, not live settlement. Keep production checkout, custody, automated payouts, mainnet signing and real-value escrow disabled.
+
+No production credentials, VPS, DNS, production database, Telegram/payment account or signing keys were accessed. No production deployment/migration, live payment/refund, seller payout, TON transfer or mainnet signing was performed.
