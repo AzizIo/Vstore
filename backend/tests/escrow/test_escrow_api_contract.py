@@ -4,7 +4,7 @@ import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
