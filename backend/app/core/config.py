@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     ton_escrow_action_value_nanotons: int = Field(default=10_000_000, gt=0)
     ton_escrow_nft_deposit_value_nanotons: int = Field(default=10_000_000, gt=0)
     ton_escrow_nft_return_value_nanotons: int = Field(default=10_000_000, gt=0)
+    # A trust-level-0 Pytoniq proof verifier is opt-in and only supports TON testnet.
+    ton_escrow_finality_enabled: bool = False
+    ton_escrow_finality_min_depth: int = Field(default=2, ge=1, le=16)
+    ton_escrow_finality_batch_deals: int = Field(default=25, ge=1, le=100)
     ton_metadata_ipfs_gateway_url: str = "https://ipfs.io/ipfs"
     cors_allowed_origins: list[str] = [
         "http://localhost:5173",
