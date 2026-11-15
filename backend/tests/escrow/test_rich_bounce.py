@@ -15,7 +15,6 @@ from app.escrow.rich_bounce import (
     parse_rich_bounce_body,
 )
 
-
 SALT = "01" * 32
 ITEM = "0:" + "44" * 32
 CONTRACT = "0:" + "aa" * 32
