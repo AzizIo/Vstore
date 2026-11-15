@@ -394,3 +394,104 @@ def test_unmatched_outbound_bounce_cannot_transition_a_deal() -> None:
             EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED,
             EscrowDealStatus.MANUAL_REVIEW.value,
         )
+
+
+@pytest.mark.parametrize(
+    ("event_type", "target"),
+    [
+        (
+            EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED,
+            EscrowDealStatus.DELIVERED_DISPUTE_WINDOW,
+        ),
+        (
+            EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED,
+            EscrowDealStatus.BUYER_REFUND_PENDING,
+        ),
+        (
+            EscrowChainEventType.SELLER_PAYOUT_RECONCILED,
+            EscrowDealStatus.SETTLED,
+        ),
+        (
+            EscrowChainEventType.BUYER_REFUND_RECONCILED,
+            EscrowDealStatus.REFUNDED,
+        ),
+    ],
+)
+def test_late_proof_verified_outbound_finality_can_resume_manual_review(
+    event_type: EscrowChainEventType,
+    target: EscrowDealStatus,
+) -> None:
+    # Timeout/manual review is a safety hold, not a terminal settlement. A later
+    # finalized contract-accepted attestation may resume only its getter-proved
+    # target state; event labels alone cannot select or invent that transition.
+    assert transition_for_verified_event(
+        EscrowDealStatus.MANUAL_REVIEW,
+        event_type,
+        target.value,
+    ) is target
+    with pytest.raises(EscrowDomainError):
+        transition_for_verified_event(
+            EscrowDealStatus.MANUAL_REVIEW,
+            event_type,
+            EscrowDealStatus.MANUAL_REVIEW.value,
+        )
+
+
+@pytest.mark.parametrize(
+    ("event_type", "target", "source", "destination", "amount"),
+    [
+        (
+            EscrowChainEventType.SELLER_PAYOUT_RECONCILED,
+            EscrowDealStatus.SETTLED,
+            "seller",
+            "seller",
+            2_500_000_000,
+        ),
+        (
+            EscrowChainEventType.BUYER_REFUND_RECONCILED,
+            EscrowDealStatus.REFUNDED,
+            "buyer",
+            "buyer",
+            2_500_000_000,
+        ),
+    ],
+)
+def test_principal_settlement_requires_accepted_attestation_and_getter(
+    deal: DealEvidenceSnapshot,
+    event_type: EscrowChainEventType,
+    target: EscrowDealStatus,
+    source: str,
+    destination: str,
+    amount: int,
+) -> None:
+    good = evidence(
+        event_type=event_type,
+        source_address=deal.contract_address,
+        destination_address=(
+            deal.seller_address if destination == "seller" else deal.buyer_address
+        ),
+        amount_nanotons=amount,
+        attestation_accepted=True,
+        contract_state_reconciled=True,
+        observed_contract_state=target.value,
+    )
+    validate_event_against_deal(good, deal)
+
+    for changes in (
+        {"attestation_accepted": False},
+        {"contract_state_reconciled": False},
+        {"observed_contract_state": EscrowDealStatus.MANUAL_REVIEW.value},
+    ):
+        payload: dict[str, object] = {
+            "source_address": deal.contract_address,
+            "destination_address": (
+                deal.seller_address if destination == "seller" else deal.buyer_address
+            ),
+            "amount_nanotons": amount,
+            "attestation_accepted": True,
+            "contract_state_reconciled": True,
+            "observed_contract_state": target.value,
+        }
+        payload.update(changes)
+        with pytest.raises(EscrowDomainError):
+            validate_event_against_deal(evidence(event_type=event_type, **payload), deal)
