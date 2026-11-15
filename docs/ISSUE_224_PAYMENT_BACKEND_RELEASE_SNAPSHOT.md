@@ -45,7 +45,19 @@ Telegram's Stars refund method returns the **full** charge. The current adapter 
 
 There is **no public HTTP payment-intent, payment-status or webhook endpoint** in the current backend API. Existing HTTP order routes reserve/read/cancel orders and manage delivery; they do not accept client payment-success or refund claims. The current payment entry point is the test bot's `/pay ORDER_UUID` command.
 
-The payment tables and internal statuses are not a frontend API contract. Do not have the Mini App read database-shaped models or infer payment success from an order status. A future HTTP contract must be coordinated with the frontend owner before routes are added. Its response should expose an explicitly documented payment status and safe provider metadata only; it must never accept client-supplied `paid`, `captured` or `refunded` state. No such endpoint is claimed as implemented by this issue slice.
+The payment tables and internal statuses are not a frontend API contract. Do not have the Mini App read database-shaped models or infer payment success from an order status. The following is the **proposed frontend-facing contract for coordination only**; none of these routes are implemented by this PR:
+
+| Operation | Proposed contract | Authorization / effects |
+|---|---|---|
+| Create checkout | `POST /api/orders/{order_id}/payment-intent` | Authenticated order buyer only; server reads amount/currency from immutable order, requires a live reserved XTR order, creates/reuses one intent, and returns a provider checkout URL plus expiry. |
+| Read payment | `GET /api/orders/{order_id}/payment` | Authenticated order buyer (seller/admin read rules require separate approval); returns the server-derived payment state and safe refund summary. |
+| Provider notification | No public route while the bot uses long polling | A future webhook requires a separately approved secret-validation/replay contract and must not run alongside polling for the same bot. |
+
+Proposed response fields: `order_id`, `payment_status`, `provider`, `amount`, `currency`, `expires_at`, and an optional `checkout_url` on intent creation. A safe refund summary may expose `refund_status` and a non-sensitive support/error code; do not expose bot tokens, invoice payloads, raw updates, provider charge IDs, payer Telegram IDs or database rows. The client may request checkout or read status, but must never submit a claimed `paid`, `captured` or `refunded` state.
+
+Stable public payment statuses should be `pending`, `paid`, `refund_pending`, `refunded`, `failed` and `expired`; internal refund worker states (`queued`, `processing`, `retry_wait`, `reconciliation_required`, `manual_review`) should be mapped to a safe refund summary and must not be mistaken for a completed refund. Unknown provider outcomes remain `refund_pending` / manual review, never success.
+
+Expected API errors: `401` unauthenticated, `404` unknown or non-owned order, `409` non-XTR/expired/non-reserved order or incompatible existing intent, and `503` when the configured payment provider is unavailable. The final request/response envelope, status naming and seller/admin read permissions must be agreed with the frontend owner (Issue #227) before implementation.
 
 ## 5. Runtime isolation
 
