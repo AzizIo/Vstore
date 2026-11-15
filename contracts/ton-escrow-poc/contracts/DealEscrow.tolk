@@ -317,6 +317,10 @@ fun handleNftOwnershipNotification(
 
 fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
     var progress = storage.progress.load();
+    assert (
+        progress.deadlineUnix > 0
+        && blockchain.now() <= progress.deadlineUnix
+    ) throw Errors.Deadline;
     val terms = storage.terms.load();
     assertTestnet(terms);
 
@@ -449,6 +453,10 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
 
 fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
     var progress = storage.progress.load();
+    assert (
+        progress.deadlineUnix > 0
+        && blockchain.now() <= progress.deadlineUnix
+    ) throw Errors.Deadline;
     val terms = storage.terms.load();
     assertTestnet(terms);
 
@@ -741,10 +749,21 @@ fun onInternalMessage(in: InMessage) {
 }
 
 fun onBouncedMessage(_in: InMessageBounced) {
-    // A bounce is not treated as final ownership or settlement evidence.
-    // Freeze the state until a fresh finalized trace/getter check is reconciled.
+    // A late bounce of a secondary message (for example the seller deployment
+    // allowance refund) must not erase an already reconciled terminal result.
+    // Terminal state and principal settlement are immutable once recorded.
     var storage = EscrowStorage.load();
     var progress = storage.progress.load();
+    if (
+        progress.state == STATE_SETTLED
+        || progress.state == STATE_REFUNDED
+        || progress.state == STATE_EXPIRED
+    ) {
+        return;
+    }
+
+    // For non-terminal states, a bounce is not final ownership or settlement
+    // evidence. Freeze until a fresh finalized trace/getter check is reconciled.
     progress = asManualReview(progress);
     storage.progress = progress.toCell();
     storage.save();
