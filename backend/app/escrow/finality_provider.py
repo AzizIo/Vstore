@@ -835,7 +835,7 @@ class PytoniqTONTestnetEscrowProvider:
                 _OP_FUND: 3,
                 _OP_ACCEPT: 4,
                 _OP_DISPUTE: 6,
-                _OP_RECOVER: 13,
+                _OP_RECOVER: 7,
             }.get(opcode)
             if opcode == _OP_RESOLVE and state not in {4, 7}:
                 raise EscrowProviderInvalidEvidence("ResolveDispute did not reach an allowed state")
@@ -856,19 +856,15 @@ class PytoniqTONTestnetEscrowProvider:
             if opcode == _OP_RESOLVE:
                 event_type = EscrowChainEventType.DISPUTE_RESOLUTION_ACCEPTED
             elif opcode == _OP_TIMEOUT:
-                event_type = {
-                    7: EscrowChainEventType.NFT_RETURN_STARTED,
-                    8: EscrowChainEventType.SELLER_PAYOUT_INITIATED,
-                    12: EscrowChainEventType.DEAL_EXPIRED,
-                    13: EscrowChainEventType.MANUAL_REVIEW_REQUIRED,
-                }[state]
+                event_type = EscrowChainEventType.DEAL_TIMEOUT_ACCEPTED
+            elif opcode == _OP_RECOVER:
+                event_type = EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED
             else:
                 event_type = {
                     _OP_ACTIVATE: EscrowChainEventType.CONTRACT_ACTIVATED,
                     _OP_FUND: EscrowChainEventType.BUYER_PAYMENT_ACCEPTED,
                     _OP_ACCEPT: EscrowChainEventType.BUYER_ACCEPTANCE_RECORDED,
                     _OP_DISPUTE: EscrowChainEventType.DISPUTE_OPENED_ONCHAIN,
-                    _OP_RECOVER: EscrowChainEventType.MANUAL_REVIEW_REQUIRED,
                 }[opcode]
             source = message_source
             destination = message_destination
@@ -876,6 +872,21 @@ class PytoniqTONTestnetEscrowProvider:
             collection = _canonical_address(snapshot["collection_address"])
             amount = message_value
             accepted = False
+            if opcode == _OP_RECOVER:
+                recovery_item = _canonical_address(getter.get("recovery_item_address"))
+                recovery_owner = _canonical_address(getter.get("recovery_previous_owner"))
+                if (
+                    state != 7
+                    or not bool(getter.get("nft_in_escrow"))
+                    or recovery_item is None
+                    or recovery_owner is None
+                    or source != recovery_owner
+                    or destination != _canonical_address(deal.contract_address)
+                ):
+                    raise EscrowProviderInvalidEvidence(
+                        "Unexpected NFT recovery does not match the proof-read recovery state"
+                    )
+                item = recovery_item
         elif opcode == _NFT_NOTIFICATION_OPCODE:
             parser = tx.in_msg.body.begin_parse()
             if parser.load_uint(32) != _NFT_NOTIFICATION_OPCODE:
@@ -951,8 +962,8 @@ class PytoniqTONTestnetEscrowProvider:
                 raise EscrowProviderInvalidEvidence("Oracle attestation route/evidence disagrees with getter state")
             event_type = {
                 (1, 5): EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED,
-                (1, 8): EscrowChainEventType.SELLER_PAYOUT_INITIATED,
-                (2, 9): EscrowChainEventType.BUYER_REFUND_INITIATED,
+                (1, 8): EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED,
+                (2, 9): EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED,
                 (2, 12): EscrowChainEventType.ORACLE_NFT_RETURN_ATTESTATION_ACCEPTED,
                 (3, 10): EscrowChainEventType.SELLER_PAYOUT_RECONCILED,
                 (4, 11): EscrowChainEventType.BUYER_REFUND_RECONCILED,
