@@ -876,14 +876,23 @@ class PytoniqTONTestnetEscrowProvider:
         str | None,
         int | None,
         bool,
+        str | None,
     ]:
         state = int(getter["contract_state"])
+        verified_query_id: int | None = None
         opcode = int(event.operation_id, 16) if event.operation_id else -1
         snapshot = deal.deployment_snapshot_json
         if not isinstance(snapshot, dict):
             raise EscrowProviderInvalidEvidence("DealEscrow snapshot is missing")
         if opcode in _DIRECT_OPCODES:
-            query_id, _salt, _reason_hash = self._decode_direct_body(tx.in_msg.body, opcode, deal)
+            query_id, _salt, _reason_hash = self._decode_direct_body(
+                tx.in_msg.body, opcode, deal
+            )
+            verified_query_id = query_id
+            if event.query_id is not None and event.query_id != str(query_id):
+                raise EscrowProviderInvalidEvidence(
+                    "Indexed query id differs from the proof-decoded direct message"
+                )
             expected_state = {
                 _OP_ACTIVATE: 1,
                 _OP_FUND: 3,
@@ -958,6 +967,11 @@ class PytoniqTONTestnetEscrowProvider:
             if parser.load_uint(32) != _NFT_NOTIFICATION_OPCODE:
                 raise EscrowProviderInvalidEvidence("NFT notification opcode mismatch")
             query_id = parser.load_uint(64)
+            verified_query_id = query_id
+            if event.query_id is not None and event.query_id != str(query_id):
+                raise EscrowProviderInvalidEvidence(
+                    "Indexed query id differs from the proof-decoded NFT notification"
+                )
             previous_owner = parser.load_address()
             is_ref = parser.load_bit()
             payload_cell = parser.load_ref() if is_ref else parser.to_cell()
@@ -1013,6 +1027,14 @@ class PytoniqTONTestnetEscrowProvider:
             if oracle is None:
                 raise EscrowProviderInvalidEvidence("Oracle attestation data is missing")
             action = int(oracle["action"])
+            verified_query_id = int(oracle["query_id"])
+            if (
+                event.query_id is not None
+                and event.query_id != str(verified_query_id)
+            ):
+                raise EscrowProviderInvalidEvidence(
+                    "Indexed query id differs from the proof-decoded oracle attestation"
+                )
             expected_routes = {
                 1: ("contract", "buyer", {5, 8}, 0),
                 2: ("contract", "seller", {9, 12}, 0),
@@ -1077,7 +1099,16 @@ class PytoniqTONTestnetEscrowProvider:
             raise EscrowProviderInvalidEvidence(
                 "The candidate opcode is not part of the DealEscrow v1 ABI"
             )
-        return event_type, source, destination, item, collection, amount, accepted
+        return (
+            event_type,
+            source,
+            destination,
+            item,
+            collection,
+            amount,
+            accepted,
+            str(verified_query_id) if verified_query_id is not None else None,
+        )
 
     async def verify_event(self, event: NormalizedChainEvent) -> FinalityVerification | None:
         if event.network != "testnet" or not event.deal_id:
@@ -1164,10 +1195,9 @@ class PytoniqTONTestnetEscrowProvider:
                 collection,
                 verified_amount,
                 accepted,
-            ) = (
-                self._verified_event(
-                    event, tx, deal, getter, state_name, oracle, source, destination, amount
-                )
+                verified_query_id,
+            ) = self._verified_event(
+                event, tx, deal, getter, state_name, oracle, source, destination, amount
             )
             # The proof's local trace identity is derived only from the actually
             # included transaction and message; the V3 trace_id is not trusted.
@@ -1211,6 +1241,7 @@ class PytoniqTONTestnetEscrowProvider:
                 masterchain_inclusion_verified=True,
                 trace_binding_verified=True,
                 verified_event_type=event_type,
+                verified_query_id=verified_query_id,
                 source_address=verified_source,
                 destination_address=verified_destination,
                 item_address=item,
