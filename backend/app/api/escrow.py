@@ -18,9 +18,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.ton_nft.address import AddressError, normalize_address
-from app.assets.ton_nft.dependencies import get_ton_nft_verifier
-from app.assets.ton_nft.models import VerificationStatus
-from app.assets.ton_nft.verifier import TONNFTVerifier
 from app.auth.dependencies import get_current_user
 from app.core.config import get_settings
 from app.db.models import (
@@ -199,7 +196,6 @@ async def _deal_projection(
 router = APIRouter(prefix="/escrow", tags=["ton-escrow"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
-Verifier = Annotated[TONNFTVerifier, Depends(get_ton_nft_verifier)]
 IdentityProvider = Annotated[
     PytoniqTONTestnetEscrowProvider,
     Depends(get_escrow_nft_identity_provider),
@@ -716,31 +712,6 @@ async def _verify_escrow_nft_identity(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "escrow_nft_identity_evidence_invalid"},
         ) from exc
-
-
-async def _verify_current_nft_owner(
-    verifier: TONNFTVerifier,
-    *,
-    item_address: str,
-    seller_address: str,
-) -> None:
-    if verifier.network != "testnet":
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Escrow requires a TON testnet verifier",
-        )
-    result = await verifier.verify(item_address, seller_address)
-    if result.status is VerificationStatus.VERIFIED:
-        return
-    if result.status is VerificationStatus.PROVIDER_UNAVAILABLE:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="TON testnet ownership provider is unavailable; retry later",
-        )
-    raise HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail="NFT ownership or item verification did not match the escrow intent",
-    )
 
 
 @router.post("/listing-intents", response_model=EscrowListingIntentResponse, status_code=201)
@@ -1323,7 +1294,7 @@ async def list_seller_deals(user: CurrentUser, session: DbSession, limit: int = 
 
 async def _prepare_action(
     deal_id: UUID, action: EscrowWalletAction, user: User,
-    session: AsyncSession, verifier: TONNFTVerifier,
+    session: AsyncSession,
     identity_provider: PytoniqTONTestnetEscrowProvider, idempotency_key: str,
     request_context: dict[str, object] | None = None,
 ):
@@ -1733,9 +1704,9 @@ async def _prepare_action(
 @router.post("/deals/{deal_id}/prepare/create-deal-escrow",
     response_model=EscrowTransactionPreparationResponse)
 async def prepare_deal_escrow(deal_id: UUID, user: CurrentUser, session: DbSession,
-    verifier: Verifier, identity_provider: IdentityProvider, idempotency_key: IdempotencyKey):
+    identity_provider: IdentityProvider, idempotency_key: IdempotencyKey):
     return await _prepare_action(deal_id, EscrowWalletAction.CREATE_DEAL_ESCROW, user, session,
-        verifier, identity_provider, idempotency_key)
+        identity_provider, idempotency_key)
 
 
 @router.post(
@@ -1747,7 +1718,6 @@ async def prepare_deal_activation(
     request: Request,
     user: CurrentUser,
     session: DbSession,
-    verifier: Verifier,
     identity_provider: IdentityProvider,
     idempotency_key: IdempotencyKey,
 ):
@@ -1772,7 +1742,7 @@ async def prepare_deal_activation(
     if existing is not None:
         return await _prepare_action(
             deal_id, EscrowWalletAction.ACTIVATE_DEAL, user, session,
-            verifier, identity_provider, idempotency_key,
+            identity_provider, idempotency_key,
         )
 
     deal = await session.scalar(
@@ -1883,39 +1853,36 @@ async def prepare_deal_activation(
 
     return await _prepare_action(
         deal_id, EscrowWalletAction.ACTIVATE_DEAL, user, session,
-        verifier, identity_provider, idempotency_key,
+        identity_provider, idempotency_key,
     )
 
 
 @router.post("/deals/{deal_id}/prepare/deposit-nft",
     response_model=EscrowTransactionPreparationResponse)
 async def prepare_nft_deposit(deal_id: UUID, user: CurrentUser, session: DbSession,
-    verifier: Verifier,
     identity_provider: IdentityProvider,
     idempotency_key: IdempotencyKey):
     return await _prepare_action(
-        deal_id, EscrowWalletAction.DEPOSIT_NFT, user, session, verifier, identity_provider, idempotency_key
+        deal_id, EscrowWalletAction.DEPOSIT_NFT, user, session, identity_provider, idempotency_key
     )
 
 
 @router.post("/deals/{deal_id}/prepare/funding",
     response_model=EscrowTransactionPreparationResponse)
 async def prepare_buyer_funding(deal_id: UUID, user: CurrentUser, session: DbSession,
-    verifier: Verifier,
     identity_provider: IdentityProvider,
     idempotency_key: IdempotencyKey):
     return await _prepare_action(
-        deal_id, EscrowWalletAction.FUND_DEAL, user, session, verifier, identity_provider, idempotency_key
+        deal_id, EscrowWalletAction.FUND_DEAL, user, session, identity_provider, idempotency_key
     )
 
 
 @router.post("/deals/{deal_id}/prepare/accept", response_model=EscrowTransactionPreparationResponse)
 async def prepare_buyer_acceptance(deal_id: UUID, user: CurrentUser, session: DbSession,
-    verifier: Verifier,
     identity_provider: IdentityProvider,
     idempotency_key: IdempotencyKey):
     return await _prepare_action(
-        deal_id, EscrowWalletAction.ACCEPT_DEAL, user, session, verifier, identity_provider, idempotency_key
+        deal_id, EscrowWalletAction.ACCEPT_DEAL, user, session, identity_provider, idempotency_key
     )
 
 
@@ -1923,35 +1890,33 @@ async def prepare_buyer_acceptance(deal_id: UUID, user: CurrentUser, session: Db
     response_model=EscrowTransactionPreparationResponse)
 async def prepare_dispute(
     deal_id: UUID, payload: EscrowDisputeCreate, user: CurrentUser,
-    session: DbSession, verifier: Verifier, identity_provider: IdentityProvider,
+    session: DbSession, identity_provider: IdentityProvider,
     idempotency_key: IdempotencyKey,
 ):
     return await _prepare_action(
-        deal_id, EscrowWalletAction.OPEN_DISPUTE, user, session, verifier, identity_provider, idempotency_key, {"reason": payload.reason, "reason_code": payload.reason_code},
+        deal_id, EscrowWalletAction.OPEN_DISPUTE, user, session, identity_provider, idempotency_key, {"reason": payload.reason, "reason_code": payload.reason_code},
     )
 
 
 @router.post("/deals/{deal_id}/prepare/nft-return",
     response_model=EscrowTransactionPreparationResponse)
 async def prepare_buyer_nft_return(
-    deal_id: UUID, user: CurrentUser, session: DbSession, verifier: Verifier,
-    identity_provider: IdentityProvider,
+    deal_id: UUID, user: CurrentUser, session: DbSession, identity_provider: IdentityProvider,
     idempotency_key: IdempotencyKey,
 ):
     return await _prepare_action(deal_id, EscrowWalletAction.RETURN_NFT_TO_ESCROW, user,
-        session, verifier, identity_provider, idempotency_key)
+        session, identity_provider, idempotency_key)
 
 
 @router.post("/deals/{deal_id}/prepare/withdraw-unsold-nft",
     response_model=EscrowTransactionPreparationResponse)
 async def prepare_unsold_nft_withdrawal(
-    deal_id: UUID, user: CurrentUser, session: DbSession, verifier: Verifier,
-    identity_provider: IdentityProvider,
+    deal_id: UUID, user: CurrentUser, session: DbSession, identity_provider: IdentityProvider,
     idempotency_key: IdempotencyKey,
 ):
     return await _prepare_action(
         deal_id, EscrowWalletAction.WITHDRAW_UNSOLD_NFT, user, session,
-        verifier, identity_provider, idempotency_key)
+        identity_provider, idempotency_key)
 
 
 @router.post(
