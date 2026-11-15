@@ -942,23 +942,6 @@ async def _prepare_action(
         raise HTTPException(
             status_code=409, detail={"code": "escrow_wallet_changed_during_validation"}
         )
-    deal_snapshot, missing_snapshot_fields = _build_deployment_snapshot(deal)
-    if deal_snapshot is None:
-        action_record.status = "blocked_abi"
-        action_record.last_error_code = "deployment_snapshot_incomplete"
-        await session.commit()
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "code": "deployment_snapshot_incomplete",
-                "action_id": str(action_record.id),
-                "missing_fields": list(missing_snapshot_fields),
-                "message": (
-                    "The full immutable DealEscrow deployment/getter snapshot is not "
-                    "persisted yet; no transaction payload was generated"
-                ),
-            },
-        )
     action_hash = canonical_request_sha256({
         "actor_id": str(user.id),
         "deal_id": str(deal.id),
@@ -1008,6 +991,24 @@ async def _prepare_action(
             "code": "contract_abi_pending", "action_id": str(action_record.id),
             "message": "No reviewed ABI or message layout is available",
         })
+
+    deal_snapshot, missing_snapshot_fields = _build_deployment_snapshot(deal)
+    if deal_snapshot is None:
+        action_record.status = "blocked_abi"
+        action_record.last_error_code = "deployment_snapshot_incomplete"
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "deployment_snapshot_incomplete",
+                "action_id": str(action_record.id),
+                "missing_fields": list(missing_snapshot_fields),
+                "message": (
+                    "The full immutable DealEscrow deployment/getter snapshot is not "
+                    "persisted yet; no transaction payload was generated"
+                ),
+            },
+        )
     try:
         await _contract_adapter.prepare_transaction(
             action, actor_wallet=wallet, resource_id=str(deal.id),
