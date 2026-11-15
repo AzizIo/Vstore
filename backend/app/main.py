@@ -17,6 +17,7 @@ from app.api.escrow import router as escrow_router
 from app.api.health import router as health_router
 from app.api.listings import router as listings_router
 from app.api.orders import router as orders_router
+from app.api.payments import _test_payment_router_enabled, router as payments_router
 from app.api.reviews import router as reviews_router
 from app.api.sellers import router as sellers_router
 from app.api.users import router as users_router
@@ -154,6 +155,9 @@ app.include_router(users_router, prefix="/api")
 app.include_router(listings_router, prefix="/api")
 app.include_router(wallets_router, prefix="/api")
 app.include_router(orders_router, prefix="/api")
+# The public HTTP payment contract is only available in the isolated Stars test runtime.
+if _test_payment_router_enabled(settings):
+    app.include_router(payments_router, prefix="/api")
 app.include_router(reviews_router, prefix="/api")
 app.include_router(sellers_router, prefix="/api")
 
