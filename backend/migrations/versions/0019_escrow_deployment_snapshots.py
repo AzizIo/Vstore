@@ -175,7 +175,17 @@ def upgrade() -> None:
         "AND finality_provider IS NULL"
         ") OR ("
         "finalized_transaction_hash IS NOT NULL "
-        "AND finalized_transaction_hash ~ '^[0-9a-f]{64}    )
+        "AND finalized_transaction_hash ~ '^[0-9a-f]{64}$' "
+        "AND finality_masterchain_seqno IS NOT NULL "
+        "AND finality_masterchain_seqno > 0 "
+        "AND finality_masterchain_block_hash IS NOT NULL "
+        "AND finality_masterchain_block_hash ~ '^[0-9a-f]{64}$' "
+        "AND finality_proof_sha256 IS NOT NULL "
+        "AND finality_proof_sha256 ~ '^[0-9a-f]{64}$' "
+        "AND finality_provider IS NOT NULL "
+        "AND length(finality_provider) BETWEEN 1 AND 128"
+        ")",
+    )
     op.create_check_constraint(
         "ck_escrow_action_unsigned_bocs_pair",
         "escrow_wallet_actions",
