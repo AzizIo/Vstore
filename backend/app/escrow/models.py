@@ -91,6 +91,47 @@ class EscrowListingIntent(TimestampMixin, EscrowBase):
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
 
 
+_IMMUTABLE_LISTING_INTENT_TERMS = (
+    "id",
+    "marketplace_listing_id",
+    "asset_id",
+    "seller_id",
+    "seller_wallet_id",
+    "network",
+    "item_address",
+    "listing_key",
+    "collection_address_snapshot",
+    "nft_identity_snapshot_json",
+    "nft_identity_snapshot_sha256",
+    "seller_address_snapshot",
+    "price_amount",
+    "price_currency",
+    "idempotency_key",
+)
+
+
+def assert_listing_intent_terms_immutable(target: EscrowListingIntent) -> None:
+    state = sa_inspect(target)
+    changed = [
+        name for name in _IMMUTABLE_LISTING_INTENT_TERMS
+        if state.attrs[name].history.has_changes()
+    ]
+    if changed:
+        fields = ", ".join(sorted(set(changed)))
+        raise ValueError(f"Immutable escrow listing-intent terms cannot be changed: {fields}")
+
+
+def _before_escrow_listing_intent_update(
+    _mapper: object,
+    _connection: object,
+    target: EscrowListingIntent,
+) -> None:
+    assert_listing_intent_terms_immutable(target)
+
+
+sa_event.listen(EscrowListingIntent, "before_update", _before_escrow_listing_intent_update)
+
+
 class EscrowDeal(TimestampMixin, EscrowBase):
     __tablename__ = "escrow_deals"
     __table_args__ = (
