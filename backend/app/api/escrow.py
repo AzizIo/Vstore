@@ -1007,6 +1007,7 @@ async def _prepare_action(
     # diagnostic builder or an adapter stub imply that transaction preparation is
     # available. Keep the durable action and fail closed until the schema, migration,
     # immutability rules and PostgreSQL integration tests land together.
+    _, missing_snapshot_fields = _build_deployment_snapshot(deal)
     action_record.status = "blocked_abi"
     action_record.last_error_code = "deployment_snapshot_incomplete"
     await session.commit()
@@ -1014,6 +1015,7 @@ async def _prepare_action(
         "code": "deployment_snapshot_incomplete",
         "action_id": str(action_record.id),
         "action_status": action_record.status,
+        "missing_fields": list(missing_snapshot_fields),
         "message": (
             "The immutable DealEscrow deployment/getter snapshot is not persisted; "
             "no transaction payload was generated"
