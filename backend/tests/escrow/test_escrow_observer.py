@@ -871,6 +871,9 @@ async def test_proof_verified_query_finalizes_only_matching_durable_action() -> 
         transaction_hash="a" * 64,
         event_type=EscrowChainEventType.BUYER_PAYMENT_ACCEPTED,
         query_id="77",
+        masterchain_block_hash="b" * 64,
+        finality_proof_sha256="c" * 64,
+        finality_provider="pytoniq-trust0-testnet-v1",
     )
     proof = FinalityVerification(
         network="testnet",
