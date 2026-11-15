@@ -5,7 +5,7 @@
 
 ## Executive status
 
-The contract is a testnet-only immutable single-deal PoC. The repository has a reproducible Acton/Tolk build and 25 emulator tests, but the present evidence is insufficient to call it a defensible testnet release candidate. This report distinguishes implemented guards from behavior that is not yet proven.
+The contract is a testnet-only immutable single-deal PoC. This document retains the original pre-remediation findings as an audit trail; those findings must not be read as a description of the current PR branch. The latest implementation and remaining release gates are summarized below. CI/emulator success is not a live-network or independent-audit claim.
 
 ## Implementation update — PR #234 (2026-11-15)
 
@@ -25,12 +25,26 @@ The final exact-head run [#43732705509](https://github.com/AzizIo/Vstore/actions
 
 ### Remaining gates
 
-- Extend the emulator failure matrix to secondary seller allowance and carry-all reserve-refund bounces, plus out-of-order/mismatched RichBounce envelopes.
-- Expand timeout/recovery state × custody × principal/reserve matrix beyond the current boundary tests.
+- Add explicit out-of-order, duplicate, stale and mismatched RichBounce envelopes across both descriptor slots, and broaden action-phase failure assertions. Actual seller deployment-allowance and carry-all execution-reserve bounce/retry scenarios are now covered by emulator tests.
+- Expand the timeout/recovery state × custody × principal/reserve matrix. A late, still-pending NFT delivery attestation after timeout is now exercised end-to-end; late NFT return, buyer refund, seller payout and recovery paths still need the same matrix-level coverage.
 - Independent TON/Tolk audit and actual valueless testnet transaction traces/getter reconciliation are not performed.
-- Collection authenticity is not proven in contract; a trusted provider must verify exact item's collection getter before immutable deployment terms are accepted.
+- The observer's trusted TEP-62 owner check also decodes and compares the item's collection address, but this proof is currently exercised only by provider fixtures/terminal reconciliation logic. A live testnet proof and an explicit pre-activation collection-approval gate remain required.
 
-## Confirmed findings
+## Latest remediation status — PR #235 (2026-11-15)
+
+The current branch has moved materially beyond the historical baseline findings above:
+
+- `onBouncedMessage` parses RichBounce and matches the original body hash, destination and message value to a persisted outbound descriptor. It records phase/exit code, does not mutate NFT ownership or principal custody, and cannot reopen terminal states.
+- Actual emulator-generated bounce tests cover NFT release, seller principal payout, seller deployment allowance and carry-all execution-reserve refund. Retry is restricted to the snapshotted recipient, uses a fresh monotonic attempt/query ID, and rejects stale replay.
+- Oracle/resolver positive test fixtures use deterministic Ed25519 signatures over the exact typed-cell digest. The test file contains no `testing.setChecksigIgnore` calls; zero-signature fixtures remain for negative coverage.
+- A new regression test covers the timeout/restart failure mode: NFT transfer succeeds, its deadline passes before backend finality reconciliation, the contract enters manual review, then a still-`PENDING` action can be reconciled with a valid 2-of-3 oracle attestation and the principal can complete payout. The same bypass is explicitly unavailable for an action already marked `BOUNCED`; that path requires recipient-authorized retry.
+- Backend state reconciliation now permits a proof-finalized delivery/return/payout/refund attestation to resume a deal from `manual_review` only when the event's proof-read contract state is the corresponding allowed target. Payout/refund events also require accepted attestation and getter reconciliation.
+
+This update does not remove the independent-review, live-testnet, complete timeout/action-failure matrix, or pre-activation collection authenticity gates.
+
+## Historical confirmed findings — pre-remediation baseline
+
+The findings below describe the original baseline and are retained for audit traceability. Do not use their historical descriptions as an assessment of the current PR #235 branch; consult the latest remediation status and remaining gates above.
 
 ### HIGH — bounced outbound actions are not correlated to their originating action
 
