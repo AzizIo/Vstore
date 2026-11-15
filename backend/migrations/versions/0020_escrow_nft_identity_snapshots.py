@@ -53,7 +53,7 @@ def upgrade() -> None:
             ")",
         )
 
-    op.execute(
+    op.get_bind().exec_driver_sql(
         """
         CREATE FUNCTION guard_escrow_nft_identity_snapshot()
         RETURNS trigger
@@ -85,7 +85,7 @@ def upgrade() -> None:
         $$
         """
     )
-    op.execute(
+    op.get_bind().exec_driver_sql(
         """
         CREATE FUNCTION guard_escrow_listing_nft_identity_terms()
         RETURNS trigger
