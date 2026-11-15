@@ -7,11 +7,10 @@ import json
 import re
 import secrets
 from dataclasses import asdict
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID, uuid4
-
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
