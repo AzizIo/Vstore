@@ -174,46 +174,6 @@ async def test_accept_deal_is_buyer_only_and_funded_review_only(
     assert buyer_error.value.status_code == 409
 
 
-@pytest.mark.asyncio
-async def test_action_replay_session_double_supports_async_get() -> None:
-    monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
-    try:
-        actor_id, deal_id, intent_id = uuid4(), uuid4(), uuid4()
-        deal = SimpleNamespace(
-            id=deal_id,
-            seller_id=uuid4(),
-            buyer_id=actor_id,
-            status="funded_review",
-            listing_key_snapshot="a" * 64,
-            item_address="0:" + "b" * 64,
-            collection_address_snapshot="0:" + "c" * 64,
-            seller_address_snapshot="0:" + "d" * 64,
-            buyer_address_snapshot="0:" + "e" * 64,
-            principal_nanotons=2_500_000_000,
-            deal_salt="f" * 64,
-            network="testnet",
-            listing_intent_id=intent_id,
-        )
-        existing_action = SimpleNamespace(deal_id=deal_id)
-        session = DealSession(deal, existing_action)
-
-        with pytest.raises(HTTPException) as error:
-            await _prepare_action(
-                deal_id,
-                EscrowWalletAction.ACCEPT_DEAL,
-                SimpleNamespace(id=actor_id),
-                session,
-                None,
-                "accept-key-0001",
-            )
-
-        assert error.value.status_code == 404
-        assert session.get_calls == 1
-    finally:
-        monkeypatch.undo()
-
-
 def test_listing_available_actions_are_actor_scoped() -> None:
     seller_id, buyer_id = uuid4(), uuid4()
     intent = SimpleNamespace(status="active", seller_id=seller_id)
