@@ -244,6 +244,60 @@ def validate_nft_identity_snapshot(
     }
     if not required.issubset(snapshot):
         raise NFTIdentityEvidenceError("Persisted NFT identity evidence is incomplete")
+
+    if snapshot.get("version") != 1 or snapshot.get("network") != "testnet":
+        raise NFTIdentityEvidenceError("Persisted NFT identity evidence has an unsupported version/network")
+    if (
+        isinstance(snapshot.get("masterchain_seqno"), bool)
+        or not isinstance(snapshot.get("masterchain_seqno"), int)
+        or int(snapshot["masterchain_seqno"]) <= 0
+    ):
+        raise NFTIdentityEvidenceError("Persisted NFT identity masterchain sequence is invalid")
+    if (
+        isinstance(snapshot.get("item_index"), bool)
+        or not isinstance(snapshot.get("item_index"), int)
+        or int(snapshot["item_index"]) < 0
+    ):
+        raise NFTIdentityEvidenceError("Persisted NFT identity item index is invalid")
+    policy = snapshot.get("policy")
+    if not isinstance(policy, dict) or snapshot.get("policy_sha256") != sha256_json(policy):
+        raise NFTIdentityEvidenceError("Persisted NFT identity policy digest mismatch")
+    if (
+        policy.get("collection_address") != snapshot.get("collection_address")
+        or policy.get("collection_code_hash") != snapshot.get("collection_code_hash")
+        or policy.get("item_code_hash") != snapshot.get("item_code_hash")
+        or policy.get("derivation") != _POLICY_DERIVATION
+    ):
+        raise NFTIdentityEvidenceError("Persisted NFT identity policy does not bind the recorded item")
+    for field in (
+        "masterchain_block_hash",
+        "trusted_init_key_block_hash",
+        "item_code_hash",
+        "collection_code_hash",
+        "collection_item_code_hash",
+        "item_data_hash",
+        "collection_data_hash",
+    ):
+        if not _valid_hash(snapshot.get(field)):
+            raise NFTIdentityEvidenceError(f"Persisted NFT identity {field} is malformed")
+    for field in ("item_address", "collection_address", "owner_address", "derived_item_address"):
+        try:
+            normalized = canonical_address(snapshot.get(field))
+        except NFTIdentityEvidenceError as exc:
+            raise NFTIdentityEvidenceError(f"Persisted NFT identity {field} is malformed") from exc
+        if normalized != snapshot.get(field):
+            raise NFTIdentityEvidenceError(f"Persisted NFT identity {field} is not canonical")
+    if snapshot.get("derived_item_address") != snapshot.get("item_address"):
+        raise NFTIdentityEvidenceError("Persisted NFT identity derived address does not match the item")
+    next_index = snapshot.get("collection_next_item_index")
+    if (
+        isinstance(next_index, bool)
+        or not isinstance(next_index, int)
+        or int(next_index) <= int(snapshot["item_index"])
+    ):
+        raise NFTIdentityEvidenceError("Persisted NFT identity collection index range is invalid")
+    if not isinstance(snapshot.get("provider_id"), str) or not str(snapshot["provider_id"]).strip():
+        raise NFTIdentityEvidenceError("Persisted NFT identity provider id is missing")
     return dict(snapshot)
 
 
