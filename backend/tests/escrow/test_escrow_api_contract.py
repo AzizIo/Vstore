@@ -173,6 +173,18 @@ async def test_accept_deal_is_buyer_only_and_funded_review_only(
         )
     assert buyer_error.value.status_code == 409
 
+    # A valid actor/state reaches the idempotent replay path, which loads the
+    # listing intent through AsyncSession.get().
+    deal.status = "funded_review"
+    replay_session = DealSession(deal, SimpleNamespace(deal_id=deal_id))
+    with pytest.raises(HTTPException) as replay_error:
+        await _prepare_action(
+            deal_id, EscrowWalletAction.ACCEPT_DEAL, buyer, replay_session, None,
+            "accept-key-0001",
+        )
+    assert replay_error.value.status_code == 404
+    assert replay_session.get_calls == 1
+
 
 def test_listing_available_actions_are_actor_scoped() -> None:
     seller_id, buyer_id = uuid4(), uuid4()
