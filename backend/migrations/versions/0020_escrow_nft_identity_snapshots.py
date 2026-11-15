@@ -53,6 +53,7 @@ def upgrade() -> None:
             ")",
         )
 
+    # Keep PL/pgSQL bodies dollar-quoted; a lone "$" is invalid syntax.
     op.get_bind().exec_driver_sql(
         """
         CREATE FUNCTION guard_escrow_nft_identity_snapshot()
