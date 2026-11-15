@@ -923,6 +923,9 @@ fun retryBouncedOutboundAction(
     } else if (action.kind == OUTBOUND_KIND_BUYER_REFUND) {
         sendBuyerRefund(mutate progress, roles, asset, money, retryAttemptId);
     } else if (action.kind == OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND) {
+        // The terminal storage-floor reservation belongs to the original
+        // settlement transaction and must be recreated for this retry.
+        reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, RESERVE_MODE_EXACT_AMOUNT);
         sendSellerDeploymentRefund(
             mutate progress,
             roles,
