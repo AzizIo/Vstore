@@ -30,7 +30,7 @@ from app.db.models import (
     User,
     Wallet,
 )
-from app.db.payments import PaymentEvent, PaymentIntent, PaymentTransaction
+from app.db.payments import PaymentEvent, PaymentIntent, PaymentRefund, PaymentTransaction
 from app.escrow.models import EscrowDeal, EscrowListingIntent
 from app.orders import payment_service
 from app.orders.payment_service import (
@@ -555,6 +555,53 @@ async def test_mismatched_successful_payment_is_queued_for_refund(
             assert transaction.last_error_code == "amount_mismatch"
             assert persisted_intent is not None
             assert persisted_intent.status == "refund_pending"
+    finally:
+        await _cleanup(session_factory, ids)
+        await engine.dispose()
+
+
+async def test_mismatched_currency_charge_is_retained_and_queued_for_refund(
+    payment_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_test_stars(monkeypatch)
+    engine = create_async_engine(payment_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    ids = await _seed_order(session_factory)
+    try:
+        intent = await _create_intent(session_factory, ids)
+        evidence = _payment_evidence(
+            intent,
+            ids,
+            update_id=f"wrong-currency-update-{uuid4()}",
+            charge_id=f"wrong-currency-charge-{uuid4()}",
+        )
+        evidence["currency"] = "USD"
+
+        async with session_factory() as session:
+            result = await record_stars_success(session, **evidence)
+
+        assert result == "refund_pending"
+
+        async with session_factory() as session:
+            transaction = await session.scalar(
+                select(PaymentTransaction).where(
+                    PaymentTransaction.telegram_payment_charge_id
+                    == evidence["telegram_payment_charge_id"]
+                )
+            )
+            assert transaction is not None
+            assert transaction.currency == "USD"
+            assert transaction.status == "refund_pending"
+            assert transaction.last_error_code == "currency_mismatch"
+
+            refund = await session.scalar(
+                select(PaymentRefund).where(
+                    PaymentRefund.payment_transaction_id == transaction.id
+                )
+            )
+            assert refund is not None
+            assert refund.status == "queued"
     finally:
         await _cleanup(session_factory, ids)
         await engine.dispose()
