@@ -917,7 +917,7 @@ async def create_deal_intent(
     payload: EscrowDealCreate,
     user: CurrentUser,
     session: DbSession,
-    verifier: Verifier,
+    identity_provider: IdentityProvider,
     idempotency_key: IdempotencyKey,
 ) -> EscrowDealResponse:
     _require_testnet()
@@ -958,8 +958,30 @@ async def create_deal_intent(
                 status_code=409,
                 detail="Active listing price/currency changed after the escrow intent",
             )
+        # Require identity evidence from the seller intent before repeating a
+        # trusted, same-block proof immediately before the reservation.
+        try:
+            initial_identity = validate_nft_identity_snapshot(
+                intent.nft_identity_snapshot_json,
+                intent.nft_identity_snapshot_sha256,
+            )
+        except NFTIdentityEvidenceError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_identity_snapshot_required"},
+            ) from exc
+        if (
+            initial_identity.get("item_address") != intent.item_address
+            or initial_identity.get("collection_address") != intent.collection_address_snapshot
+            or initial_identity.get("owner_address") != intent.seller_address_snapshot
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_identity_snapshot_mismatch"},
+            )
+
         # Capture the immutable facts, then end the read transaction before
-        # calling the external ownership provider. Re-lock/revalidate afterwards.
+        # proof-provider I/O. Re-lock/revalidate afterwards.
         intent_id = intent.id
         intent_snapshot = {
             "marketplace_listing_id": intent.marketplace_listing_id,
@@ -971,6 +993,8 @@ async def create_deal_intent(
             "seller_address_snapshot": intent.seller_address_snapshot,
             "price_amount": intent.price_amount,
             "price_currency": intent.price_currency,
+            "nft_identity_snapshot_json": intent.nft_identity_snapshot_json,
+            "nft_identity_snapshot_sha256": intent.nft_identity_snapshot_sha256,
         }
         listing_snapshot = {
             "id": listing.id,
@@ -980,11 +1004,17 @@ async def create_deal_intent(
             "price_currency": listing.price_currency,
         }
         await session.rollback()
-        await _verify_current_nft_owner(
-            verifier,
-            item_address=intent_snapshot["item_address"],
-            seller_address=intent_snapshot["seller_address_snapshot"],
+        identity_snapshot = await _verify_escrow_nft_identity(
+            identity_provider,
+            item_address=str(intent_snapshot["item_address"]),
+            collection_address=str(intent_snapshot["collection_address_snapshot"]),
+            expected_owner_address=str(intent_snapshot["seller_address_snapshot"]),
         )
+        if not same_nft_identity_anchor(initial_identity, identity_snapshot):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_identity_changed_since_listing"},
+            )
 
         # Lock in the same order as ordinary order reservation: Listing first,
         # then escrow intent. Concurrent reservations serialize on Listing.
@@ -1038,6 +1068,8 @@ async def create_deal_intent(
             network="testnet",
             deal_salt=secrets.token_hex(32),
             collection_address_snapshot=intent.collection_address_snapshot,
+            nft_identity_snapshot_json=identity_snapshot,
+            nft_identity_snapshot_sha256=str(identity_snapshot["evidence_sha256"]),
             contract_address=None,
             contract_abi_version=None,
             item_address=intent.item_address,
