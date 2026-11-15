@@ -160,15 +160,15 @@ async def _cleanup(session_factory, *, listing_id, intent_id, asset_id, wallet_i
         await session.execute(
             text("DELETE FROM order_events WHERE order_id IN "
                  "(SELECT id FROM orders WHERE listing_id = :listing_id)"),
-            {"intent_id": intent_id},
+            {"listing_id": listing_id},
         )
         await session.execute(
             text("DELETE FROM telegram_notification_outbox WHERE order_id IN "
                  "(SELECT id FROM orders WHERE listing_id = :listing_id)"),
-            {"intent_id": intent_id},
+            {"listing_id": listing_id},
         )
         await session.execute(text("DELETE FROM orders WHERE listing_id = :listing_id"),
-                              {"intent_id": intent_id})
+                              {"listing_id": listing_id})
         await session.execute(Listing.__table__.delete().where(Listing.id == listing_id))
         await session.execute(NFTAsset.__table__.delete().where(NFTAsset.id == asset_id))
         await session.execute(Wallet.__table__.delete().where(Wallet.id == wallet_id))
