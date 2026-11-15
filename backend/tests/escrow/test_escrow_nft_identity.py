@@ -148,6 +148,9 @@ def test_identity_rejects_same_index_but_wrong_item_address() -> None:
 
 def test_identity_rejects_unapproved_item_code_hash() -> None:
     fixture = _fixture(item_code_override=begin_cell().store_uint(0x8888, 16).end_cell())
+    fixture["policy"]["item_code_hash"] = cell_hash(
+        begin_cell().store_uint(0x1234, 16).end_cell()
+    )
 
     with pytest.raises(NFTIdentityEvidenceError, match="item contract code hash"):
         _verify_fixture(fixture)
