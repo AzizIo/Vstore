@@ -49,7 +49,6 @@ type TestEscrowPartyMessage =
     | PartyAcceptEscrow
     | PartyRetryOutbound
     | PartySetRejectAction
-    | SettlementMessage
     | NotificationForNewOwner
 
 contract TestEscrowParty {
@@ -72,6 +71,20 @@ fun onInternalMessage(in: InMessage) {
     if (in.body.isEmpty()) {
         return;
     }
+    // SettlementMessage has no opcode in the escrow protocol, so it cannot
+    // participate in an opcode-dispatched auto-serialization union. Its TL-B
+    // shape is fixed: query_id:uint64, deal_salt:uint256, action:uint8.
+    if (
+        in.body.remainingBitsCount() == 328
+        && in.body.remainingRefsCount() == 0
+    ) {
+        val settlement = SettlementMessage.fromSlice(in.body);
+        val storage = TestEscrowPartyStorage.load();
+        assert (settlement.action != storage.rejectSettlementAction) throw 911;
+        // Accept all other settlements. The value remains on this test recipient.
+        return;
+    }
+
     val msg = lazy TestEscrowPartyMessage.fromSlice(in.body);
     match (msg) {
         PartyActivateEscrow => {
@@ -158,12 +171,6 @@ fun onInternalMessage(in: InMessage) {
             assert (in.senderAddress == storage.controllerAddress) throw 910;
             storage.rejectSettlementAction = msg.rejectSettlementAction;
             storage.save();
-        }
-        SettlementMessage => {
-            val storage = TestEscrowPartyStorage.load();
-            assert (msg.action != storage.rejectSettlementAction) throw 911;
-            // Accept all other TON escrow settlements. The incoming value stays
-            // in this test recipient's balance and can be observed by the test.
         }
         NotificationForNewOwner => {
             // The test recipient can be the new owner of the configured NFT.
