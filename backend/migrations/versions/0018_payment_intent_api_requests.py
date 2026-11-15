@@ -91,7 +91,7 @@ def downgrade() -> None:
     ).scalar_one()
     if has_receipts:
         raise RuntimeError(
-            "Cannot downgrade payment intent API idempotency while receipt records exist"
+            "Cannot downgrade payment ledger while payment intent idempotency receipts exist"
         )
 
     op.drop_index(
