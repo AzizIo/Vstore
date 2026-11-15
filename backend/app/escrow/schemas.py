@@ -149,3 +149,15 @@ class EscrowWalletReferenceInput(BaseModel):
         "open_dispute", "return_nft_to_escrow", "withdraw_unsold_nft"
     ]
     reference: str = Field(min_length=1, max_length=512)
+
+
+class EscrowWalletReferenceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action_id: UUID
+    status: Literal["prepared", "submitted", "ambiguous", "finalized", "manual_review"]
+    reference_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reconciliation_status: Literal[
+        "awaiting_independent_chain_reconciliation",
+        "already_finalized",
+        "manual_review",
+    ]
