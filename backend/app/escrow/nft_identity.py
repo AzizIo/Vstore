@@ -246,7 +246,9 @@ def validate_nft_identity_snapshot(
         raise NFTIdentityEvidenceError("Persisted NFT identity evidence is incomplete")
 
     if snapshot.get("version") != 1 or snapshot.get("network") != "testnet":
-        raise NFTIdentityEvidenceError("Persisted NFT identity evidence has an unsupported version/network")
+        raise NFTIdentityEvidenceError(
+            "Persisted NFT identity evidence has an unsupported version/network"
+        )
     if (
         isinstance(snapshot.get("masterchain_seqno"), bool)
         or not isinstance(snapshot.get("masterchain_seqno"), int)
@@ -268,7 +270,9 @@ def validate_nft_identity_snapshot(
         or policy.get("item_code_hash") != snapshot.get("item_code_hash")
         or policy.get("derivation") != _POLICY_DERIVATION
     ):
-        raise NFTIdentityEvidenceError("Persisted NFT identity policy does not bind the recorded item")
+        raise NFTIdentityEvidenceError(
+            "Persisted NFT identity policy does not bind the recorded item"
+        )
     for field in (
         "masterchain_block_hash",
         "trusted_init_key_block_hash",
@@ -288,7 +292,9 @@ def validate_nft_identity_snapshot(
         if normalized != snapshot.get(field):
             raise NFTIdentityEvidenceError(f"Persisted NFT identity {field} is not canonical")
     if snapshot.get("derived_item_address") != snapshot.get("item_address"):
-        raise NFTIdentityEvidenceError("Persisted NFT identity derived address does not match the item")
+        raise NFTIdentityEvidenceError(
+            "Persisted NFT identity derived address does not match the item"
+        )
     next_index = snapshot.get("collection_next_item_index")
     if (
         isinstance(next_index, bool)
