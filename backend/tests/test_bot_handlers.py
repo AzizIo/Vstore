@@ -51,6 +51,7 @@ def test_dispatcher_registers_all_user_facing_handlers(
         "handle_orders_callback",
         "handle_safety_callback",
         "handle_about_callback",
+        "handle_unknown_callback",
     }.issubset(callback_handlers)
     assert bot_handlers.router in dispatcher.sub_routers
     assert {"message", "callback_query"}.issubset(
@@ -300,6 +301,18 @@ async def test_only_duplicate_message_edit_errors_are_suppressed(
     await bot_handlers.handle_buy_callback(callback)  # type: ignore[arg-type]
 
     callback.answer.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_unknown_callback_is_acknowledged_with_recovery_hint() -> None:
+    callback = SimpleNamespace(answer=AsyncMock())
+
+    await bot_handlers.handle_unknown_callback(callback)  # type: ignore[arg-type]
+
+    callback.answer.assert_awaited_once_with(
+        "Эта кнопка устарела. Используйте /start, чтобы открыть актуальное меню.",
+        show_alert=True,
+    )
 
 
 @pytest.mark.asyncio
