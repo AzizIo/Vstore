@@ -739,7 +739,11 @@ class PytoniqTONTestnetEscrowProvider:
             raise EscrowProviderInvalidEvidence("Direct escrow message body failed ABI validation") from exc
 
     def _decode_oracle_attestation(
-        self, body: Any, deal: EscrowDeal, inclusion_mc_seqno: int
+        self,
+        body: Any,
+        deal: EscrowDeal,
+        inclusion_mc_seqno: int,
+        getter: dict[str, object],
     ) -> dict[str, object]:
         try:
             parser = body.begin_parse()
@@ -790,10 +794,21 @@ class PytoniqTONTestnetEscrowProvider:
                 or message_hash == 0
                 or trace_hash == 0
                 or evidence_hash == 0
-                or _canonical_address(item_address.to_str(is_user_friendly=False))
+                or (
+                    action != 5
+                    and _canonical_address(item_address.to_str(is_user_friendly=False))
                     != _canonical_address(snapshot["item_address"])
+                )
+                or (action == 5 and item_address is None)
             ):
                 raise ValueError("oracle attestation context does not match the deal")
+            if action == 5:
+                # Recovery is deliberately manual-review-only. The deployed
+                # contract verifies both the attested item and prior owner against
+                # its pre-transition recovery storage before clearing those fields.
+                # The accepted result never authorizes automatic listing release.
+                if int(getter["contract_state"]) != 13:
+                    raise ValueError("unexpected-NFT recovery must remain in manual review")
             return {
                 "action": action,
                 "attempt_id": attempt_id,
@@ -947,15 +962,19 @@ class PytoniqTONTestnetEscrowProvider:
                 if destination_role == "buyer"
                 else _canonical_address(snapshot["seller_address"])
                 if destination_role == "seller"
+                else _canonical_address(oracle["destination_address"])
+                if action == 5
                 else _canonical_address(getter.get("recovery_previous_owner"))
             )
+            item_matches_snapshot = item == _canonical_address(snapshot["item_address"])
+            recovery_action = action == 5 and state == 13
             if (
                 state not in expected_states
                 or source != expected_source
                 or expected_dest is None
                 or destination != expected_dest
                 or amount != expected_amount
-                or item != _canonical_address(snapshot["item_address"])
+                or (not item_matches_snapshot and not recovery_action)
                 or _canonical_address(message_source) is None
                 or int(oracle["evidence_hash"], 16) != int(getter.get("last_evidence_hash", "0"), 16)
             ):
@@ -1026,7 +1045,7 @@ class PytoniqTONTestnetEscrowProvider:
             )
             opcode = message.body.begin_parse().load_uint(32)
             oracle = (
-                self._decode_oracle_attestation(message.body, deal, master_id.seqno)
+                self._decode_oracle_attestation(message.body, deal, master_id.seqno, getter)
                 if opcode == _OP_ORACLE
                 else None
             )
