@@ -502,7 +502,7 @@ async def test_terminal_owner_verification_fails_closed_for_legacy_deal_without_
         lite_client_factory=lambda: _FakeLiteClient(fixture),
     )
 
-    with pytest.raises(EscrowProviderInvalidEvidence, match="identity proof"):
+    with pytest.raises(EscrowProviderInvalidEvidence, match="persisted collection identity"):
         await provider.verify_terminal_owner(
             item_address=fixture["item_address"],
             expected_owner_address=OWNER,
