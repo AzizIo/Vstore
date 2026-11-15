@@ -358,10 +358,12 @@ get fun `test contract rejects activation on mainnet global id`() {
 }
 
 get fun `test stale oracle attempt cannot advance escrow state`() {
+    testing.setNow(1_700_000_000);
     val (escrow, nftItem, seller, buyer) = createFixture(
         0xA11D7,
         STATE_NFT_RELEASE_PENDING,
         2,
+        1_700_000_060,
     );
     val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
     expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
