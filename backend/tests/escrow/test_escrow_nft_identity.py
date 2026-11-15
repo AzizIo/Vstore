@@ -141,7 +141,7 @@ def test_identity_rejects_item_claiming_a_different_collection() -> None:
 def test_identity_rejects_same_index_but_wrong_item_address() -> None:
     fixture = _fixture(item_address_override="0:" + "e" * 64)
 
-    with pytest.raises(NFTIdentityEvidenceError, match="address derivation"):
+    with pytest.raises(NFTIdentityEvidenceError, match="derivation does not match"):
         _verify_fixture(fixture)
 
 
