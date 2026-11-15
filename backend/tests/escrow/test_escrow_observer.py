@@ -1007,3 +1007,49 @@ async def test_unmatched_proof_verified_bounce_is_audited_without_mutating_deal_
     assert row.status == "manual_review"
     assert row.reason_code == "outbound_action_descriptor_not_found"
     assert row.deal_id == deal_id
+
+
+
+@pytest.mark.asyncio
+async def test_pending_bounce_candidate_can_be_proof_reclassified_as_unmatched() -> None:
+    deal_id = uuid4()
+    candidate = make_event(
+        deal_id=str(deal_id),
+        event_type=EscrowChainEventType.OUTBOUND_ACTION_BOUNCED,
+        phase="bounce",
+        attempt_id=None,
+        query_id=None,
+        operation_id="0xfffffffe",
+        source_address=None,
+        destination_address=None,
+        amount_nanotons=None,
+    )
+    existing = stored_row(candidate, status="pending")
+    existing.deal_id = deal_id
+    unmatched = replace(
+        candidate,
+        event_type=EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED,
+        source_address="0:" + "b" * 64,
+        destination_address=candidate.contract_address,
+        observed_contract_state=EscrowDealStatus.AWAITING_NFT.value,
+        contract_state_reconciled=True,
+        bounce_match_reason="outbound_action_descriptor_not_found",
+    )
+    deal = SimpleNamespace(
+        id=deal_id,
+        network="testnet",
+        contract_address=candidate.contract_address,
+        deal_salt=candidate.deal_salt,
+        status=EscrowDealStatus.AWAITING_NFT.value,
+        last_chain_seqno=None,
+        last_chain_logical_time=None,
+    )
+    session = FakeSession(existing, deal)
+
+    result = await _apply_one_event(session, unmatched, provider_verified=True)
+
+    assert result == "rejected"
+    assert existing.event_type == EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED.value
+    assert existing.status == "manual_review"
+    assert existing.reason_code == "outbound_action_descriptor_not_found"
+    assert deal.status == EscrowDealStatus.AWAITING_NFT.value

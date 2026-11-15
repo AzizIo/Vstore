@@ -85,6 +85,23 @@ def _stored_evidence_hash(event: NormalizedChainEvent) -> str:
     return _sha256_json(_payload(event))
 
 
+def _compatible_event_type(
+    old_payload: dict[str, Any], event: NormalizedChainEvent
+) -> bool:
+    old_type = old_payload.get("event_type")
+    new_type = event.event_type.value
+    if old_type == new_type:
+        return True
+    # Discovery uses a generic bounced opcode as a candidate. Only proof
+    # verification may reclassify it as unmatched forensic evidence.
+    return (
+        event.phase == "bounce"
+        and old_payload.get("phase") == "bounce"
+        and old_type == EscrowChainEventType.OUTBOUND_ACTION_BOUNCED.value
+        and new_type == EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED.value
+    )
+
+
 def _event_snapshot(event: NormalizedChainEvent) -> NormalizedEventEvidence:
     return NormalizedEventEvidence(
         network=event.network, contract_address=event.contract_address, event_type=event.event_type,
@@ -156,7 +173,6 @@ async def _persist_event(
     immutable_fields = (
         "transaction_hash",
         "event_index",
-        "event_type",
         "contract_address",
         "deal_id",
         "account_address",
@@ -176,7 +192,8 @@ async def _persist_event(
         "deal_salt",
     )
     if (
-        any(old.get(field) not in (None, payload.get(field)) for field in immutable_fields)
+        not _compatible_event_type(old, event)
+        or any(old.get(field) not in (None, payload.get(field)) for field in immutable_fields)
         or (old.get("finalized") and not event.finalized)
         or (
             old.get("finalized")
@@ -201,6 +218,7 @@ async def _persist_event(
     )
     existing.masterchain_seqno = max(existing.masterchain_seqno, event.masterchain_seqno)
     existing.evidence_sha256 = _stored_evidence_hash(event)
+    existing.event_type = event.event_type.value
     existing.payload_json = payload
     existing.observed_contract_state = (
         event.observed_contract_state or existing.observed_contract_state
@@ -363,7 +381,6 @@ async def _apply_one_event(
         stable = (
             "transaction_hash",
             "event_index",
-            "event_type",
             "contract_address",
             "deal_id",
             "account_address",
@@ -382,8 +399,9 @@ async def _apply_one_event(
             "operation_id",
             "deal_salt",
         )
-        conflict = any(
-            old.get(key) not in (None, new.get(key)) for key in stable
+        conflict = (
+            not _compatible_event_type(old, event)
+            or any(old.get(key) not in (None, new.get(key)) for key in stable)
         )
         conflict = conflict or (
             old.get("finalized")
