@@ -45,7 +45,7 @@ afterEach(() => {
 });
 
 describe("SessionProvider", () => {
-  it("renews the Telegram session before JWT expiry and clears private cached data", async () => {
+  it("expires the Telegram session at JWT expiry and clears private cached data", async () => {
     vi.useFakeTimers();
     window.Telegram = { WebApp: { initData: "raw-telegram-init-data" } };
 
@@ -85,14 +85,15 @@ describe("SessionProvider", () => {
     expect(screen.getByText("authenticated:token-1")).toBeInTheDocument();
     expect(authRequests).toBe(1);
 
-    // 60 seconds lifetime with a 10% refresh lead means refresh at 54 seconds.
+    // The backend accepts Telegram initData for only a short window and exposes
+    // no refresh-token API. Expire locally rather than reusing stale initData.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(54_000);
+      await vi.advanceTimersByTimeAsync(60_000);
       await flushPromises();
     });
 
-    expect(screen.getByText("authenticated:token-2")).toBeInTheDocument();
-    expect(authRequests).toBe(2);
+    expect(screen.getByText("unauthenticated")).toBeInTheDocument();
+    expect(authRequests).toBe(1);
     expect(queryClient.getQueryData(["private-user-data"])).toBeUndefined();
   });
 });
