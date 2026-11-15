@@ -1331,13 +1331,19 @@ async def _prepare_action(
         # End the read transaction before external provider I/O. No writes have
         # happened yet; both deal and wallet are revalidated after the call.
         await session.rollback()
-        await _verify_escrow_nft_identity(
+        current_identity = await _verify_escrow_nft_identity(
             identity_provider,
             item_address=ownership_check[0],
             collection_address=deal.collection_address_snapshot,
             expected_owner_address=ownership_check[1],
             minimum_masterchain_seqno=int(identity_snapshot["masterchain_seqno"]),
         )
+        if not same_nft_identity_anchor(identity_snapshot, current_identity):
+            await session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_nft_identity_changed_since_snapshot"},
+            )
 
     # Reacquire the deal lock only after external ownership checks have finished.
     locked_deal = await session.scalar(
