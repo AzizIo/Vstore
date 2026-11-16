@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     payment_refund_max_reconcile_attempts: int = Field(default=20, gt=0)
     telegram_mini_app_url: str | None = None
     telegram_mini_app_direct_link: str | None = None
+    # Optional public user-facing support/terms destinations for production bot commands.
+    telegram_support_username: str | None = None
+    telegram_terms_url: str | None = None
     ton_connect_allowed_domains: list[str] = Field(default_factory=list)
     ton_connect_network: Literal["mainnet", "testnet"] = "mainnet"
     ton_center_api_key: SecretStr | None = None
