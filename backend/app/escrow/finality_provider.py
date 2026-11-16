@@ -821,30 +821,14 @@ class PytoniqTONTestnetEscrowProvider:
                 "Could not prove the deployed DealEscrow account state"
             ) from exc
 
-    async def read_current_outbound_retry_proof(
-        self, deal: EscrowDeal, *, query_id: int, deal_salt: str
-    ) -> OutboundRetryProof:
-        """Read a retry descriptor from the current trust-level-0 proved account state.
-
-        This intentionally does not consult observer/indexer projections or a
-        previously persisted getter snapshot. The descriptor and its anchor are
-        returned together so callers can bind idempotency to this exact state.
-        """
+    async def read_current_outbound_retry_proofs(
+        self, deal: EscrowDeal
+    ) -> tuple[OutboundRetryProof, ...]:
+        """Return retryable descriptors from one current trust-level-0 account proof."""
         if deal.network != "testnet" or not deal.contract_address:
             raise EscrowProviderInvalidEvidence(
                 "Outbound retry is not bound to a deployed testnet DealEscrow"
             )
-        if (
-            isinstance(query_id, bool)
-            or not isinstance(query_id, int)
-            or not 0 < query_id < (1 << 64)
-            or not isinstance(deal_salt, str)
-            or len(deal_salt) != 64
-            or any(char not in "0123456789abcdefABCDEF" for char in deal_salt)
-            or deal_salt.lower() != deal.deal_salt.lower()
-        ):
-            raise EscrowProviderInvalidEvidence("Outbound retry query ID/deal salt is invalid")
-
         client = await self._get_lite_client()
         try:
             if getattr(client, "trust_level", None) != 0:
@@ -852,41 +836,19 @@ class PytoniqTONTestnetEscrowProvider:
             masterchain_id = await client.get_trusted_last_mc_block()
             if masterchain_id is None or int(getattr(masterchain_id, "seqno", 0)) <= 0:
                 raise EscrowProviderUnavailable("Trusted testnet masterchain head is unavailable")
-
             getter, _state_name, _identity = await self._read_contract_state(
                 deal, masterchain_id, client
             )
             descriptors = getter.get("outbound_actions")
             if not isinstance(descriptors, list):
                 raise EscrowProviderInvalidEvidence("Proved outbound descriptor set is malformed")
-            matches = [
-                item for item in descriptors
-                if isinstance(item, dict) and item.get("query_id") == query_id
-            ]
-            if len(matches) != 1:
-                raise EscrowProviderInvalidEvidence(
-                    "Outbound query ID must match exactly one current descriptor"
-                )
-            descriptor = matches[0]
-            if (
-                descriptor.get("deal_salt") != deal_salt.lower()
-                or descriptor.get("status") != 1
-                or isinstance(descriptor.get("retry_window_seconds"), bool)
-                or not isinstance(descriptor.get("retry_window_seconds"), int)
-                or descriptor["retry_window_seconds"] <= 0
-            ):
-                raise EscrowProviderInvalidEvidence(
-                    "Outbound descriptor is not BOUNCED or has an invalid retry window"
-                )
-            recipient = descriptor.get("recipient_address")
-            if (
-                not isinstance(recipient, str)
-                or _canonical_address(recipient) != recipient
-            ):
-                raise EscrowProviderInvalidEvidence(
-                    "Outbound descriptor recipient address is not canonical"
-                )
 
+            query_ids = [
+                item.get("query_id") for item in descriptors if isinstance(item, dict)
+            ]
+            duplicate_query_ids = {
+                value for value in query_ids if query_ids.count(value) > 1
+            }
             account, _shard_account = await client.raw_get_account_state(
                 deal.contract_address, block=masterchain_id
             )
@@ -907,39 +869,90 @@ class PytoniqTONTestnetEscrowProvider:
             ):
                 raise EscrowProviderInvalidEvidence("Outbound retry proof anchor is malformed")
 
-            action = ProofBoundOutboundAction(
-                slot=str(descriptor["slot"]),
-                kind=int(descriptor["kind"]),
-                query_id=int(descriptor["query_id"]),
-                deal_salt=str(descriptor["deal_salt"]),
-                attempt_id=int(descriptor["attempt_id"]),
-                amount_nanotons=int(descriptor["amount_nanotons"]),
-                message_value_nanotons=int(descriptor["message_value_nanotons"]),
-                expected_state=int(descriptor["expected_state"]),
-                expected_pending_action=int(descriptor["expected_pending_action"]),
-                retry_window_seconds=int(descriptor["retry_window_seconds"]),
-                message_body_hash=str(descriptor["message_body_hash"]),
-                status=int(descriptor["status"]),
-                bounce_phase=int(descriptor["bounce_phase"]),
-                exit_code=int(descriptor["exit_code"]),
-                item_address=str(descriptor["item_address"]),
-                destination_address=str(descriptor["destination_address"]),
-                recipient_address=recipient,
-                response_address=str(descriptor["response_address"]),
-            )
-            return OutboundRetryProof(
-                action=action,
-                masterchain_seqno=int(masterchain_id.seqno),
-                masterchain_block_hash=block_hash,
-                state_data_hash=state_data_hash,
-                provider_id=_PROVIDER_ID,
-            )
+            proofs: list[OutboundRetryProof] = []
+            for descriptor in descriptors:
+                if not isinstance(descriptor, dict):
+                    raise EscrowProviderInvalidEvidence("Proved outbound descriptor is malformed")
+                query_id = descriptor.get("query_id")
+                if (
+                    descriptor.get("status") != 1
+                    or isinstance(descriptor.get("retry_window_seconds"), bool)
+                    or not isinstance(descriptor.get("retry_window_seconds"), int)
+                    or descriptor["retry_window_seconds"] <= 0
+                ):
+                    continue
+                if query_id in duplicate_query_ids:
+                    continue
+                recipient = descriptor.get("recipient_address")
+                if (
+                    not isinstance(recipient, str)
+                    or _canonical_address(recipient) != recipient
+                    or descriptor.get("deal_salt") != deal.deal_salt.lower()
+                    or isinstance(query_id, bool)
+                    or not isinstance(query_id, int)
+                    or not 0 < query_id < (1 << 64)
+                    or descriptor.get("bounce_phase") not in {1, 2}
+                ):
+                    continue
+                action = ProofBoundOutboundAction(
+                    slot=str(descriptor["slot"]),
+                    kind=int(descriptor["kind"]),
+                    query_id=int(query_id),
+                    deal_salt=str(descriptor["deal_salt"]),
+                    attempt_id=int(descriptor["attempt_id"]),
+                    amount_nanotons=int(descriptor["amount_nanotons"]),
+                    message_value_nanotons=int(descriptor["message_value_nanotons"]),
+                    expected_state=int(descriptor["expected_state"]),
+                    expected_pending_action=int(descriptor["expected_pending_action"]),
+                    retry_window_seconds=int(descriptor["retry_window_seconds"]),
+                    message_body_hash=str(descriptor["message_body_hash"]),
+                    status=int(descriptor["status"]),
+                    bounce_phase=int(descriptor["bounce_phase"]),
+                    exit_code=int(descriptor["exit_code"]),
+                    item_address=str(descriptor["item_address"]),
+                    destination_address=str(descriptor["destination_address"]),
+                    recipient_address=recipient,
+                    response_address=str(descriptor["response_address"]),
+                )
+                proofs.append(OutboundRetryProof(
+                    action=action,
+                    masterchain_seqno=int(masterchain_id.seqno),
+                    masterchain_block_hash=block_hash,
+                    state_data_hash=state_data_hash,
+                    provider_id=_PROVIDER_ID,
+                ))
+            return tuple(proofs)
         except (EscrowProviderInvalidEvidence, EscrowProviderUnavailable):
             raise
         except Exception as exc:
             raise EscrowProviderUnavailable(
-                "Could not read a current proof-bound outbound retry descriptor"
+                "Could not read current proof-bound outbound retry descriptors"
             ) from exc
+
+    async def read_current_outbound_retry_proof(
+        self, deal: EscrowDeal, *, query_id: int, deal_salt: str
+    ) -> OutboundRetryProof:
+        """Resolve exactly one retry descriptor by query ID and immutable deal salt."""
+        if (
+            isinstance(query_id, bool)
+            or not isinstance(query_id, int)
+            or not 0 < query_id < (1 << 64)
+            or not isinstance(deal_salt, str)
+            or len(deal_salt) != 64
+            or any(char not in "0123456789abcdefABCDEF" for char in deal_salt)
+            or deal_salt.lower() != deal.deal_salt.lower()
+        ):
+            raise EscrowProviderInvalidEvidence("Outbound retry query ID/deal salt is invalid")
+        proofs = await self.read_current_outbound_retry_proofs(deal)
+        matches = [
+            proof for proof in proofs
+            if proof.action.query_id == query_id and proof.action.deal_salt == deal_salt.lower()
+        ]
+        if len(matches) != 1:
+            raise EscrowProviderInvalidEvidence(
+                "Outbound query ID must match exactly one current BOUNCED descriptor"
+            )
+        return matches[0]
 
     def _decode_direct_body(
         self, body: Any, opcode: int, deal: EscrowDeal
