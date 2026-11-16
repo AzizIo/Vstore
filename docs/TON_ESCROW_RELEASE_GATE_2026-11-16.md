@@ -11,9 +11,9 @@ This document supersedes the older handoff material based on `525215b9a51a34be81
 
 | Track | Exact head at snapshot | Status | Release condition |
 |---|---|---|---|
-| NFT identity / Issue #213 / [PR #241](https://github.com/AzizIo/Vstore/pull/241) | `c8f883ef0360ea844a19252f399c4cf92a47d09d` | Draft; Frontend build/unit job passed but API E2E migration failed; Backend migration validation failed on the same malformed SQL delimiter in migration 0020 | Exact-head Backend, Frontend and API-backed E2E green; PostgreSQL 16 migration upgrade/downgrade and immutable-evidence tests pass; collection policy remains empty until explicitly approved |
+| NFT identity / Issue #213 / [PR #241](https://github.com/AzizIo/Vstore/pull/241) | `a12a5c627d4ffc708ff52e0317b479da96bb90dc` | Draft; new head pushed, no exact-head CI visible yet; migration review found a mismatched named dollar-quote delimiter in the first trigger function | Exact-head Backend, Frontend and API-backed E2E green; PostgreSQL 16 migration upgrade/downgrade and immutable-evidence tests pass; collection policy remains empty until explicitly approved |
 | Backend artifact pin / Issue #206 / [PR #247](https://github.com/AzizIo/Vstore/pull/247) | `c93867f2e3469807135bffd2f5a7701c4b1fbabe` | Draft; Backend, Frontend/API E2E and Contract CI passed | Pin must be refreshed to the final contract artifact from the #248 track before integration |
-| Contract lifecycle and refund ordering / Issue #225 / [PR #248](https://github.com/AzizIo/Vstore/pull/248) | `cae0912c1a78a95ca5a834a80cdac20bc0d29ece` | Draft; Contract CI #43814168361 failed at the strict StateInit golden comparison after compiler build and wrapper verification | Frozen manifest must contain non-null StateInit, raw address and data hash reproduced by generated wrapper and `@ton/core`; exact-head emulator and static checks green; backend adapter must consume this same artifact |
+| Contract lifecycle and refund ordering / Issue #225 / [PR #248](https://github.com/AzizIo/Vstore/pull/248) | `5b65380e33c814be95bea0c931873a7620b56783` | Draft; StateInit golden check now passes; Contract CI #43814617994 fails 2 of 33 emulator tests (buyer reserve retry balance and resolver replay exit code) | Frozen manifest must contain non-null StateInit, raw address and data hash reproduced by generated wrapper and `@ton/core`; exact-head emulator and static checks green; backend adapter must consume this same artifact |
 | Earlier audit handoff / [PR #246](https://github.com/AzizIo/Vstore/pull/246) | `d0b19d2bd948edacbaf336285f9fff6afef0a748` | Draft; stale base | Based on older main and must not be used as current release evidence; this document is the current coordination snapshot |
 
 PR heads and CI status can move. Always re-query the exact head SHA before treating a check as evidence.
@@ -41,13 +41,13 @@ The current PR #248 exact-head build identifies candidate code hash:
 
 `21206C3371B9EB270B63F8C288ADA6A15A207093F9D3D41DEA8255AFD39775ED`
 
-The frozen manifest currently carries the **previous** StateInit hash/address `155ab72e6f8ad9f3b3f879f22a44cbc2b821882a4799e6e789a4bb8652ffa6d2`. The generated Acton wrapper + `@ton/core` verification in exact-head Contract CI #43814168361 computed a different vector and correctly failed closed:
+The generated Acton wrapper + `@ton/core` vector now matches the checked-in frozen manifest:
 
-- computed StateInit hash: `cfa1d4f92afb1c7e6d1dfeb6672f84979747b7f1518d847573ac00cbb89538c2`;
-- computed raw address: `0:cfa1d4f92afb1c7e6d1dfeb6672f84979747b7f1518d847573ac00cbb89538c2`;
+- StateInit hash: `cfa1d4f92afb1c7e6d1dfeb6672f84979747b7f1518d847573ac00cbb89538c2`;
+- raw address: `0:cfa1d4f92afb1c7e6d1dfeb6672f84979747b7f1518d847573ac00cbb89538c2`;
 - initial data hash: `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b`.
 
-These values come from uploaded exact-head build artifact #14202320050. Agent 2 has been sent the vector and must pin it into the final frozen manifest, refresh `artifacts/VERIFYING.md` provenance, and rerun Contract CI on a new exact head. The current manifest's source/workflow/artifact provenance must also be refreshed from the final exact-head run. Do not merge while the vector or provenance is mismatched.
+The strict vector comparison passed on the next exact-head Contract CI run, but emulator tests remain red: 31 passed and 2 failed in run #43814617994. Failures are the buyer reserve retry balance assertion at `tests/DealEscrow.test.tolk:2786` and resolver replay error expectation at line 2930 (actual Deadline 710, expected InvalidState 703). Agent 2 has been sent both findings. This candidate is not ready until all emulator tests pass and the final successful run's manifest/verification documentation are consistent.
 
 The backend pin in PR #247 is currently for the prior frozen artifact (code hash `9011F274BC3D7E32B76A17F13FCBA17AC49429BB4EECBC4AB97FA202BDAC2940`, StateInit `674227296eff6ac5ee02c8e2eaa12857ac339d10a9ed7f4f7ea0591e7b4adfca`). It must be updated only from the final, successful #248 compiler artifact and must pass the cross-track test against that final manifest. No runtime action may be prepared against a stale code hash.
 
