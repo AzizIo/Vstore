@@ -1,6 +1,7 @@
 """TON escrow wallet payloads, backed by the pinned DealEscrow ABI."""
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from enum import StrEnum
@@ -34,6 +35,7 @@ class EscrowWalletAction(StrEnum):
     RETURN_NFT_TO_ESCROW = "return_nft_to_escrow"
     TIMEOUT_DEAL = "timeout_deal"
     RECOVER_UNEXPECTED_NFT = "recover_unexpected_nft"
+    RETRY_FAILED_OUTBOUND_ACTION = "retry_failed_outbound_action"
     # Kept for backwards compatibility, but these are not user wallet actions.
     REFUND = "refund"
     PAYOUT = "payout"
@@ -84,6 +86,37 @@ class DealEscrowDeploymentSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class ProofBoundOutboundAction:
+    slot: str
+    kind: int
+    query_id: int
+    deal_salt: str
+    attempt_id: int
+    amount_nanotons: int
+    message_value_nanotons: int
+    expected_state: int
+    expected_pending_action: int
+    retry_window_seconds: int
+    message_body_hash: str
+    status: int
+    bounce_phase: int
+    exit_code: int
+    item_address: str
+    destination_address: str
+    recipient_address: str
+    response_address: str
+
+
+@dataclass(frozen=True, slots=True)
+class OutboundRetryProof:
+    action: ProofBoundOutboundAction
+    masterchain_seqno: int
+    masterchain_block_hash: str
+    state_data_hash: str
+    provider_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class TONConnectMessage:
     address: str
     amount: str
@@ -127,6 +160,7 @@ class TONEscrowContractAdapter(Protocol):
         reason_hash: int | None = None,
         query_id: int | None = None,
         valid_until: int | None = None,
+        retry_proof: OutboundRetryProof | None = None,
     ) -> TONConnectTransactionPayload: ...
 
 
@@ -145,8 +179,9 @@ class UnconfiguredTONEscrowContractAdapter:
         reason_hash: int | None = None,
         query_id: int | None = None,
         valid_until: int | None = None,
+        retry_proof: OutboundRetryProof | None = None,
     ) -> TONConnectTransactionPayload:
-        del action, actor_wallet, resource_id, deal_snapshot, reason_hash, query_id, valid_until
+        del action, actor_wallet, resource_id, deal_snapshot, reason_hash, query_id, valid_until, retry_proof
         raise EscrowContractABIUnavailable(
             "TON escrow transaction construction is disabled until ABI/code artifacts "
             "are configured"
@@ -177,6 +212,7 @@ class PinnedTONEscrowContractAdapter:
         reason_hash: int | None = None,
         query_id: int | None = None,
         valid_until: int | None = None,
+        retry_proof: OutboundRetryProof | None = None,
     ) -> TONConnectTransactionPayload:
         if not resource_id or len(resource_id) > 128:
             raise EscrowContractABIUnavailable("resource_id is required and must be bounded")
@@ -332,6 +368,42 @@ class PinnedTONEscrowContractAdapter:
                 target = escrow_address
                 amount = deal_snapshot.action_value_nanotons
                 body = encode_simple_action("recover_unexpected_nft", require_query_id(), salt)
+            elif action is EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION:
+                if retry_proof is None:
+                    raise TONABIError("a current trust-level-0 outbound retry proof is required")
+                descriptor = retry_proof.action
+                retry_query_id = require_query_id()
+                if (
+                    retry_proof.provider_id != "pytoniq-trust0-testnet-v1"
+                    or isinstance(retry_proof.masterchain_seqno, bool)
+                    or not isinstance(retry_proof.masterchain_seqno, int)
+                    or retry_proof.masterchain_seqno <= 0
+                    or not re.fullmatch(r"[0-9a-f]{64}", retry_proof.masterchain_block_hash)
+                    or not re.fullmatch(r"[0-9a-f]{64}", retry_proof.state_data_hash)
+                ):
+                    raise TONABIError("outbound retry proof anchor is invalid")
+                if (
+                    descriptor.slot not in {"first", "second"}
+                    or descriptor.query_id != retry_query_id
+                    or descriptor.deal_salt != f"{salt:064x}"
+                    or descriptor.status != 1
+                    or descriptor.retry_window_seconds <= 0
+                    or not 0 <= descriptor.expected_state <= 13
+                    or descriptor.bounce_phase not in {1, 2}
+                ):
+                    raise TONABIError("outbound descriptor is not uniquely retryable")
+                recipient = parse_basechain_address(
+                    descriptor.recipient_address, "outbound recipient_address"
+                )
+                if recipient.to_str(is_user_friendly=False) != wallet_address.to_str(is_user_friendly=False):
+                    raise TONABIError("only the exact snapshotted outbound recipient may retry")
+                if deal_snapshot.action_value_nanotons <= 0:
+                    raise TONABIError("retry action value must be positive")
+                target = escrow_address
+                amount = deal_snapshot.action_value_nanotons
+                body = encode_simple_action(
+                    "retry_failed_outbound_action", retry_query_id, salt
+                )
             else:
                 raise TONABIError(
                     "refund/payout are contract-initiated; this wallet action is not supported"
