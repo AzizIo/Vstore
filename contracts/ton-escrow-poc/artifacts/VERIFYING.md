@@ -6,12 +6,12 @@ This directory pins the ABI and compiler output for the current testnet-only Dea
 
 | Field | Value |
 |---|---|
-| Exact source commit | `b8d3175c318e136d44916c8a82d4e1e1527385da` |
+| Exact source commit | `9d80a65a974b54f115fc697158974bdcee2c6be8` |
 | Contract source commit | `d87e4a81e07ec0c1e95619f6e5188c5be5433d62` |
 | Toolchain | Acton `1.2.1`, Tolk `1.5.0` |
-| Green exact-head Contract CI | [#43823914888](https://github.com/AzizIo/Vstore/actions/runs/43823914888) |
-| Artifact ID | `14206155677` |
-| Artifact ZIP SHA-256 | `4134afaccb27469c7d51008883c04977d876e9b2cc958f9cd66d1d7bbea49451` |
+| Green exact-head Contract CI | [#43824551943](https://github.com/AzizIo/Vstore/actions/runs/43824551943) |
+| Artifact ID | `14205079269` |
+| Artifact ZIP SHA-256 | `622174053559929887d34c0ae0b8f3318efe2a4b9c661bf1925bd4760cf48c9a` |
 | Build descriptor SHA-256 | `32c5ff1e392d77ade6c4a99b6010e41bcc2c1c9700e768fe190be45f98aeb5db` |
 | Compact ABI SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
 | Compiled code hash | `498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46` |
@@ -34,7 +34,7 @@ The source-controlled files are `frozen/DealEscrow.abi.json` and `frozen/manifes
 - A timed-out pre-delivery dispute with NFT and principal still escrowed remains resolver-controlled in manual review; an expired post-delivery dispute can accept only the exact late buyer return, restore the dispute window, and still requires a fresh resolver quorum before further NFT movement.
 - Failed buyer principal refund, seller payout, seller allowance, execution-reserve refund, late finality, duplicate oracle delivery/refund, and terminal bounce cases are covered in emulator fixtures.
 
-The green run reports **34 passing Sandbox tests**. Coverage for the contract tree is 85.9% lines and 68.6% branches; DealEscrow itself is 83.5% lines and 67.9% branches. Coverage is useful evidence, not a proof of correctness.
+The green run reports **35 passing Sandbox tests**. Coverage for the contract tree is 85.9% lines and 68.7% branches; DealEscrow itself is 83.5% lines and 68.1% branches. Coverage is useful evidence, not a proof of correctness.
 
 ## Reproduction
 
