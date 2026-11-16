@@ -253,6 +253,7 @@ Before calling this a stable production release, separately arrange:
 - HTTPS certificate renewal and reverse-proxy hardening;
 - resource/disk monitoring and log retention;
 - an incident/support contact and rollback procedure;
+- verified `TELEGRAM_SUPPORT_USERNAME` and a public HTTPS `TELEGRAM_TERMS_URL`; `/support`, `/paysupport` and `/terms` must be tested on the production bot before any checkout is enabled;
 - rate limiting/WAF at the public edge;
 - live Telegram, wallet proof and NFT transfer acceptance.
 
