@@ -28,7 +28,7 @@ Issue #252's retry implementation and adversarial test matrix are now represente
 - Independent TON/Tolk audit bound to the final source, ABI, BOC and StateInit hashes.
 - Explicit approval of a testnet collection policy; the allowlist remains empty.
 - Owner-approved valueless live-testnet lifecycle acceptance and evidence bundle.
-- Written Telegram policy/legal review for the exact NFT resale/payment flow.
+- Written Telegram policy/legal review for the exact NFT resale/payment flow. First-party Bot Developer Terms §6.2 currently require Stars for digital goods/services transactions in a TPA, and §6.2.1 requires /paysupport while warning against irreversible high-value virtual-item sales after chargebacks. §7 / [Blockchain Guidelines](https://core.telegram.org/bots/blockchain-guidelines) allow TON assets and TON Connect, but do not expressly exempt P2P NFT sales from §6.2. The [Stars Payments API](https://core.telegram.org/bots/payments-stars) says Stars applies to digital goods inside Telegram even where external portals/providers exist. This exact user-to-user existing TON NFT resale remains unresolved; require written Telegram clarification and legal review before paid checkout. See Issue #155.
 - npm audit still prints three low deepmerge findings even though GitHub withdrew GHSA-gcqx-w48m-w2h4 on 2026-11-16 as not describing a security vulnerability. Treat this as stale audit feed output pending reconciliation, not a confirmed vulnerability; see Issue #256.
 
 **Release decision remains BLOCKED.** CI is not an independent audit or live-chain acceptance. No production checkout, server signing/broadcast, mainnet, real TON, custody or user funds are enabled.
