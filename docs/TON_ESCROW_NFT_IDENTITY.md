@@ -73,3 +73,8 @@ Indexer observations are discovery hints only. The existing testnet finality pro
 The discovery candidate's `finalized` bit never authorizes state advancement. If the locator conflicts with the proof-returned block, the transaction/message is absent or ambiguous, validator/config proof validation fails, the current head lacks the configured depth, or any contract getter disagrees with the snapshot, the provider returns invalid/unavailable evidence and the observer leaves the event pending/retryable or routes it to manual review. It must not turn an indexer status into a successful terminal event.
 
 Adversarial tests now cover a mismatched shard locator, an indexed/masterchain sequence conflict, insufficient masterchain depth, validator/config-proof failure, and shard-inclusion-proof failure. These exercise the fail-closed boundary with controlled proof-client doubles; they are not a live testnet acceptance test and do not substitute for an owner-approved end-to-end test using disposable wallets.
+
+
+### Database immutability guard
+
+PostgreSQL triggers freeze identity snapshots and proof-bound listing/deal terms even when a row has no snapshot yet, preventing direct SQL from retrofitting evidence onto legacy rows. Deal buyer binding, salt, principal, and established contract bindings are immutable; lifecycle status updates remain allowed. Downgrade refuses to discard identity evidence while any listing intent or deal references it.
