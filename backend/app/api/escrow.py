@@ -1863,6 +1863,13 @@ async def list_retryable_outbound_actions(
         if exc.status_code == 404:
             return []
         raise
+    expected_wallet_address = (
+        deal.seller_address_snapshot
+        if deal.seller_id == user.id
+        else deal.buyer_address_snapshot
+    )
+    if wallet_address != expected_wallet_address:
+        return []
 
     # Copy the immutable deployment identity before releasing the DB
     # transaction; the provider must not trigger lazy ORM reads while on-chain.
