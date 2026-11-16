@@ -31,7 +31,16 @@ The current main frozen contract manifest is not yet aligned with the backend ad
 - The allowlist defaults to empty; no concrete collection/item code hashes are approved.
 - The implementation uses Pytoniq trust-level-0 LiteServer proof reads for item and collection account state at the same trusted masterchain block; checks standard TEP-62 item/collection storage, item and collection code hashes, collection-stored item code and minted index; reconstructs the item address from index + collection; and persists immutable identity evidence bound to a digest.
 - The persisted validator rejects bool-as-int version values, missing/boolean/invalid chain timestamps, malformed hashes/addresses, mismatched policy digests and invalid index ranges.
-- Independent review is still required. The PR currently has no submitted review record. A read-only release review found the core same-block proof/anchor path fail-closed; one defense-in-depth suggestion remains to reject any non-canonical per-deal collection address in terminal-owner reconciliation rather than discarding malformed entries.
+- The final terminal-owner implementation rejects any missing/non-canonical per-deal collection address and checks every deal's item/collection columns against its own validated immutable identity snapshot; regression tests cover missing collection and mismatched item address.
+- Independent security review is still required. No independent review submission is recorded.
+
+### PR #250 — deterministic compressed BOC verifier follow-up
+
+- Exact head: `7b8775b628e9df9d22cbb18549bb9a51cf51828d`; Draft and stacked on #248's exact prior head.
+- Contract CI #43829081437 — SUCCESS; artifact #14208215967.
+- Adds deterministic RFC 1950/DEFLATE stored-block encoding (fixed 65,535-byte blocks, fixed header and Adler-32), plus tests for byte-exact small vectors, empty input, multi-block round-trip and wrong-digest rejection.
+- Updates frozen contract manifest compressed BOC SHA-256 to `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7`.
+- This closes the contract CI verifier gap on the #250 stack, but #250 is not yet integrated into the #248 branch. Keep it stacked until reviewed/integrated; rerun Contract CI on the new resulting #248 head.
 
 ### PR #247 — backend artifact pin and cross-track guard (Issue #206)
 
@@ -47,19 +56,19 @@ The current main frozen contract manifest is not yet aligned with the backend ad
 
 ### PR #248 — contract lifecycle/refund follow-up (Issue #225)
 
-- Latest PR head: `170dafb2180ec37ada903f3d17518c8d50d25c8c`; Draft.
-- Exact Contract CI #43824843864 — success on that exact SHA; all 35 Sandbox tests passed, Tolk formatting and static checks passed, frozen ABI/raw BOC verification passed, StateInit/address cross-check passed, and message BOC golden vectors passed. Contract tree coverage is 85.9% lines / 68.7% branches.
+- Latest #248 head: `170dafb2180ec37ada903f3d17518c8d50d25c8c`; Draft.
+- Exact Contract CI #43824843864 — success on that SHA; all 35 Sandbox tests passed, Tolk formatting/static checks, frozen ABI/raw BOC checks, StateInit/address cross-check and message vectors passed. Contract tree coverage is 85.9% lines / 68.7% branches.
 - Compiled code hash: `498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46`.
 - StateInit hash/address: `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75`.
 - BOC base64/decoded digests: `0e7bc7b35eee4ae7003fba0a0e5368df3428b7e32ad0f4fc5ddf0f3230d5daf3` / `86ed08596d0595c711aa2cf7659ee396ff443d7b01c65659b8e7543dd23c6173`.
-- **Compressed BOC digest still requires reconciliation:** frozen manifest says `dbca9581e8ce45f2ca68f6dc766e149f4e7ca25a2c740fb58b2b4448c6189963`; my independent Python `zlib.compress(raw_boc)` of BOC bytes from exact artifact #14206172246 yields `1766fd8f3542eb0f9aec9cd8ddd80cdd69297c97d58efbef91cdaf11fdb75407`. Contract CI's build verifier does not currently validate this compressed field. It does not invalidate the 35/35 emulator or StateInit results, but the backend BOC file/manifest pair must be generated and checked together before updating #247.
-- The exact Sandbox suite now includes seller-allowance-before-buyer-reserve retry, duplicate TEP-62 callback idempotency, timed-out escrowed-dispute resolver recovery, exact late buyer NFT return, replay rejection and sub-0.01 TON action-value rejection. The two previously failing lifecycle paths have been corrected and the 35-test run passes.
+- **Canonical compressed-BOC follow-up:** [PR #250](https://github.com/AzizIo/Vstore/pull/250) is stacked on the exact #248 head. It adds a portable RFC 1950/DEFLATE stored-block encoder and makes Contract CI verify the compressed representation itself. Canonical compressed digest: `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7`. Exact PR #250 head `7b8775b628e9df9d22cbb18549bb9a51cf51828d` passed Contract CI #43829081437 (artifact #14208215967), including verifier tests, Acton build, StateInit/message vectors, static checks and the emulator suite. **PR #250 is green but still stacked; it must be integrated into #248 and Contract CI rerun on the resulting #248 head before #247 is refreshed.**
+- The 35-test suite covers seller-allowance-before-buyer-reserve retry, duplicate TEP-62 callback idempotency, timed-out escrowed-dispute resolver recovery, exact late buyer NFT return, replay rejection and sub-minimum action-value rejection.
 
 ## 3. Required integration sequence
 
 1. Complete independent code review and collection-policy review for #241; keep the default collection allowlist empty.
-2. Finish #248: refresh frozen manifest, code/BOC/StateInit vectors and `artifacts/VERIFYING.md` from one exact successful compiler run; resolve the resolver replay ordering and rerun all emulator tests.
-3. Refresh #247 backend manifest/BOC/ABI pin from the final #248 artifact, not from any older candidate.
+2. Integrate reviewed PR #250 into #248, then rerun Contract CI on the resulting exact #248 SHA. The canonical compressed-BOC digest must be reproduced by the verifier alongside code/raw/base64 BOC and StateInit vectors.
+3. Refresh #247 backend manifest/physical BOC/code pin/StateInit golden vectors from the final post-#250 #248 artifact, not from any older candidate.
 4. Build one integrated candidate tree containing #241 identity work, the final #248 contract and matching #247 backend pin.
 5. Run Backend, Contract, Frontend/API E2E and PostgreSQL 16 migration tests on the same exact SHA. The strict backend↔contract artifact test must pass.
 6. Obtain independent TON/Tolk audit and remediate all Critical/High findings.
