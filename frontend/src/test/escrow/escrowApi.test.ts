@@ -262,6 +262,12 @@ describe("proof-bound outbound retry API", () => {
     expect(isRetryableOutboundAction({ ...terminalRefund, kind: 4 })).toBe(false);
     expect(isRetryableOutboundAction({ ...terminalRefund, kind: 7, retry_window_seconds: 1800 })).toBe(false);
     expect(isRetryableOutboundAction({ ...terminalRefund, amount_nanotons: "0" })).toBe(false);
+    expect(isRetryableOutboundAction({
+      ...terminalRefund, kind: 7, amount_nanotons: "0", retry_window_seconds: 0,
+    })).toBe(true);
+    expect(isRetryableOutboundAction({
+      ...terminalRefund, kind: 7, amount_nanotons: "90000000", retry_window_seconds: 0,
+    })).toBe(false);
     expect(isRetryableOutboundAction({ ...terminalRefund, query_id: "18446744073709551616" })).toBe(false);
   });
 
