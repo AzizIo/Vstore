@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 
 class EscrowListingIntentCreate(BaseModel):
@@ -57,7 +57,7 @@ class EscrowRetryableOutboundActionResponse(BaseModel):
 
     @field_validator("retry_window_seconds")
     @classmethod
-    def validate_kind_specific_retry_window(cls, value: int, info) -> int:
+    def validate_kind_specific_retry_window(cls, value: int, info: ValidationInfo) -> int:
         kind = info.data.get("kind")
         if kind in {1, 2, 3, 4, 5} and value == 1800:
             return value
