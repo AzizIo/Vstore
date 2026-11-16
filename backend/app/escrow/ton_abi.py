@@ -11,6 +11,7 @@ import base64
 import hashlib
 import json
 import re
+import zlib
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -103,21 +104,27 @@ def load_pinned_abi() -> tuple[dict[str, Any], dict[str, Any]]:
 
 
 def load_pinned_code_boc() -> str:
-    """Verify the pinned compiler BOC base64 and return canonical text."""
+    """Verify the pinned compiler BOC after decompression.
+
+    zlib is only a transport encoding; the canonical base64 and raw BOC
+    digests pin the exact compiler output independent of compression level.
+    """
     try:
-        code_boc_base64 = (
-            _ARTIFACTS / "DealEscrow.code.boc.b64"
+        compressed_b64 = (
+            _ARTIFACTS / "DealEscrow.code.boc.zlib.b64"
         ).read_text(encoding="ascii").strip()
-        code_boc = base64.b64decode(code_boc_base64, validate=True)
-    except (OSError, UnicodeError, ValueError) as exc:
+        compressed = base64.b64decode(compressed_b64, validate=True)
+        raw_boc = zlib.decompress(compressed)
+    except (OSError, UnicodeError, ValueError, zlib.error) as exc:
         raise TONABIError("pinned DealEscrow code BOC is unavailable or corrupt") from exc
 
     _, manifest = load_pinned_abi()
+    code_boc_base64 = base64.b64encode(raw_boc).decode("ascii")
     if _sha256(code_boc_base64.encode("ascii")) != manifest.get(
         "compiled_code_boc_base64_sha256"
     ):
         raise TONABIError("DealEscrow code BOC base64 digest mismatch")
-    if _sha256(code_boc) != manifest.get("compiled_code_boc_sha256"):
+    if _sha256(raw_boc) != manifest.get("compiled_code_boc_sha256"):
         raise TONABIError("DealEscrow raw code BOC digest mismatch")
     return code_boc_base64
 
