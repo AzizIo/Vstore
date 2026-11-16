@@ -382,13 +382,26 @@ class PinnedTONEscrowContractAdapter:
                     or not re.fullmatch(r"[0-9a-f]{64}", retry_proof.state_data_hash)
                 ):
                     raise TONABIError("outbound retry proof anchor is invalid")
+                valid_retry_window = (
+                    descriptor.kind in {1, 2, 3, 4, 5}
+                    and descriptor.retry_window_seconds == 1800
+                ) or (
+                    descriptor.kind in {6, 7}
+                    and descriptor.retry_window_seconds == 0
+                )
                 if (
                     descriptor.slot not in {"first", "second"}
+                    or descriptor.kind not in {1, 2, 3, 4, 5, 6, 7}
                     or descriptor.query_id != retry_query_id
                     or descriptor.deal_salt != f"{salt:064x}"
+                    or descriptor.attempt_id <= 0
                     or descriptor.status != 1
-                    or descriptor.retry_window_seconds <= 0
+                    or not valid_retry_window
+                    or descriptor.amount_nanotons <= 0
+                    or descriptor.message_value_nanotons <= 0
+                    or not re.fullmatch(r"[0-9a-f]{64}", descriptor.message_body_hash)
                     or not 0 <= descriptor.expected_state <= 13
+                    or not 0 <= descriptor.expected_pending_action <= 255
                     or descriptor.bounce_phase not in {1, 2}
                 ):
                     raise TONABIError("outbound descriptor is not uniquely retryable")
