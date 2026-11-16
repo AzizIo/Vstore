@@ -65,6 +65,7 @@ from app.escrow.schemas import (
     EscrowNftProjection,
     EscrowPageResponse,
     EscrowRetryFailedOutboundInput,
+    EscrowRetryableOutboundActionResponse,
     EscrowSellerBalanceResponse,
     EscrowTransactionPreparationResponse,
     EscrowWalletReferenceInput,
@@ -1677,6 +1678,71 @@ async def prepare_unsold_nft_withdrawal(
     return await _prepare_action(
         deal_id, EscrowWalletAction.WITHDRAW_UNSOLD_NFT, user, session,
         verifier, idempotency_key)
+
+
+@router.get(
+    "/deals/{deal_id}/retryable-outbound-actions",
+    response_model=list[EscrowRetryableOutboundActionResponse],
+)
+async def list_retryable_outbound_actions(
+    deal_id: UUID,
+    user: CurrentUser,
+    session: DbSession,
+) -> list[EscrowRetryableOutboundActionResponse]:
+    _require_testnet()
+    deal = await session.scalar(
+        select(EscrowDeal).where(
+            EscrowDeal.id == deal_id,
+            (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id),
+        )
+    )
+    if deal is None:
+        raise HTTPException(status_code=404, detail="Escrow deal not found")
+    if deal.seller_id == user.id:
+        intent = await session.get(EscrowListingIntent, deal.listing_intent_id)
+        if intent is None:
+            raise HTTPException(status_code=404, detail="Escrow listing intent not found")
+        wallet_id = intent.seller_wallet_id
+    else:
+        wallet_id = deal.buyer_wallet_id
+    try:
+        _wallet, wallet_address = await _verified_wallet(
+            session, user_id=user.id, wallet_id=wallet_id,
+        )
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            return []
+        raise
+
+    provider = PytoniqTONTestnetEscrowProvider(settings=get_settings())
+    try:
+        proofs = await provider.read_current_outbound_retry_proofs(deal)
+    except EscrowProviderInvalidEvidence as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "outbound_retry_state_not_proven"},
+        ) from exc
+    except EscrowProviderUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "outbound_retry_proof_unavailable"},
+        ) from exc
+    finally:
+        await provider.close()
+
+    return [
+        EscrowRetryableOutboundActionResponse(
+            query_id=str(proof.action.query_id),
+            slot=proof.action.slot,
+            kind=proof.action.kind,
+            recipient_address=proof.action.recipient_address,
+            amount_nanotons=str(proof.action.amount_nanotons),
+            retry_window_seconds=proof.action.retry_window_seconds,
+            proof_masterchain_seqno=proof.masterchain_seqno,
+        )
+        for proof in proofs
+        if proof.action.recipient_address == wallet_address
+    ]
 
 
 @router.post(
