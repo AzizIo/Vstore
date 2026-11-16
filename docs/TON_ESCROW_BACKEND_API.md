@@ -41,6 +41,8 @@ All routes below are under `/api/escrow`. The router is mounted only when `TON_C
 | POST | `/deals/{deal_id}/prepare/dispute` | Bound buyer only, only in `funded_review` or `delivered_dispute_window`; currently 503. |
 | POST | `/deals/{deal_id}/prepare/nft-return` | Bound buyer only in `disputed`; buyer ownership is rechecked; currently 503. |
 | POST | `/deals/{deal_id}/prepare/withdraw-unsold-nft` | Seller only after `expired`; escrow ownership is rechecked; currently 503. |
+| GET | `/deals/{deal_id}/retryable-outbound-actions` | Participant only. Reads the current DealEscrow account at a trust-level-0 testnet masterchain block and returns only BOUNCED descriptors whose exact recipient is the caller's verified deal wallet. Never uses the observer's cached getter snapshot as authorization. |
+| POST | `/deals/{deal_id}/prepare/retry-failed-outbound` | Requires a decimal-string uint64 `query_id` and Idempotency-Key. Re-reads current proved storage, requires exactly one BOUNCED descriptor, matching deal salt and recipient wallet, and binds the idempotency hash to the proof anchor. Returns an unsigned TON Connect message only; it never signs or broadcasts. |
 | POST | `/wallet-references` | Currently 503. A client-supplied hash/BOC is never accepted as evidence or state. |
 | GET | `/seller/balance` | Returns unavailable; this design does not define a withdrawable seller balance. |
 | GET | `/seller/withdrawals` | Empty page until an approved settlement/withdrawal model exists. |
