@@ -81,9 +81,9 @@ const manifest = JSON.parse(
   readFileSync("artifacts/frozen/manifest.json", "utf8"),
 ) as {
   compiled_code_hash: string;
-  state_init_hash: string | null;
-  raw_address: string | null;
-  data_hash: string | null;
+  state_init_hash: string;
+  raw_address: string;
+  data_hash: string;
 };
 
 if (!stateInit.hash().equals(deployed.address.hash)) {
@@ -93,18 +93,30 @@ if (deployed.init.code.hash().toString("hex").toUpperCase() !== manifest.compile
   throw new Error("Generated Acton CodeCell does not match pinned manifest");
 }
 if (
-  manifest.state_init_hash
-  && stateInit.hash().toString("hex") !== manifest.state_init_hash
+  typeof manifest.state_init_hash !== "string"
+  || !/^[0-9a-f]{64}$/.test(manifest.state_init_hash)
 ) {
-  throw new Error("Generated fixed StateInit hash differs from frozen golden vector");
-}
-if (manifest.raw_address && deployed.address.toRawString() !== manifest.raw_address) {
-  throw new Error("Generated fixed DealEscrow address differs from frozen golden vector");
+  throw new Error("Frozen manifest must pin a valid StateInit hash");
 }
 if (
-  manifest.data_hash
-  && deployed.init.data.hash().toString("hex") !== manifest.data_hash
+  typeof manifest.raw_address !== "string"
+  || manifest.raw_address !== `0:${manifest.state_init_hash}`
 ) {
+  throw new Error("Frozen manifest must pin the matching basechain raw address");
+}
+if (
+  typeof manifest.data_hash !== "string"
+  || !/^[0-9a-f]{64}$/.test(manifest.data_hash)
+) {
+  throw new Error("Frozen manifest must pin a valid initial data hash");
+}
+if (stateInit.hash().toString("hex") !== manifest.state_init_hash) {
+  throw new Error("Generated fixed StateInit hash differs from frozen golden vector");
+}
+if (deployed.address.toRawString() !== manifest.raw_address) {
+  throw new Error("Generated fixed DealEscrow address differs from frozen golden vector");
+}
+if (deployed.init.data.hash().toString("hex") !== manifest.data_hash) {
   throw new Error("Generated initial storage cell differs from frozen golden vector");
 }
 console.log(JSON.stringify({
