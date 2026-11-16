@@ -8,14 +8,14 @@ Product boundaries and decisions approved for the current MVP are recorded in [d
 
 ### TON escrow development status — not a live feature
 
-The TON escrow work is being developed and reviewed separately from the current non-custodial reservation/direct-transfer MVP. **There is no production escrow checkout, payment collection, refund processing, seller payout or custody on main.** Do not infer that an unsigned testnet action-preparation route is a live settlement rail.
+The TON escrow implementation stack has now been merged into main and remains separate from the current non-custodial reservation/direct-transfer MVP. **There is no production escrow checkout, payment collection, refund processing, seller payout or custody on main.** Do not infer that an unsigned testnet action-preparation route is a live settlement rail.
 
 The implementation and release evidence are tracked in:
 - [Current TON escrow release gate](docs/TON_ESCROW_RELEASE_GATE_2026-11-16.md)
 - [Independent TON/Tolk audit and valueless testnet acceptance handoff](docs/TON_ESCROW_EXTERNAL_AUDIT_HANDOFF.md)
 - [Issue #225 current-main security assessment](docs/TON_ESCROW_ISSUE_225_CURRENT_MAIN_ASSESSMENT.md)
 
-The relevant implementation PRs are [#241 — proof-backed TEP-62 identity](https://github.com/AzizIo/Vstore/pull/241), [#247 — backend contract artifact pin and proof-bound retry API](https://github.com/AzizIo/Vstore/pull/247), [#248 — TON escrow contract lifecycle follow-up](https://github.com/AzizIo/Vstore/pull/248), and [#255 — recipient-authorized failed-outbound retry UI and cross-layer CI](https://github.com/AzizIo/Vstore/pull/255). These branches must not be treated as a released, integrated feature until one exact candidate SHA contains matching backend/contract artifacts and passes all required CI, independent TON/Tolk audit and owner-approved valueless testnet acceptance. Mainnet, real funds and real NFT transfers are out of scope.
+The implementation is integrated in main through [#248 — contract lifecycle](https://github.com/AzizIo/Vstore/pull/248), [#241 — proof-backed TEP-62 identity](https://github.com/AzizIo/Vstore/pull/241), [#247 — pinned backend artifact and proof-bound retry API](https://github.com/AzizIo/Vstore/pull/247), [#255 — recipient-authorized retry UI and cross-layer CI](https://github.com/AzizIo/Vstore/pull/255), and [#251 — production support/terms commands](https://github.com/AzizIo/Vstore/pull/251). The integrated candidate passed Backend, Contract and Frontend CI on one SHA; the final main head also passed Backend and Frontend push CI. This is source integration only: independent TON/Tolk audit, owner-approved valueless testnet acceptance, explicit collection policy approval and Telegram/legal review remain required before any production escrow or paid checkout. Mainnet, real funds and real NFT transfers remain out of scope.
 
 
 Admin workspace: `/admin`. Access is fail-closed and requires the server-side `ADMIN_TELEGRAM_IDS` JSON array of numeric Telegram user IDs. The default is `[]` (no admin access). Never commit real administrator IDs or credentials.
