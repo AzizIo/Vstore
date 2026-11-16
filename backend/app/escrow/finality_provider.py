@@ -878,12 +878,14 @@ class PytoniqTONTestnetEscrowProvider:
                 or deadline < 0
             ):
                 raise EscrowProviderInvalidEvidence(
-                    "Proved DealEscrow retry deadline/time is malformed"
+                    "Proved DealEscrow retry time fields are malformed"
                 )
-            # Contract kinds 1-5 carry the 30-minute lifecycle/reconciliation
-            # window. Kinds 6-7 are terminal secondary refunds and deliberately
-            # encode a zero window; they are governed by the contract's ordering
-            # guard instead of a lifecycle deadline.
+            # retryWindowSeconds is the deadline for the *new* phase after a
+            # successful retry, not an expiry for initiating the retry. The
+            # contract clears deadlineUnix when a critical outbound bounces, so
+            # the current storage snapshot cannot prove an expiry timestamp.
+            # Enforce the exact per-kind window encoding; do not invent a TTL.
+            # Kinds 6-7 are terminal secondary refunds and deliberately encode 0.
             bounced_seller_allowance = any(
                 isinstance(item, dict)
                 and item.get("kind") == 6
@@ -906,7 +908,7 @@ class PytoniqTONTestnetEscrowProvider:
                 ):
                     continue
                 if kind in {1, 2, 3, 4, 5}:
-                    if retry_window != 1800 or deadline <= chain_time:
+                    if retry_window != 1800:
                         continue
                 elif retry_window != 0 or (kind == 7 and bounced_seller_allowance):
                     continue
