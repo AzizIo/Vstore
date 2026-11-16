@@ -208,7 +208,7 @@ describe("escrow API boundary", () => {
     expect(isPreparedEscrowTransaction({ ...deployment, factory_address: "0:" + "3".repeat(64) })).toBe(false);
     expect(isPreparedEscrowTransaction({
       ...deployment,
-      messages: [{ ...deployment.messages[0], address: factory }],
+      messages: [{ ...deployment.messages[0], address: "0:" + "3".repeat(64) }],
     })).toBe(false);
     expect(isPreparedEscrowTransaction({
       ...deployment,
