@@ -524,6 +524,10 @@ class _FakeRetryLiteClient:
                 )
             )
         )
+        self.masterchain = SimpleNamespace(seqno=700, root_hash=b"m" * 32)
+
+    async def get_trusted_last_mc_block(self):
+        return self.masterchain
 
     async def raw_get_account_state(self, _address: str, *, block: object):
         return self.account, object()
