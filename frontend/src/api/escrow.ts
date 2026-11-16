@@ -491,7 +491,9 @@ function normalizeEscrowPreparation(
   }));
   const firstRecipient = messages[0]?.address;
   const nftTransfer = action === "deposit_nft" || action === "return_nft_to_escrow";
-  const escrowAddress = action === "create_deal_escrow" ? firstRecipient : context.escrow_address;
+  const escrowAddress = action === "create_deal_escrow" || (action === "activate_deal" && !context.escrow_address)
+    ? firstRecipient
+    : context.escrow_address;
   if (typeof escrowAddress !== "string" || escrowAddress.length === 0) {
     throw new Error("Для этой операции отсутствует подтверждённый адрес DealEscrow.");
   }
