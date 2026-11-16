@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare the fresh Acton build output to the frozen DealEscrow provenance."""
+"""Compare a fresh Acton build to frozen DealEscrow code and BOC provenance."""
 from __future__ import annotations
 
 import argparse
@@ -8,6 +8,8 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+
+from canonical_zlib_boc import canonical_zlib_boc
 
 
 def sha256(data: bytes) -> str:
@@ -34,7 +36,22 @@ def verify_build(build_path: Path, manifest_path: Path) -> dict[str, str]:
     actual_boc = sha256(code_boc)
     if actual_boc != expected_boc:
         raise ValueError(f"compiled BOC digest mismatch: expected {expected_boc}, got {actual_boc}")
-    return {"compiled_code_hash": build["hash"], "compiled_boc_sha256": actual_boc}
+
+    expected_zlib = manifest.get("compiled_code_boc_zlib_sha256")
+    if not isinstance(expected_zlib, str) or not expected_zlib:
+        raise ValueError("frozen manifest has no compiled_code_boc_zlib_sha256")
+    actual_zlib = sha256(canonical_zlib_boc(code_boc))
+    if actual_zlib != expected_zlib:
+        raise ValueError(
+            f"compiled BOC canonical zlib digest mismatch: expected {expected_zlib}, got {actual_zlib}"
+        )
+
+    return {
+        "compiled_code_hash": build["hash"],
+        "compiled_code_boc_base64_sha256": actual_boc64,
+        "compiled_code_boc_sha256": actual_boc,
+        "compiled_code_boc_zlib_sha256": actual_zlib,
+    }
 
 
 def main() -> int:
@@ -50,7 +67,7 @@ def main() -> int:
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
-    print("PASS: fresh Acton build matches frozen DealEscrow code and BOC digests")
+    print("PASS: fresh Acton build matches frozen DealEscrow code and canonical BOC digests")
     for key, value in result.items():
         print(f"{key}: {value}")
     return 0
