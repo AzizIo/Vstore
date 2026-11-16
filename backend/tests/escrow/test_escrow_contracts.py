@@ -599,7 +599,7 @@ async def test_retry_failed_outbound_action_encodes_exact_proved_query_and_deal_
         ({"status": 0}, 42, None, "not uniquely retryable"),
         ({"amount_nanotons": 0}, 42, None, "not uniquely retryable"),
         ({}, 43, None, "not uniquely retryable"),
-        ({}, 42, "0:" + "55" * 32, "exact snapshotted outbound recipient"),
+        ({}, 42, "seller", "exact snapshotted outbound recipient"),
     ],
 )
 async def test_retry_failed_outbound_action_rejects_invalid_descriptor_or_recipient(
@@ -611,7 +611,10 @@ async def test_retry_failed_outbound_action_rejects_invalid_descriptor_or_recipi
     adapter = PinnedTONEscrowContractAdapter()
     deal = snapshot()
     proof = _outbound_retry_proof(deal, **proof_changes)
-    actor_address = wallet_address or proof.action.recipient_address
+    actor_address = (
+        deal.seller_address if wallet_address == "seller"
+        else wallet_address or proof.action.recipient_address
+    )
 
     with pytest.raises(EscrowContractABIUnavailable, match=message):
         await adapter.prepare_transaction(
