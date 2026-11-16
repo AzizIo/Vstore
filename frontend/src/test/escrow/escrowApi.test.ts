@@ -5,6 +5,7 @@ import {
   isEscrowDeal,
   isEscrowListingIntent,
   isEscrowWithdrawal,
+  isRetryableOutboundAction,
   type EscrowDeal,
   type EscrowHttpContract,
   type EscrowListingIntent,
@@ -122,6 +123,8 @@ function contract(): EscrowHttpContract {
     prepareDispute: (input) => operation("/test/escrow/prepare-dispute", input),
     prepareBuyerNftReturn: (input) => operation("/test/escrow/prepare-nft-return", input),
     prepareUnsoldNftWithdrawal: (input) => operation("/test/escrow/prepare-unsold-withdrawal", input),
+    retryableOutboundActions: (dealId) => `/test/escrow/deals/${dealId}/retryable-outbound-actions`,
+    prepareFailedOutboundRetry: (input) => operation("/test/escrow/prepare-failed-outbound-retry", input),
     submitWalletReference: (input) => operation("/test/escrow/submit-reference", input),
   };
 }
@@ -236,5 +239,65 @@ describe("escrow API boundary", () => {
     const api = createEscrowApiClient("access-token", contract());
     await expect(api.listMarketplaceListings()).rejects.toThrow("Escrow indexer unavailable");
     await expect(api.listMarketplaceListings()).rejects.toMatchObject({ name: "AbortError" });
+  });
+});
+
+
+describe("proof-bound outbound retry API", () => {
+  beforeEach(() => vi.stubGlobal("fetch", vi.fn()));
+  afterEach(() => vi.unstubAllGlobals());
+
+  const terminalRefund = {
+    query_id: "18446744073709551615",
+    slot: "second" as const,
+    kind: 6,
+    recipient_address: "0:" + "b".repeat(64),
+    amount_nanotons: "90000000",
+    retry_window_seconds: 0,
+    proof_masterchain_seqno: 700,
+  };
+
+  it("accepts the contract's zero-window secondary refund descriptor", () => {
+    expect(isRetryableOutboundAction(terminalRefund)).toBe(true);
+    expect(isRetryableOutboundAction({ ...terminalRefund, kind: 4 })).toBe(false);
+    expect(isRetryableOutboundAction({ ...terminalRefund, kind: 7, retry_window_seconds: 1800 })).toBe(false);
+    expect(isRetryableOutboundAction({ ...terminalRefund, amount_nanotons: "0" })).toBe(false);
+    expect(isRetryableOutboundAction({ ...terminalRefund, query_id: "18446744073709551616" })).toBe(false);
+  });
+
+  it("loads only validated retry descriptors and prepares the exact decimal query ID", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response([terminalRefund]))
+      .mockResolvedValueOnce(response(prepared("retry_failed_outbound_action")));
+
+    const api = createEscrowApiClient("access-token", contract());
+    await expect(api.listRetryableOutboundActions("deal-1"))
+      .resolves.toEqual([terminalRefund]);
+    await api.prepareFailedOutboundRetry({
+      deal_id: "deal-1",
+      query_id: terminalRefund.query_id,
+    });
+
+    const [listUrl, listInit] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    expect(listUrl).toBe("/test/escrow/deals/deal-1/retryable-outbound-actions");
+    expect(listInit.method).toBeUndefined();
+    expect(listInit.headers).toMatchObject({ Authorization: "Bearer access-token" });
+
+    const [prepareUrl, prepareInit] = vi.mocked(fetch).mock.calls[1] as [string, RequestInit];
+    expect(prepareUrl).toBe("/test/escrow/prepare-failed-outbound-retry");
+    expect(prepareInit.method).toBe("POST");
+    expect(JSON.parse(String(prepareInit.body))).toEqual({
+      deal_id: "deal-1",
+      query_id: "18446744073709551615",
+    });
+  });
+
+  it("rejects malformed retry projections instead of exposing a retry control", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response([
+      { ...terminalRefund, query_id: "0" },
+    ]));
+    const api = createEscrowApiClient("access-token", contract());
+    await expect(api.listRetryableOutboundActions("deal-1"))
+      .rejects.toThrow(/не соответствует ожидаемому контракту/i);
   });
 });
