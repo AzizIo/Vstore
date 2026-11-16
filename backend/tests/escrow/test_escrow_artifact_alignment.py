@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import re
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -76,12 +77,16 @@ def test_backend_pin_matches_frozen_tolk_artifact_provenance() -> None:
     assert isinstance(backend.get("artifact_id"), int) and backend["artifact_id"] > 0
     assert backend["raw_address"] == f"0:{backend['state_init_hash']}"
 
-    compiler_boc_path = BACKEND_ARTIFACTS / "DealEscrow.code.boc.b64"
-    compiler_boc_b64 = compiler_boc_path.read_text(encoding="ascii").strip()
-    raw_boc = base64.b64decode(compiler_boc_b64, validate=True)
-    assert base64.b64encode(raw_boc).decode("ascii") == compiler_boc_b64
+    compressed_boc_path = BACKEND_ARTIFACTS / "DealEscrow.code.boc.zlib.b64"
+    compressed_boc_b64 = compressed_boc_path.read_text(encoding="ascii").strip()
+    compressed_boc = base64.b64decode(compressed_boc_b64, validate=True)
+    assert base64.b64encode(compressed_boc).decode("ascii") == compressed_boc_b64
+
+    raw_boc = zlib.decompress(compressed_boc)
+    assert hashlib.sha256(raw_boc).hexdigest() == backend["compiled_code_boc_sha256"]
+
+    compiler_boc_b64 = base64.b64encode(raw_boc).decode("ascii")
     assert (
         hashlib.sha256(compiler_boc_b64.encode("ascii")).hexdigest()
         == backend["compiled_code_boc_base64_sha256"]
     )
-    assert hashlib.sha256(raw_boc).hexdigest() == backend["compiled_code_boc_sha256"]
