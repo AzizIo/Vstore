@@ -38,13 +38,6 @@ const testWallet = {
   is_verified: true,
   is_primary: true,
 };
-const verifiedRetrySellerWallet = {
-  id: "wallet-retry-seller",
-  address: sellerAddress,
-  network: "testnet",
-  is_verified: true,
-  is_primary: false,
-};
 const ignoredMainnetWallet = {
   id: "wallet-mainnet",
   address: "0:" + "5".repeat(64),
@@ -199,7 +192,7 @@ function installInventoryApi() {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.endsWith("/api/wallets/me")) {
-      return jsonResponse([testWallet, verifiedRetrySellerWallet, ignoredMainnetWallet]);
+      return jsonResponse([testWallet, ignoredMainnetWallet]);
     }
     if (url.includes("/api/assets/me?")) {
       return jsonResponse({
