@@ -1291,9 +1291,12 @@ async def _prepare_action(
                 status_code=503, detail={"code": "outbound_action_proof_incomplete"}
             )
         if deal.seller_id == user.id:
-            wallet_id = (
-                (await session.get(EscrowListingIntent, deal.listing_intent_id)).seller_wallet_id
-            )
+            retry_intent = await session.get(EscrowListingIntent, deal.listing_intent_id)
+            if retry_intent is None:
+                raise HTTPException(
+                    status_code=404, detail={"code": "escrow_listing_intent_not_found"}
+                )
+            wallet_id = retry_intent.seller_wallet_id
             expected_address = deal.seller_address_snapshot
         elif deal.buyer_id == user.id:
             wallet_id = deal.buyer_wallet_id

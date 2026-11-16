@@ -61,6 +61,8 @@ Wallet messages are constructed from the versioned Tolk structs, not from user-p
 - TEP-62 `NftTransfer` uses opcode `0x5fcc3d14`, null custom payload, 0.01 TON forward amount and inline payload `0x56454e46 || dealSalt`, matching the generated Acton message vectors and backend wallet message encoder.
 - Wallet payloads are unsigned TON Connect requests. Server-side signing, wallet custody and submission are not implemented.
 - Payout/refund are contract-initiated and deliberately have no user wallet encoder.
+- `RetryFailedOutboundAction` (`0x56450009`) is prepared only from a fresh trust-level-0 proof of exactly one BOUNCED outbound descriptor. The descriptor query ID and deal salt are bound to the message; the actor must be the snapshotted buyer/seller wallet whose raw address equals the descriptor recipient. The payload remains unsigned and is not broadcast.
+- The contract stores `retryWindowSeconds` as a duration for the next reconciliation deadline, but does not persist a bounce timestamp. Backend code therefore cannot claim to verify elapsed time since bounce from contract storage alone; a future protocol change or separately proof-backed bounce-time source is required before an expiry guarantee can be made.
 
 `verify_message_vectors.ts` creates fixed message BOCs with the generated Acton wrapper and `@ton/core 0.63.1`. Backend tests compare decoded body BOC SHA-256 values with the cross-generated fixed vector. Regenerate only alongside an ABI/protocol review; do not update expected hashes just to make tests pass.
 

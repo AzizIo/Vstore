@@ -361,7 +361,7 @@ class PinnedTONEscrowContractAdapter:
                 ):
                     raise TONABIError("retry query_id does not match the bounced descriptor")
                 if (
-                    isinstance(descriptor.deal_salt, str) is False
+                    not isinstance(descriptor.deal_salt, str)
                     or descriptor.deal_salt.lower() != f"{salt:064x}"
                 ):
                     raise TONABIError("retry descriptor deal salt does not match the deal")
