@@ -59,7 +59,7 @@ def upgrade() -> None:
         CREATE FUNCTION guard_escrow_nft_identity_snapshot()
         RETURNS trigger
         LANGUAGE plpgsql
-        AS $escrow_deal_guard$$
+        AS $$
         BEGIN
             IF (
                 NEW.nft_identity_snapshot_json::jsonb
