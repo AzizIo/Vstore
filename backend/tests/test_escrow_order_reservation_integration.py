@@ -323,7 +323,7 @@ async def test_postgres_deal_identity_snapshot_is_immutable_but_status_can_advan
     try:
         with pytest.raises(
             DBAPIError,
-            match="Persisted escrow NFT identity and bound terms are immutable",
+            match="Immutable DealEscrow deployment terms cannot be changed",
         ):
             async with session_factory() as session:
                 async with session.begin():
@@ -335,6 +335,20 @@ async def test_postgres_deal_identity_snapshot_is_immutable_but_status_can_advan
                         {"address": "0:" + "8" * 64, "deal_id": deal_id},
                     )
 
+        with pytest.raises(
+            DBAPIError,
+            match="Persisted escrow NFT identity and bound terms are immutable",
+        ):
+            async with session_factory() as session:
+                async with session.begin():
+                    await session.execute(
+                        text(
+                            "UPDATE escrow_deals SET nft_identity_snapshot_sha256 = :digest "
+                            "WHERE id = :deal_id"
+                        ),
+                        {"digest": "0" * 64, "deal_id": deal_id},
+                    )
+
         for column, value in (
             ("buyer_address_snapshot", "0:" + "7" * 64),
             ("deal_salt", "9" * 64),
@@ -342,7 +356,7 @@ async def test_postgres_deal_identity_snapshot_is_immutable_but_status_can_advan
         ):
             with pytest.raises(
                 DBAPIError,
-                match="Persisted escrow deal NFT identity and bound terms are immutable",
+                match="Immutable DealEscrow deployment terms cannot be changed",
             ):
                 async with session_factory() as session:
                     async with session.begin():
