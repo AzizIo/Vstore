@@ -39,8 +39,11 @@ from app.escrow.contracts import (
     DealEscrowDeploymentSnapshot,
     EscrowContractABIUnavailable,
     EscrowWalletAction,
+    OutboundRetryProof,
     PinnedTONEscrowContractAdapter,
 )
+from app.escrow.finality_provider import PytoniqTONTestnetEscrowProvider
+from app.escrow.provider import EscrowProviderInvalidEvidence, EscrowProviderUnavailable
 from app.escrow.domain import EscrowDealStatus
 from app.escrow.models import (
     EscrowDeal,
@@ -61,6 +64,7 @@ from app.escrow.schemas import (
     EscrowListingIntentResponse,
     EscrowNftProjection,
     EscrowPageResponse,
+    EscrowRetryFailedOutboundInput,
     EscrowSellerBalanceResponse,
     EscrowTransactionPreparationResponse,
     EscrowWalletReferenceInput,
@@ -1049,6 +1053,7 @@ async def _prepare_action(
     deal_id: UUID, action: EscrowWalletAction, user: User,
     session: AsyncSession, verifier: TONNFTVerifier, idempotency_key: str,
     request_context: dict[str, object] | None = None,
+    retry_proof: OutboundRetryProof | None = None,
 ):
     _require_testnet()
     # Do not hold a database row lock across ownership-provider calls.
@@ -1193,6 +1198,31 @@ async def _prepare_action(
             raise HTTPException(status_code=409,
                 detail="Verified buyer wallet snapshot has changed")
         ownership_check = (deal.item_address, deal.buyer_address_snapshot)
+    elif action is EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION:
+        if retry_proof is None:
+            raise HTTPException(status_code=503, detail={"code": "outbound_retry_proof_required"})
+        if deal.seller_id == user.id:
+            retry_intent = await session.get(EscrowListingIntent, deal.listing_intent_id)
+            if retry_intent is None:
+                raise HTTPException(status_code=404, detail="Escrow listing intent not found")
+            retry_wallet_id = retry_intent.seller_wallet_id
+        else:
+            if deal.buyer_id != user.id:
+                raise HTTPException(status_code=404, detail="Escrow deal not found")
+            retry_wallet_id = deal.buyer_wallet_id
+        wallet, wallet_address = await _verified_wallet(
+            session, user_id=user.id, wallet_id=retry_wallet_id,
+        )
+        if wallet_address != retry_proof.action.recipient_address:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "outbound_retry_recipient_wallet_mismatch"},
+            )
+        requested_query_id = (request_context or {}).get("query_id")
+        if not isinstance(requested_query_id, str) or requested_query_id != str(
+            retry_proof.action.query_id
+        ):
+            raise HTTPException(status_code=409, detail={"code": "outbound_retry_query_id_mismatch"})
     else:
         raise HTTPException(status_code=409, detail="Unsupported escrow action")
 
@@ -1334,7 +1364,16 @@ async def _prepare_action(
     try:
         if action_record.attempt_id is None:
             action_record.attempt_id = uuid4().hex
-        query_id = _action_query_id(action, snapshot, action_record)
+        if action is EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION:
+            requested_query_id = int(str((request_context or {}).get("query_id", "0")))
+            if not 0 < requested_query_id < (1 << 64):
+                raise EscrowContractABIUnavailable("retry query_id must be a non-zero uint64")
+            if action_record.query_id is not None and action_record.query_id != str(requested_query_id):
+                raise HTTPException(status_code=409, detail={"code": "stored_action_query_id_conflict"})
+            action_record.query_id = str(requested_query_id)
+            query_id = requested_query_id
+        else:
+            query_id = _action_query_id(action, snapshot, action_record)
         if action_record.attempt_count == 0:
             action_record.attempt_count = 1
         # Persist attempt/query identity before local serialization. A process crash
@@ -1357,6 +1396,7 @@ async def _prepare_action(
             deal_snapshot=snapshot,
             reason_hash=reason_hash,
             query_id=query_id,
+            retry_proof=retry_proof,
         )
         payload_dict = prepared.to_tonconnect_dict()
         unsigned_bocs = {
@@ -1637,6 +1677,68 @@ async def prepare_unsold_nft_withdrawal(
     return await _prepare_action(
         deal_id, EscrowWalletAction.WITHDRAW_UNSOLD_NFT, user, session,
         verifier, idempotency_key)
+
+
+@router.post(
+    "/deals/{deal_id}/prepare/retry-failed-outbound",
+    response_model=EscrowTransactionPreparationResponse,
+)
+async def prepare_failed_outbound_retry(
+    deal_id: UUID,
+    payload: EscrowRetryFailedOutboundInput,
+    user: CurrentUser,
+    session: DbSession,
+    idempotency_key: IdempotencyKey,
+):
+    _require_testnet()
+    deal = await session.scalar(
+        select(EscrowDeal).where(
+            EscrowDeal.id == deal_id,
+            (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id),
+        )
+    )
+    if deal is None:
+        raise HTTPException(status_code=404, detail="Escrow deal not found")
+
+    provider = PytoniqTONTestnetEscrowProvider(settings=get_settings())
+    try:
+        retry_proof = await provider.read_current_outbound_retry_proof(
+            deal, query_id=int(payload.query_id), deal_salt=deal.deal_salt,
+        )
+    except EscrowProviderInvalidEvidence as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "outbound_retry_not_proven_or_not_retryable"},
+        ) from exc
+    except EscrowProviderUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "outbound_retry_proof_unavailable"},
+        ) from exc
+    finally:
+        await provider.close()
+
+    # The proof anchor is part of the canonical idempotency request hash. A
+    # different masterchain/state anchor cannot replay this wallet action.
+    request_context = {
+        "query_id": payload.query_id,
+        "proof_anchor": {
+            "provider_id": retry_proof.provider_id,
+            "masterchain_seqno": retry_proof.masterchain_seqno,
+            "masterchain_block_hash": retry_proof.masterchain_block_hash,
+            "state_data_hash": retry_proof.state_data_hash,
+        },
+    }
+    return await _prepare_action(
+        deal_id,
+        EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION,
+        user,
+        session,
+        None,
+        idempotency_key,
+        request_context,
+        retry_proof,
+    )
 
 
 @router.post(
