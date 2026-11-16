@@ -174,6 +174,9 @@ export interface EscrowRetryableOutboundAction {
   amount_nanotons: string;
   retry_window_seconds: number;
   proof_masterchain_seqno: number;
+  proof_masterchain_block_hash: string;
+  proof_state_data_hash: string;
+  proof_provider_id: string;
 }
 
 export interface EscrowOpenDisputeInput {
@@ -302,6 +305,13 @@ export function isRetryableOutboundAction(value: unknown): value is EscrowRetrya
     || !Number.isInteger(value.retry_window_seconds)
     || !Number.isSafeInteger(value.proof_masterchain_seqno)
     || Number(value.proof_masterchain_seqno) <= 0
+    || typeof value.proof_masterchain_block_hash !== "string"
+    || !/^[0-9a-f]{64}$/.test(value.proof_masterchain_block_hash)
+    || typeof value.proof_state_data_hash !== "string"
+    || !/^[0-9a-f]{64}$/.test(value.proof_state_data_hash)
+    || typeof value.proof_provider_id !== "string"
+    || value.proof_provider_id.length === 0
+    || value.proof_provider_id.length > 128
   ) return false;
   const kind = Number(value.kind);
   const retryWindow = Number(value.retry_window_seconds);
