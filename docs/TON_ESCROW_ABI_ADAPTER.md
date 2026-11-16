@@ -16,19 +16,19 @@ Pinned provenance:
 |---|---|
 | Contract / protocol | `DealEscrow` / v1 |
 | Network scope | TON testnet only |
-| Source commit in frozen manifest | `2160aa6780efff2e44e5f8ae99b2d21cb8764740` |
-| Successful contract workflow | [#43767931853](https://github.com/AzizIo/Vstore/actions/runs/43767931853) |
-| Artifact ID | `14183122192` |
-| Artifact archive SHA-256 | `b5c7d011004098ccbeaef48aeaec230231c6531a5554d17937972d7f3ec9edf0` |
-| Build descriptor SHA-256 | `d53460a4c957ed011897fe43435d21fbfd570080b2e9bee34e244bd361959bf0` |
+| Source commit in frozen manifest | `9d80a65a974b54f115fc697158974bdcee2c6be8` |
+| Successful contract workflow | [#43824551943](https://github.com/AzizIo/Vstore/actions/runs/43824551943) |
+| Artifact ID | `14205079269` |
+| Artifact archive SHA-256 | `622174053559929887d34c0ae0b8f3318efe2a4b9c661bf1925bd4760cf48c9a` |
+| Build descriptor SHA-256 | `32c5ff1e392d77ade6c4a99b6010e41bcc2c1c9700e768fe190be45f98aeb5db` |
 | Acton / Tolk | `1.2.1` / `1.5.0` |
 | ABI compact SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
-| Code cell hash | `9011F274BC3D7E32B76A17F13FCBA17AC49429BB4EECBC4AB97FA202BDAC2940` |
-| Code BOC base64 SHA-256 | `f8da91f71e363585823060fcfb75d9fe579e449f3e74551bbba6b142a7e98149` |
-| Decoded code BOC SHA-256 | `f9ae570bf2808556a1be9dee8e804d95f6c9f427ecfcfd3edb06b029490c8607` |
-| Zlib-compressed BOC SHA-256 | `58a888105143cf27c02e5beae8d724fca92fb7b89f00c77fbfc54ad5828cf365` |
-| Deterministic StateInit hash | `674227296eff6ac5ee02c8e2eaa12857ac339d10a9ed7f4f7ea0591e7b4adfca` |
-| Deterministic raw address | `0:674227296eff6ac5ee02c8e2eaa12857ac339d10a9ed7f4f7ea0591e7b4adfca` |
+| Code cell hash | `498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46` |
+| Code BOC base64 SHA-256 | `0e7bc7b35eee4ae7003fba0a0e5368df3428b7e32ad0f4fc5ddf0f3230d5daf3` |
+| Decoded code BOC SHA-256 | `86ed08596d0595c711aa2cf7659ee396ff443d7b01c65659b8e7543dd23c6173` |
+| Zlib-compressed BOC SHA-256 | `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7` |
+| Deterministic StateInit hash | `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
+| Deterministic raw address | `0:4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
 | Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
 
 At adapter initialization the compressed artifact digest, decoded BOC digest and TVM cell hash are checked; the manifest also pins the canonical base64 digest. The ABI canonical compact JSON digest and manifest network/protocol/code identity are checked before StateInit can be derived. Missing or modified artifacts fail closed.
@@ -48,16 +48,16 @@ The fixed cross-implementation vector `deal-escrow-v1-testnet-fixed-terms-01` is
 
 | Field | Expected value |
 |---|---|
-| Raw address | `0:674227296eff6ac5ee02c8e2eaa12857ac339d10a9ed7f4f7ea0591e7b4adfca` |
-| StateInit hash | `674227296eff6ac5ee02c8e2eaa12857ac339d10a9ed7f4f7ea0591e7b4adfca` |
+| Raw address | `0:4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
+| StateInit hash | `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
 | Data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
-| Code cell hash | `9011F274BC3D7E32B76A17F13FCBA17AC49429BB4EECBC4AB97FA202BDAC2940` |
+| Code cell hash | `498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46` |
 
 ## Message encoders
 
 Wallet messages are constructed from the versioned Tolk structs, not from user-provided opcodes or payload strings:
 
-- `ActivateDeal`, `FundDeal`, `AcceptDeal`, `OpenDispute`, `TimeoutDeal`, `RecoverUnexpectedNft` use the generated ABI structs.
+- `ActivateDeal`, `FundDeal`, `AcceptDeal`, `OpenDispute`, `TimeoutDeal`, `RecoverUnexpectedNft` and `RetryFailedOutboundAction` use the generated ABI structs.
 - TEP-62 `NftTransfer` uses opcode `0x5fcc3d14`, null custom payload, 0.01 TON forward amount and inline payload `0x56454e46 || dealSalt`, matching the generated Acton message vectors and backend wallet message encoder.
 - Wallet payloads are unsigned TON Connect requests. Server-side signing, wallet custody and submission are not implemented.
 - Payout/refund are contract-initiated and deliberately have no user wallet encoder.
@@ -116,4 +116,4 @@ A successful build or matching vector proves serializer consistency against the 
 
 ## Latest contract CI reproduction
 
-Backend pin PR #247 reran the contract workflow against exact PR head `be6716f0f17e4cead2bd4d2ed7301d1baa5226b4`: [Contract CI #43769301445](https://github.com/AzizIo/Vstore/actions/runs/43769301445) passed and produced artifact `14183516827` (archive SHA-256 `d40915733d2e97623726cf7946508bc4f32def021c923c8340601b6fed3c6ce8`). The artifact's code BOC base64 and decoded hashes match the backend file and frozen manifest. This confirms build reproducibility on the integration head; it is not independent audit or live testnet acceptance.
+Backend pin PR #247 reran the contract workflow against exact PR head `be6716f0f17e4cead2bd4d2ed7301d1baa5226b4`: [Contract CI #43832141975](https://github.com/AzizIo/Vstore/actions/runs/43832141975) passed and produced artifact `14208215967` (archive SHA-256 `ad4b324659333abd904226857b4ac7ed6d72661f85d4ef2456b3e7b753e1caf2`). The artifact's code BOC base64 and decoded hashes match the backend file and frozen manifest. This confirms build reproducibility on the integration head; it is not independent audit or live testnet acceptance.
