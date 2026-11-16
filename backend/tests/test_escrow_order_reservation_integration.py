@@ -434,7 +434,7 @@ async def test_postgres_migration_downgrade_refuses_to_drop_identity_snapshots(
         seller, buyer, asset, wallet, listing, intent = await _seed(session)
 
     try:
-        config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        config = Config(_ALEMBIC_CONFIG_PATH)
         with pytest.raises(
             RuntimeError,
             match="Cannot downgrade while escrow NFT identity evidence is referenced",
