@@ -1,29 +1,42 @@
 # DealEscrow artifact provenance and verification
 
-This directory pins the ABI and compiler output for the current testnet-only DealEscrow source, including the persisted outbound-action storage layout and the `RetryFailedOutboundAction` opcode. Any change to contract code or storage changes the StateInit hash and the per-deal raw address; never reuse an address created from a previous code/storage version.
+This directory pins the ABI and compiler output for the current testnet-only DealEscrow source, including persisted outbound-action storage and `RetryFailedOutboundAction`. Any change to contract code or storage changes the StateInit hash and per-deal raw address; never reuse an address created from a previous code/storage version.
 
 ## Frozen provenance
 
 | Field | Value |
 |---|---|
-| Source commit | `01963603df7fb4ad819ab4a8f4a68315cec47c5d` |
+| Exact source commit | `b8d3175c318e136d44916c8a82d4e1e1527385da` |
+| Contract source commit | `d87e4a81e07ec0c1e95619f6e5188c5be5433d62` |
 | Toolchain | Acton `1.2.1`, Tolk `1.5.0` |
-| Successful exact-head contract workflow | [#43766860437](https://github.com/AzizIo/Vstore/actions/runs/43766860437) |
-| Artifact ID | `14181479725` |
-| Artifact archive SHA-256 | `25a4769ba2e4fee2f0ef913e2d7060524bc2143f6b060267651cab95b9fbf5be` |
+| Green exact-head Contract CI | [#43823914888](https://github.com/AzizIo/Vstore/actions/runs/43823914888) |
+| Artifact ID | `14206155677` |
+| Artifact ZIP SHA-256 | `4134afaccb27469c7d51008883c04977d876e9b2cc958f9cd66d1d7bbea49451` |
+| Build descriptor SHA-256 | `32c5ff1e392d77ade6c4a99b6010e41bcc2c1c9700e768fe190be45f98aeb5db` |
 | Compact ABI SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
-| Build descriptor SHA-256 | `4a782edd062c83897c7e9dc62bb2f011547bbf7d371b9f822934fdf36877f5c5` |
-| Compiled code hash | `D822B8AFBB37027611A9A9DDC8E67C52F17BBBC45B4352C7F360693BD685CA54` |
-| BOC base64 SHA-256 | `2e9b43b902b1d4c26d358af79d731d7445cca3d562d77cb858a532a487b1e05e` |
-| Decoded BOC SHA-256 | `fd226adafbfe7a1e14164c59538843dd024e99e3cec2f458322ac94eaa8d7ba8` |
-| Zlib-compressed BOC SHA-256 | `301c3aa6dfb729c5a0a640dc15eb527540e282c758c69a241632d4c04fd49947` |
-| Deterministic StateInit hash | `29a40423c7e8fa1390782bce7e94e32f2a0e14ceef6cf05bd0f1641d0ba3f423` |
-| Deterministic raw address | `0:29a40423c7e8fa1390782bce7e94e32f2a0e14ceef6cf05bd0f1641d0ba3f423` |
+| Compiled code hash | `498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46` |
+| Code BOC base64 SHA-256 | `0e7bc7b35eee4ae7003fba0a0e5368df3428b7e32ad0f4fc5ddf0f3230d5daf3` |
+| Decoded code BOC SHA-256 | `86ed08596d0595c711aa2cf7659ee396ff443d7b01c65659b8e7543dd23c6173` |
+| Zlib-compressed code BOC SHA-256 | `dbca9581e8ce45f2ca68f6dc766e149f4e7ca25a2c740fb58b2b4448c6189963` |
+| Deterministic StateInit hash | `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
+| Deterministic raw address | `0:4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
 | Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
 
-The source-controlled files are `frozen/DealEscrow.abi.json` and `frozen/manifest.json`. The backend pins the compressed compiler BOC as `backend/app/escrow/abi_artifacts/DealEscrow.code.boc.zlib.b64`; CI rebuilds it and verifies the code hash and BOC digests.
+The source-controlled files are `frozen/DealEscrow.abi.json` and `frozen/manifest.json`. The green exact-head workflow rebuilt and verified the compiled code/BOC against the manifest, generated ABI wrappers, cross-checked the exact StateInit/address/data vector with the generated Acton wrapper and `@ton/core`, checked message BOC golden vectors, formatted and statically checked Tolk sources, and ran the full emulator suite.
 
-## Local verification
+## Security changes exercised by the current Sandbox suite
+
+- RichBounce correlation requires the exact original body hash, destination/sender, and stored message value (except carry-all descriptors, whose message value is dynamic). Unmatched or malformed bounces do not mutate custody state.
+- Critical principal/NFT bounces move to manual review without clearing principal/NFT custody flags. Retry is recipient-authorized, consumes the old descriptor, and uses a fresh monotonic attempt/query ID.
+- A bounced seller deployment allowance blocks the buyer's carry-all execution-reserve retry until the seller's fixed refund is retried, preventing the buyer from sweeping the returned seller allowance.
+- The terminal storage floor is recreated before secondary refund retries.
+- Exact duplicate TEP-62 deposit and buyer-return notifications are idempotent and cannot populate the unexpected-NFT recovery path.
+- A timed-out pre-delivery dispute with NFT and principal still escrowed remains resolver-controlled in manual review; an expired post-delivery dispute can accept only the exact late buyer return, restore the dispute window, and still requires a fresh resolver quorum before further NFT movement.
+- Failed buyer principal refund, seller payout, seller allowance, execution-reserve refund, late finality, duplicate oracle delivery/refund, and terminal bounce cases are covered in emulator fixtures.
+
+The green run reports **34 passing Sandbox tests**. Coverage for the contract tree is 85.9% lines and 68.6% branches; DealEscrow itself is 83.5% lines and 67.9% branches. Coverage is useful evidence, not a proof of correctness.
+
+## Reproduction
 
 From `contracts/ton-escrow-poc`:
 
@@ -42,6 +55,15 @@ acton check
 acton test --coverage --no-studio-reporting
 ```
 
-## Important limitations
+## Release limitations
 
-The Acton emulator suite demonstrates behavior only in the pinned toolchain/test fixtures. The successful exact-head contract workflow rebuilt and verified the code/BOC, generated and cross-checked StateInit and message vectors, passed Tolk formatting/static checks, and completed the emulator suite including late NFT delivery/payout and late NFT return/buyer-refund after timeout. This proves the modeled testnet contract behavior in the pinned toolchain; it is not an independent audit or live network acceptance. Emulator evidence is not a live chain finality proof, independent TON/Tolk security audit, or manual TON testnet/Tonkeeper acceptance. A trusted provider must prove the exact collection membership before immutable deal terms are created. Signing and deployment remain disabled.
+The emulator run is not an independent TON/Tolk audit, a live testnet acceptance, or a masterchain finality proof. No live deployment or wallet transfer has been performed as part of this PR.
+
+Before any live testnet deal:
+1. An independent reviewer must audit the exact code hash, message/state machine, bounce/retry handling, gas/fee invariants, and financial invariants.
+2. A trusted NFT provider must prove that the exact item belongs to the stated collection before immutable deal terms are built; the contract's collection address is metadata and is not itself a membership proof.
+3. A separately approved valueless testnet acceptance must record actual transaction/message/trace evidence, masterchain finality, getter state, and the NFT's actual owner at each terminal transition.
+4. Backend adapter PR #247 must pin this exact artifact. Its current artifact hash/address are from an older contract build and are not compatible with this artifact yet. No backend changes are included here.
+5. Signing/deployment activation, mainnet, real funds, and real NFTs remain disabled.
+
+Passing CI does not close those independent release gates.
