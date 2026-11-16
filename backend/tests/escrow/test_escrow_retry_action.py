@@ -258,6 +258,7 @@ async def test_retry_projection_hides_third_party_and_duplicate_query_recipients
         buyer_id=buyer_id,
         seller_id=uuid4(),
         buyer_wallet_id=wallet_id,
+        buyer_address_snapshot=recipient,
         listing_intent_id=uuid4(),
         contract_address="0:" + "44" * 32,
         deployment_snapshot_json=deployment_snapshot,
