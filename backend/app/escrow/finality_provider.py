@@ -1905,36 +1905,59 @@ class PytoniqTONTestnetEscrowProvider:
             raise EscrowProviderInvalidEvidence(
                 "No escrow deal is bound to this terminal NFT owner request"
             )
-        collections = {
-            _canonical_address(deal.collection_address_snapshot)
+        # Legacy rows and partially populated proof state must block release.
+        if any(
+            getattr(deal, "nft_identity_snapshot_json", None) is None
             for deal in deals
-        }
-        collections.discard(None)
-        identity_deals = [
-            deal for deal in deals
-            if getattr(deal, "nft_identity_snapshot_json", None) is not None
-        ]
-        if len(collections) != 1 or not identity_deals or len(identity_deals) != len(deals):
+        ):
             raise EscrowProviderInvalidEvidence(
                 "NFT item is not uniquely bound to a persisted collection identity"
             )
-        identity_deal = identity_deals[0]
+
+        collections: set[str] = set()
+        identity_records: list[tuple[EscrowDeal, dict[str, object]]] = []
         try:
-            initial_identity = validate_nft_identity_snapshot(
-                identity_deal.nft_identity_snapshot_json,
-                identity_deal.nft_identity_snapshot_sha256,
-            )
-            for other_deal in identity_deals[1:]:
-                other_identity = validate_nft_identity_snapshot(
-                    other_deal.nft_identity_snapshot_json,
-                    other_deal.nft_identity_snapshot_sha256,
+            for deal in deals:
+                deal_item = _canonical_address(deal.item_address)
+                deal_collection = _canonical_address(deal.collection_address_snapshot)
+                if deal_item != item or deal_collection is None:
+                    raise NFTIdentityEvidenceError(
+                        "Persisted escrow deal has a missing or inconsistent item/collection address"
+                    )
+
+                identity = validate_nft_identity_snapshot(
+                    deal.nft_identity_snapshot_json,
+                    getattr(deal, "nft_identity_snapshot_sha256", None),
                 )
+                snapshot_item = _canonical_address(identity.get("item_address"))
+                snapshot_collection = _canonical_address(identity.get("collection_address"))
+                if (
+                    snapshot_item != item
+                    or snapshot_collection is None
+                    or snapshot_item != deal_item
+                    or snapshot_collection != deal_collection
+                ):
+                    raise NFTIdentityEvidenceError(
+                        "Persisted escrow deal addresses do not match its NFT identity snapshot"
+                    )
+
+                collections.add(deal_collection)
+                identity_records.append((deal, identity))
+
+            if len(collections) != 1 or len(identity_records) != len(deals):
+                raise NFTIdentityEvidenceError(
+                    "NFT item is not uniquely bound to a persisted collection identity"
+                )
+
+            identity_deal, initial_identity = identity_records[0]
+            for _other_deal, other_identity in identity_records[1:]:
                 if not same_nft_identity_anchor(initial_identity, other_identity):
                     raise NFTIdentityEvidenceError(
                         "Escrow deals for this item disagree on the immutable NFT identity anchor"
                     )
         except NFTIdentityEvidenceError as exc:
             raise EscrowProviderInvalidEvidence(str(exc)) from exc
+
         collection = _canonical_address(identity_deal.collection_address_snapshot)
         if (
             collection is None
