@@ -14,9 +14,9 @@
   "abi_compact_sha256": "df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028",
   "acton_version": "1.2.1",
   "tolk_version": "1.5.0",
-  "state_init_hash": "cfa1d4f92afb1c7e6d1dfeb6672f84979747b7f1518d847573ac00cbb89538c2",
-  "raw_address": "0:cfa1d4f92afb1c7e6d1dfeb6672f84979747b7f1518d847573ac00cbb89538c2",
+  "state_init_hash": "4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75",
+  "raw_address": "0:4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75",
   "data_hash": "faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b",
-  "warning": "Intermediate manifest refresh: code/BOC digests are exact from CI artifact 14201523108 (run 43814937904). The StateInit/raw address are intentionally from the previous source revision and must be refreshed from the generated Acton wrapper + @ton/core vector before merge.",
+  "warning": null,
   "compiled_code_boc_zlib_sha256": "dbca9581e8ce45f2ca68f6dc766e149f4e7ca25a2c740fb58b2b4448c6189963"
 }
