@@ -38,6 +38,13 @@ const testWallet = {
   is_verified: true,
   is_primary: true,
 };
+const verifiedRetrySellerWallet = {
+  id: "wallet-retry-seller",
+  address: sellerAddress,
+  network: "testnet",
+  is_verified: true,
+  is_primary: false,
+};
 const ignoredMainnetWallet = {
   id: "wallet-mainnet",
   address: "0:" + "5".repeat(64),
@@ -620,6 +627,7 @@ describe("TON Escrow workspace", () => {
       buyerDeals: [deal({ state: "refunded", available_actions: [] })],
       retryableOutboundActions: [outbound],
     });
+    installInventoryApi();
     renderWorkspace(api);
 
     fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
@@ -682,6 +690,7 @@ describe("TON Escrow workspace", () => {
         proof_provider_id: "pytoniq-trust0-testnet-v1",
       }],
     });
+    installInventoryApi();
     renderWorkspace(api);
 
     fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
