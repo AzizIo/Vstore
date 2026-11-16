@@ -287,15 +287,29 @@ function isListingAction(value: unknown): value is EscrowListingAction {
 
 export function isRetryableOutboundAction(value: unknown): value is EscrowRetryableOutboundAction {
   if (!isRecord(value)) return false;
-  return typeof value.query_id === "string"
-    && /^[1-9][0-9]{0,19}$/.test(value.query_id)
-    && BigInt(value.query_id) < (1n << 64n)
-    && (value.slot === "first" || value.slot === "second")
-    && Number.isInteger(value.kind) && Number(value.kind) >= 1 && Number(value.kind) <= 7
-    && typeof value.recipient_address === "string"
-    && typeof value.amount_nanotons === "string" && /^\d+$/.test(value.amount_nanotons)
-    && Number.isInteger(value.retry_window_seconds) && Number(value.retry_window_seconds) > 0
-    && Number.isInteger(value.proof_masterchain_seqno) && Number(value.proof_masterchain_seqno) > 0;
+  if (
+    typeof value.query_id !== "string"
+    || !/^[1-9][0-9]{0,19}$/.test(value.query_id)
+    || BigInt(value.query_id) >= (1n << 64n)
+    || (value.slot !== "first" && value.slot !== "second")
+    || !Number.isInteger(value.kind)
+    || Number(value.kind) < 1
+    || Number(value.kind) > 7
+    || typeof value.recipient_address !== "string"
+    || value.recipient_address.length === 0
+    || typeof value.amount_nanotons !== "string"
+    || !/^\\d+$/.test(value.amount_nanotons)
+    || BigInt(value.amount_nanotons) <= 0n
+    || !Number.isInteger(value.retry_window_seconds)
+    || !Number.isInteger(value.proof_masterchain_seqno)
+    || Number(value.proof_masterchain_seqno) <= 0
+  ) return false;
+  const kind = Number(value.kind);
+  const retryWindow = Number(value.retry_window_seconds);
+  return (
+    (kind >= 1 && kind <= 5 && retryWindow === 1800)
+    || ((kind === 6 || kind === 7) && retryWindow === 0)
+  );
 }
 
 function isRetryableOutboundActionList(value: unknown): value is EscrowRetryableOutboundAction[] {
