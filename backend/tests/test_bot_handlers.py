@@ -19,7 +19,11 @@ def dispatcher() -> Dispatcher:
 
 
 def _settings(url: str | None = APP_URL) -> SimpleNamespace:
-    return SimpleNamespace(telegram_mini_app_url=url, telegram_support_username=None, telegram_terms_url=None)
+    return SimpleNamespace(
+        telegram_mini_app_url=url,
+        telegram_support_username=None,
+        telegram_terms_url=None,
+    )
 
 
 def test_dispatcher_registers_all_user_facing_handlers(
