@@ -6,6 +6,7 @@ import {
   isEscrowListingIntent,
   isEscrowWithdrawal,
   isRetryableOutboundAction,
+  isPreparedEscrowTransaction,
   type EscrowDeal,
   type EscrowHttpContract,
   type EscrowListingIntent,
@@ -15,7 +16,6 @@ import {
 
 const item = "0:" + "1".repeat(64);
 const escrow = "0:" + "2".repeat(64);
-const factory = "0:" + "3".repeat(64);
 
 function listing(): EscrowListingIntent {
   return {
@@ -79,16 +79,14 @@ function withdrawal(): EscrowWithdrawal {
 }
 
 function prepared(action: PreparedEscrowTransaction["action"] = "fund_deal") {
-  const isFactoryAction = action === "create_deal_escrow";
-  const destination = isFactoryAction ? factory
-    : action === "deposit_nft" || action === "return_nft_to_escrow" ? item
-      : escrow;
+  const deploymentAction = action === "create_deal_escrow";
+  const destination = action === "deposit_nft" || action === "return_nft_to_escrow" ? item : escrow;
   return {
     action_id: "operation-1",
     action,
     network: "testnet",
-    factory_address: isFactoryAction ? factory : null,
-    escrow_address: isFactoryAction ? null : escrow,
+    factory_address: null,
+    escrow_address: escrow,
     nft_item_address: item,
     price_nano: "2500000000",
     fee_bps: 0,
@@ -99,7 +97,7 @@ function prepared(action: PreparedEscrowTransaction["action"] = "fund_deal") {
       address: destination,
       amount_nano: "2520000000",
       payload_boc: null,
-      state_init_boc: null,
+      state_init_boc: deploymentAction ? "server-prepared-state-init-boc" : null,
     }],
   };
 }
@@ -117,6 +115,7 @@ function contract(): EscrowHttpContract {
     createListingIntent: (input) => operation("/test/escrow/listing-intents", input),
     createBuyerDealIntent: (input) => operation("/test/escrow/deal-intents", input),
     prepareDealEscrow: (input) => operation("/test/escrow/prepare-deal-escrow", input),
+    prepareDealActivation: (input) => operation("/test/escrow/prepare-deal-activation", input),
     prepareNftDeposit: (input) => operation("/test/escrow/prepare-nft-deposit", input),
     prepareBuyerFunding: (input) => operation("/test/escrow/prepare-buyer-funding", input),
     prepareBuyerAcceptance: (input) => operation("/test/escrow/prepare-buyer-acceptance", input),
@@ -200,6 +199,40 @@ describe("escrow API boundary", () => {
       Authorization: "Bearer access-token",
       "Content-Type": "application/json",
     });
+  });
+
+
+  it("accepts only a direct per-deal StateInit deployment and the null-Factory topology", () => {
+    const deployment = prepared("create_deal_escrow");
+    expect(isPreparedEscrowTransaction(deployment)).toBe(true);
+    expect(isPreparedEscrowTransaction({ ...deployment, factory_address: factory })).toBe(false);
+    expect(isPreparedEscrowTransaction({
+      ...deployment,
+      messages: [{ ...deployment.messages[0], address: factory }],
+    })).toBe(false);
+    expect(isPreparedEscrowTransaction({
+      ...deployment,
+      messages: [{ ...deployment.messages[0], state_init_boc: null }],
+    })).toBe(false);
+    expect(isPreparedEscrowTransaction({
+      ...deployment,
+      messages: [
+        deployment.messages[0],
+        { ...deployment.messages[0] },
+      ],
+    })).toBe(false);
+  });
+
+  it("prepares seller activation through the dedicated idempotent API route", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response(prepared("activate_deal")));
+    const api = createEscrowApiClient("access-token", contract());
+
+    await api.prepareDealActivation({ deal_id: "deal-1", wallet_id: "wallet-seller" });
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/test/escrow/prepare-deal-activation");
+    expect(JSON.parse(String(init.body))).toEqual({ deal_id: "deal-1", wallet_id: "wallet-seller" });
+    expect(init.method).toBe("POST");
   });
 
   it("rejects an empty session before any fetch", () => {
