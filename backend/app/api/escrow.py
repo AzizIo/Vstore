@@ -1863,7 +1863,16 @@ async def list_retryable_outbound_actions(
             return []
         raise
 
-    # Do not hold a DB transaction across the trust-level-0 LiteServer read.
+    # Copy the immutable deployment identity before releasing the DB
+    # transaction; the provider must not trigger lazy ORM reads while on-chain.
+    proof_deal = SimpleNamespace(
+        network=deal.network,
+        contract_address=deal.contract_address,
+        deployment_snapshot_json=dict(deal.deployment_snapshot_json),
+        deployment_snapshot_sha256=deal.deployment_snapshot_sha256,
+        deal_salt=str(deal.deal_salt),
+    )
+    expected_deal_salt = str(deal.deal_salt)
     await session.rollback()
     provider = getattr(request.app.state, "ton_escrow_finality_provider", None)
     if provider is None:
@@ -1872,7 +1881,7 @@ async def list_retryable_outbound_actions(
         )
     try:
         getter, masterchain_seqno, masterchain_block_hash, provider_id = (
-            await provider.verify_deployed_account(deal, require_initial_state=False)
+            await provider.verify_deployed_account(proof_deal, require_initial_state=False)
         )
     except Exception as exc:
         from app.escrow.provider import (
@@ -1931,7 +1940,7 @@ async def list_retryable_outbound_actions(
             descriptor = _retry_descriptor_from_proof(
                 getter,
                 query_id=query_id,
-                expected_deal_salt=str(deal.deal_salt),
+                expected_deal_salt=expected_deal_salt,
             )
         except HTTPException:
             continue
