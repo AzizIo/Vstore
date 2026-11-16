@@ -530,7 +530,6 @@ async def test_retry_projection_fails_closed_without_complete_trust_anchor(
 async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflict(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
     buyer_id, deal_id, action_id = uuid4(), uuid4(), uuid4()
     deployment_snapshot = {"deal_salt": "ab" * 32}
     deal = SimpleNamespace(
