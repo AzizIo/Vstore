@@ -393,20 +393,20 @@ async def test_retry_prepare_rejects_third_party_actor_and_wrong_recipient_walle
     )
 
     class RetrySession:
-        def __init__(self, result: object) -> None:
-            self.result = result
+        def __init__(self, results: list[object]) -> None:
+            self.results = iter(results)
             self.calls = 0
 
         async def scalar(self, _statement: object):
             self.calls += 1
-            return self.result
+            return next(self.results, None)
 
     descriptor = _retry_descriptor_from_proof(
         {"outbound_actions": [_retry_row()]},
         query_id=4321,
         expected_deal_salt=deal.deal_salt,
     )
-    third_party_session = RetrySession(None)
+    third_party_session = RetrySession([None])
     with pytest.raises(HTTPException) as not_participant:
         await _prepare_action(
             deal_id,
@@ -427,7 +427,7 @@ async def test_retry_prepare_rejects_third_party_actor_and_wrong_recipient_walle
         return SimpleNamespace(id=wallet_id), "0:" + "99" * 32
 
     monkeypatch.setattr("app.api.escrow._verified_wallet", wrong_wallet)
-    wrong_wallet_session = RetrySession(deal)
+    wrong_wallet_session = RetrySession([deal, None])
     with pytest.raises(HTTPException) as wrong_recipient:
         await _prepare_action(
             deal_id,
