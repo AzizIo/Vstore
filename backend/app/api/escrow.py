@@ -65,6 +65,7 @@ from app.escrow.schemas import (
     EscrowSellerBalanceResponse,
     EscrowTransactionPreparationResponse,
     EscrowOutboundRetryRequest,
+    EscrowRetryableOutboundActionResponse,
     EscrowWalletReferenceInput,
     EscrowWalletReferenceResponse,
     EscrowWithdrawalCreate,
@@ -1814,6 +1815,138 @@ async def prepare_deal_activation(
         deal_id, EscrowWalletAction.ACTIVATE_DEAL, user, session,
         verifier, idempotency_key,
     )
+
+
+@router.get(
+    "/deals/{deal_id}/retryable-outbound-actions",
+    response_model=list[EscrowRetryableOutboundActionResponse],
+)
+async def list_retryable_outbound_actions(
+    deal_id: UUID,
+    request: Request,
+    user: CurrentUser,
+    session: DbSession,
+) -> list[EscrowRetryableOutboundActionResponse]:
+    """Project only current BOUNCED actions for the caller's verified recipient wallet."""
+    _require_testnet()
+    deal = await session.scalar(
+        select(EscrowDeal).where(
+            EscrowDeal.id == deal_id,
+            (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id),
+        )
+    )
+    if deal is None:
+        raise HTTPException(status_code=404, detail={"code": "escrow_deal_not_found"})
+    if (
+        not deal.contract_address
+        or not isinstance(deal.deployment_snapshot_json, dict)
+        or not isinstance(deal.deployment_snapshot_sha256, str)
+        or _canonical_sha256(deal.deployment_snapshot_json) != deal.deployment_snapshot_sha256
+    ):
+        raise HTTPException(
+            status_code=503, detail={"code": "deployment_snapshot_incomplete"}
+        )
+
+    if deal.seller_id == user.id:
+        intent = await session.get(EscrowListingIntent, deal.listing_intent_id)
+        if intent is None or intent.seller_wallet_id is None:
+            return []
+        wallet_id = intent.seller_wallet_id
+    else:
+        wallet_id = deal.buyer_wallet_id
+    try:
+        _wallet, wallet_address = await _verified_wallet(
+            session, user_id=user.id, wallet_id=wallet_id,
+        )
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            return []
+        raise
+
+    # Do not hold a DB transaction across the trust-level-0 LiteServer read.
+    await session.rollback()
+    provider = getattr(request.app.state, "ton_escrow_finality_provider", None)
+    if provider is None:
+        raise HTTPException(
+            status_code=503, detail={"code": "escrow_finality_provider_unavailable"}
+        )
+    try:
+        getter, masterchain_seqno, masterchain_block_hash, provider_id = (
+            await provider.verify_deployed_account(deal, require_initial_state=False)
+        )
+    except Exception as exc:
+        from app.escrow.provider import (
+            EscrowProviderInvalidEvidence,
+            EscrowProviderUnavailable,
+        )
+
+        if isinstance(exc, EscrowProviderInvalidEvidence):
+            raise HTTPException(
+                status_code=409, detail={"code": "outbound_action_proof_invalid"}
+            ) from exc
+        if isinstance(exc, EscrowProviderUnavailable):
+            raise HTTPException(
+                status_code=503, detail={"code": "escrow_finality_provider_unavailable"}
+            ) from exc
+        raise HTTPException(
+            status_code=503, detail={"code": "outbound_action_proof_failed"}
+        ) from exc
+
+    if (
+        isinstance(masterchain_seqno, bool)
+        or not isinstance(masterchain_seqno, int)
+        or masterchain_seqno <= 0
+        or not isinstance(masterchain_block_hash, str)
+        or not _HEX_256.fullmatch(masterchain_block_hash)
+        or not isinstance(provider_id, str)
+        or not provider_id.strip()
+    ):
+        raise HTTPException(
+            status_code=503, detail={"code": "outbound_action_proof_incomplete"}
+        )
+
+    rows = getter.get("outbound_actions")
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        raise HTTPException(
+            status_code=503, detail={"code": "outbound_action_proof_incomplete"}
+        )
+    query_ids = [
+        row.get("query_id") for row in rows
+        if isinstance(row.get("query_id"), int) and not isinstance(row.get("query_id"), bool)
+    ]
+    duplicate_query_ids = {
+        value for value in query_ids if query_ids.count(value) > 1
+    }
+    projections: list[EscrowRetryableOutboundActionResponse] = []
+    for row in rows:
+        query_id = row.get("query_id")
+        if (
+            isinstance(query_id, bool)
+            or not isinstance(query_id, int)
+            or not 0 < query_id < (1 << 64)
+            or query_id in duplicate_query_ids
+        ):
+            continue
+        try:
+            descriptor = _retry_descriptor_from_proof(
+                getter,
+                query_id=query_id,
+                expected_deal_salt=str(deal.deal_salt),
+            )
+        except HTTPException:
+            continue
+        if descriptor.recipient_address != wallet_address:
+            continue
+        projections.append(EscrowRetryableOutboundActionResponse(
+            query_id=str(descriptor.query_id),
+            slot=descriptor.slot,
+            kind=descriptor.kind,
+            recipient_address=descriptor.recipient_address,
+            amount_nanotons=str(descriptor.amount_nanotons),
+            retry_window_seconds=descriptor.retry_window_seconds,
+            proof_masterchain_seqno=masterchain_seqno,
+        ))
+    return projections
 
 
 @router.post(
