@@ -1626,10 +1626,15 @@ async def _prepare_action(
     _require_testnet()
     actor_id = user.id
     # Do not hold a database row lock across ownership-provider calls.
-    deal = await session.scalar(select(EscrowDeal).where(
-        deal_id == EscrowDeal.id,
-        (EscrowDeal.buyer_id == actor_id) | (EscrowDeal.seller_id == actor_id),
-    ))
+    deal = await session.scalar(
+        select(EscrowDeal)
+        .where(
+            deal_id == EscrowDeal.id,
+            (EscrowDeal.buyer_id == actor_id) | (EscrowDeal.seller_id == actor_id),
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     if deal is None:
         raise HTTPException(status_code=404, detail="Escrow deal not found")
     validated_status = deal.status
@@ -2466,10 +2471,13 @@ async def prepare_retry_failed_outbound_action(
     """
     _require_testnet()
     deal = await session.scalar(
-        select(EscrowDeal).where(
+        select(EscrowDeal)
+        .where(
             EscrowDeal.id == deal_id,
             (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id),
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if deal is None:
         raise HTTPException(status_code=404, detail={"code": "escrow_deal_not_found"})
@@ -2562,6 +2570,7 @@ async def prepare_retry_failed_outbound_action(
                     detail={"code": "escrow_retry_wallet_snapshot_changed"},
                 )
             return _prepared_action_response(existing)
+        await session.rollback()
         raise HTTPException(
             status_code=409,
             detail={
