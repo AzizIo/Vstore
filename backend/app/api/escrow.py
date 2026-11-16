@@ -1670,6 +1670,28 @@ async def _prepare_action(
             if actor_id == deal.seller_id
             else deal.buyer_address_snapshot
         )
+        if replay_wallet_id is None:
+            await session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_wallet_not_verified"},
+            )
+        try:
+            _replay_wallet, verified_replay_address = await _verified_wallet(
+                session, user_id=actor_id, wallet_id=replay_wallet_id, lock=True,
+            )
+        except HTTPException as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_wallet_not_verified"},
+            ) from exc
+        if verified_replay_address != replay_wallet_address:
+            await session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_wallet_snapshot_changed"},
+            )
         replay_hash = canonical_request_sha256({
             "actor_id": str(actor_id),
             "deal_id": str(deal.id),
@@ -2502,7 +2524,7 @@ async def prepare_retry_failed_outbound_action(
                 )
             try:
                 _wallet, verified_wallet_address = await _verified_wallet(
-                    session, user_id=user.id, wallet_id=wallet_id,
+                    session, user_id=user.id, wallet_id=wallet_id, lock=True,
                 )
             except HTTPException as exc:
                 await session.rollback()
