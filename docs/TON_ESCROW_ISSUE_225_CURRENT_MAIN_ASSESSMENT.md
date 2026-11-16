@@ -1,6 +1,7 @@
 # Issue #225 — current contract security and release-gate assessment
 
-**Assessment baseline:** `main` at `b592a4b889221aeb314e521a357b1746091a5976`  
+**Executable code baseline:** `b592a4b889221aeb314e521a357b1746091a5976`  
+**Current main HEAD:** `c74af7ceb9ba3c9893e7800ed85b155e762840a0` (docs-only PR #249 merge)  
 **Network scope:** TON testnet only (`global_id = -3`)  
 **Toolchain:** Acton 1.2.1 / Tolk 1.5.0  
 **Assessment class:** internal source/CI review and integration check; not an independent audit.
@@ -47,7 +48,7 @@ The proof-bound retry implementation is complete in the unmerged feature stack. 
 
 ## Superseding feature-stack status — 2026-11-16 19:49 UTC
 
-> Main's assessment baseline remains b592a4b889221aeb314e521a357b1746091a5976. The following active remediation status supersedes the earlier PR heads and CI outcomes further below; none of these feature PRs has been merged to main.
+> Current main HEAD is c74af7ceb9ba3c9893e7800ed85b155e762840a0 (docs-only PR #249); executable escrow code baseline remains b592a4b889221aeb314e521a357b1746091a5976. The following active remediation status supersedes the earlier PR heads and CI outcomes further below; none of these feature PRs has been merged to main.
 
 | Track | Current head | CI evidence |
 |---|---|---|
