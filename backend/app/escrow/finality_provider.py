@@ -874,6 +874,7 @@ class PytoniqTONTestnetEscrowProvider:
             if (
                 isinstance(chain_time, bool) or not isinstance(chain_time, int)
                 or chain_time <= 0
+                or chain_time != int(master_block.info.gen_utime)
                 or isinstance(deadline, bool) or not isinstance(deadline, int)
                 or deadline < 0
             ):
