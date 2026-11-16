@@ -147,7 +147,7 @@ async def test_app_command_explains_missing_or_invalid_url(
     response = message.answer.await_args
     assert "Приложение пока недоступно" in response.args[0]
     assert "TELEGRAM_MINI_APP_URL" in response.args[0]
-    assert "reply_markup" not in response.kwargs
+    assert response.kwargs.get("reply_markup") is None
 
 
 @pytest.mark.parametrize(
