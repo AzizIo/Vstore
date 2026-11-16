@@ -134,7 +134,7 @@ def upgrade() -> None:
         CREATE FUNCTION guard_escrow_deal_nft_identity_terms()
         RETURNS trigger
         LANGUAGE plpgsql
-        AS $
+        AS $escrow_deal_guard$
         BEGIN
             IF (
                 NEW.listing_intent_id IS DISTINCT FROM OLD.listing_intent_id
