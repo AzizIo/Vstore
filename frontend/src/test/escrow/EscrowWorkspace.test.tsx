@@ -626,6 +626,8 @@ describe("TON Escrow workspace", () => {
     const retryButton = await screen.findByRole("button", { name: /Повторить отправку · query 42/ });
     expect(retryButton).toBeEnabled();
     expect(screen.getByText(/актуального proof-read состояния TON testnet/)).toBeInTheDocument();
+    expect(screen.getByText(/Окно повтора: 0 сек/)).toBeInTheDocument();
+    expect(screen.getByText(/Proof: pytoniq-trust0-testnet-v1/)).toBeInTheDocument();
 
     fireEvent.click(retryButton);
     expect(api.prepareFailedOutboundRetry).toHaveBeenCalledWith({
@@ -634,6 +636,7 @@ describe("TON Escrow workspace", () => {
     });
     expect(await screen.findByRole("dialog", { name: /Повторить неудавшуюся отправку/ }))
       .toBeInTheDocument();
+    expect(retryButton).toBeDisabled();
     expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
   });
 
