@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { beginCell, Address } from "@ton/core";
 import {
   AuthorityKeys,
@@ -92,14 +92,10 @@ const actualVector = {
   data_hash: deployed.init.data.hash().toString("hex"),
   code_hash: deployed.init.code.hash().toString("hex").toUpperCase(),
 };
-// Preserve the independently computed vector even if a frozen golden is stale.
-// CI uploads build/ so a mismatch can be diagnosed and the manifest regenerated
-// from this exact toolchain build, rather than guessing the replacement address.
-writeFileSync(
-  "build/state_init_vector.json",
-  JSON.stringify(actualVector, null, 2) + "\n",
-);
-console.log("ACTUAL_STATE_INIT_VECTOR=" + JSON.stringify(actualVector));
+// stdout is redirected by Contract CI into build/state_init_vector.json.
+// Emit exactly one JSON object so the following message-vector verifier can parse it
+// even if a frozen golden mismatch makes this script exit non-zero.
+console.log(JSON.stringify(actualVector));
 
 if (!stateInit.hash().equals(deployed.address.hash)) {
   throw new Error("StateInit hash differs from generated Acton wrapper address");
@@ -134,4 +130,4 @@ if (deployed.address.toRawString() !== manifest.raw_address) {
 if (deployed.init.data.hash().toString("hex") !== manifest.data_hash) {
   throw new Error("Generated initial storage cell differs from frozen golden vector");
 }
-console.log("PASS: frozen StateInit, raw address and initial data vector match the generated Acton wrapper");
+
