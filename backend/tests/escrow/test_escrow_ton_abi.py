@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import base64
 from types import SimpleNamespace
 
-from pytoniq_core import Address, begin_cell
+import pytest
+from pytoniq_core import Address, Cell, begin_cell
 
-from app.escrow.ton_abi import build_storage_cell, decode_storage_cell
+from app.escrow.ton_abi import (
+    TONABIError,
+    build_storage_cell,
+    decode_storage_cell,
+    encode_simple_action,
+)
 
 
 def _initial_snapshot() -> SimpleNamespace:
@@ -141,3 +148,22 @@ def test_storage_decoder_reads_both_outbound_action_slots_and_full_descriptor() 
         "recipient_address": "0:" + "22" * 32,
         "response_address": "0:" + "22" * 32,
     }]
+
+
+
+def test_retry_failed_outbound_action_uses_contract_opcode_and_exact_fields() -> None:
+    payload = encode_simple_action(
+        "retry_failed_outbound_action", 0x0102030405060708, int("ab" * 32, 16)
+    )
+    parser = Cell.one_from_boc(base64.b64decode(payload)).begin_parse()
+    assert parser.load_uint(32) == 0x56450009
+    assert parser.load_uint(64) == 0x0102030405060708
+    assert parser.load_uint(256) == int("ab" * 32, 16)
+    assert parser.remaining_bits == 0
+    assert parser.remaining_refs == 0
+
+
+@pytest.mark.parametrize("query_id", [0, -1, 1 << 64])
+def test_retry_failed_outbound_action_rejects_invalid_query_id(query_id: int) -> None:
+    with pytest.raises(TONABIError):
+        encode_simple_action("retry_failed_outbound_action", query_id, 1)
