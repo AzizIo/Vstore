@@ -438,7 +438,7 @@ class PinnedTONEscrowContractAdapter:
                 canonical_recipient = recipient.to_str(is_user_friendly=False)
                 if canonical_recipient != descriptor.recipient_address:
                     raise TONABIError("retry recipient address must be canonical raw form")
-                if wallet_address != canonical_recipient:
+                if wallet_address.to_str(is_user_friendly=False) != canonical_recipient:
                     raise TONABIError("only the bounced action recipient may retry it")
                 target = escrow_address
                 amount = deal_snapshot.action_value_nanotons
