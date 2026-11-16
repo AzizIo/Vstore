@@ -612,6 +612,9 @@ describe("TON Escrow workspace", () => {
       amount_nanotons: "90000000",
       retry_window_seconds: 0,
       proof_masterchain_seqno: 700,
+      proof_masterchain_block_hash: "aa".repeat(32),
+      proof_state_data_hash: "bb".repeat(32),
+      proof_provider_id: "pytoniq-trust0-testnet-v1",
     };
     const api = makeApi({
       buyerDeals: [deal({ state: "refunded", available_actions: [] })],
@@ -645,6 +648,9 @@ describe("TON Escrow workspace", () => {
         amount_nanotons: "90000000",
         retry_window_seconds: 1800,
         proof_masterchain_seqno: 701,
+        proof_masterchain_block_hash: "aa".repeat(32),
+        proof_state_data_hash: "bb".repeat(32),
+        proof_provider_id: "pytoniq-trust0-testnet-v1",
       }],
     });
     renderWorkspace(api);
@@ -668,6 +674,9 @@ describe("TON Escrow workspace", () => {
         amount_nanotons: "0",
         retry_window_seconds: 0,
         proof_masterchain_seqno: 702,
+        proof_masterchain_block_hash: "aa".repeat(32),
+        proof_state_data_hash: "bb".repeat(32),
+        proof_provider_id: "pytoniq-trust0-testnet-v1",
       }],
     });
     renderWorkspace(api);
