@@ -1,0 +1,114 @@
+name: Sync TON escrow artifact for PR 247
+
+on:
+  push:
+    branches:
+      - fix/ton-escrow-backend-code-pin-9011
+    paths:
+      - .github/workflows/sync-ton-escrow-artifact-247.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  sync-artifact:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          persist-credentials: true
+
+      - name: Download exact contract CI artifact from PR 248
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GH_REPOSITORY}/actions/artifacts/14208215967/zip" \
+            -o /tmp/ton-escrow-contract-artifact.zip
+          unzip -l /tmp/ton-escrow-contract-artifact.zip
+
+      - name: Verify hashes and write canonical pinned BOC
+        run: |
+          python3 - <<'PY'
+          from __future__ import annotations
+          import base64
+          import hashlib
+          import json
+          import struct
+          import zipfile
+          import zlib
+          from pathlib import Path
+
+          expected = {
+              "compiled_code_hash": "498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46",
+              "compiled_code_boc_base64_sha256": "0e7bc7b35eee4ae7003fba0a0e5368df3428b7e32ad0f4fc5ddf0f3230d5daf3",
+              "compiled_code_boc_sha256": "86ed08596d0595c711aa2cf7659ee396ff443d7b01c65659b8e7543dd23c6173",
+              "compiled_code_boc_zlib_sha256": "8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7",
+              "state_init_hash": "4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75",
+          }
+          manifest = json.loads(Path("backend/app/escrow/abi_artifacts/manifest.json").read_text())
+          for key, value in expected.items():
+              if manifest.get(key) != value:
+                  raise SystemExit(f"repository manifest mismatch for {key}")
+
+          with zipfile.ZipFile("/tmp/ton-escrow-contract-artifact.zip") as artifact:
+              candidates = [n for n in artifact.namelist() if n.endswith("/build/DealEscrow.json") or n == "build/DealEscrow.json"]
+              if len(candidates) != 1:
+                  raise SystemExit(f"expected one build/DealEscrow.json in artifact, got {candidates!r}")
+              build = json.loads(artifact.read(candidates[0]))
+
+          if build.get("code_hash", "").upper() != expected["compiled_code_hash"]:
+              raise SystemExit("contract artifact code hash mismatch")
+          code_boc64 = build.get("code_boc64")
+          if not isinstance(code_boc64, str):
+              raise SystemExit("contract artifact has no code_boc64 string")
+          if hashlib.sha256(code_boc64.encode()).hexdigest() != expected["compiled_code_boc_base64_sha256"]:
+              raise SystemExit("contract artifact base64 digest mismatch")
+          raw = base64.b64decode(code_boc64, validate=True)
+          if hashlib.sha256(raw).hexdigest() != expected["compiled_code_boc_sha256"]:
+              raise SystemExit("contract artifact BOC digest mismatch")
+
+          # Same canonical RFC 1950 + DEFLATE stored-block format as
+          # contracts/ton-escrow-poc/scripts/canonical_zlib_boc.py.
+          block_size = 65_535
+          output = bytearray(b"\\x78\\x01")
+          blocks = [raw[offset:offset + block_size] for offset in range(0, len(raw), block_size)] or [b""]
+          for index, block in enumerate(blocks):
+              output.append(0x01 if index == len(blocks) - 1 else 0x00)
+              length = len(block)
+              output.extend(struct.pack("<HH", length, length ^ 0xFFFF))
+              output.extend(block)
+          output.extend(struct.pack(">I", zlib.adler32(raw) & 0xFFFFFFFF))
+          compressed = bytes(output)
+          if hashlib.sha256(compressed).hexdigest() != expected["compiled_code_boc_zlib_sha256"]:
+              raise SystemExit("canonical zlib BOC digest mismatch")
+          if zlib.decompress(compressed) != raw:
+              raise SystemExit("canonical zlib BOC round-trip failed")
+
+          target = Path("backend/app/escrow/abi_artifacts/DealEscrow.code.boc.zlib.b64")
+          target.write_text(base64.b64encode(compressed).decode("ascii") + "\n")
+          print(f"Wrote {target}: {target.stat().st_size} bytes, zlib SHA-256 verified")
+          PY
+
+      - name: Commit artifact update
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app/escrow/abi_artifacts/DealEscrow.code.boc.zlib.b64
+          if git diff --cached --quiet; then
+            echo "Pinned BOC already matches the verified artifact."
+            exit 0
+          fi
+          git commit -m "fix(escrow): sync pinned BOC with contract CI artifact #248"
+          git push origin "HEAD:${BRANCH_NAME}"

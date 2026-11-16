@@ -22,7 +22,7 @@ from pytoniq_core import Address, Cell, begin_cell
 _ARTIFACTS = Path(__file__).resolve().parent / "abi_artifacts"
 _NETWORK_ID = -3
 _PROTOCOL_VERSION = 1
-_CODE_HASH = "D822B8AFBB37027611A9A9DDC8E67C52F17BBBC45B4352C7F360693BD685CA54"
+_CODE_HASH = "498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46"
 _NFT_TRANSFER_OPCODE = 0x5FCC3D14
 _NFT_FORWARD_MAGIC = 0x56454E46
 _OPCODES = {
@@ -32,6 +32,7 @@ _OPCODES = {
     "open_dispute": 0x56450004,
     "timeout_deal": 0x56450007,
     "recover_unexpected_nft": 0x56450008,
+    "retry_failed_outbound_action": 0x56450009,
 }
 _TERMINAL_STORAGE_RESERVE = 10_000_000
 _MIN_ACTION_VALUE = 10_000_000
@@ -103,7 +104,11 @@ def load_pinned_abi() -> tuple[dict[str, Any], dict[str, Any]]:
 
 
 def load_pinned_code_boc() -> str:
-    """Verify and decompress the pinned compiler BOC into canonical base64 text."""
+    """Verify the pinned compiler BOC after decompression.
+
+    zlib is a transport encoding. Both the local compressed artifact and the
+    canonical base64/raw BOC digests are pinned independently.
+    """
     try:
         compressed_b64 = (
             _ARTIFACTS / "DealEscrow.code.boc.zlib.b64"
@@ -113,14 +118,30 @@ def load_pinned_code_boc() -> str:
         raise TONABIError("pinned DealEscrow code BOC is unavailable or corrupt") from exc
 
     _, manifest = load_pinned_abi()
-    if _sha256(compressed) != manifest.get("compiled_code_boc_zlib_sha256"):
+    if _sha256(compressed) != manifest.get("backend_code_boc_zlib_sha256"):
         raise TONABIError("DealEscrow compressed code BOC digest mismatch")
 
     try:
-        raw_boc = zlib.decompress(compressed)
-    except zlib.error as exc:
+        decompressor = zlib.decompressobj()
+        raw_boc = decompressor.decompress(compressed)
+        raw_boc += decompressor.flush()
+        if (
+            not decompressor.eof
+            or decompressor.unused_data
+            or decompressor.unconsumed_tail
+        ):
+            raise ValueError("pinned BOC is not one complete zlib stream")
+    except (ValueError, zlib.error) as exc:
         raise TONABIError("pinned DealEscrow code BOC is unavailable or corrupt") from exc
-    return base64.b64encode(raw_boc).decode("ascii")
+
+    code_boc_base64 = base64.b64encode(raw_boc).decode("ascii")
+    if _sha256(code_boc_base64.encode("ascii")) != manifest.get(
+        "compiled_code_boc_base64_sha256"
+    ):
+        raise TONABIError("DealEscrow code BOC base64 digest mismatch")
+    if _sha256(raw_boc) != manifest.get("compiled_code_boc_sha256"):
+        raise TONABIError("DealEscrow raw code BOC digest mismatch")
+    return code_boc_base64
 
 
 def verify_compiled_code(code_boc_base64: str | None = None) -> VerifiedArtifacts:
