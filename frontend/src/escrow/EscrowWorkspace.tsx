@@ -908,9 +908,9 @@ function WorkspaceBody({
                             <br />
                             Masterchain seqno: {outbound.proof_masterchain_seqno}
                             <br />
-                            Окно повтора: {outbound.retry_window_seconds === 0
-                              ? "0 сек. (терминальный возврат)"
-                              : `${outbound.retry_window_seconds} сек.`}
+                            {outbound.retry_window_seconds === 0
+                              ? "Терминальный возврат: дополнительный срок не задаётся"
+                              : `Срок следующего этапа после успешного повтора: ${outbound.retry_window_seconds} сек.`}
                             <br />
                             Proof: {outbound.proof_provider_id} · block {outbound.proof_masterchain_block_hash.slice(0, 8)} · state {outbound.proof_state_data_hash.slice(0, 8)}
                           </p>
