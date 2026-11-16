@@ -475,3 +475,202 @@ async def test_original_outbound_message_rejects_value_or_message_mismatch() -> 
     assert proof is None
     assert reason == "original_outbound_message_not_uniquely_in_source_transaction"
     await provider.close()
+
+
+def _retry_descriptor(
+    *,
+    query_id: int = 42,
+    kind: int = 4,
+    recipient: str = "0:" + "b" * 64,
+    deal_salt: str = "c" * 64,
+    status: int = 1,
+    retry_window_seconds: int = 1800,
+    amount_nanotons: int = 90_000_000,
+) -> dict[str, object]:
+    return {
+        "slot": "first",
+        "kind": kind,
+        "query_id": query_id,
+        "deal_salt": deal_salt,
+        "attempt_id": 7,
+        "amount_nanotons": amount_nanotons,
+        "message_value_nanotons": amount_nanotons,
+        "expected_state": 10,
+        "expected_pending_action": 0,
+        "retry_window_seconds": retry_window_seconds,
+        "message_body_hash": "d" * 64,
+        "status": status,
+        "bounce_phase": 1,
+        "exit_code": 37,
+        "item_address": "0:" + "a" * 64,
+        "destination_address": recipient,
+        "recipient_address": recipient,
+        "response_address": recipient,
+    }
+
+
+class _FakeRetryLiteClient:
+    trust_level = 0
+
+    def __init__(self) -> None:
+        from pytoniq_core import begin_cell
+
+        data = begin_cell().store_uint(1, 1).end_cell()
+        self.account = SimpleNamespace(
+            storage=SimpleNamespace(
+                state=SimpleNamespace(
+                    type_="account_active",
+                    state_init=SimpleNamespace(data=data),
+                )
+            )
+        )
+
+    async def raw_get_account_state(self, _address: str, *, block: object):
+        return self.account, object()
+
+    async def raw_get_block(self, _block: object):
+        return SimpleNamespace(info=SimpleNamespace(gen_utime=1_700_000_100))
+
+
+@pytest.mark.asyncio
+async def test_current_retry_proof_accepts_terminal_refund_zero_window(monkeypatch) -> None:
+    deal = _deal()
+    descriptor = _retry_descriptor(kind=6, retry_window_seconds=0)
+    client = _FakeRetryLiteClient()
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(),
+        http_client=_FakeHttp({"transactions": []}),
+        lite_client_factory=lambda: client,
+    )
+    masterchain = SimpleNamespace(seqno=700, root_hash=b"m" * 32)
+
+    async def get_client():
+        return client
+
+    async def read_state(_deal, _masterchain, _client):
+        return ({
+            "outbound_actions": [descriptor],
+            "deadline_unix": 0,
+            "observed_chain_time_unix": 1_700_000_100,
+        }, "settled", "getter-identity")
+
+    monkeypatch.setattr(provider, "_get_lite_client", get_client)
+    monkeypatch.setattr(provider, "_read_contract_state", read_state)
+
+    proofs = await provider.read_current_outbound_retry_proofs(deal)
+
+    assert len(proofs) == 1
+    assert proofs[0].action.kind == 6
+    assert proofs[0].action.retry_window_seconds == 0
+    assert proofs[0].masterchain_seqno == 700
+    assert proofs[0].masterchain_block_hash == (b"m" * 32).hex()
+
+
+@pytest.mark.asyncio
+async def test_current_retry_proof_blocks_execution_reserve_until_seller_allowance_retry(monkeypatch) -> None:
+    deal = _deal()
+    seller_allowance = _retry_descriptor(
+        query_id=42, kind=6, retry_window_seconds=0,
+        recipient="0:" + "b" * 64,
+    )
+    execution_reserve = _retry_descriptor(
+        query_id=43, kind=7, retry_window_seconds=0,
+        recipient="0:" + "c" * 64,
+    )
+    client = _FakeRetryLiteClient()
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(),
+        http_client=_FakeHttp({"transactions": []}),
+        lite_client_factory=lambda: client,
+    )
+
+    async def get_client():
+        return client
+
+    async def read_state(_deal, _masterchain, _client):
+        return ({
+            "outbound_actions": [seller_allowance, execution_reserve],
+            "deadline_unix": 0,
+            "observed_chain_time_unix": 1_700_000_100,
+        }, "refunded", "getter-identity")
+
+    monkeypatch.setattr(provider, "_get_lite_client", get_client)
+    monkeypatch.setattr(provider, "_read_contract_state", read_state)
+
+    proofs = await provider.read_current_outbound_retry_proofs(deal)
+
+    assert [proof.action.kind for proof in proofs] == [6]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("descriptor", "deadline"),
+    [
+        (_retry_descriptor(kind=4, retry_window_seconds=1799), 1_700_000_200),
+        (_retry_descriptor(kind=4, retry_window_seconds=1800), 1_700_000_099),
+        (_retry_descriptor(kind=6, retry_window_seconds=1800), 0),
+        (_retry_descriptor(kind=7, retry_window_seconds=1), 0),
+        (_retry_descriptor(kind=4, amount_nanotons=0), 1_700_000_200),
+    ],
+)
+async def test_current_retry_proof_rejects_invalid_or_expired_retry_window(
+    monkeypatch, descriptor: dict[str, object], deadline: int
+) -> None:
+    deal = _deal()
+    client = _FakeRetryLiteClient()
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(),
+        http_client=_FakeHttp({"transactions": []}),
+        lite_client_factory=lambda: client,
+    )
+
+    async def get_client():
+        return client
+
+    async def read_state(_deal, _masterchain, _client):
+        return ({
+            "outbound_actions": [descriptor],
+            "deadline_unix": deadline,
+            "observed_chain_time_unix": 1_700_000_100,
+        }, "settled", "getter-identity")
+
+    monkeypatch.setattr(provider, "_get_lite_client", get_client)
+    monkeypatch.setattr(provider, "_read_contract_state", read_state)
+
+    assert await provider.read_current_outbound_retry_proofs(deal) == ()
+
+
+@pytest.mark.asyncio
+async def test_current_retry_proof_rejects_duplicate_query_ids_and_noncanonical_recipient(
+    monkeypatch,
+) -> None:
+    from pytoniq_core import Address
+
+    deal = _deal()
+    first = _retry_descriptor(query_id=42)
+    second = _retry_descriptor(query_id=42)
+    noncanonical = _retry_descriptor(
+        query_id=43,
+        recipient=Address("0:" + "b" * 64).to_str(is_user_friendly=True),
+    )
+    client = _FakeRetryLiteClient()
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(),
+        http_client=_FakeHttp({"transactions": []}),
+        lite_client_factory=lambda: client,
+    )
+
+    async def get_client():
+        return client
+
+    async def read_state(_deal, _masterchain, _client):
+        return ({
+            "outbound_actions": [first, second, noncanonical],
+            "deadline_unix": 1_700_000_200,
+            "observed_chain_time_unix": 1_700_000_100,
+        }, "settled", "getter-identity")
+
+    monkeypatch.setattr(provider, "_get_lite_client", get_client)
+    monkeypatch.setattr(provider, "_read_contract_state", read_state)
+
+    assert await provider.read_current_outbound_retry_proofs(deal) == ()
