@@ -205,7 +205,7 @@ describe("escrow API boundary", () => {
   it("accepts only a direct per-deal StateInit deployment and the null-Factory topology", () => {
     const deployment = prepared("create_deal_escrow");
     expect(isPreparedEscrowTransaction(deployment)).toBe(true);
-    expect(isPreparedEscrowTransaction({ ...deployment, factory_address: factory })).toBe(false);
+    expect(isPreparedEscrowTransaction({ ...deployment, factory_address: "0:" + "3".repeat(64) })).toBe(false);
     expect(isPreparedEscrowTransaction({
       ...deployment,
       messages: [{ ...deployment.messages[0], address: factory }],
