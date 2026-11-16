@@ -915,6 +915,17 @@ class PytoniqTONTestnetEscrowProvider:
                 recipient = descriptor.get("recipient_address")
                 amount = descriptor.get("amount_nanotons")
                 message_value = descriptor.get("message_value_nanotons")
+                amounts_valid = (
+                    kind == 7
+                    and amount == 0
+                    and message_value == 0
+                ) or (
+                    kind in {1, 2, 3, 4, 5, 6}
+                    and isinstance(amount, int) and not isinstance(amount, bool)
+                    and amount > 0
+                    and isinstance(message_value, int) and not isinstance(message_value, bool)
+                    and message_value > 0
+                )
                 if (
                     not isinstance(recipient, str)
                     or _canonical_address(recipient) != recipient
@@ -923,9 +934,7 @@ class PytoniqTONTestnetEscrowProvider:
                     or not isinstance(query_id, int)
                     or not 0 < query_id < (1 << 64)
                     or descriptor.get("bounce_phase") not in {1, 2}
-                    or isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0
-                    or isinstance(message_value, bool)
-                    or not isinstance(message_value, int) or message_value <= 0
+                    or not amounts_valid
                 ):
                     continue
                 action = ProofBoundOutboundAction(
