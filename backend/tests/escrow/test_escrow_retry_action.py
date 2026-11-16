@@ -616,6 +616,15 @@ async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflic
     user = SimpleNamespace(id=buyer_id)
     verified_wallet_address = {"value": deal.buyer_address_snapshot}
     verified_wallet_calls: list[tuple[object, object]] = []
+    deployment_terms = {
+        "buyer_address": deal.buyer_address_snapshot,
+        "seller_address": deal.seller_address_snapshot,
+    }
+
+    def build_deployment_snapshot(_deal: object):
+        return SimpleNamespace(**deployment_terms), ()
+
+    monkeypatch.setattr("app.api.escrow._build_deployment_snapshot", build_deployment_snapshot)
 
     async def verified_wallet(
         _session: object, *, user_id: object, wallet_id: object, lock: bool = False
@@ -640,6 +649,23 @@ async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflic
     assert replay.payload == payload
     assert session.scalar_calls == 2
     assert verified_wallet_calls == [(buyer_id, deal.buyer_wallet_id)]
+
+    # The mutable row's participant address must still equal the immutable
+    # deployment snapshot before an old payload is returned.
+    deployment_terms["buyer_address"] = "0:" + "99" * 32
+    with pytest.raises(HTTPException) as snapshot_changed:
+        await prepare_retry_failed_outbound_action(
+            deal_id,
+            EscrowOutboundRetryRequest(query_id="4321"),
+            request,
+            user,
+            session,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            "retry-idempotency-key-0001",
+        )
+    assert snapshot_changed.value.status_code == 409
+    assert snapshot_changed.value.detail["code"] == "escrow_retry_wallet_snapshot_changed"
+    deployment_terms["buyer_address"] = deal.buyer_address_snapshot
 
     # A formerly valid idempotency key must not return the unsigned payload if
     # the account's currently verified wallet no longer matches the participant
