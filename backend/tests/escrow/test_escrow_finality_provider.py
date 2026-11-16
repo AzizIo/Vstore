@@ -546,8 +546,6 @@ async def test_current_retry_proof_accepts_terminal_refund_zero_window(monkeypat
         http_client=_FakeHttp({"transactions": []}),
         lite_client_factory=lambda: client,
     )
-    masterchain = SimpleNamespace(seqno=700, root_hash=b"m" * 32)
-
     async def get_client():
         return client
 
