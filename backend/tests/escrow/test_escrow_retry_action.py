@@ -396,7 +396,9 @@ async def test_new_idempotency_key_cannot_prepare_same_active_retry_twice(
     assert error.value.status_code == 409
     assert error.value.detail["code"] == "outbound_action_retry_already_prepared"
     assert error.value.detail["action_status"] == "prepared"
-    assert session.rollback_calls == 1
+    # One rollback releases DB locks before proof I/O; the second closes
+    # the transaction after the active-retry conflict is detected.
+    assert session.rollback_calls == 2
     assert session.scalar_calls == 4
 
 
