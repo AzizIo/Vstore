@@ -618,3 +618,104 @@ async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflic
     assert conflict.value.status_code == 409
     assert conflict.value.detail["code"] == "idempotency_payload_conflict"
     assert session.rollback_calls == 1
+
+@pytest.mark.asyncio
+async def test_retry_prepare_rejects_stale_proof_without_rolling_back_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    buyer_id, deal_id = uuid4(), uuid4()
+    deployment_snapshot = {"deal_salt": "ab" * 32}
+    snapshot_sha = _canonical_sha256(deployment_snapshot)
+    deal = SimpleNamespace(
+        id=deal_id,
+        buyer_id=buyer_id,
+        seller_id=uuid4(),
+        contract_address="0:" + "44" * 32,
+        deployment_snapshot_json=deployment_snapshot,
+        deployment_snapshot_sha256=snapshot_sha,
+        deal_salt="ab" * 32,
+        network="testnet",
+    )
+    locked_deal = SimpleNamespace(
+        id=deal_id,
+        buyer_id=buyer_id,
+        seller_id=deal.seller_id,
+        contract_address=deal.contract_address,
+        deployment_snapshot_sha256=snapshot_sha,
+        getter_snapshot_masterchain_seqno=701,
+        getter_snapshot_json={"_proof_masterchain_seqno": 701},
+        getter_snapshot_sha256="cc" * 32,
+        getter_snapshot_block_hash="dd" * 32,
+        getter_snapshot_provider="pytoniq-trust0-testnet-v1",
+    )
+
+    class StaleProofSession:
+        def __init__(self) -> None:
+            self.scalar_calls = 0
+            self.rollback_calls = 0
+            self.commit_calls = 0
+
+        async def scalar(self, _statement: object):
+            self.scalar_calls += 1
+            if self.scalar_calls == 1:
+                return deal
+            if self.scalar_calls == 3:
+                return locked_deal
+            return None
+
+        async def rollback(self) -> None:
+            self.rollback_calls += 1
+
+        async def commit(self) -> None:
+            self.commit_calls += 1
+
+    class OlderProofProvider:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def verify_deployed_account(
+            self, _deal: object, *, require_initial_state: bool
+        ):
+            self.calls += 1
+            assert require_initial_state is False
+            getter = {
+                "outbound_actions": [_retry_row()],
+                "_proof_masterchain_seqno": 700,
+                "_proof_masterchain_block_hash": "aa" * 32,
+                "_proof_state_data_hash": "bb" * 32,
+                "_proof_provider_id": "pytoniq-trust0-testnet-v1",
+            }
+            return (
+                getter,
+                700,
+                "aa" * 32,
+                "pytoniq-trust0-testnet-v1",
+            )
+
+    provider = OlderProofProvider()
+    session = StaleProofSession()
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(ton_escrow_finality_provider=provider)
+        )
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await prepare_retry_failed_outbound_action(
+            deal_id,
+            EscrowOutboundRetryRequest(query_id="4321"),
+            request,
+            SimpleNamespace(id=buyer_id),
+            session,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            "retry-stale-proof-key-0001",
+        )
+
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "stale_escrow_getter_proof"
+    assert provider.calls == 1
+    assert session.scalar_calls == 3
+    assert session.rollback_calls == 2
+    assert session.commit_calls == 0
+    assert locked_deal.getter_snapshot_masterchain_seqno == 701
