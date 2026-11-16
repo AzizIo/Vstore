@@ -309,11 +309,15 @@ async def test_prepare_action_persists_idempotency_before_incomplete_snapshot_50
 
     session = ActionSession()
 
+    wallet_verification = {"enabled": True}
+
     async def verified_wallet(
-        _session: object, *, user_id: object, wallet_id: object
+        _session: object, *, user_id: object, wallet_id: object, lock: bool = False
     ) -> tuple[SimpleNamespace, str]:
         assert user_id == buyer_id
         assert wallet_id == wallet_id_expected
+        if not wallet_verification["enabled"]:
+            raise HTTPException(status_code=404, detail="Verified testnet wallet not found")
         return wallet, deal.buyer_address_snapshot
 
     wallet_id_expected = wallet_id
@@ -407,6 +411,27 @@ async def test_prepare_action_persists_idempotency_before_incomplete_snapshot_50
     assert replay_error.value.detail["code"] == "deployment_snapshot_incomplete"
     assert replay_error.value.detail["action_id"] == str(action_record.id)
     assert replay_error.value.detail["action_status"] == "blocked_abi"
+
+    # The same idempotency key must not bypass wallet verification after the
+    # previously verified wallet has been revoked.
+    wallet_verification["enabled"] = False
+    revoked_wallet_session = ActionSession()
+    async def revoked_replay_scalar(_statement: object) -> SimpleNamespace | None:
+        revoked_wallet_session.scalar_calls += 1
+        return deal if revoked_wallet_session.scalar_calls == 1 else blocked_action
+    revoked_wallet_session.scalar = revoked_replay_scalar  # type: ignore[method-assign]
+
+    with pytest.raises(HTTPException) as revoked_wallet_error:
+        await _prepare_action(
+            deal_id,
+            EscrowWalletAction.FUND_DEAL,
+            SimpleNamespace(id=buyer_id),
+            revoked_wallet_session,
+            None,
+            "fund-action-key-0001",
+        )
+    assert revoked_wallet_error.value.status_code == 409
+    assert revoked_wallet_error.value.detail["code"] == "escrow_wallet_not_verified"
 
 
 def test_preview_compose_is_the_only_compose_runtime_opted_into_preview_mode() -> None:
