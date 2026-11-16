@@ -202,7 +202,14 @@ async def test_retry_projection_uses_current_proof_and_exact_recipient_wallet(
             assert require_initial_state is False
             assert proof_deal.contract_address == deal.contract_address
             return ({
-                "outbound_actions": [_retry_row()],
+                "outbound_actions": [
+                    _retry_row(),
+                    _retry_row(
+                        query_id=4322, slot="second", kind=7,
+                        retry_window_seconds=0, amount_nanotons=0,
+                        message_value_nanotons=0,
+                    ),
+                ],
                 "_proof_masterchain_seqno": 700,
                 "_proof_masterchain_block_hash": "aa" * 32,
                 "_proof_state_data_hash": "bb" * 32,
@@ -219,14 +226,19 @@ async def test_retry_projection_uses_current_proof_and_exact_recipient_wallet(
         ProjectionSession(),  # type: ignore[arg-type]
     )
 
-    assert len(actions) == 1
-    assert isinstance(actions[0], EscrowRetryableOutboundActionResponse)
-    assert actions[0].query_id == "4321"
-    assert actions[0].recipient_address == recipient
-    assert actions[0].proof_masterchain_seqno == 700
-    assert actions[0].proof_masterchain_block_hash == "aa" * 32
-    assert actions[0].proof_state_data_hash == "bb" * 32
-    assert actions[0].proof_provider_id == "pytoniq-trust0-testnet-v1"
+    assert len(actions) == 2
+    assert all(isinstance(action, EscrowRetryableOutboundActionResponse) for action in actions)
+    assert {action.query_id for action in actions} == {"4321", "4322"}
+    reserve = next(action for action in actions if action.query_id == "4322")
+    assert reserve.amount_nanotons == "0"
+    assert reserve.retry_window_seconds == 0
+    assert all(action.recipient_address == recipient for action in actions)
+    assert all(action.proof_masterchain_seqno == 700 for action in actions)
+    assert all(action.proof_masterchain_block_hash == "aa" * 32 for action in actions)
+    assert all(action.proof_state_data_hash == "bb" * 32 for action in actions)
+    assert all(
+        action.proof_provider_id == "pytoniq-trust0-testnet-v1" for action in actions
+    )
 
 
 @pytest.mark.asyncio
