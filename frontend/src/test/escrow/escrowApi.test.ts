@@ -124,7 +124,7 @@ function contract(): EscrowHttpContract {
     prepareBuyerNftReturn: (input) => operation("/test/escrow/prepare-nft-return", input),
     prepareUnsoldNftWithdrawal: (input) => operation("/test/escrow/prepare-unsold-withdrawal", input),
     retryableOutboundActions: (dealId) => `/test/escrow/deals/${dealId}/retryable-outbound-actions`,
-    prepareFailedOutboundRetry: (input) => operation("/test/escrow/prepare-failed-outbound-retry", input),
+    prepareFailedOutboundRetry: (input) => operation("/test/escrow/prepare-failed-outbound-retry-action", input),
     submitWalletReference: (input) => operation("/test/escrow/submit-reference", input),
   };
 }
