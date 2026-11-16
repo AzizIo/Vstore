@@ -495,6 +495,12 @@ fun handleNftOwnershipNotification(
     val asset = terms.asset.load();
     val money = terms.money.load();
 
+    val existingRecovery = progress.recovery.load();
+    val hasUnexpectedRecovery = (
+        existingRecovery.unexpectedPreviousOwner != null
+        || existingRecovery.unexpectedItemAddress != null
+    );
+
     // Only the exact item fixed in StateInit may alter this DealEscrow.
     // An unrelated NFT notification cannot be used as collateral.
     if (senderAddress != asset.itemAddress) {
@@ -531,12 +537,6 @@ fun handleNftOwnershipNotification(
         && msg.queryId == money.nftReturnToEscrowQueryId
     );
     val validExpectedPayload = hasValidInlineNftPayload(msg.payload, asset);
-    val existingRecovery = progress.recovery.load();
-    val hasUnexpectedRecovery = (
-        existingRecovery.unexpectedPreviousOwner != null
-        || existingRecovery.unexpectedItemAddress != null
-    );
-
     // A replayed TEP-62 ownership_assigned notification can arrive after the
     // original transfer has already been accepted. Treat the exact seller
     // deposit / buyer return callback as idempotent while the NFT is still
