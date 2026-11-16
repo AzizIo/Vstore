@@ -627,7 +627,7 @@ describe("TON Escrow workspace", () => {
     const retryButton = await screen.findByRole("button", { name: /Повторить отправку · query 42/ });
     await waitFor(() => expect(retryButton).toBeEnabled());
     expect(screen.getByText(/актуального proof-read состояния TON testnet/)).toBeInTheDocument();
-    expect(screen.getByText(/Окно повтора: 0 сек/)).toBeInTheDocument();
+    expect(screen.getByText(/Терминальный возврат: дополнительный срок не задаётся/)).toBeInTheDocument();
     expect(screen.getByText(/Proof: pytoniq-trust0-testnet-v1/)).toBeInTheDocument();
 
     fireEvent.click(retryButton);
@@ -663,6 +663,7 @@ describe("TON Escrow workspace", () => {
     expect(await screen.findByRole("button", { name: /Повторить отправку · query 43/ }))
       .toBeDisabled();
     expect(screen.getByText(/совпадающего с получателем/)).toBeInTheDocument();
+    expect(screen.getByText(/Срок следующего этапа после успешного повтора: 1800 сек\./)).toBeInTheDocument();
     expect(api.prepareFailedOutboundRetry).not.toHaveBeenCalled();
   });
 
@@ -689,6 +690,7 @@ describe("TON Escrow workspace", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
     expect(await screen.findByText(/Сумма определяется контрактом: перевод остатка баланса/))
       .toBeInTheDocument();
+    expect(screen.getByText(/Терминальный возврат: дополнительный срок не задаётся/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Повторить отправку · query 44/ }))
       .toBeEnabled();
   });
