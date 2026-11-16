@@ -19,6 +19,7 @@ describe("TON escrow HTTP contract", () => {
       contract.createListingIntent({ asset_id: "asset", seller_wallet_id: "wallet", price_nano: "1000000000" }),
       contract.createBuyerDealIntent({ listing_id: "listing", buyer_wallet_id: "wallet" }),
       contract.prepareDealEscrow({ deal_id: "deal", wallet_id: "wallet" }),
+      contract.prepareDealActivation({ deal_id: "deal", wallet_id: "wallet" }),
       contract.prepareNftDeposit({ deal_id: "deal", wallet_id: "wallet" }),
       contract.prepareBuyerFunding({ deal_id: "deal", wallet_id: "wallet" }),
       contract.prepareBuyerAcceptance({ deal_id: "deal", wallet_id: "wallet" }),
@@ -50,6 +51,15 @@ describe("TON escrow HTTP contract", () => {
     );
     expect(retry.body).toEqual({ query_id: "18446744073709551615" });
     expect(retry.headers?.["Idempotency-Key"]).toBeTruthy();
+  });
+
+
+  it("maps seller activation to the dedicated idempotent preparation route", () => {
+    const contract = createEscrowHttpContract("/api-host");
+    const activation = contract.prepareDealActivation({ deal_id: "deal/1", wallet_id: "seller-wallet" });
+    expect(activation.url).toBe("/api-host/api/escrow/deals/deal%2F1/prepare/activate-deal");
+    expect(activation.body).toBeUndefined();
+    expect(activation.headers?.["Idempotency-Key"]).toBeTruthy();
   });
 
   it("keeps dispute reason in the request body and wallet actions address-scoped", () => {
