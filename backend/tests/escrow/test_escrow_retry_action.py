@@ -175,6 +175,8 @@ async def test_retry_projection_uses_current_proof_and_exact_recipient_wallet(
         buyer_id=buyer_id,
         seller_id=uuid4(),
         buyer_wallet_id=wallet_id,
+        buyer_address_snapshot=recipient,
+        seller_address_snapshot="0:" + "44" * 32,
         listing_intent_id=uuid4(),
         contract_address="0:" + "44" * 32,
         deployment_snapshot_json=deployment_snapshot,
@@ -246,6 +248,7 @@ async def test_retry_projection_uses_current_proof_and_exact_recipient_wallet(
 async def test_retry_projection_hides_third_party_and_duplicate_query_recipients(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
     buyer_id, deal_id, wallet_id = uuid4(), uuid4(), uuid4()
     recipient = "0:" + "33" * 32
     third_party = "0:" + "99" * 32
