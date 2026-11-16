@@ -110,7 +110,8 @@ class EscrowDealResponse(BaseModel):
     dispute_deadline: datetime | None
     available_actions: list[Literal[
         "create_deal_escrow", "activate_deal", "deposit_nft", "fund_deal", "accept_deal",
-        "open_dispute", "return_nft_to_escrow", "withdraw_unsold_nft"
+        "open_dispute", "return_nft_to_escrow", "withdraw_unsold_nft",
+        "retry_failed_outbound_action"
     ]]
     created_at: datetime
     updated_at: datetime
@@ -170,7 +171,8 @@ class EscrowWalletReferenceInput(BaseModel):
     action_id: UUID
     action: Literal[
         "create_deal_escrow", "deposit_nft", "fund_deal", "accept_deal",
-        "open_dispute", "return_nft_to_escrow", "withdraw_unsold_nft"
+        "open_dispute", "return_nft_to_escrow", "withdraw_unsold_nft",
+        "retry_failed_outbound_action"
     ]
     reference: str = Field(min_length=1, max_length=512)
 
