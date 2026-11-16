@@ -10,6 +10,7 @@ from app.api.escrow import (
     _prepare_action,
     _retry_descriptor_from_proof,
     list_retryable_outbound_actions,
+    prepare_retry_failed_outbound_action,
 )
 from app.escrow.contracts import EscrowWalletAction
 from app.escrow.schemas import (
@@ -520,3 +521,94 @@ async def test_retry_projection_fails_closed_without_complete_trust_anchor(
 
     assert error.value.status_code == 503
     assert error.value.detail["code"] == "outbound_action_proof_anchor_incomplete"
+
+
+@pytest.mark.asyncio
+async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    buyer_id, deal_id, action_id = uuid4(), uuid4(), uuid4()
+    deployment_snapshot = {"deal_salt": "ab" * 32}
+    deal = SimpleNamespace(
+        id=deal_id,
+        buyer_id=buyer_id,
+        seller_id=uuid4(),
+        contract_address="0:" + "44" * 32,
+        deployment_snapshot_json=deployment_snapshot,
+        deployment_snapshot_sha256=_canonical_sha256(deployment_snapshot),
+        deal_salt="ab" * 32,
+    )
+    payload = {
+        "network": "-3",
+        "validUntil": 1_800_000_000,
+        "messages": [{
+            "address": deal.contract_address,
+            "amount": "10000000",
+            "payload": "unsigned-boc",
+        }],
+    }
+    unsigned_bocs = {
+        "format": "tonconnect-message-bocs-v1",
+        "network": "testnet",
+        "messages": [{
+            "index": 0,
+            "address": deal.contract_address,
+            "amount_nanotons": "10000000",
+            "payload_boc_base64": "unsigned-boc",
+            "state_init_boc_base64": None,
+        }],
+    }
+    existing = SimpleNamespace(
+        id=action_id,
+        deal_id=deal_id,
+        query_id="4321",
+        unsigned_payload_json=payload,
+        unsigned_payload_sha256=_canonical_sha256(payload),
+        unsigned_bocs_json=unsigned_bocs,
+        unsigned_boc_sha256=_canonical_sha256(unsigned_bocs),
+        unsigned_boc_ref=f"db://escrow_wallet_actions/{action_id}/unsigned_bocs_json",
+    )
+
+    class ReplaySession:
+        def __init__(self) -> None:
+            self.scalar_calls = 0
+            self.rollback_calls = 0
+
+        async def scalar(self, _statement: object):
+            self.scalar_calls += 1
+            return deal if self.scalar_calls % 2 else existing
+
+        async def rollback(self) -> None:
+            self.rollback_calls += 1
+
+    session = ReplaySession()
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    user = SimpleNamespace(id=buyer_id)
+
+    replay = await prepare_retry_failed_outbound_action(
+        deal_id,
+        EscrowOutboundRetryRequest(query_id="4321"),
+        request,
+        user,
+        session,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+        "retry-idempotency-key-0001",
+    )
+    assert replay.action_id == action_id
+    assert replay.payload == payload
+    assert session.scalar_calls == 2
+
+    with pytest.raises(HTTPException) as conflict:
+        await prepare_retry_failed_outbound_action(
+            deal_id,
+            EscrowOutboundRetryRequest(query_id="4322"),
+            request,
+            user,
+            session,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            "retry-idempotency-key-0001",
+        )
+    assert conflict.value.status_code == 409
+    assert conflict.value.detail["code"] == "idempotency_payload_conflict"
+    assert session.rollback_calls == 1
