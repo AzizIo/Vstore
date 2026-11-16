@@ -11,9 +11,9 @@ This document supersedes the older handoff material based on `525215b9a51a34be81
 
 | Track | Exact head at snapshot | Status | Release condition |
 |---|---|---|---|
-| NFT identity / Issue #213 / [PR #241](https://github.com/AzizIo/Vstore/pull/241) | `a12a5c627d4ffc708ff52e0317b479da96bb90dc` | Draft; new head pushed, no exact-head CI visible yet; migration review found a mismatched named dollar-quote delimiter in the first trigger function | Exact-head Backend, Frontend and API-backed E2E green; PostgreSQL 16 migration upgrade/downgrade and immutable-evidence tests pass; collection policy remains empty until explicitly approved |
+| NFT identity / Issue #213 / [PR #241](https://github.com/AzizIo/Vstore/pull/241) | `e4d707ef6cf6b4f6910dc351723e11dafda35e11` | Draft; Backend #43815069949 and Frontend/API #43815069935 running; source review still found an unbalanced first-function dollar-quote delimiter | Exact-head Backend, Frontend and API-backed E2E green; PostgreSQL 16 migration upgrade/downgrade and immutable-evidence tests pass; collection policy remains empty until explicitly approved |
 | Backend artifact pin / Issue #206 / [PR #247](https://github.com/AzizIo/Vstore/pull/247) | `c93867f2e3469807135bffd2f5a7701c4b1fbabe` | Draft; Backend, Frontend/API E2E and Contract CI passed | Pin must be refreshed to the final contract artifact from the #248 track before integration |
-| Contract lifecycle and refund ordering / Issue #225 / [PR #248](https://github.com/AzizIo/Vstore/pull/248) | `5b65380e33c814be95bea0c931873a7620b56783` | Draft; StateInit golden check now passes; Contract CI #43814617994 fails 2 of 33 emulator tests (buyer reserve retry balance and resolver replay exit code) | Frozen manifest must contain non-null StateInit, raw address and data hash reproduced by generated wrapper and `@ton/core`; exact-head emulator and static checks green; backend adapter must consume this same artifact |
+| Contract lifecycle and refund ordering / Issue #225 / [PR #248](https://github.com/AzizIo/Vstore/pull/248) | `75926f137f057c56253a87a63b52d8c08586c52f` | Draft; code/BOC refreshed; Contract CI #43815040780 fails strict StateInit vector comparison; final StateInit and zlib BOC hashes still need pinning | Frozen manifest must contain non-null StateInit, raw address and data hash reproduced by generated wrapper and `@ton/core`; exact-head emulator and static checks green; backend adapter must consume this same artifact |
 | Earlier audit handoff / [PR #246](https://github.com/AzizIo/Vstore/pull/246) | `d0b19d2bd948edacbaf336285f9fff6afef0a748` | Draft; stale base | Based on older main and must not be used as current release evidence; this document is the current coordination snapshot |
 
 PR heads and CI status can move. Always re-query the exact head SHA before treating a check as evidence.
@@ -37,17 +37,23 @@ Those results validate PR #247 against the frozen contract artifact present in t
 
 ## 3. Artifact state and why #248 is not ready yet
 
-The current PR #248 exact-head build identifies candidate code hash:
+The current PR #248 exact-head build now identifies candidate code hash:
 
-`21206C3371B9EB270B63F8C288ADA6A15A207093F9D3D41DEA8255AFD39775ED`
+`498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46`
 
-The generated Acton wrapper + `@ton/core` vector now matches the checked-in frozen manifest:
+The compiled BOC digests from exact artifact #14201523108 are:
 
-- StateInit hash: `cfa1d4f92afb1c7e6d1dfeb6672f84979747b7f1518d847573ac00cbb89538c2`;
-- raw address: `0:cfa1d4f92afb1c7e6d1dfeb6672f84979747b7f1518d847573ac00cbb89538c2`;
+- base64 BOC SHA-256: `0e7bc7b35eee4ae7003fba0a0e5368df3428b7e32ad0f4fc5ddf0f3230d5daf3`;
+- decoded BOC SHA-256: `86ed08596d0595c711aa2cf7659ee396ff443d7b01c65659b8e7543dd23c6173`;
+- zlib-compressed BOC SHA-256: `1766fd8f3542eb0f9aec9cd8ddd80cdd69297c97d58efbef91cdaf11fdb75407`.
+
+The latest manifest at #248 head `75926f137f057c56253a87a63b52d8c08586c52f` has refreshed code/BOC fields but still contains the older compressed BOC digest and old StateInit vector. The generated Acton wrapper + `@ton/core` output from exact run #43815040780 / artifact #14201912732 reports:
+
+- StateInit hash: `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75`;
+- raw address: `0:4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75`;
 - initial data hash: `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b`.
 
-The strict vector comparison passed on the next exact-head Contract CI run, but emulator tests remain red: 31 passed and 2 failed in run #43814617994. Failures are the buyer reserve retry balance assertion at `tests/DealEscrow.test.tolk:2786` and resolver replay error expectation at line 2930 (actual Deadline 710, expected InvalidState 703). Agent 2 has been sent both findings. This candidate is not ready until all emulator tests pass and the final successful run's manifest/verification documentation are consistent.
+The current frozen manifest still pins StateInit `cfa1d4f9...`; the exact run failed at the expected strict vector comparison. Agent 2 has been sent the computed new vector and zlib digest. Refresh the complete manifest and `artifacts/VERIFYING.md`, then rerun Contract CI.
 
 The backend pin in PR #247 is currently for the prior frozen artifact (code hash `9011F274BC3D7E32B76A17F13FCBA17AC49429BB4EECBC4AB97FA202BDAC2940`, StateInit `674227296eff6ac5ee02c8e2eaa12857ac339d10a9ed7f4f7ea0591e7b4adfca`). It must be updated only from the final, successful #248 compiler artifact and must pass the cross-track test against that final manifest. No runtime action may be prepared against a stale code hash.
 
