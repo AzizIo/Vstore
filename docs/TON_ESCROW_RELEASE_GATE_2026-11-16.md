@@ -10,7 +10,7 @@ This document supersedes the older handoff material based on `525215b9a51a34be81
 
 ## Latest integrated candidate — 2026-11-16 20:25 UTC
 
-> This block supersedes every earlier feature head and CI snapshot below. Current main remains `b592a4b889221aeb314e521a357b1746091a5976`; **no escrow implementation PR has been merged to main**.
+> This block supersedes every earlier feature head and CI snapshot below. The executable escrow code baseline remains `b592a4b889221aeb314e521a357b1746091a5976`; the current main branch also contains docs-only release-handoff updates. **No escrow implementation PR has been merged to main**.
 
 Integrated candidate: `f2e61b0c049d64e90dd47025d0979ce295f1e426`.
 
@@ -50,7 +50,7 @@ The proof-bound retry implementation is complete in the unmerged feature stack. 
 
 ## Superseding implementation status — 2026-11-16 19:49 UTC
 
-> This status block supersedes the older branch heads and CI outcomes recorded in the historical snapshot sections below. Main remains b592a4b889221aeb314e521a357b1746091a5976; no escrow change from this stack has been merged to main.
+> This status block supersedes the older branch heads and CI outcomes recorded in the historical snapshot sections below. The executable escrow code baseline remains b592a4b889221aeb314e521a357b1746091a5976; no escrow implementation change from this stack has been merged to main.
 
 | Track | Current head | Exact evidence |
 |---|---|---|
