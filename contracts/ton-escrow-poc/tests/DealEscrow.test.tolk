@@ -487,6 +487,43 @@ get fun `test only the snapshotted seller can activate the deal`() {
     expect(escrow.getState()).toEqual(STATE_INTENT_CREATED);
 }
 
+get fun `test subminimum lifecycle action value cannot advance the deal`() {
+    testing.setNow(1_700_000_000);
+    val salt = 0xA22507;
+    val (escrow, _, seller, _) = createFixture(salt);
+    val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
+    expect(deployResult).toHaveSuccessfulDeploy({ to: escrow.address });
+
+    // The contract requires a 0.01 TON minimum action value before lifecycle
+    // processing. A lower-value message must not activate the deal or mutate
+    // any custody, deadline, or attempt state.
+    val underfundedActivation = escrow.sendAny(
+        seller.address,
+        ActivateDeal { queryId: 1, dealSalt: salt }.toCell(),
+        { value: grams("0.009"), bounce: true },
+    );
+    expect(underfundedActivation).toHaveFailedTx<ActivateDeal>({
+        to: escrow.address,
+        exitCode: Errors.InvalidValue,
+    });
+    expect(escrow.getState()).toEqual(STATE_INTENT_CREATED);
+    expect(escrow.getProgress().deadlineUnix).toEqual(0);
+    expect(escrow.getProgress().oracleAttemptId).toEqual(0);
+    expect(escrow.getProgress().principalLocked).toEqual(false);
+    expect(escrow.getProgress().nftInEscrow).toEqual(false);
+
+    // A valid action-value message can then advance the same deployment once.
+    val fundedActivation = escrow.sendAny(
+        seller.address,
+        ActivateDeal { queryId: 1, dealSalt: salt }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(fundedActivation).toHaveSuccessfulTx<ActivateDeal>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_AWAITING_NFT);
+    expect(escrow.getProgress().deadlineUnix).toBeGreater(testing.getNow());
+    expect(escrow.getProgress().oracleAttemptId).toEqual(0);
+}
+
 get fun `test exact TEP-62 item deposit unlocks buyer funding state`() {
     val (escrow, nftItem, seller, _) = createFixture(0xA11D1);
     val deployResult = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
@@ -2877,6 +2914,30 @@ get fun `test buyer reserve retry cannot sweep a bounced seller allowance`() {
     expect(actions.second.load().kind).toEqual(OUTBOUND_KIND_EXECUTION_RESERVE_REFUND);
     expect(actions.second.load().status).toEqual(OUTBOUND_STATUS_BOUNCED);
 
+    // Replay the consumed seller descriptor using its old query ID. It must
+    // fail closed without incrementing the attempt counter or creating another
+    // seller payout.
+    val sellerBalanceAfterRetry = testing.getAccountBalance(sellerParty.address);
+    val staleSellerRetry = sellerParty.sendAny(
+        sellerController.address,
+        PartyRetryOutbound {
+            escrowAddress: escrow.address,
+            dealSalt: salt,
+            queryId: sellerAllowance.queryId,
+        }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(staleSellerRetry).toHaveSuccessfulTx<PartyRetryOutbound>({ to: sellerParty.address });
+    expect(staleSellerRetry).toHaveFailedTx<RetryFailedOutboundAction>({
+        from: sellerParty.address,
+        to: escrow.address,
+        exitCode: Errors.OutboundActionMissing,
+    });
+    expect(escrow.getProgress().oracleAttemptId).toEqual(5);
+    expect(testing.getAccountBalance(sellerParty.address)).toBeLess(
+        sellerBalanceAfterRetry + grams("0.01"),
+    );
+
     val buyerBalanceBeforeSuccessfulReserveRetry = testing.getAccountBalance(buyerParty.address);
     partySetRejectAction(buyerParty, buyerController, 0);
     partyRetryOutbound(buyerParty, buyerController, escrow, salt, buyerReserve.queryId);
@@ -2886,6 +2947,26 @@ get fun `test buyer reserve retry cannot sweep a bounced seller allowance`() {
     expect(testing.getAccountBalance(buyerParty.address)).toBeGreater(
         buyerBalanceBeforeSuccessfulReserveRetry + grams("0.1"),
     );
+
+    // Replay the old carry-all descriptor too. Once its fresh retry was sent,
+    // the original query ID cannot cause a second balance sweep.
+    val staleBuyerRetry = buyerParty.sendAny(
+        buyerController.address,
+        PartyRetryOutbound {
+            escrowAddress: escrow.address,
+            dealSalt: salt,
+            queryId: buyerReserve.queryId,
+        }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(staleBuyerRetry).toHaveSuccessfulTx<PartyRetryOutbound>({ to: buyerParty.address });
+    expect(staleBuyerRetry).toHaveFailedTx<RetryFailedOutboundAction>({
+        from: buyerParty.address,
+        to: escrow.address,
+        exitCode: Errors.OutboundActionMissing,
+    });
+    expect(escrow.getProgress().oracleAttemptId).toEqual(6);
+
     actions = escrow.getProgress().outboundActions.load();
     assert (actions.first != null && actions.second != null) throw Errors.OutboundActionMissing;
     expect(actions.first.load().status).toEqual(OUTBOUND_STATUS_PENDING);
