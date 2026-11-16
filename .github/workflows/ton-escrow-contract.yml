@@ -10,6 +10,9 @@ on:
       - "frontend/src/api/escrow.ts"
       - "frontend/src/escrow/**"
       - "frontend/src/test/escrow/**"
+      - "frontend/e2e-escrow/**"
+      - "frontend/playwright.escrow.config.ts"
+      - "frontend/package.json"
       - ".github/workflows/ton-escrow-contract.yml"
   push:
     branches:
@@ -23,6 +26,9 @@ on:
       - "frontend/src/api/escrow.ts"
       - "frontend/src/escrow/**"
       - "frontend/src/test/escrow/**"
+      - "frontend/e2e-escrow/**"
+      - "frontend/playwright.escrow.config.ts"
+      - "frontend/package.json"
       - ".github/workflows/ton-escrow-contract.yml"
   workflow_dispatch:
 
