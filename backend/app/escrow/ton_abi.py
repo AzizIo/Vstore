@@ -127,6 +127,8 @@ def load_pinned_code_boc() -> str:
         raise TONABIError("pinned DealEscrow code BOC is unavailable or corrupt") from exc
 
     _, manifest = load_pinned_abi()
+    if _sha256(compressed) != manifest.get("backend_code_boc_zlib_sha256"):
+        raise TONABIError("DealEscrow compressed code BOC digest mismatch")
     code_boc_base64 = base64.b64encode(raw_boc).decode("ascii")
     if _sha256(code_boc_base64.encode("ascii")) != manifest.get(
         "compiled_code_boc_base64_sha256"
