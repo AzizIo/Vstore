@@ -25,7 +25,8 @@ describe("TON escrow HTTP contract", () => {
       contract.prepareDispute({ deal_id: "deal", reason: "Test reason" }),
       contract.prepareBuyerNftReturn({ deal_id: "deal", wallet_id: "wallet" }),
       contract.prepareUnsoldNftWithdrawal({ deal_id: "deal", wallet_id: "wallet" }),
-      contract.submitWalletReference({ action_id: "action", action: "fund_deal", reference: "digest" }),
+      contract.prepareFailedOutboundRetry({ deal_id: "deal", query_id: "18446744073709551615" }),
+      contract.submitWalletReference({ action_id: "action", action: "retry_failed_outbound_action", reference: "digest" }),
     ];
 
     for (const operation of operations) {
@@ -33,6 +34,22 @@ describe("TON escrow HTTP contract", () => {
       expect(operation.headers?.["Idempotency-Key"]).toBeTruthy();
       expect((operation.headers?.["Idempotency-Key"] ?? "").length).toBeGreaterThan(8);
     }
+  });
+
+  it("maps retry discovery to a read and retry preparation to an idempotent write", () => {
+    const contract = createEscrowHttpContract("/api-host");
+    expect(contract.retryableOutboundActions("deal/1")).toBe(
+      "/api-host/api/escrow/deals/deal%2F1/retryable-outbound-actions",
+    );
+    const retry = contract.prepareFailedOutboundRetry({
+      deal_id: "deal/1",
+      query_id: "18446744073709551615",
+    });
+    expect(retry.url).toBe(
+      "/api-host/api/escrow/deals/deal%2F1/prepare/retry-failed-outbound",
+    );
+    expect(retry.body).toEqual({ query_id: "18446744073709551615" });
+    expect(retry.headers?.["Idempotency-Key"]).toBeTruthy();
   });
 
   it("keeps dispute reason in the request body and wallet actions address-scoped", () => {
