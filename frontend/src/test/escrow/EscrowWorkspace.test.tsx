@@ -624,7 +624,7 @@ describe("TON Escrow workspace", () => {
       proof_provider_id: "pytoniq-trust0-testnet-v1",
     };
     const api = makeApi({
-      buyerDeals: [deal({ state: "refunded", available_actions: [] })],
+      buyerDeals: [deal({ buyer_id: "buyer-1", seller_id: "seller-1", state: "refunded", available_actions: [] })],
       retryableOutboundActions: [outbound],
     });
     installInventoryApi();
@@ -650,7 +650,7 @@ describe("TON Escrow workspace", () => {
 
   it("disables retry when the proved recipient has no matching verified testnet wallet", async () => {
     const api = makeApi({
-      buyerDeals: [deal({ state: "refunded", available_actions: [] })],
+      buyerDeals: [deal({ buyer_id: "buyer-1", seller_id: "seller-1", state: "refunded", available_actions: [] })],
       retryableOutboundActions: [{
         query_id: "43",
         slot: "second",
@@ -676,7 +676,7 @@ describe("TON Escrow workspace", () => {
 
   it("explains that execution-reserve retry carries the contract balance rather than a fixed amount", async () => {
     const api = makeApi({
-      buyerDeals: [deal({ state: "refunded", available_actions: [] })],
+      buyerDeals: [deal({ buyer_id: "buyer-1", seller_id: "seller-1", state: "refunded", available_actions: [] })],
       retryableOutboundActions: [{
         query_id: "44",
         slot: "second",
