@@ -516,10 +516,10 @@ fun handleNftOwnershipNotification(
         && blockchain.now() <= progress.deadlineUnix
     );
     val validExpectedPayload = hasValidInlineNftPayload(msg.payload, asset);
-    val recovery = progress.recovery.load();
+    val existingRecovery = progress.recovery.load();
     val hasUnexpectedRecovery = (
-        recovery.unexpectedPreviousOwner != null
-        || recovery.unexpectedItemAddress != null
+        existingRecovery.unexpectedPreviousOwner != null
+        || existingRecovery.unexpectedItemAddress != null
     );
 
     // A replayed TEP-62 ownership_assigned notification can arrive after the
