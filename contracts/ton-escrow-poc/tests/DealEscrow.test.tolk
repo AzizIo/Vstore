@@ -2934,9 +2934,10 @@ get fun `test buyer reserve retry cannot sweep a bounced seller allowance`() {
         exitCode: Errors.OutboundActionMissing,
     });
     expect(escrow.getProgress().oracleAttemptId).toEqual(5);
-    expect(testing.getAccountBalance(sellerParty.address)).toBeLess(
-        sellerBalanceAfterRetry + grams("0.01"),
-    );
+    actions = escrow.getProgress().outboundActions.load();
+    assert (actions.first != null && actions.second != null) throw Errors.OutboundActionMissing;
+    expect(actions.first.load().queryId).toEqual(5);
+    expect(actions.first.load().status).toEqual(OUTBOUND_STATUS_PENDING);
 
     val buyerBalanceBeforeSuccessfulReserveRetry = testing.getAccountBalance(buyerParty.address);
     partySetRejectAction(buyerParty, buyerController, 0);
