@@ -11,9 +11,9 @@ This document supersedes the older handoff material based on `525215b9a51a34be81
 
 | Track | Exact head at snapshot | Status | Release condition |
 |---|---|---|---|
-| NFT identity / Issue #213 / [PR #241](https://github.com/AzizIo/Vstore/pull/241) | `9be7a06fa1ca8207dfb0934b1bb36836bf869b50` | Ready for Review (not merged); Backend CI #43816635436 and Frontend/API #43816635486 passed; PG16 upgrade/downgrade/re-upgrade passed; no independent review submission recorded yet | Exact-head Backend, Frontend and API-backed E2E green; PostgreSQL 16 migration upgrade/downgrade and immutable-evidence tests pass; collection policy remains empty until explicitly approved |
+| NFT identity / Issue #213 / [PR #241](https://github.com/AzizIo/Vstore/pull/241) | `605612436df49db2a4414de28b9c5e8beb49d7b9` | Ready for Review (not merged); Backend #43823958161 and Frontend/API + API E2E #43823958345 passed; PG16 migration passed; 93 ahead / 0 behind main; no independent review submission recorded | Exact-head Backend, Frontend and API-backed E2E green; PostgreSQL 16 migration upgrade/downgrade and immutable-evidence tests pass; collection policy remains empty until explicitly approved |
 | Backend artifact pin / Issue #206 / [PR #247](https://github.com/AzizIo/Vstore/pull/247) | `2c83cd3f2af3faba902d5d809ffe83f889fd6086` | Draft; strict compressed/decoded/base64 BOC guard passed Backend #43815732686 (866 tests), Frontend/API #43815732770 and Contract #43815732694 | Pin must be refreshed to the final contract artifact from the #248 track before integration |
-| Contract lifecycle and refund ordering / Issue #225 / [PR #248](https://github.com/AzizIo/Vstore/pull/248) | `75926f137f057c56253a87a63b52d8c08586c52f` | Draft; code hash/BOC digests refreshed but manifest warning remains; Contract CI #43815040780 fails strict StateInit vector comparison; agent has exact new vector and zlib SHA to pin | Frozen manifest must contain non-null StateInit, raw address and data hash reproduced by generated wrapper and `@ton/core`; exact-head emulator and static checks green; backend adapter must consume this same artifact |
+| Contract lifecycle and refund ordering / Issue #225 / [PR #248](https://github.com/AzizIo/Vstore/pull/248) | `170dafb2180ec37ada903f3d17518c8d50d25c8c` | Draft; Contract CI #43824843864 passed on exact head; 35/35 Sandbox tests, formatting, static checks, frozen ABI/BOC, StateInit/address and message vectors pass; compressed BOC digest still needs independent verification before backend pin | Frozen manifest must contain non-null StateInit, raw address and data hash reproduced by generated wrapper and `@ton/core`; exact-head emulator and static checks green; backend adapter must consume this same artifact |
 | Earlier audit handoff / [PR #246](https://github.com/AzizIo/Vstore/pull/246) | `d0b19d2bd948edacbaf336285f9fff6afef0a748` | Draft; stale base | Based on older main and must not be used as current release evidence; this document is the current coordination snapshot |
 
 PR heads and CI status can move. Always re-query the exact head SHA before treating a check as evidence.
@@ -35,34 +35,37 @@ PR #247 adds `backend/tests/escrow/test_escrow_artifact_alignment.py` to enforce
 
 Those results validate PR #247 against the frozen contract artifact present in that PR's merge tree. They do **not** validate it against the later contract candidate in PR #248. The gate is intentionally fail-closed: do not merge the contract update and backend pin as separate, incompatible revisions. Build one integrated candidate and rerun Backend, Contract, Frontend and API-backed E2E CI on the same resulting SHA.
 
-## 3. Artifact state and why #248 is not ready yet
+## 3. Artifact state and why backend integration is still blocked
 
-The current PR #248 exact-head build now identifies candidate code hash:
+PR #248 now has a green exact-head Contract CI on `170dafb2180ec37ada903f3d17518c8d50d25c8c`: [run #43824843864](https://github.com/AzizIo/Vstore/actions/runs/43824843864). The run is tied to PR #248's exact head and reports:
 
-`498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46`
+- 35/35 Sandbox tests passed;
+- Tolk formatting and static checks passed;
+- source-controlled frozen ABI matches its manifest;
+- fresh Acton build matches the frozen code hash and raw/base64 BOC digests;
+- generated Acton wrapper + `@ton/core` StateInit/address/data cross-check passed;
+- message BOC golden vectors passed;
+- coverage: 85.9% lines / 68.7% branches for the contract tree.
 
-The compiled BOC digests from exact artifact #14201523108 are:
+The frozen candidate values are:
 
-- base64 BOC SHA-256: `0e7bc7b35eee4ae7003fba0a0e5368df3428b7e32ad0f4fc5ddf0f3230d5daf3`;
-- decoded BOC SHA-256: `86ed08596d0595c711aa2cf7659ee396ff443d7b01c65659b8e7543dd23c6173`;
-- zlib-compressed BOC SHA-256: `1766fd8f3542eb0f9aec9cd8ddd80cdd69297c97d58efbef91cdaf11fdb75407`.
+| Artifact | Exact candidate value |
+|---|---|
+| Source/provenance commit | `9d80a65a974b54f115fc697158974bdcee2c6be8` |
+| Contract source change commit | `d87e4a81e07ec0c1e95619f6e5188c5be5433d62` |
+| Green contract workflow / artifact | `#43824551943` / `14205079269` |
+| Compiled code hash | `498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46` |
+| BOC base64 SHA-256 | `0e7bc7b35eee4ae7003fba0a0e5368df3428b7e32ad0f4fc5ddf0f3230d5daf3` |
+| Decoded BOC SHA-256 | `86ed08596d0595c711aa2cf7659ee396ff443d7b01c65659b8e7543dd23c6173` |
+| Compact ABI SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
+| StateInit hash / raw address hash | `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
+| Raw address | `0:4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
+| Initial data hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
+| Acton / Tolk | `1.2.1` / `1.5.0` |
 
-The latest manifest at #248 head `75926f137f057c56253a87a63b52d8c08586c52f` has refreshed code/BOC fields but still contains the older compressed BOC digest and old StateInit vector. The generated Acton wrapper + `@ton/core` output from exact run #43815040780 / artifact #14201912732 reports:
+**Remaining artifact caveat:** the manifest currently declares `compiled_code_boc_zlib_sha256 = dbca9581e8ce45f2ca68f6dc766e149f4e7ca25a2c740fb58b2b4448c6189963`. Contract CI's current `verify_build_matches_manifest.py` checks the compiled code hash, base64 BOC digest and decoded BOC digest, but does not check this compressed-zlib field. I independently decoded the BOC from exact run artifact #14206172246; Python `zlib.compress(raw_boc)` yields SHA-256 `1766fd8f3542eb0f9aec9cd8ddd80cdd69297c97d58efbef91cdaf11fdb75407`, not the manifest value. Compression bytes can vary by compressor/level, so this is not evidence that the code hash or StateInit is wrong; it means the compressed artifact bytes and their manifest digest must be generated together and independently verified before adapter pinning. Agent 2 has been notified.
 
-- StateInit hash: `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75`;
-- raw address: `0:4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75`;
-- initial data hash: `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b`.
-
-The current frozen manifest still pins StateInit `cfa1d4f9...`; the exact run failed at the expected strict vector comparison. Agent 2 has been sent the computed new vector and zlib digest. Refresh the complete manifest and `artifacts/VERIFYING.md`, then rerun Contract CI.
-
-The previous emulator run #43814617994 (head `5b65380e33c814be95bea0c931873a7620b56783`) also found two lifecycle issues, which have not yet been revalidated against the newer source:
-
-- In `duplicate nft delivery callbacks are idempotent and buyer refund bounce is retryable`, the assertion immediately after the principal-refund bounce incorrectly expects `STATE_BUYER_REFUND_PENDING` (9); the contract correctly transitions to `STATE_MANUAL_REVIEW` (13) when the critical outbound refund bounces. The later post-retry assertion must remain: recipient-authorized retry should create a fresh outbound action, restore `STATE_BUYER_REFUND_PENDING`, preserve `principalLocked`, and allow final oracle reconciliation. Exact failed-run artifact #14202320775 confirms the pre-retry assertion is the stale expectation; this correction was sent to Agent 2.
-- In `expired dispute with NFT in escrow remains resolvable by the resolver quorum`, replay after the first resolver decision returns `Errors.Deadline` (710) before the state guard, while the expected state-specific rejection is `Errors.InvalidState` (703). Validate the state class first, then the deadline for an active dispute; preserve the explicit timed-out escrowed-dispute resolver path.
-
-Both findings were sent to Agent 2. They require a fresh exact-head emulator run after manifest/vector and source are finalized.
-
-The backend pin in PR #247 is currently for the prior frozen artifact (code hash `9011F274BC3D7E32B76A17F13FCBA17AC49429BB4EECBC4AB97FA202BDAC2940`, StateInit `674227296eff6ac5ee02c8e2eaa12857ac339d10a9ed7f4f7ea0591e7b4adfca`). It must be updated only from the final, successful #248 compiler artifact and must pass the cross-track test against that final manifest. No runtime action may be prepared against a stale code hash.
+PR #247 is still pinned to the previous main artifact (code hash `9011F274BC3D7E32B76A17F13FCBA17AC49429BB4EECBC4AB97FA202BDAC2940`, StateInit `674227296eff6ac5ee02c8e2eaa12857ac339d10a9ed7f4f7ea0591e7b4adfca`). It is therefore incompatible with PR #248's `498A82F9...` / `4e3845e9...` candidate and must not be merged independently. Refresh its BOC file, manifest, `_CODE_HASH`, StateInit golden tests and adapter docs from the final #248 artifact. Run the cross-track guard on an integrated tree and require Backend, Contract, Frontend and API-backed E2E checks on the same exact SHA.
 
 ## 4. Security and acceptance gates still open
 
@@ -103,7 +106,7 @@ Until every gate above is closed:
 
 ## 6. Merge and release sequence
 
-1. PR #241 code/CI work is complete on `9be7a06fa1ca8207dfb0934b1bb36836bf869b50`; obtain an independent code review and approve the collection policy/runbook before merging. Keep the collection allowlist empty by default.
+1. PR #241 code/CI work is green on `605612436df49db2a4414de28b9c5e8beb49d7b9` (Backend + Frontend/API E2E + PG16 migration); obtain an independent code review and approve the collection policy/runbook before merging. Keep the collection allowlist empty by default.
 2. Agent 2 completes PR #248, resolves every lifecycle/bounce/retry finding, regenerates the frozen compiler artifacts and passes exact-head Contract CI with non-null independently reproduced StateInit/address/data vectors.
 3. Release integration refreshes PR #247's backend code BOC, manifest, expected code hash and message/StateInit vectors from that final #248 artifact.
 4. Create an integrated candidate tree containing the final contract source and matching backend pin. Run Backend, Contract, Frontend, API-backed E2E and migration checks on the **same exact SHA**; verify the cross-track artifact test passes.
