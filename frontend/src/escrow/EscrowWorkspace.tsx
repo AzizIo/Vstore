@@ -50,6 +50,7 @@ interface Props {
 interface PendingWalletAction {
   transaction: PreparedEscrowTransaction;
   expectedWalletAddress: string;
+  dealId: string;
 }
 
 interface WalletInventory {
@@ -558,7 +559,11 @@ function WorkspaceBody({
         setActionError("Backend вернул неподходящее действие или сеть. Подписание заблокировано.");
         return;
       }
-      setPending({ transaction, expectedWalletAddress: expectedWallet.address });
+      setPending({
+        transaction,
+        expectedWalletAddress: expectedWallet.address,
+        dealId: deal.id,
+      });
     }
   }
 
@@ -912,7 +917,7 @@ function WorkspaceBody({
                           <button
                             className="escrow-button escrow-button-primary"
                             type="button"
-                            disabled={!api || busy || (pending?.transaction.action === "retry_failed_outbound_action" && pending.transaction.deal_id === selectedDeal.id) || !recipientWallet}
+                            disabled={!api || busy || (pending?.transaction.action === "retry_failed_outbound_action" && pending.dealId === selectedDeal.id) || !recipientWallet}
                             onClick={() => recipientWallet && void prepareWalletAction(
                               "retry_failed_outbound_action",
                               selectedDeal,
