@@ -1,7 +1,45 @@
+## Main integration completed — 2026-11-17
+
+All implementation PRs in this escrow stack are now merged into `main`. The current main head is `842cf5562d4f13f6c9f1fef50fd4dd4e234c611d`.
+
+| PR | Scope | Main merge commit |
+|---|---|---|
+| [#248](https://github.com/AzizIo/Vstore/pull/248) | Tolk escrow contract lifecycle, refund/retry ordering and deterministic frozen BOC verification | `011d71678b6e338ace2853812bbd4d26dd0aa0ad` |
+| [#241](https://github.com/AzizIo/Vstore/pull/241) | Proof-backed TEP-62 NFT identity, immutable identity snapshots and finality checks | `01b7820e1b8461664fd55496a8d5f46642a1c6c0` |
+| [#247](https://github.com/AzizIo/Vstore/pull/247) | Pinned backend artifact and proof-bound recipient-authorized retry API | `bdae33e0e360a2800e14832aeeda139e1cb139e9` |
+| [#255](https://github.com/AzizIo/Vstore/pull/255) | Retry UI, browser E2E and cross-layer workflow triggers | `154070ad3774d5e62cecb64b220ee8a7200e2bf2` |
+| [#251](https://github.com/AzizIo/Vstore/pull/251) | Production bot support/terms command surfaces; no checkout | `842cf5562d4f13f6c9f1fef50fd4dd4e234c611d` |
+
+### Exact verification evidence
+
+The integrated escrow candidate `168f4bbd43bc818474b6be82ef98babfe8835f3b` passed all three workflows on one SHA:
+- Backend CI [#43950978214](https://github.com/AzizIo/Vstore/actions/runs/43950978214) — 961 tests, Ruff, migrations and Python dependency audit.
+- TON Contract CI [#43950978302](https://github.com/AzizIo/Vstore/actions/runs/43950978302) — frozen artifact/ABI/BOC/StateInit checks and 35/35 Sandbox tests.
+- Frontend CI [#43950978229](https://github.com/AzizIo/Vstore/actions/runs/43950978229) — 248 unit tests, 31 standard Playwright E2E, 1 dedicated escrow retry browser E2E, production build and manifest validation; API-backed E2E 4/4.
+
+After all merges, the actual `main` head `842cf5562d4f13f6c9f1fef50fd4dd4e234c611d` also passed push-triggered checks:
+- Backend CI [#43969649892](https://github.com/AzizIo/Vstore/actions/runs/43969649892) — success.
+- Frontend CI [#43969649906](https://github.com/AzizIo/Vstore/actions/runs/43969649906) — frontend job and API-backed E2E job both success.
+- The contract source/artifact did not change in the final bot-support merge; its exact integrated-candidate Contract CI remains #43950978302.
+
+PR #251's own exact-head Backend CI [#43832280156](https://github.com/AzizIo/Vstore/actions/runs/43832280156) and Frontend CI [#43832280175](https://github.com/AzizIo/Vstore/actions/runs/43832280175) passed before merge. No signing, broadcast, deployment, live wallet transfer, real TON or real NFT transfer was performed.
+
+### Release decision remains BLOCKED
+
+Merging implementation into `main` is source integration, **not production acceptance or permission to enable paid escrow**. Before any real transaction or production checkout:
+1. Obtain an independent TON/Tolk audit bound to the exact final source, ABI, BOC and StateInit hashes.
+2. Complete owner-approved valueless live-testnet lifecycle acceptance with trusted masterchain evidence, actual recipient wallet ownership, bounce/retry traces and balance/storage-floor reconciliation.
+3. Have an operator review and explicitly configure the exact testnet NFT collection policy. The allowlist remains empty by default.
+4. Resolve the Telegram/legal classification of this exact P2P TON NFT resale and payment model. The current Stars/chargeback risk remains unresolved; paid checkout stays disabled.
+
+The code remains testnet-oriented and fail-closed. Do not enable mainnet, real-fund checkout, custody, server-side signing or automatic broadcast based only on CI or the fact that PRs are merged.
+
+---
+
 # VILTARA TON Escrow — external audit and live acceptance handoff
 
-**Executable code baseline:** `b592a4b889221aeb314e521a357b1746091a5976`  
-**Mainline note:** release-gate and audit documentation has been updated on main; executable escrow code baseline remains `b592a4b889221aeb314e521a357b1746091a5976`.  
+**Pre-integration code baseline:** `b592a4b889221aeb314e521a357b1746091a5976`  
+**Current main:** `842cf5562d4f13f6c9f1fef50fd4dd4e234c611d`; implementation PRs #248/#241/#247/#255/#251 are merged. This is an external audit/acceptance handoff, not authorization to deploy.  
 **Network scope:** TON testnet only (`global_id = -3`)  
 **Contract:** `contracts/ton-escrow-poc/contracts/DealEscrow.tolk`  
 **Toolchain:** Acton 1.2.1 / Tolk 1.5.0  
@@ -9,15 +47,15 @@
 
 ## Latest integrated candidate — 2026-11-16 20:25 UTC
 
-> This block supersedes every earlier feature head and CI snapshot below. The executable escrow code baseline remains `b592a4b889221aeb314e521a357b1746091a5976`; the current main branch also contains docs-only release-handoff updates. **No escrow implementation PR has been merged to main**.
+> This block supersedes every earlier feature head and CI snapshot below. The pre-integration code baseline was `b592a4b889221aeb314e521a357b1746091a5976`; the escrow implementation stack is now merged to main at `842cf5562d4f13f6c9f1fef50fd4dd4e234c611d`.
 
-Integrated candidate: `f2e61b0c049d64e90dd47025d0979ce295f1e426`.
+Pre-merge integrated candidate: `168f4bbd43bc818474b6be82ef98babfe8835f3b`.
 
 | Workflow | Exact evidence on the integrated SHA |
 |---|---|
-| Backend CI [#43948985127](https://github.com/AzizIo/Vstore/actions/runs/43948985127) | **Success** — 961 passed, Ruff, migration upgrade and Python dependency audit passed |
-| TON Contract CI [#43948984661](https://github.com/AzizIo/Vstore/actions/runs/43948984661) | **Success** — frozen source/ABI/BOC, code hash, StateInit and message vectors passed; **35/35 Sandbox tests** |
-| Frontend CI [#43948984632](https://github.com/AzizIo/Vstore/actions/runs/43948984632) | **Success** — 248 unit tests, production build, preview container, Nginx, TON Connect manifest; **31 standard Playwright + 1 dedicated escrow retry browser E2E** |
+| Backend CI [#43950978214](https://github.com/AzizIo/Vstore/actions/runs/43950978214) | **Success** — 961 passed, Ruff, migration upgrade and Python dependency audit passed |
+| TON Contract CI [#43950978302](https://github.com/AzizIo/Vstore/actions/runs/43950978302) | **Success** — frozen source/ABI/BOC, code hash, StateInit and message vectors passed; **35/35 Sandbox tests** |
+| Frontend CI [#43950978229](https://github.com/AzizIo/Vstore/actions/runs/43950978229) | **Success** — 248 unit tests, production build, preview container, Nginx, TON Connect manifest; **31 standard Playwright + 1 dedicated escrow retry browser E2E** |
 | API-backed E2E (within #43948984632) | **Success** — 4/4 marketplace journey tests and persisted order/event/outbox assertions. These are marketplace tests, not retry-path evidence. |
 
 The dedicated escrow browser E2E runs in a separate Vite server with testnet UI visible, deterministic wallet/API fixtures, blank TON Connect manifest and signing disabled. It verifies the recipient-bound retry review, exact query ID/idempotency header and unsigned transaction display. It does not sign, broadcast or contact a live chain.
@@ -33,7 +71,7 @@ Cross-layer path filters now trigger Backend and Contract CI when frontend escro
 
 ### Issue #252 implementation status
 
-The proof-bound retry implementation is complete in the unmerged feature stack. Backend retry discovery and preparation both require provider/getter proof-anchor agreement. Retry idempotency replay revalidates the full deployment snapshot and currently verified recipient wallet; changed/revoked wallets or inconsistent snapshots fail closed. Deal, wallet and action row locks use a consistent order. The browser test verifies the positive recipient-authorized UI path; backend adversarial tests cover proof, wallet, snapshot and idempotency failures.
+The proof-bound retry implementation is merged into main via PRs #247 and #255. Backend retry discovery and preparation both require provider/getter proof-anchor agreement. Retry idempotency replay revalidates the full deployment snapshot and currently verified recipient wallet; changed/revoked wallets or inconsistent snapshots fail closed. Deal, wallet and action row locks use a consistent order. The browser test verifies the positive recipient-authorized UI path; backend adversarial tests cover proof, wallet, snapshot and idempotency failures.
 
 **Retry-window limitation:** the on-chain BOUNCED descriptor does not persist the bounce timestamp. The backend validates kind-specific contract window values (kinds 1–5: 1800 seconds; terminal kinds 6–7: zero) and the contract sets a follow-up confirmation deadline when a retry starts. The backend cannot prove elapsed time since the original bounce; no bounce-age cutoff is claimed.
 
@@ -213,7 +251,7 @@ Capture network/global ID, source commit/code hash, contract/item/collection/wal
 - **Independent TON/Tolk security audit:** none has been commissioned or accepted. Internal review and CI are not independent audit evidence.
 - **Collection identity policy:** PR #241 is Ready for Review with green exact-head Backend/Frontend/API checks, but has no recorded independent review and its collection allowlist remains empty. No real collection policy/code hash has been approved.
 - **Contract artifact and lifecycle:** PR #248 contains PR #250's canonical compressed-BOC integrity verification as of exact head `08daf5afe63c83f6f892fd469d90b3788e0f989c` (squash merged into the feature branch, not main). Former #250 head passed Contract CI #43829081437 / artifact #14208215967, with canonical compressed digest `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7`. Fresh Contract CI #43832141975 completed successfully on the updated #248 head. The contract candidate is now build-verified; #247 still needs to be refreshed to this exact artifact. The 35-test suite covers buyer-reserve retry ordering, duplicate NFT callback idempotency, timeout dispute resolution, late buyer return, terminal replay and sub-minimum action-value tests.
-- **Backend artifact/runtime synchronization:** current main's backend manifest is still pinned to code hash D822… while the contract frozen manifest is 9011… . PR #247's strict cross-track guard is green on its own head but has not been merged. An integrated candidate must contain the matching backend pin and final contract artifact, then run all four workflows on one SHA.
+- **Backend artifact/runtime synchronization (resolved in code):** PR #247 aligned the backend BOC/manifest with the frozen contract artifact (code hash `498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46`, StateInit hash `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75`, canonical compressed BOC SHA-256 `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7`). The alignment guard and integrated Backend/Contract/Frontend workflows passed before merge; PR #247 is now merged in main commit `bdae33e0e360a2800e14832aeeda139e1cb139e9`.
 - **Valueless live TON testnet acceptance:** no live deployment address, signed transaction, trace, trusted masterchain inclusion proof, getter snapshot or NFT owner transition has been recorded. Disposable wallets, reviewed valueless NFT/collection and independent oracle/resolver operators are not provisioned.
 - **Recipient-authorized outbound retry API:** [Issue #252](https://github.com/AzizIo/Vstore/issues/252) is open. Contract #248 implements `RetryFailedOutboundAction` but backend/API/frontend do not yet prepare this operation. The backend must use a fresh trusted masterchain storage read and require the verified wallet to equal the exact recipient of the matching BOUNCED descriptor. Observer/indexer hints, a stale getter snapshot or a caller-supplied query ID cannot authorize the retry. Positive and adversarial end-to-end tests on the same integrated SHA are required.
 - **Production support surfaces:** [PR #251](https://github.com/AzizIo/Vstore/pull/251) adds information-only `/paysupport`, `/terms`, `/support` without importing the isolated test payment router. It remains Draft; exact-head Backend CI #1758 and Frontend CI #1958 both completed successfully on `f51400e24ea5da8db4dc47bd2e450626f753bacc`. Independent review, configured legal/support destinations and the actual payment-dispute/refund workflow remain open. It does not provide the actual payment-dispute/refund workflow or publish the operator's legal terms/support contact.
