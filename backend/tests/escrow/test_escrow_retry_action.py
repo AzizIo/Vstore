@@ -618,7 +618,7 @@ async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflic
     verified_wallet_calls: list[tuple[object, object]] = []
 
     async def verified_wallet(
-        _session: object, *, user_id: object, wallet_id: object
+        _session: object, *, user_id: object, wallet_id: object, lock: bool = False
     ):
         verified_wallet_calls.append((user_id, wallet_id))
         if verified_wallet_address["value"] is None:
