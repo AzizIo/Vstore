@@ -14,6 +14,7 @@ from app.api.escrow import (
     _build_deployment_snapshot,
     _listing_actions,
     _prepare_action,
+    list_retryable_outbound_actions,
     router,
     submit_wallet_reference,
 )
@@ -615,3 +616,210 @@ async def test_conflicting_second_wallet_reference_quarantines_action(
     assert session.commit_calls == 1
     assert len(session.added) == 1
 
+
+
+@pytest.mark.asyncio
+async def test_new_idempotency_key_cannot_prepare_same_active_outbound_retry_twice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    buyer_id, seller_id, deal_id, wallet_id = uuid4(), uuid4(), uuid4(), uuid4()
+    buyer_address = "0:" + "b" * 64
+    deal = SimpleNamespace(
+        id=deal_id,
+        buyer_id=buyer_id,
+        seller_id=seller_id,
+        buyer_wallet_id=wallet_id,
+        listing_intent_id=uuid4(),
+        status="settled",
+        listing_key_snapshot="a" * 64,
+        item_address="0:" + "c" * 64,
+        collection_address_snapshot="0:" + "d" * 64,
+        seller_address_snapshot="0:" + "e" * 64,
+        buyer_address_snapshot=buyer_address,
+        principal_nanotons=1_000_000_000,
+        deal_salt="f" * 64,
+        network="testnet",
+    )
+    active_action = SimpleNamespace(id=uuid4(), status="prepared")
+
+    class RetrySession:
+        def __init__(self) -> None:
+            self.scalar_calls = 0
+            self.rollback_calls = 0
+
+        async def scalar(self, _statement: object):
+            self.scalar_calls += 1
+            if self.scalar_calls in {1, 3}:
+                return deal
+            if self.scalar_calls == 4:
+                return active_action
+            return None
+
+        async def get(self, _model: type[object], _identity: object):
+            return SimpleNamespace(seller_wallet_id=uuid4())
+
+        async def rollback(self) -> None:
+            self.rollback_calls += 1
+
+    async def verified_wallet(
+        _session: object, *, user_id: object, wallet_id: object
+    ):
+        assert user_id == buyer_id
+        assert wallet_id == deal.buyer_wallet_id
+        return SimpleNamespace(id=wallet_id), buyer_address
+
+    monkeypatch.setattr("app.api.escrow._verified_wallet", verified_wallet)
+    proof = SimpleNamespace(
+        action=SimpleNamespace(query_id=42, recipient_address=buyer_address)
+    )
+    context = {
+        "query_id": "42",
+        "proof_anchor": {
+            "provider_id": "pytoniq-trust0-testnet-v1",
+            "masterchain_seqno": 700,
+            "masterchain_block_hash": "1" * 64,
+            "state_data_hash": "2" * 64,
+        },
+    }
+    session = RetrySession()
+
+    with pytest.raises(HTTPException) as error:
+        await _prepare_action(
+            deal_id,
+            EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION,
+            SimpleNamespace(id=buyer_id),
+            session,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            "retry-new-key-0001",
+            context,
+            proof,  # type: ignore[arg-type]
+        )
+
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "outbound_retry_already_prepared"
+    assert error.value.detail["action_status"] == "prepared"
+    assert session.rollback_calls == 1
+    assert session.scalar_calls == 4
+
+
+@pytest.mark.asyncio
+async def test_retry_preparation_rejects_a_wallet_that_is_not_the_proved_recipient(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    buyer_id, seller_id, deal_id, wallet_id = uuid4(), uuid4(), uuid4(), uuid4()
+    deal = SimpleNamespace(
+        id=deal_id,
+        buyer_id=buyer_id,
+        seller_id=seller_id,
+        buyer_wallet_id=wallet_id,
+        listing_intent_id=uuid4(),
+        status="settled",
+        listing_key_snapshot="a" * 64,
+        item_address="0:" + "c" * 64,
+        collection_address_snapshot="0:" + "d" * 64,
+        seller_address_snapshot="0:" + "e" * 64,
+        buyer_address_snapshot="0:" + "b" * 64,
+        principal_nanotons=1_000_000_000,
+        deal_salt="f" * 64,
+        network="testnet",
+    )
+
+    class RetrySession:
+        def __init__(self) -> None:
+            self.scalar_calls = 0
+
+        async def scalar(self, _statement: object):
+            self.scalar_calls += 1
+            return deal if self.scalar_calls == 1 else None
+
+    async def wrong_wallet(
+        _session: object, *, user_id: object, wallet_id: object
+    ):
+        return SimpleNamespace(id=wallet_id), "0:" + "9" * 64
+
+    monkeypatch.setattr("app.api.escrow._verified_wallet", wrong_wallet)
+    proof = SimpleNamespace(
+        action=SimpleNamespace(query_id=42, recipient_address="0:" + "8" * 64)
+    )
+    with pytest.raises(HTTPException) as error:
+        await _prepare_action(
+            deal_id,
+            EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION,
+            SimpleNamespace(id=buyer_id),
+            RetrySession(),  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            "retry-wrong-wallet-0001",
+            {"query_id": "42"},
+            proof,  # type: ignore[arg-type]
+        )
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "outbound_retry_recipient_wallet_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_retryable_outbound_projection_is_recipient_wallet_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    buyer_id, deal_id, wallet_id = uuid4(), uuid4(), uuid4()
+    recipient = "0:" + "b" * 64
+    deal = SimpleNamespace(
+        id=deal_id,
+        buyer_id=buyer_id,
+        seller_id=uuid4(),
+        buyer_wallet_id=wallet_id,
+    )
+
+    class ProjectionSession:
+        async def scalar(self, _statement: object):
+            return deal
+
+    async def verified_wallet(
+        _session: object, *, user_id: object, wallet_id: object
+    ):
+        assert user_id == buyer_id
+        assert wallet_id == deal.buyer_wallet_id
+        return SimpleNamespace(id=wallet_id), recipient
+
+    class FakeProvider:
+        def __init__(self, **_kwargs: object) -> None:
+            self.closed = False
+
+        async def read_current_outbound_retry_proofs(self, _deal: object):
+            return (
+                SimpleNamespace(
+                    action=SimpleNamespace(
+                        query_id=42, slot="first", kind=4,
+                        recipient_address=recipient, amount_nanotons=90_000_000,
+                        retry_window_seconds=1800,
+                    ),
+                    masterchain_seqno=700,
+                ),
+                SimpleNamespace(
+                    action=SimpleNamespace(
+                        query_id=43, slot="second", kind=5,
+                        recipient_address="0:" + "9" * 64, amount_nanotons=90_000_000,
+                        retry_window_seconds=1800,
+                    ),
+                    masterchain_seqno=700,
+                ),
+            )
+
+        async def close(self) -> None:
+            self.closed = True
+
+    monkeypatch.setattr("app.api.escrow._verified_wallet", verified_wallet)
+    monkeypatch.setattr("app.api.escrow.PytoniqTONTestnetEscrowProvider", FakeProvider)
+
+    actions = await list_retryable_outbound_actions(
+        deal_id,
+        SimpleNamespace(id=buyer_id),
+        ProjectionSession(),  # type: ignore[arg-type]
+    )
+
+    assert len(actions) == 1
+    assert actions[0].query_id == "42"
+    assert actions[0].recipient_address == recipient
+    assert actions[0].proof_masterchain_seqno == 700
