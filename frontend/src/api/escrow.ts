@@ -299,16 +299,17 @@ export function isRetryableOutboundAction(value: unknown): value is EscrowRetrya
     || value.recipient_address.length === 0
     || typeof value.amount_nanotons !== "string"
     || !/^\\d+$/.test(value.amount_nanotons)
-    || BigInt(value.amount_nanotons) <= 0n
     || !Number.isInteger(value.retry_window_seconds)
     || !Number.isInteger(value.proof_masterchain_seqno)
     || Number(value.proof_masterchain_seqno) <= 0
   ) return false;
   const kind = Number(value.kind);
   const retryWindow = Number(value.retry_window_seconds);
-  return (
+  const amount = BigInt(value.amount_nanotons);
+  if (kind === 7) return amount === 0n && retryWindow === 0;
+  return amount > 0n && (
     (kind >= 1 && kind <= 5 && retryWindow === 1800)
-    || ((kind === 6 || kind === 7) && retryWindow === 0)
+    || (kind === 6 && retryWindow === 0)
   );
 }
 
