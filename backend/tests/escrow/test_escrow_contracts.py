@@ -441,11 +441,20 @@ async def test_retry_failed_outbound_action_is_proof_descriptor_bound_and_recipi
     adapter = PinnedTONEscrowContractAdapter()
     deal = snapshot(contract_state=13)
     descriptor = OutboundActionRetryDescriptor(
+        slot="first",
+        kind=4,
         query_id=3007,
         deal_salt=deal.deal_salt,
         recipient_address=deal.buyer_address,
         status=1,
         retry_window_seconds=1800,
+        attempt_id=7,
+        amount_nanotons=90_000_000,
+        message_value_nanotons=90_000_000,
+        expected_state=10,
+        expected_pending_action=0,
+        bounce_phase=1,
+        message_body_hash="ab" * 32,
     )
 
     prepared = await adapter.prepare_transaction(
@@ -457,6 +466,25 @@ async def test_retry_failed_outbound_action_is_proof_descriptor_bound_and_recipi
         retry_descriptor=descriptor,
         valid_until=1_800_000_000,
     )
+    # Terminal secondary refunds use zero retry_window_seconds by contract.
+    seller_refund = replace(
+        descriptor, kind=6, retry_window_seconds=0,
+    )
+    reserve_refund = replace(
+        descriptor, kind=7, retry_window_seconds=0,
+        amount_nanotons=0, message_value_nanotons=0,
+    )
+    for terminal_descriptor in (seller_refund, reserve_refund):
+        await adapter.prepare_transaction(
+            EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION,
+            actor_wallet=wallet(deal.buyer_address),  # type: ignore[arg-type]
+            resource_id="deal-retry-terminal",
+            deal_snapshot=deal,
+            query_id=terminal_descriptor.query_id,
+            retry_descriptor=terminal_descriptor,
+            valid_until=1_800_000_000,
+        )
+
     message = prepared.messages[0]
     assert message.address == derive_deployment(load_pinned_code_boc(), deal).address
     assert message.amount == str(deal.action_value_nanotons)
@@ -474,7 +502,12 @@ async def test_retry_failed_outbound_action_is_proof_descriptor_bound_and_recipi
         (replace(descriptor, query_id=3008), "query_id"),
         (replace(descriptor, deal_salt="02" * 32), "salt"),
         (replace(descriptor, recipient_address=deal.seller_address), "recipient"),
-        (replace(descriptor, retry_window_seconds=0), "window"),
+        (replace(descriptor, retry_window_seconds=0), "fields"),
+        (replace(descriptor, kind=6, retry_window_seconds=1800), "fields"),
+        (replace(descriptor, kind=7, retry_window_seconds=0, amount_nanotons=1, message_value_nanotons=1), "fields"),
+        (replace(descriptor, attempt_id=0), "fields"),
+        (replace(descriptor, bounce_phase=0), "fields"),
+        (replace(descriptor, message_body_hash="bad"), "fields"),
     ]
     for bad_descriptor, error in mutations:
         with pytest.raises(EscrowContractABIUnavailable, match=error):
