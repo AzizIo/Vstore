@@ -114,7 +114,15 @@ def load_pinned_code_boc() -> str:
             _ARTIFACTS / "DealEscrow.code.boc.zlib.b64"
         ).read_text(encoding="ascii").strip()
         compressed = base64.b64decode(compressed_b64, validate=True)
-        raw_boc = zlib.decompress(compressed)
+        decompressor = zlib.decompressobj()
+        raw_boc = decompressor.decompress(compressed)
+        raw_boc += decompressor.flush()
+        if (
+            not decompressor.eof
+            or decompressor.unused_data
+            or decompressor.unconsumed_tail
+        ):
+            raise ValueError("pinned BOC is not one complete zlib stream")
     except (OSError, UnicodeError, ValueError, zlib.error) as exc:
         raise TONABIError("pinned DealEscrow code BOC is unavailable or corrupt") from exc
 
