@@ -6,6 +6,33 @@
 **Toolchain:** Acton 1.2.1 / Tolk 1.5.0  
 **Status:** audit/acceptance handoff only; no independent audit or live testnet acceptance has occurred.
 
+## Superseding status update — 2026-11-16 19:49 UTC
+
+> This update supersedes the historical PR heads and CI references below. Main remains b592a4b889221aeb314e521a357b1746091a5976 and none of the escrow stack has been merged to main.
+
+The implementation stack is now: PR #248 (contract) → PR #241 (NFT identity) → PR #247 (backend artifact + proof-bound retry API) → PR #255 (frontend retry + cross-layer CI).
+
+| PR | Exact head | Current evidence |
+|---|---|---|
+| #248 | 08daf5afe63c83f6f892fd469d90b3788e0f989c | Contract CI #43832141975 passed |
+| #241 | e1c891a99b5359585f2b7b2d391699a1a11737eb | Backend #43931218291 and Frontend #43931217044 passed; independent review remains outstanding |
+| #247 | e98e1b6873d65c0504d05c9d217b8c08e8fc4120 | Backend #43942177488 (961 passed); Frontend/API E2E #43942177624 passed |
+| #255 | 1e1a12e9d79e936a5d0df28461012df562f6e8d0 | **Backend #43942937032, Contract #43942936983 and Frontend/API E2E #43942937000 all passed on this one exact SHA.** Results: 961 backend, 35/35 Sandbox, 248 frontend unit, 31 Playwright and 4 API-backed E2E tests |
+
+The new backend retry preparation guard verifies the getter proof seqno, block hash, provider ID and 64-hex state-data hash against the provider tuple before committing a new getter snapshot or wallet action. Missing/mismatched proof metadata fails closed.
+
+Issue #252's retry implementation and adversarial test matrix are now represented in the integrated stack. No signing or broadcast is enabled; this endpoint prepares unsigned testnet TON Connect payloads only.
+
+### Remaining independent acceptance gates
+
+- Independent TON/Tolk audit bound to the final source, ABI, BOC and StateInit hashes.
+- Explicit approval of a testnet collection policy; the allowlist remains empty.
+- Owner-approved valueless live-testnet lifecycle acceptance and evidence bundle.
+- Written Telegram policy/legal review for the exact NFT resale/payment flow.
+- npm audit still prints three low deepmerge findings even though GitHub withdrew GHSA-gcqx-w48m-w2h4 on 2026-11-16 as not describing a security vulnerability. Treat this as stale audit feed output pending reconciliation, not a confirmed vulnerability; see Issue #256.
+
+**Release decision remains BLOCKED.** CI is not an independent audit or live-chain acceptance. No production checkout, server signing/broadcast, mainnet, real TON, custody or user funds are enabled.
+
 ## 1. Release posture and exact revisions to review
 
 Do not treat current main as a release candidate. Current `main` is `b592a4b889221aeb314e521a357b1746091a5976`, which is the merge commit for PR #244; it includes the carry-all reserve retry fix from #242 and seller deployment allowance retry storage-floor fix from #244.
