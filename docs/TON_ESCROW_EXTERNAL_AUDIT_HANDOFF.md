@@ -9,7 +9,7 @@
 
 ## Latest integrated candidate — 2026-11-16 20:25 UTC
 
-> This block supersedes every earlier feature head and CI snapshot below. Current main remains `b592a4b889221aeb314e521a357b1746091a5976`; **no escrow implementation PR has been merged to main**.
+> This block supersedes every earlier feature head and CI snapshot below. The executable escrow code baseline remains `b592a4b889221aeb314e521a357b1746091a5976`; the current main branch also contains docs-only release-handoff updates. **No escrow implementation PR has been merged to main**.
 
 Integrated candidate: `f2e61b0c049d64e90dd47025d0979ce295f1e426`.
 
@@ -49,7 +49,7 @@ The proof-bound retry implementation is complete in the unmerged feature stack. 
 
 ## Superseding status update — 2026-11-16 19:49 UTC
 
-> This update supersedes the historical PR heads and CI references below. Main remains b592a4b889221aeb314e521a357b1746091a5976 and none of the escrow stack has been merged to main.
+> This update supersedes the historical PR heads and CI references below. The executable escrow code baseline remains b592a4b889221aeb314e521a357b1746091a5976; none of the escrow implementation stack has been merged to main.
 
 The implementation stack is now: PR #248 (contract) → PR #241 (NFT identity) → PR #247 (backend artifact + proof-bound retry API) → PR #255 (frontend retry + cross-layer CI).
 
@@ -76,7 +76,7 @@ Issue #252's retry implementation and adversarial test matrix are now represente
 
 ## 1. Release posture and exact revisions to review
 
-Do not treat current main as a release candidate. Current `main` is `b592a4b889221aeb314e521a357b1746091a5976`, which is the merge commit for PR #244; it includes the carry-all reserve retry fix from #242 and seller deployment allowance retry storage-floor fix from #244.
+Do not treat the current main branch as a release candidate. At the original executable-code baseline `b592a4b889221aeb314e521a357b1746091a5976` (PR #244), main included the carry-all reserve retry fix from #242 and seller deployment allowance retry storage-floor fix from #244. Subsequent main changes in this handoff were documentation-only.
 
 The active remediation tracks are:
 
@@ -95,7 +95,7 @@ Source of truth: `contracts/ton-escrow-poc/artifacts/frozen/manifest.json`. The 
 
 ### Current main contract artifact
 
-Current main `b592a4b889221aeb314e521a357b1746091a5976` has the PR #244 frozen artifact:
+The original main code baseline `b592a4b889221aeb314e521a357b1746091a5976` has the PR #244 frozen artifact:
 
 | Artifact | Current-main frozen value |
 |---|---|
