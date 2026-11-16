@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from pytoniq_core.tl.block import BlockIdExt
 
 from app.core.config import Settings
 from app.escrow.domain import EscrowChainEventType
@@ -13,7 +14,11 @@ from app.escrow.finality_provider import (
     _candidate_type,
     _parse_shard,
 )
-from app.escrow.provider import EscrowProviderInvalidEvidence
+from app.escrow.provider import (
+    EscrowProviderInvalidEvidence,
+    EscrowProviderUnavailable,
+    NormalizedChainEvent,
+)
 
 
 def _settings(**overrides: object) -> Settings:
@@ -474,4 +479,207 @@ async def test_original_outbound_message_rejects_value_or_message_mismatch() -> 
     )
     assert proof is None
     assert reason == "original_outbound_message_not_uniquely_in_source_transaction"
+    await provider.close()
+
+
+def _block_id(
+    workchain: int,
+    shard: int,
+    seqno: int,
+    root_byte: int,
+    file_byte: int,
+) -> BlockIdExt:
+    return BlockIdExt(
+        workchain=workchain,
+        shard=shard,
+        seqno=seqno,
+        root_hash=bytes([root_byte]) * 32,
+        file_hash=bytes([file_byte]) * 32,
+    )
+
+
+class _FinalityProofClient:
+    def __init__(
+        self,
+        *,
+        shard_block: BlockIdExt | None = None,
+        master_block: BlockIdExt | None = None,
+        latest_seqno: int | None = None,
+        validator_proof_error: Exception | None = None,
+        shard_proof_error: Exception | None = None,
+    ) -> None:
+        self.shard_block = shard_block or _block_id(0, -(1 << 63), 100, 1, 2)
+        self.master_block = master_block or _block_id(-1, -(1 << 63), 300, 3, 4)
+        self.last_key_block = _block_id(-1, -(1 << 63), 250, 5, 6)
+        self.latest = _block_id(
+            -1,
+            -(1 << 63),
+            latest_seqno if latest_seqno is not None else self.master_block.seqno + 2,
+            7,
+            8,
+        )
+        self.validator_proof_error = validator_proof_error
+        self.shard_proof_error = shard_proof_error
+        self.lookup_calls: list[tuple[int, int, int]] = []
+        self.master_proof_calls: list[tuple[object, object]] = []
+        self.shard_proof_calls: list[tuple[object, bool]] = []
+
+    async def lookup_block(self, workchain: int, shard: int, seqno: int):
+        self.lookup_calls.append((workchain, shard, seqno))
+        return self.shard_block, None
+
+    async def liteserver_request(self, schema: str, data: dict[str, object]):
+        assert schema == "getShardBlockProof"
+        assert data["id"] == self.shard_block.to_dict()
+        return {"masterchain_id": self.master_block.to_dict()}
+
+    async def get_mc_block_proof(self, *, known_block: object, target_block: object):
+        self.master_proof_calls.append((known_block, target_block))
+        if self.validator_proof_error is not None:
+            raise self.validator_proof_error
+
+    async def get_shard_block_proof(self, block: object, prove_mc: bool = False):
+        self.shard_proof_calls.append((block, prove_mc))
+        if self.shard_proof_error is not None:
+            raise self.shard_proof_error
+
+    async def get_trusted_last_mc_block(self):
+        return self.latest
+
+
+def _finality_candidate(
+    *, masterchain_seqno: int = 300, block_seqno: int = 100, shard: int = -(1 << 63)
+) -> NormalizedChainEvent:
+    return NormalizedChainEvent(
+        network="testnet",
+        transaction_hash="a" * 64,
+        event_index=0,
+        event_type=EscrowChainEventType.NFT_DEPOSIT_ACCEPTED,
+        contract_address="0:" + "b" * 64,
+        deal_id=str(uuid4()),
+        source_address=None,
+        destination_address=None,
+        item_address="0:" + "c" * 64,
+        amount_nanotons=None,
+        masterchain_seqno=masterchain_seqno,
+        finalized=True,
+        evidence_sha256="d" * 64,
+        cursor="candidate",
+        message_hash="e" * 64,
+        trace_id="f" * 64,
+        logical_time=123,
+        candidate_workchain=0,
+        candidate_shard=shard,
+        candidate_block_seqno=block_seqno,
+    )
+
+
+@pytest.mark.asyncio
+async def test_finality_requires_trusted_mc_and_shard_inclusion_proofs() -> None:
+    client = _FinalityProofClient()
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(),
+        http_client=_FakeHttp({"transactions": []}),
+        lite_client_factory=lambda: client,
+    )
+
+    shard, master, latest = await provider._trusted_shard_and_masterchain(
+        _finality_candidate(), client
+    )
+
+    assert shard is client.shard_block
+    assert master.to_dict() == client.master_block.to_dict()
+    assert latest.seqno == 302
+    assert client.lookup_calls == [(0, -(1 << 63), 100)]
+    assert client.master_proof_calls == [(client.last_key_block, client.master_block)]
+    assert client.shard_proof_calls == [(client.shard_block, True)]
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_finality_rejects_shard_block_locator_mismatch() -> None:
+    client = _FinalityProofClient(
+        shard_block=_block_id(0, -(1 << 63), 101, 9, 10)
+    )
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(),
+        http_client=_FakeHttp({"transactions": []}),
+        lite_client_factory=lambda: client,
+    )
+
+    with pytest.raises(EscrowProviderInvalidEvidence, match="different shard block"):
+        await provider._trusted_shard_and_masterchain(_finality_candidate(), client)
+    assert client.master_proof_calls == []
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_finality_rejects_masterchain_sequence_conflicting_with_candidate() -> None:
+    client = _FinalityProofClient()
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(),
+        http_client=_FakeHttp({"transactions": []}),
+        lite_client_factory=lambda: client,
+    )
+
+    with pytest.raises(
+        EscrowProviderInvalidEvidence,
+        match="Indexed masterchain sequence does not match",
+    ):
+        await provider._trusted_shard_and_masterchain(
+            _finality_candidate(masterchain_seqno=301), client
+        )
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_finality_stays_pending_until_configured_masterchain_depth() -> None:
+    client = _FinalityProofClient(latest_seqno=301)
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(ton_escrow_finality_min_depth=2),
+        http_client=_FakeHttp({"transactions": []}),
+        lite_client_factory=lambda: client,
+    )
+
+    with pytest.raises(EscrowProviderUnavailable, match="configured finality depth"):
+        await provider._trusted_shard_and_masterchain(_finality_candidate(), client)
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_validator_configuration_proof_failure_is_not_finalized() -> None:
+    client = _FinalityProofClient(
+        validator_proof_error=ValueError("validator signature/config proof mismatch")
+    )
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(),
+        http_client=_FakeHttp({"transactions": []}),
+        lite_client_factory=lambda: client,
+    )
+
+    with pytest.raises(
+        EscrowProviderUnavailable,
+        match="Could not verify TON block inclusion proof",
+    ):
+        await provider._trusted_shard_and_masterchain(_finality_candidate(), client)
+    assert client.shard_proof_calls == []
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_shard_inclusion_proof_failure_is_not_finalized() -> None:
+    client = _FinalityProofClient(
+        shard_proof_error=ValueError("shard inclusion merkle proof mismatch")
+    )
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(),
+        http_client=_FakeHttp({"transactions": []}),
+        lite_client_factory=lambda: client,
+    )
+
+    with pytest.raises(
+        EscrowProviderUnavailable,
+        match="Could not verify TON block inclusion proof",
+    ):
+        await provider._trusted_shard_and_masterchain(_finality_candidate(), client)
     await provider.close()

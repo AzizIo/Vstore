@@ -29,6 +29,12 @@ from app.db.session import async_session_factory
 from app.escrow.contracts import DealEscrowDeploymentSnapshot
 from app.escrow.domain import EscrowChainEventType
 from app.escrow.models import EscrowDeal
+from app.escrow.nft_identity import (
+    NFTIdentityEvidenceError,
+    same_nft_identity_anchor,
+    validate_nft_identity_snapshot,
+    verify_nft_identity_cells,
+)
 from app.escrow.provider import (
     ChainEventBatch,
     EscrowProviderInvalidEvidence,
@@ -1772,6 +1778,105 @@ class PytoniqTONTestnetEscrowProvider:
                 "Could not independently verify escrow transaction finality"
             ) from exc
 
+    async def verify_nft_identity(
+        self,
+        *,
+        item_address: str,
+        collection_address: str,
+        expected_owner_address: str | None = None,
+        minimum_masterchain_seqno: int = 0,
+    ) -> dict[str, object] | None:
+        """Prove item code, collection membership and owner at one trusted MC block.
+
+        TON Center/indexer fields are not consulted here. The item and collection
+        account states are both retrieved from the same trust-level-0 LiteServer
+        masterchain anchor, and the collection's canonical TEP-62 address
+        derivation is reconstructed from its proof-read item code and item index.
+        """
+        item = _canonical_address(item_address)
+        collection = _canonical_address(collection_address)
+        expected_owner = (
+            _canonical_address(expected_owner_address)
+            if expected_owner_address is not None
+            else None
+        )
+        if item is None or collection is None or (
+            expected_owner_address is not None and expected_owner is None
+        ):
+            raise EscrowProviderInvalidEvidence("NFT identity query contains a malformed address")
+        if minimum_masterchain_seqno < 0:
+            raise EscrowProviderInvalidEvidence("Minimum masterchain sequence is invalid")
+
+        client = await self._get_lite_client()
+        try:
+            master_id = await client.get_trusted_last_mc_block()
+            if master_id is None or int(getattr(master_id, "seqno", 0)) <= 0:
+                raise EscrowProviderUnavailable("Trusted masterchain head is unavailable")
+            if master_id.seqno < minimum_masterchain_seqno:
+                raise EscrowProviderUnavailable(
+                    "No trusted masterchain head at the requested minimum sequence"
+                )
+
+            # Both account reads are pinned to the exact same trusted block ID.
+            item_account, _item_shard = await client.raw_get_account_state(
+                item, block=master_id
+            )
+            collection_account, _collection_shard = await client.raw_get_account_state(
+                collection, block=master_id
+            )
+            for account, label in (
+                (item_account, "NFT item"),
+                (collection_account, "NFT collection"),
+            ):
+                if (
+                    account is None
+                    or account.storage.state.type_ != "account_active"
+                    or account.storage.state.state_init is None
+                ):
+                    raise EscrowProviderInvalidEvidence(
+                        f"{label} account is not active at the trusted proof block"
+                    )
+            item_state_init = item_account.storage.state.state_init
+            collection_state_init = collection_account.storage.state.state_init
+            if (
+                item_state_init.code is None
+                or item_state_init.data is None
+                or collection_state_init.code is None
+                or collection_state_init.data is None
+            ):
+                raise EscrowProviderInvalidEvidence(
+                    "NFT item or collection account is missing code/data"
+                )
+            master_block = await client.raw_get_block(master_id)
+            try:
+                return verify_nft_identity_cells(
+                    item_address=item,
+                    collection_address=collection,
+                    item_code=item_state_init.code,
+                    item_data=item_state_init.data,
+                    collection_code=collection_state_init.code,
+                    collection_data=collection_state_init.data,
+                    policies=getattr(
+                        self._settings, "ton_escrow_nft_collection_policies", []
+                    ),
+                    expected_owner_address=expected_owner,
+                    masterchain_seqno=int(master_id.seqno),
+                    masterchain_block_hash=master_id.root_hash.hex(),
+                    trusted_init_key_block_hash=client.init_key_block.root_hash.hex(),
+                    observed_chain_time_unix=int(master_block.info.gen_utime),
+                    provider_id=_PROVIDER_ID,
+                )
+            except NFTIdentityEvidenceError as exc:
+                if str(exc) == "NFT current owner differs from the expected wallet":
+                    return None
+                raise EscrowProviderInvalidEvidence(str(exc)) from exc
+        except (EscrowProviderInvalidEvidence, EscrowProviderUnavailable):
+            raise
+        except Exception as exc:
+            raise EscrowProviderUnavailable(
+                "Could not verify NFT identity from trusted account-state proofs"
+            ) from exc
+
     async def verify_terminal_owner(
         self,
         *,
@@ -1788,77 +1893,119 @@ class PytoniqTONTestnetEscrowProvider:
                 (
                     await session.scalars(
                         select(EscrowDeal)
-                        .where(EscrowDeal.network == "testnet", EscrowDeal.item_address == item)
+                        .where(
+                            EscrowDeal.network == "testnet",
+                            EscrowDeal.item_address == item,
+                        )
                         .order_by(EscrowDeal.created_at.desc())
                     )
                 ).all()
             )
-        collections = {
-            _canonical_address(deal.collection_address_snapshot)
-            for deal in deals
-        }
-        collections.discard(None)
-        if not deals or len(collections) != 1:
+        if not deals:
             raise EscrowProviderInvalidEvidence(
-                "NFT item is not uniquely bound to a persisted testnet collection"
+                "No escrow deal is bound to this terminal NFT owner request"
             )
-        collection = next(iter(collections))
-        client = await self._get_lite_client()
+        # Legacy rows and partially populated proof state must block release.
+        if any(
+            getattr(deal, "nft_identity_snapshot_json", None) is None
+            for deal in deals
+        ):
+            raise EscrowProviderInvalidEvidence(
+                "NFT item is not uniquely bound to a persisted collection identity"
+            )
+
+        collections: set[str] = set()
+        identity_records: list[tuple[EscrowDeal, dict[str, object]]] = []
         try:
-            master_id = await client.get_trusted_last_mc_block()
-            if master_id.seqno < minimum_masterchain_seqno:
-                raise EscrowProviderUnavailable(
-                    "No trusted masterchain head at requested minimum sequence"
+            for deal in deals:
+                deal_item = _canonical_address(deal.item_address)
+                deal_collection = _canonical_address(deal.collection_address_snapshot)
+                if deal_item != item or deal_collection is None:
+                    raise NFTIdentityEvidenceError(
+                        "Persisted escrow deal address is missing or inconsistent"
+                    )
+
+                identity = validate_nft_identity_snapshot(
+                    deal.nft_identity_snapshot_json,
+                    getattr(deal, "nft_identity_snapshot_sha256", None),
                 )
-            account, _shard_account = await client.raw_get_account_state(item, block=master_id)
-            if account is None or account.storage.state.type_ != "account_active":
-                return None
-            state_init = account.storage.state.state_init
-            data = state_init.data
-            if data is None:
-                return None
-            parser = data.begin_parse()
-            index = parser.load_uint(64)
-            actual_collection = parser.load_address()
-            actual_owner = parser.load_address()
-            actual_collection_raw = actual_collection.to_str(is_user_friendly=False)
-            actual_owner_raw = actual_owner.to_str(is_user_friendly=False)
-            if _canonical_address(actual_collection_raw) != collection:
-                raise EscrowProviderInvalidEvidence(
-                    "TEP-62 collection differs from the persisted NFT listing"
+                snapshot_item = _canonical_address(identity.get("item_address"))
+                snapshot_collection = _canonical_address(identity.get("collection_address"))
+                if (
+                    snapshot_item != item
+                    or snapshot_collection is None
+                    or snapshot_item != deal_item
+                    or snapshot_collection != deal_collection
+                ):
+                    raise NFTIdentityEvidenceError(
+                        "Persisted escrow deal addresses do not match its NFT identity snapshot"
+                    )
+
+                collections.add(deal_collection)
+                identity_records.append((deal, identity))
+
+            if len(collections) != 1 or len(identity_records) != len(deals):
+                raise NFTIdentityEvidenceError(
+                    "NFT item is not uniquely bound to a persisted collection identity"
                 )
-            if _canonical_address(actual_owner_raw) != expected_owner:
-                return None
-            if index < 0:
-                return None
-            master_block = await client.raw_get_block(master_id)
-            proof_digest = _sha256(
-                {
-                    "provider": _PROVIDER_ID,
-                    "trusted_init_key_block": client.init_key_block.root_hash.hex(),
-                    "masterchain_seqno": master_id.seqno,
-                    "masterchain_block_hash": master_id.root_hash.hex(),
-                    "item_address": item,
-                    "collection_address": collection,
-                    "item_index": index,
-                    "owner_address": _canonical_address(actual_owner_raw),
-                    "state_data_hash": _cell_hash(data),
-                    "code_hash": _cell_hash(state_init.code),
-                    "observed_chain_time_unix": int(master_block.info.gen_utime),
-                }
+
+            identity_deal, initial_identity = identity_records[0]
+            for _, other_identity in identity_records[1:]:
+                if not same_nft_identity_anchor(initial_identity, other_identity):
+                    raise NFTIdentityEvidenceError(
+                        "Escrow deals for this item disagree on the immutable NFT identity anchor"
+                    )
+        except NFTIdentityEvidenceError as exc:
+            raise EscrowProviderInvalidEvidence(str(exc)) from exc
+
+        collection = _canonical_address(identity_deal.collection_address_snapshot)
+        if (
+            collection is None
+            or collection != next(iter(collections))
+            or _canonical_address(identity_deal.item_address) != item
+            or initial_identity.get("item_address") != item
+            or initial_identity.get("collection_address") != collection
+        ):
+            raise EscrowProviderInvalidEvidence(
+                "Persisted NFT identity does not match the terminal owner request"
             )
-            return TerminalOwnerVerification(
-                network="testnet",
-                item_address=item,
-                owner_address=expected_owner,
-                masterchain_seqno=master_id.seqno,
-                proof_sha256=proof_digest,
-                provider_id=_PROVIDER_ID,
-                verified=True,
+
+        current_identity = await self.verify_nft_identity(
+            item_address=item,
+            collection_address=collection,
+            expected_owner_address=expected_owner,
+            minimum_masterchain_seqno=minimum_masterchain_seqno,
+        )
+        if current_identity is None:
+            return None
+        if not same_nft_identity_anchor(initial_identity, current_identity):
+            raise EscrowProviderInvalidEvidence(
+                "NFT code, collection membership or policy changed since deal creation"
             )
-        except (EscrowProviderInvalidEvidence, EscrowProviderUnavailable):
-            raise
-        except Exception as exc:
+        if current_identity["masterchain_seqno"] < minimum_masterchain_seqno:
             raise EscrowProviderUnavailable(
-                "Could not verify TEP-62 owner from a trusted account-state proof"
-            ) from exc
+                "NFT identity proof is older than the terminal event"
+            )
+        proof_digest = _sha256(
+            {
+                "purpose": "terminal-owner",
+                "provider": _PROVIDER_ID,
+                "initial_identity_sha256": identity_deal.nft_identity_snapshot_sha256,
+                "current_identity_sha256": current_identity["evidence_sha256"],
+                "item_address": item,
+                "collection_address": collection,
+                "owner_address": expected_owner,
+                "minimum_masterchain_seqno": minimum_masterchain_seqno,
+                "masterchain_seqno": current_identity["masterchain_seqno"],
+                "masterchain_block_hash": current_identity["masterchain_block_hash"],
+            }
+        )
+        return TerminalOwnerVerification(
+            network="testnet",
+            item_address=item,
+            owner_address=expected_owner,
+            masterchain_seqno=int(current_identity["masterchain_seqno"]),
+            proof_sha256=proof_digest,
+            provider_id=_PROVIDER_ID,
+            verified=True,
+        )

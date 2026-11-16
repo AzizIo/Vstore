@@ -1,8 +1,8 @@
 # TON escrow backend API — Draft
 
-**Status:** isolated testnet-only backend prototype. `backend/app/main.py` mounts the router only when `TON_CONNECT_NETWORK=testnet`. The pinned ABI/BOC adapter and unsigned message builders exist, but the API still fails closed: it does not prepare or broadcast transactions.
+**Current status (2026-11-16):** isolated testnet-only backend prototype. Listing/deal creation and wallet-action preparation require a proof-anchored NFT identity snapshot tied to an explicitly allowlisted standard TEP-62 collection. The collection policy list defaults to empty, so these paths fail closed until an operator reviews and configures the exact collection and item code hashes. No wallet signing, transaction broadcast, mainnet use, or live testnet transfer is enabled.
 
-This API follows `docs/TON_ESCROW_SHARED_INTERFACE.md`. The pinned DealEscrow v1 ABI, code BOC, deterministic StateInit/address derivation and unsigned TON Connect message encoders are implemented and documented in `docs/TON_ESCROW_ABI_ADAPTER.md`. The API does not yet activate those encoders because the complete immutable deployment snapshot and independently verified chain state are not available from the current database/provider.
+This API follows `docs/TON_ESCROW_SHARED_INTERFACE.md`. The pinned DealEscrow v1 ABI, code BOC, deterministic StateInit/address derivation and unsigned TON Connect message encoders are documented in `docs/TON_ESCROW_ABI_ADAPTER.md`. Proof-backed NFT identity reads are separate from the opt-in finality observer and do not enable signing or broadcast.
 
 ## Safety boundary
 
@@ -10,12 +10,14 @@ This API follows `docs/TON_ESCROW_SHARED_INTERFACE.md`. The pinned DealEscrow v1
 - `available_actions` is derived from the authenticated participant and current server-side state. Sellers never receive buyer-only `create_deal_intent` actions, and buyers never receive seller-only actions.
 - All amounts are integer nanotons encoded as decimal strings. The seller's listing price is snapshotted as the immutable deal principal.
 - A listing intent is an off-chain seller preparation record. It does not claim that the NFT is held by escrow.
+- Before listing/deal creation, item and collection account state are both read from the same trust-level-0 LiteServer masterchain anchor. The verifier checks explicit code-hash allowlist policy, TEP-62 storage, and locally reconstructs the standard `get_nft_address_by_index(index)` StateInit address. TON Center indexed NFT fields and remote get-method responses are not accepted as this proof.
+- Missing/invalid `TON_ESCROW_NFT_COLLECTION_POLICIES`, unlisted collection/code, malformed or stale proof, provider outage, or changed identity anchor blocks listing/deal/action progression. Terminal-owner reconciliation re-proves the owner and requires the original item/collection/code/policy identity to remain unchanged.
 - Creating a buyer deal intent locks one buyer, seller, listing key, collection, NFT item, principal, network and unique deal salt into one immutable deal record. ORM guards and a PostgreSQL trigger reject later changes to these terms. The first contract address/ABI-version assignment is permitted after an approved deployment; subsequent replacement or clearing is rejected.
 - Deal-scoped deployment is not prepared from a seller-only listing intent.
 - The observer stores raw evidence separately from accepted contract events. Accepted NFT deposit/delivery/return events must match both the snapshotted collection and item; raw NFT transfer observations cannot advance canonical deal state.
 - Non-final, unverified or unmatched events remain pending and pin the durable cursor. The same provider page is re-queried until it can be promoted or reconciled. Missing deal/contract reconciliation and stale sequence/logical-time events also remain pending; database commit failure rolls back the batch and leaves the durable cursor unchanged. Conflicting immutable event parameters move to manual review.
 - Event identity is a SHA-256 key over network, transaction hash, message hash (or event index), trace, phase and attempt. Logical time, deal salt, collection/item and contract-state facts remain correlated payload fields; compatible pending evidence may be enriched, while conflicting values are moved to manual review. A provider must keep the identity tuple stable between non-final and final scans.
-- The pinned `PinnedTONEscrowContractAdapter` is implemented and its ABI/BOC/vector checks pass, but the API deliberately instantiates `UnconfiguredTONEscrowContractAdapter`. Preparation remains HTTP 503; each authorized attempt first persists an idempotent `escrow_wallet_actions` record and returns its stable `action_id`. This is an audit/recovery intent, not a transaction payload or permission to broadcast. The API also validates that every required immutable deployment/getter field is persisted before constructing the adapter dataclass. The current `EscrowDeal` schema lacks reserve/refund amounts, query IDs, authority public keys and getter-state fields, so the response is `deployment_snapshot_incomplete` rather than an unhandled constructor error or a fabricated payload. The chain provider also remains unconfigured.
+- The pinned `PinnedTONEscrowContractAdapter` produces unsigned wallet payloads only after immutable snapshot, identity, getter, role and state checks. A prepared payload is not proof of submission/finality. The backend never signs or broadcasts.
 - Durable action identity binds actor, deal, action, idempotency key and the immutable deal/wallet snapshot. Exact retries reuse the row; payload conflicts return HTTP 409. Attempt/query IDs, unsigned BOC digest/reference, submission reference/digest, lease/retry metadata and safe error codes are reserved in the schema.
 - The shared marketplace `Listing` row is locked and moved to `RESERVED` in the same transaction as the escrow deal intent. Escrow-only projection state is not sufficient to prevent a parallel ordinary Order.
 - No production/mainnet routes, real TON transfers, production migrations or observer autostart are enabled.
@@ -34,14 +36,14 @@ All routes below are under `/api/escrow`. The router is mounted only when `TON_C
 | GET | `/buyer/deals` | Current buyer's deals. |
 | GET | `/seller/deals` | Current seller's deals. |
 | GET | `/deals/{deal_id}` | Participant-only deal projection. Other users receive 404. |
-| POST | `/deals/{deal_id}/prepare/create-deal-escrow` | Seller-only, deal-scoped deployment preparation; currently 503 until ABI approval. |
-| POST | `/deals/{deal_id}/prepare/deposit-nft` | Seller-only, only in `awaiting_nft`; ownership is rechecked; currently 503. |
-| POST | `/deals/{deal_id}/prepare/funding` | Bound buyer only, only in `awaiting_buyer_funds`; currently 503. |
-| POST | `/deals/{deal_id}/prepare/accept` | Bound buyer only, only in `funded_review`; currently 503. |
-| POST | `/deals/{deal_id}/prepare/dispute` | Bound buyer only, only in `funded_review` or `delivered_dispute_window`; currently 503. |
-| POST | `/deals/{deal_id}/prepare/nft-return` | Bound buyer only in `disputed`; buyer ownership is rechecked; currently 503. |
-| POST | `/deals/{deal_id}/prepare/withdraw-unsold-nft` | Seller only after `expired`; escrow ownership is rechecked; currently 503. |
-| POST | `/wallet-references` | Currently 503. A client-supplied hash/BOC is never accepted as evidence or state. |
+| POST | `/deals/{deal_id}/prepare/create-deal-escrow` | Seller-only, deal-scoped unsigned deployment preparation; requires persisted snapshot and fresh NFT identity evidence; never signs/broadcasts. |
+| POST | `/deals/{deal_id}/prepare/deposit-nft` | Seller-only, only in `awaiting_nft`; ownership and NFT identity are rechecked before returning an unsigned payload. |
+| POST | `/deals/{deal_id}/prepare/funding` | Bound buyer only, only in `awaiting_buyer_funds`; requires a current identity proof and complete immutable snapshot. |
+| POST | `/deals/{deal_id}/prepare/accept` | Bound buyer only, only in `funded_review`; requires a current identity proof and complete immutable snapshot. |
+| POST | `/deals/{deal_id}/prepare/dispute` | Bound buyer only, only in `funded_review` or `delivered_dispute_window`; requires a current identity proof and complete immutable snapshot. |
+| POST | `/deals/{deal_id}/prepare/nft-return` | Bound buyer only in `disputed`; buyer ownership and NFT identity are rechecked. |
+| POST | `/deals/{deal_id}/prepare/withdraw-unsold-nft` | Seller only after `expired`; expected owner and NFT identity are rechecked. |
+| POST | `/wallet-references` | Stores a client-reported submission reference only as an untrusted reconciliation hint; never finalizes state. |
 | GET | `/seller/balance` | Returns unavailable; this design does not define a withdrawable seller balance. |
 | GET | `/seller/withdrawals` | Empty page until an approved settlement/withdrawal model exists. |
 | POST | `/withdrawals` | Legacy generic withdrawal is blocked with 503. |
@@ -92,16 +94,13 @@ Normalized event identity includes transaction hash, message hash (or transactio
 
 ## Migration and compatibility
 
-Revision `e20261114_ton_escrow` is chained after the current main Alembic head `0014_admin_user_management`, which itself follows the existing Stars refund migration `0013_payment_refund_workflow`. It creates escrow-only tables and does not alter Stars payment ledger tables, `OrderStatus`, orders or the existing non-custodial delivery workflow. Migration tests must use a disposable test database only; never run this migration on production/VPS.
+The escrow schema has durable action/snapshot migrations through `0019_escrow_deployment_snapshots`. Revision `0020_escrow_nft_identity_snapshots` adds the identity-evidence pair to listing intents and deals, with database checks and an immutable-snapshot trigger. Migration tests must use a disposable test database only; never run these migrations against production/VPS.
 
-## Explicit blockers
+## Remaining release gates
 
-1. Persist the complete immutable deployment snapshot in `EscrowDeal`: oracle/resolver public keys, execution reserve, seller refund, NFT transfer/deposit/return values, all query IDs and protocol/network terms.
-2. Persist exact unsigned payload bytes and response metadata so idempotent retries return the same payload rather than creating a different wallet request.
-3. Implement a testnet provider with independently verifiable masterchain/shard inclusion and finality evidence. TON Center indexer observations alone are not proof of finality.
-4. Reconcile finalized traces and all contract getters before applying any canonical state transition.
-5. Complete PostgreSQL concurrency tests and terminal listing/NFT ownership reconciliation.
-6. Execute a valueless live testnet lifecycle run and obtain an independent TON contract/security review.
+1. Configure only operator-reviewed standard TEP-62 collection policies in `TON_ESCROW_NFT_COLLECTION_POLICIES`. Keep this list empty until code hashes and collection ownership/provenance have been independently checked.
+2. Complete exact-head CI and disposable-PostgreSQL migration verification for the new identity snapshot migration.
+3. Complete an independently reviewed, valueless live testnet acceptance lifecycle with transaction, trace, finality, getter and current-owner evidence. Do not enable mainnet or production asset transfers.
 
 Until these blockers close, all preparation endpoints remain fail-closed. The router may be conditionally mounted in testnet mode for discovery/projection APIs, but signing, broadcast and mainnet must remain disabled.
 
@@ -121,3 +120,11 @@ Payout and refund remain contract-initiated state transitions. The API exposes t
 
 
 See [TON escrow durable actions](TON_ESCROW_DURABLE_ACTIONS.md) for the action persistence contract, immutable identity guards, submission-reference policy and migration `e20261115_escrow_actions`.
+
+## NFT identity verification added for Issue #213
+
+See [TON escrow NFT identity proof and allowlist](TON_ESCROW_NFT_IDENTITY.md) for the trust boundary, configuration schema, snapshot immutability, adversarial test inventory and rollout gates.
+
+The implementation uses `backend/app/escrow/nft_identity.py` for TEP-62 storage and address derivation; `backend/app/escrow/finality_provider.py` reads item and collection account states from the same trusted masterchain block and repeats identity/current-owner proof before terminal listing reconciliation; migration `0020_escrow_nft_identity_snapshots` persists immutable evidence on both listing intents and deals.
+
+The default collection policy list is intentionally empty. Do not take code hashes from TON Center metadata or enable a collection without an operator-reviewed policy. No Preview wiring, Tolk source, ABI serializer, signing, broadcast or mainnet behavior is changed by this issue.

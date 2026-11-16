@@ -77,6 +77,9 @@ class EscrowListingIntent(TimestampMixin, EscrowBase):
     item_address: Mapped[str] = mapped_column(String(128), nullable=False)
     listing_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     collection_address_snapshot: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Proof-read item/collection code and canonical collection membership, bound to one MC block.
+    nft_identity_snapshot_json: Mapped[dict[str, object] | None] = mapped_column(JSON)
+    nft_identity_snapshot_sha256: Mapped[str | None] = mapped_column(String(64))
     seller_address_snapshot: Mapped[str] = mapped_column(String(128), nullable=False)
     price_amount: Mapped[Decimal] = mapped_column(Numeric(24, 9), nullable=False)
     price_currency: Mapped[str] = mapped_column(String(8), server_default="TON", nullable=False)
@@ -86,6 +89,47 @@ class EscrowListingIntent(TimestampMixin, EscrowBase):
     contract_address: Mapped[str | None] = mapped_column(String(128))
     contract_abi_version: Mapped[str | None] = mapped_column(String(64))
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+
+
+_IMMUTABLE_LISTING_INTENT_TERMS = (
+    "id",
+    "marketplace_listing_id",
+    "asset_id",
+    "seller_id",
+    "seller_wallet_id",
+    "network",
+    "item_address",
+    "listing_key",
+    "collection_address_snapshot",
+    "nft_identity_snapshot_json",
+    "nft_identity_snapshot_sha256",
+    "seller_address_snapshot",
+    "price_amount",
+    "price_currency",
+    "idempotency_key",
+)
+
+
+def assert_listing_intent_terms_immutable(target: EscrowListingIntent) -> None:
+    state = sa_inspect(target)
+    changed = [
+        name for name in _IMMUTABLE_LISTING_INTENT_TERMS
+        if state.attrs[name].history.has_changes()
+    ]
+    if changed:
+        fields = ", ".join(sorted(set(changed)))
+        raise ValueError(f"Immutable escrow listing-intent terms cannot be changed: {fields}")
+
+
+def _before_escrow_listing_intent_update(
+    _mapper: object,
+    _connection: object,
+    target: EscrowListingIntent,
+) -> None:
+    assert_listing_intent_terms_immutable(target)
+
+
+sa_event.listen(EscrowListingIntent, "before_update", _before_escrow_listing_intent_update)
 
 
 class EscrowDeal(TimestampMixin, EscrowBase):
@@ -155,6 +199,10 @@ class EscrowDeal(TimestampMixin, EscrowBase):
     )
     last_chain_seqno: Mapped[int | None] = mapped_column(BigInteger)
     last_chain_logical_time: Mapped[int | None] = mapped_column(BigInteger)
+    # Identity evidence proves the TEP-62 item is derived from the allowlisted collection.
+    # It is immutable after creation and independent from metadata/indexer claims.
+    nft_identity_snapshot_json: Mapped[dict[str, object] | None] = mapped_column(JSON)
+    nft_identity_snapshot_sha256: Mapped[str | None] = mapped_column(String(64))
     # Frozen deployment inputs are canonical JSON with an independently checked hash.
     # They contain no signing material and can only be initialized once.
     deployment_snapshot_json: Mapped[dict[str, object] | None] = mapped_column(JSON)
@@ -190,6 +238,8 @@ _IMMUTABLE_DEAL_TERMS = (
     "price_currency",
     "principal_nanotons",
     "idempotency_key",
+    "nft_identity_snapshot_json",
+    "nft_identity_snapshot_sha256",
     "deployment_snapshot_json",
     "deployment_snapshot_sha256",
     "deployment_snapshot_version",
