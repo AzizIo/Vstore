@@ -1950,7 +1950,7 @@ class PytoniqTONTestnetEscrowProvider:
                 )
 
             identity_deal, initial_identity = identity_records[0]
-            for _other_deal, other_identity in identity_records[1:]:
+            for _, other_identity in identity_records[1:]:
                 if not same_nft_identity_anchor(initial_identity, other_identity):
                     raise NFTIdentityEvidenceError(
                         "Escrow deals for this item disagree on the immutable NFT identity anchor"
