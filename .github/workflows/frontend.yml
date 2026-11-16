@@ -116,6 +116,9 @@ jobs:
       - name: Run Playwright E2E
         run: npm run test:e2e
 
+      - name: Run isolated escrow retry E2E (signing disabled)
+        run: npm run test:e2e:escrow
+
       - name: Upload Playwright report and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -124,6 +127,8 @@ jobs:
           path: |
             frontend/playwright-report/
             frontend/test-results/
+            frontend/playwright-report-escrow/
+            frontend/test-results-escrow/
           if-no-files-found: ignore
           retention-days: 7
 
