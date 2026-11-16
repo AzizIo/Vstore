@@ -29,7 +29,12 @@ The proof-bound recipient-authorized retry path is implemented across the provid
 1. Independent TON/Tolk audit bound to final source, ABI, code BOC and StateInit hashes. Internal review and green CI are not an independent audit.
 2. Explicit operator approval of a reviewed testnet NFT collection policy. The default allowlist remains empty.
 3. Owner-approved valueless live-testnet acceptance with trusted masterchain inclusion, NFT owner transitions, retry/bounce traces and balance/storage-floor reconciliation.
-4. Written Telegram policy/legal review for the exact TON NFT resale/payment flow.
+4. Written Telegram policy/legal review for the exact TON NFT resale/payment flow. Current first-party terms (checked 2026-11-16) create a material unresolved policy risk:
+   - [Bot Developer Terms §6.2](https://telegram.org/tos/bot-developers#6-2-digital-goods-and-services) says transactions pertaining to digital goods/services in a TPA must use Telegram Stars exclusively.
+   - [§6.2.1](https://telegram.org/tos/bot-developers#6-2-1-payment-disputes-for-digital-goods-and-services) requires a /paysupport path and expressly discourages real-time sales of valuable digital/virtual items that cannot be reclaimed, frozen or rescinded after chargeback.
+   - [§7](https://telegram.org/tos/bot-developers#7-blockchain-integration) and the [Blockchain Guidelines](https://core.telegram.org/bots/blockchain-guidelines) permit TON assets and TON Connect wallet flows, but do not provide an explicit exemption from the Stars rule for P2P NFT resale.
+   - [Stars Payments API](https://core.telegram.org/bots/payments-stars) says the Stars requirement applies to digital goods sold inside Telegram even when external web portals or providers exist.
+   Written Telegram clarification is required for the exact user-to-user resale flow; do not infer permission from TON Connect compatibility. Issue #155 tracks the ruling.
 5. Reconcile npm audit's deepmerge notice: GitHub Advisory Database withdrew GHSA-gcqx-w48m-w2h4 on 2026-11-16 because it does not describe a security vulnerability, but the npm audit feed still prints three low findings. See [the withdrawn advisory](https://github.com/advisories/GHSA-gcqx-w48m-w2h4) and Issue #256. No forced dependency override was applied.
 
 **Decision remains BLOCKED — not a production release candidate.** No server signing/broadcast, mainnet, real TON, checkout, custody or user funds are enabled.
