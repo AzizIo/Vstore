@@ -46,6 +46,9 @@ class EscrowRetryableOutboundActionResponse(BaseModel):
     amount_nanotons: str = Field(pattern=r"^(0|[1-9][0-9]*)$")
     retry_window_seconds: int = Field(ge=0, le=4_294_967_295)
     proof_masterchain_seqno: int = Field(gt=0)
+    proof_masterchain_block_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    proof_state_data_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    proof_provider_id: str = Field(min_length=1, max_length=128)
 
     @field_validator("query_id")
     @classmethod
