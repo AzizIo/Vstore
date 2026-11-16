@@ -655,3 +655,26 @@ describe("TON Escrow workspace", () => {
     expect(screen.getByText(/совпадающего с получателем/)).toBeInTheDocument();
     expect(api.prepareFailedOutboundRetry).not.toHaveBeenCalled();
   });
+
+
+  it("explains that execution-reserve retry carries the contract balance rather than a fixed amount", async () => {
+    const api = makeApi({
+      buyerDeals: [deal({ state: "refunded", available_actions: [] })],
+      retryableOutboundActions: [{
+        query_id: "44",
+        slot: "second",
+        kind: 7,
+        recipient_address: sellerAddress,
+        amount_nanotons: "0",
+        retry_window_seconds: 0,
+        proof_masterchain_seqno: 702,
+      }],
+    });
+    renderWorkspace(api);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
+    expect(await screen.findByText(/Сумма определяется контрактом: перевод остатка баланса/))
+      .toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Повторить отправку · query 44/ }))
+      .toBeEnabled();
+  });
