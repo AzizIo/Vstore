@@ -160,7 +160,16 @@ class UnconfiguredTONEscrowContractAdapter:
         retry_descriptor: OutboundActionRetryDescriptor | None = None,
         valid_until: int | None = None,
     ) -> TONConnectTransactionPayload:
-        del action, actor_wallet, resource_id, deal_snapshot, reason_hash, query_id, retry_descriptor, valid_until
+        del (
+            action,
+            actor_wallet,
+            resource_id,
+            deal_snapshot,
+            reason_hash,
+            query_id,
+            retry_descriptor,
+            valid_until,
+        )
         raise EscrowContractABIUnavailable(
             "TON escrow transaction construction is disabled until ABI/code artifacts "
             "are configured"
