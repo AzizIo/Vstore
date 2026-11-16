@@ -415,6 +415,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareDealEscrow).toHaveBeenCalledWith({
       deal_id: "deal-1",
       wallet_id: "wallet-testnet",
+      context: incoming,
     });
   });
 
@@ -434,6 +435,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareDealActivation).toHaveBeenCalledWith({
       deal_id: "deal-1",
       wallet_id: "wallet-testnet",
+      context: incoming,
     });
   });
 
