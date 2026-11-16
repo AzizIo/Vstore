@@ -565,6 +565,7 @@ async def test_retry_failed_outbound_action_encodes_exact_proved_query_and_deal_
     proof = _outbound_retry_proof(
         deal, kind=kind, query_id=42, recipient=recipient,
         retry_window_seconds=window,
+        amount_nanotons=0 if kind == 7 else 90_000_000,
     )
 
     prepared = await adapter.prepare_transaction(
