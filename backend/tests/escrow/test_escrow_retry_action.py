@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.api.escrow import (
     _canonical_sha256,
@@ -153,9 +154,9 @@ def test_execution_reserve_retry_waits_for_seller_deployment_refund() -> None:
 def test_retry_request_uses_bounded_decimal_uint64_string() -> None:
     request = EscrowOutboundRetryRequest(query_id="18446744073709551615")
     assert request.query_id == "18446744073709551615"
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         EscrowOutboundRetryRequest(query_id="18446744073709551616")
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         EscrowOutboundRetryRequest(query_id="0")
 
 
