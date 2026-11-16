@@ -5,6 +5,33 @@
 **Toolchain:** Acton 1.2.1 / Tolk 1.5.0  
 **Assessment class:** internal source/CI review and integration check; not an independent audit.
 
+## Superseding feature-stack status — 2026-11-16 19:49 UTC
+
+> Main's assessment baseline remains b592a4b889221aeb314e521a357b1746091a5976. The following active remediation status supersedes the earlier PR heads and CI outcomes further below; none of these feature PRs has been merged to main.
+
+| Track | Current head | CI evidence |
+|---|---|---|
+| PR #248 — contract lifecycle | 08daf5afe63c83f6f892fd469d90b3788e0f989c | TON Contract CI #43832141975 passed; 35/35 Sandbox tests, frozen build/ABI/StateInit/message vectors |
+| PR #241 — NFT identity | e1c891a99b5359585f2b7b2d391699a1a11737eb | Backend #43931218291 and Frontend #43931217044 passed; no independent review recorded |
+| PR #247 — backend artifact pin + proof-bound retry | e98e1b6873d65c0504d05c9d217b8c08e8fc4120 | Backend #43942177488 passed (961); Frontend/API E2E #43942177624 passed (31 + 4) |
+| PR #255 — integrated frontend retry stack | 1e1a12e9d79e936a5d0df284523e00f963c1f2d8 | Backend #43942937032, Contract #43942936983 and Frontend/API E2E #43942937000 all passed on the exact same SHA: 961 backend, 35/35 Sandbox, 248 unit, 31 Playwright and 4 API-backed E2E |
+
+The #255 candidate includes a proof-anchor hardening fix: retry preparation now requires getter seqno, block hash, provider ID and state-data hash to match the trust-level-0 provider tuple before persisting the getter snapshot or creating a wallet action. The regression proves a missing state-data hash fails closed without a DB commit.
+
+Cross-layer path filters have been added so future escrow frontend changes trigger Backend CI and backend/frontend escrow changes trigger TON Contract CI. This makes the three workflow runs reproducible on a shared candidate SHA.
+
+Issue #252 implementation is complete in the unmerged stack; its issue remains open for external audit and acceptance gates. All retry preparation remains unsigned and testnet-only.
+
+### Remaining release gates
+
+- Independent TON/Tolk audit against the exact frozen source, ABI, BOC and StateInit hashes.
+- Operator approval of a testnet NFT collection policy; the allowlist remains empty by default.
+- Owner-approved valueless live-testnet acceptance with transaction inclusion, NFT ownership, bounce/retry, refund/payout and storage-floor evidence.
+- Written Telegram policy/legal review of the exact P2P TON NFT resale/payment flow.
+- npm audit still prints three low deepmerge warnings although GHSA-gcqx-w48m-w2h4 was withdrawn by GitHub on 2026-11-16 as not describing a security vulnerability. Track stale feed output in Issue #256; do not force an unverified TON Connect upgrade.
+
+**Decision: BLOCKED — not a production release candidate.** No server signing or broadcast, mainnet, real TON, checkout, custody or user funds are enabled. Green CI is not an independent audit or live testnet acceptance.
+
 ## 1. Mainline state and merged contract fixes
 
 Current main includes the merged contract lifecycle and retry fixes:
