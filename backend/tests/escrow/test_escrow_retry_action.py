@@ -243,6 +243,7 @@ async def test_retry_projection_uses_current_proof_and_exact_recipient_wallet(
 
 
 @pytest.mark.asyncio
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
 async def test_retry_projection_hides_third_party_and_duplicate_query_recipients(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -458,6 +459,7 @@ async def test_retry_prepare_rejects_third_party_actor_and_wrong_recipient_walle
 
 
 @pytest.mark.asyncio
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
 async def test_retry_projection_fails_closed_without_complete_trust_anchor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
