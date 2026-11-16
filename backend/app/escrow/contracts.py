@@ -88,11 +88,20 @@ class DealEscrowDeploymentSnapshot:
 class OutboundActionRetryDescriptor:
     """Fresh proof-read descriptor needed to retry one bounced outbound action."""
 
+    slot: str
+    kind: int
     query_id: int
     deal_salt: str
     recipient_address: str
     status: int
     retry_window_seconds: int
+    attempt_id: int
+    amount_nanotons: int
+    message_value_nanotons: int
+    expected_state: int
+    expected_pending_action: int
+    bounce_phase: int
+    message_body_hash: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -379,12 +388,41 @@ class PinnedTONEscrowContractAdapter:
                     or descriptor.status != 1
                 ):
                     raise TONABIError("retry requires a bounced outbound descriptor")
+                valid_retry_window = (
+                    descriptor.kind in {1, 2, 3, 4, 5}
+                    and descriptor.retry_window_seconds == 1800
+                ) or (
+                    descriptor.kind in {6, 7}
+                    and descriptor.retry_window_seconds == 0
+                )
+                valid_amounts = (
+                    descriptor.kind == 7
+                    and type(descriptor.amount_nanotons) is int
+                    and descriptor.amount_nanotons == 0
+                    and type(descriptor.message_value_nanotons) is int
+                    and descriptor.message_value_nanotons == 0
+                ) or (
+                    descriptor.kind in {1, 2, 3, 4, 5, 6}
+                    and type(descriptor.amount_nanotons) is int
+                    and descriptor.amount_nanotons > 0
+                    and type(descriptor.message_value_nanotons) is int
+                    and descriptor.message_value_nanotons > 0
+                )
                 if (
-                    isinstance(descriptor.retry_window_seconds, bool)
-                    or not isinstance(descriptor.retry_window_seconds, int)
-                    or not 0 < descriptor.retry_window_seconds < (1 << 32)
+                    type(descriptor.kind) is not int
+                    or descriptor.kind not in {1, 2, 3, 4, 5, 6, 7}
+                    or descriptor.slot not in {"first", "second"}
+                    or not valid_retry_window
+                    or not valid_amounts
+                    or isinstance(descriptor.attempt_id, bool)
+                    or not isinstance(descriptor.attempt_id, int)
+                    or not 0 < descriptor.attempt_id < (1 << 64)
+                    or descriptor.bounce_phase not in {1, 2}
+                    or not 0 <= descriptor.expected_state <= 13
+                    or not 0 <= descriptor.expected_pending_action <= 255
+                    or not re.fullmatch(r"[0-9a-f]{64}", descriptor.message_body_hash)
                 ):
-                    raise TONABIError("retry descriptor window is invalid")
+                    raise TONABIError("retry descriptor fields are invalid")
                 try:
                     recipient = parse_basechain_address(
                         descriptor.recipient_address, "retry recipient_address"
