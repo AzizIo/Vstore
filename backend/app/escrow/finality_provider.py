@@ -869,21 +869,52 @@ class PytoniqTONTestnetEscrowProvider:
             ):
                 raise EscrowProviderInvalidEvidence("Outbound retry proof anchor is malformed")
 
+            chain_time = getter.get("observed_chain_time_unix")
+            deadline = getter.get("deadline_unix")
+            if (
+                isinstance(chain_time, bool) or not isinstance(chain_time, int)
+                or chain_time <= 0
+                or isinstance(deadline, bool) or not isinstance(deadline, int)
+                or deadline < 0
+            ):
+                raise EscrowProviderInvalidEvidence(
+                    "Proved DealEscrow retry deadline/time is malformed"
+                )
+            # Contract kinds 1-5 carry the 30-minute lifecycle/reconciliation
+            # window. Kinds 6-7 are terminal secondary refunds and deliberately
+            # encode a zero window; they are governed by the contract's ordering
+            # guard instead of a lifecycle deadline.
+            bounced_seller_allowance = any(
+                isinstance(item, dict)
+                and item.get("kind") == 6
+                and item.get("status") == 1
+                for item in descriptors
+            )
             proofs: list[OutboundRetryProof] = []
             for descriptor in descriptors:
                 if not isinstance(descriptor, dict):
                     raise EscrowProviderInvalidEvidence("Proved outbound descriptor is malformed")
                 query_id = descriptor.get("query_id")
+                kind = descriptor.get("kind")
+                retry_window = descriptor.get("retry_window_seconds")
                 if (
                     descriptor.get("status") != 1
-                    or isinstance(descriptor.get("retry_window_seconds"), bool)
-                    or not isinstance(descriptor.get("retry_window_seconds"), int)
-                    or descriptor["retry_window_seconds"] <= 0
+                    or isinstance(kind, bool) or not isinstance(kind, int)
+                    or kind not in {1, 2, 3, 4, 5, 6, 7}
+                    or isinstance(retry_window, bool)
+                    or not isinstance(retry_window, int)
                 ):
+                    continue
+                if kind in {1, 2, 3, 4, 5}:
+                    if retry_window != 1800 or deadline <= chain_time:
+                        continue
+                elif retry_window != 0 or (kind == 7 and bounced_seller_allowance):
                     continue
                 if query_id in duplicate_query_ids:
                     continue
                 recipient = descriptor.get("recipient_address")
+                amount = descriptor.get("amount_nanotons")
+                message_value = descriptor.get("message_value_nanotons")
                 if (
                     not isinstance(recipient, str)
                     or _canonical_address(recipient) != recipient
@@ -892,19 +923,22 @@ class PytoniqTONTestnetEscrowProvider:
                     or not isinstance(query_id, int)
                     or not 0 < query_id < (1 << 64)
                     or descriptor.get("bounce_phase") not in {1, 2}
+                    or isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0
+                    or isinstance(message_value, bool)
+                    or not isinstance(message_value, int) or message_value <= 0
                 ):
                     continue
                 action = ProofBoundOutboundAction(
                     slot=str(descriptor["slot"]),
-                    kind=int(descriptor["kind"]),
+                    kind=kind,
                     query_id=int(query_id),
                     deal_salt=str(descriptor["deal_salt"]),
                     attempt_id=int(descriptor["attempt_id"]),
-                    amount_nanotons=int(descriptor["amount_nanotons"]),
-                    message_value_nanotons=int(descriptor["message_value_nanotons"]),
+                    amount_nanotons=amount,
+                    message_value_nanotons=message_value,
                     expected_state=int(descriptor["expected_state"]),
                     expected_pending_action=int(descriptor["expected_pending_action"]),
-                    retry_window_seconds=int(descriptor["retry_window_seconds"]),
+                    retry_window_seconds=retry_window,
                     message_body_hash=str(descriptor["message_body_hash"]),
                     status=int(descriptor["status"]),
                     bounce_phase=int(descriptor["bounce_phase"]),
