@@ -471,6 +471,7 @@ async def test_retry_projection_fails_closed_without_complete_trust_anchor(
         buyer_id=buyer_id,
         seller_id=uuid4(),
         buyer_wallet_id=wallet_id,
+        buyer_address_snapshot=recipient,
         listing_intent_id=uuid4(),
         contract_address="0:" + "44" * 32,
         deployment_snapshot_json=deployment_snapshot,
@@ -530,6 +531,7 @@ async def test_retry_projection_fails_closed_without_complete_trust_anchor(
 async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflict(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
     buyer_id, deal_id, action_id = uuid4(), uuid4(), uuid4()
     deployment_snapshot = {"deal_salt": "ab" * 32}
     deal = SimpleNamespace(
