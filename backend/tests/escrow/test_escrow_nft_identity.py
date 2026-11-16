@@ -537,3 +537,31 @@ def test_identity_snapshot_rejects_rehashed_policy_or_network_tampering() -> Non
         validate_nft_identity_snapshot(
             wrong_policy, wrong_policy["evidence_sha256"]
         )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "remove"),
+    [
+        ("version", True, False),
+        ("observed_chain_time_unix", None, True),
+        ("observed_chain_time_unix", True, False),
+        ("observed_chain_time_unix", -1, False),
+        ("observed_chain_time_unix", 0, False),
+    ],
+)
+def test_identity_snapshot_rejects_rehashed_invalid_version_and_chain_time(
+    field: str, value: object, remove: bool
+) -> None:
+    from app.escrow.nft_identity import sha256_json
+
+    evidence = _verify_fixture(_fixture())
+    tampered = dict(evidence)
+    tampered.pop("evidence_sha256")
+    if remove:
+        tampered.pop(field, None)
+    else:
+        tampered[field] = value
+    tampered["evidence_sha256"] = sha256_json(tampered)
+
+    with pytest.raises(NFTIdentityEvidenceError):
+        validate_nft_identity_snapshot(tampered, tampered["evidence_sha256"])
