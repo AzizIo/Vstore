@@ -81,6 +81,10 @@ def test_backend_pin_matches_frozen_tolk_artifact_provenance() -> None:
     compressed_boc_b64 = compressed_boc_path.read_text(encoding="ascii").strip()
     compressed_boc = base64.b64decode(compressed_boc_b64, validate=True)
     assert base64.b64encode(compressed_boc).decode("ascii") == compressed_boc_b64
+    assert (
+        hashlib.sha256(compressed_boc).hexdigest()
+        == backend["backend_code_boc_zlib_sha256"]
+    )
 
     raw_boc = zlib.decompress(compressed_boc)
     assert hashlib.sha256(raw_boc).hexdigest() == backend["compiled_code_boc_sha256"]
