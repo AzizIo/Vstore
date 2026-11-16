@@ -37,6 +37,8 @@ from app.escrow.reservation import (
 from app.orders.service import OrderConflict, create_order
 from tests.database_safety import require_test_database_url
 
+_ALEMBIC_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "alembic.ini")
+
 pytestmark = pytest.mark.integration
 
 
@@ -47,7 +49,7 @@ def escrow_reservation_database() -> str:
     os.environ["DATABASE_URL"] = url
     get_settings.cache_clear()
     try:
-        config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        config = Config(_ALEMBIC_CONFIG_PATH)
         command.upgrade(config, "head")
         yield url
     finally:

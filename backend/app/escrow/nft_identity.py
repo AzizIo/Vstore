@@ -255,7 +255,11 @@ def validate_nft_identity_snapshot(
     if not required.issubset(snapshot):
         raise NFTIdentityEvidenceError("Persisted NFT identity evidence is incomplete")
 
-    if type(snapshot.get("version")) is not int or snapshot["version"] != 1 or snapshot.get("network") != "testnet":
+    if (
+        type(snapshot.get("version")) is not int
+        or snapshot["version"] != 1
+        or snapshot.get("network") != "testnet"
+    ):
         raise NFTIdentityEvidenceError(
             "Persisted NFT identity evidence has an unsupported version/network"
         )
