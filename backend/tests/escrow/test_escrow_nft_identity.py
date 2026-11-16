@@ -500,6 +500,93 @@ async def test_terminal_owner_verification_reuses_immutable_identity_anchor() ->
 
 
 @pytest.mark.asyncio
+async def test_terminal_owner_verification_rejects_missing_collection_on_any_deal() -> None:
+    fixture = _fixture()
+    evidence = _verify_fixture(fixture)
+
+    def deal(deal_id: str, collection: str | None):
+        return SimpleNamespace(
+            id=deal_id,
+            network="testnet",
+            item_address=fixture["item_address"],
+            collection_address_snapshot=collection,
+            nft_identity_snapshot_json=evidence,
+            nft_identity_snapshot_sha256=evidence["evidence_sha256"],
+            created_at=None,
+        )
+
+    rows = [deal("valid-deal", COLLECTION), deal("missing-collection", None)]
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        ton_connect_network="testnet",
+        ton_center_testnet_base_url="https://testnet.toncenter.com/api/v3",
+        ton_center_timeout_seconds=2,
+        ton_escrow_nft_collection_policies=fixture["policy_list"],
+    )
+    provider = PytoniqTONTestnetEscrowProvider(
+        session_factory=lambda: _FakeSession(rows),
+        settings=settings,
+        http_client=_FakeHttp(),
+        lite_client_factory=lambda: _FakeLiteClient(fixture),
+    )
+
+    with pytest.raises(EscrowProviderInvalidEvidence, match="missing or inconsistent item/collection address"):
+        await provider.verify_terminal_owner(
+            item_address=fixture["item_address"],
+            expected_owner_address=OTHER_OWNER,
+            minimum_masterchain_seqno=499,
+        )
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_terminal_owner_verification_checks_model_addresses_for_every_deal() -> None:
+    fixture = _fixture()
+    evidence = _verify_fixture(fixture)
+
+    def deal(deal_id: str, item_address: str):
+        return SimpleNamespace(
+            id=deal_id,
+            network="testnet",
+            item_address=item_address,
+            collection_address_snapshot=COLLECTION,
+            nft_identity_snapshot_json=evidence,
+            nft_identity_snapshot_sha256=evidence["evidence_sha256"],
+            created_at=None,
+        )
+
+    # Even if one row has a valid snapshot, its denormalized address columns must
+    # not be ignored merely because the newest deal is internally consistent.
+    rows = [
+        deal("valid-deal", fixture["item_address"]),
+        deal("inconsistent-item", OTHER_COLLECTION),
+    ]
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        ton_connect_network="testnet",
+        ton_center_testnet_base_url="https://testnet.toncenter.com/api/v3",
+        ton_center_timeout_seconds=2,
+        ton_escrow_nft_collection_policies=fixture["policy_list"],
+    )
+    provider = PytoniqTONTestnetEscrowProvider(
+        session_factory=lambda: _FakeSession(rows),
+        settings=settings,
+        http_client=_FakeHttp(),
+        lite_client_factory=lambda: _FakeLiteClient(fixture),
+    )
+
+    with pytest.raises(EscrowProviderInvalidEvidence, match="missing or inconsistent item/collection address"):
+        await provider.verify_terminal_owner(
+            item_address=fixture["item_address"],
+            expected_owner_address=OTHER_OWNER,
+            minimum_masterchain_seqno=499,
+        )
+    await provider.close()
+
+
+@pytest.mark.asyncio
 async def test_terminal_owner_verification_fails_closed_for_legacy_deal_without_identity() -> None:
     fixture = _fixture()
     deal = SimpleNamespace(
