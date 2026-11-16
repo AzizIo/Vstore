@@ -310,6 +310,21 @@ async def test_new_idempotency_key_cannot_prepare_same_active_retry_twice(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    identity_snapshot = {
+        "item_address": "0:" + "44" * 32,
+        "collection_address": "0:" + "55" * 32,
+        "owner_address": "0:" + "66" * 32,
+        "masterchain_seqno": 700,
+    }
+    async def verified_identity(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return identity_snapshot
+
+    monkeypatch.setattr(
+        "app.api.escrow.validate_nft_identity_snapshot",
+        lambda snapshot, _digest: snapshot,
+    )
+    monkeypatch.setattr("app.api.escrow._verify_escrow_nft_identity", verified_identity)
+    monkeypatch.setattr("app.api.escrow.same_nft_identity_anchor", lambda *_args: True)
     buyer_id, seller_id, deal_id, wallet_id = uuid4(), uuid4(), uuid4(), uuid4()
     buyer_address = "0:" + "33" * 32
     deal = SimpleNamespace(
@@ -327,6 +342,8 @@ async def test_new_idempotency_key_cannot_prepare_same_active_retry_twice(
         principal_nanotons=1_000_000_000,
         deal_salt="ab" * 32,
         network="testnet",
+        nft_identity_snapshot_json=identity_snapshot,
+        nft_identity_snapshot_sha256="aa" * 32,
     )
     active_action = SimpleNamespace(id=uuid4(), status="prepared")
 
