@@ -18,5 +18,6 @@
   "raw_address": "0:4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75",
   "data_hash": "faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b",
   "warning": null,
-  "compiled_code_boc_zlib_sha256": "8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7"
+  "compiled_code_boc_zlib_sha256": "8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7",
+  "backend_code_boc_zlib_sha256": "76182882f8d8339acfe516d09c9ef59305bbae4eb421e4c399673a28ef633cf8"
 }
