@@ -912,7 +912,7 @@ function WorkspaceBody({
                           <button
                             className="escrow-button escrow-button-primary"
                             type="button"
-                            disabled={!api || busy || Boolean(pending) || !recipientWallet}
+                            disabled={!api || busy || (pending?.transaction.action === "retry_failed_outbound_action" && pending.transaction.deal_id === selectedDeal.id) || !recipientWallet}
                             onClick={() => recipientWallet && void prepareWalletAction(
                               "retry_failed_outbound_action",
                               selectedDeal,
