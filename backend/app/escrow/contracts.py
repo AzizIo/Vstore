@@ -389,6 +389,15 @@ class PinnedTONEscrowContractAdapter:
                     descriptor.kind in {6, 7}
                     and descriptor.retry_window_seconds == 0
                 )
+                valid_amounts = (
+                    descriptor.kind == 7
+                    and descriptor.amount_nanotons == 0
+                    and descriptor.message_value_nanotons == 0
+                ) or (
+                    descriptor.kind in {1, 2, 3, 4, 5, 6}
+                    and descriptor.amount_nanotons > 0
+                    and descriptor.message_value_nanotons > 0
+                )
                 if (
                     descriptor.slot not in {"first", "second"}
                     or descriptor.kind not in {1, 2, 3, 4, 5, 6, 7}
@@ -397,8 +406,7 @@ class PinnedTONEscrowContractAdapter:
                     or descriptor.attempt_id <= 0
                     or descriptor.status != 1
                     or not valid_retry_window
-                    or descriptor.amount_nanotons <= 0
-                    or descriptor.message_value_nanotons <= 0
+                    or not valid_amounts
                     or not re.fullmatch(r"[0-9a-f]{64}", descriptor.message_body_hash)
                     or not 0 <= descriptor.expected_state <= 13
                     or not 0 <= descriptor.expected_pending_action <= 255
