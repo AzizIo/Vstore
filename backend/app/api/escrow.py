@@ -1626,10 +1626,15 @@ async def _prepare_action(
     _require_testnet()
     actor_id = user.id
     # Do not hold a database row lock across ownership-provider calls.
-    deal = await session.scalar(select(EscrowDeal).where(
-        deal_id == EscrowDeal.id,
-        (EscrowDeal.buyer_id == actor_id) | (EscrowDeal.seller_id == actor_id),
-    ))
+    deal = await session.scalar(
+        select(EscrowDeal)
+        .where(
+            deal_id == EscrowDeal.id,
+            (EscrowDeal.buyer_id == actor_id) | (EscrowDeal.seller_id == actor_id),
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     if deal is None:
         raise HTTPException(status_code=404, detail="Escrow deal not found")
     validated_status = deal.status
@@ -1670,6 +1675,28 @@ async def _prepare_action(
             if actor_id == deal.seller_id
             else deal.buyer_address_snapshot
         )
+        if replay_wallet_id is None:
+            await session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_wallet_not_verified"},
+            )
+        try:
+            _replay_wallet, verified_replay_address = await _verified_wallet(
+                session, user_id=actor_id, wallet_id=replay_wallet_id, lock=True,
+            )
+        except HTTPException as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_wallet_not_verified"},
+            ) from exc
+        if verified_replay_address != replay_wallet_address:
+            await session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "escrow_wallet_snapshot_changed"},
+            )
         replay_hash = canonical_request_sha256({
             "actor_id": str(actor_id),
             "deal_id": str(deal.id),
@@ -1875,7 +1902,7 @@ async def _prepare_action(
         )
     deal = locked_deal
     wallet, wallet_address = await _verified_wallet(
-        session, user_id=actor_id, wallet_id=validated_wallet_id
+        session, user_id=actor_id, wallet_id=validated_wallet_id, lock=True
     )
     if wallet_address != validated_wallet_address:
         await session.rollback()
@@ -2444,10 +2471,13 @@ async def prepare_retry_failed_outbound_action(
     """
     _require_testnet()
     deal = await session.scalar(
-        select(EscrowDeal).where(
+        select(EscrowDeal)
+        .where(
             EscrowDeal.id == deal_id,
             (EscrowDeal.buyer_id == user.id) | (EscrowDeal.seller_id == user.id),
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if deal is None:
         raise HTTPException(status_code=404, detail={"code": "escrow_deal_not_found"})
@@ -2483,7 +2513,64 @@ async def prepare_retry_failed_outbound_action(
                 status_code=409, detail={"code": "idempotency_payload_conflict"}
             )
         if getattr(existing, "unsigned_payload_json", None) is not None:
+            # Replay must still satisfy the same immutable deployment identity
+            # checks as a fresh preparation, without refreshing its proof anchor.
+            replay_snapshot, missing_snapshot_fields = _build_deployment_snapshot(deal)
+            if replay_snapshot is None:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "code": "deployment_snapshot_incomplete",
+                        "missing_fields": list(missing_snapshot_fields),
+                    },
+                )
+            # Replays must still be bound to the actor's currently verified
+            # recipient wallet. Do not hand back an old unsigned retry payload
+            # after the account's wallet verification or participant snapshot
+            # has changed since the original preparation.
+            if deal.seller_id == user.id:
+                intent = await session.get(EscrowListingIntent, deal.listing_intent_id)
+                wallet_id = intent.seller_wallet_id if intent is not None else None
+                expected_wallet_address = deal.seller_address_snapshot
+            else:
+                wallet_id = deal.buyer_wallet_id
+                expected_wallet_address = deal.buyer_address_snapshot
+            snapshot_wallet_address = (
+                replay_snapshot.seller_address
+                if deal.seller_id == user.id
+                else replay_snapshot.buyer_address
+            )
+            if wallet_id is None:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "escrow_retry_wallet_not_verified"},
+                )
+            if expected_wallet_address != snapshot_wallet_address:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "escrow_retry_wallet_snapshot_changed"},
+                )
+            try:
+                _wallet, verified_wallet_address = await _verified_wallet(
+                    session, user_id=user.id, wallet_id=wallet_id, lock=True,
+                )
+            except HTTPException as exc:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "escrow_retry_wallet_not_verified"},
+                ) from exc
+            if verified_wallet_address != expected_wallet_address:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "escrow_retry_wallet_snapshot_changed"},
+                )
             return _prepared_action_response(existing)
+        await session.rollback()
         raise HTTPException(
             status_code=409,
             detail={

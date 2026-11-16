@@ -195,7 +195,9 @@ async def test_retry_projection_uses_current_proof_and_exact_recipient_wallet(
         async def rollback(self) -> None:
             self.rollback_calls += 1
 
-    async def verified_wallet(_session: object, *, user_id: object, wallet_id: object):
+    async def verified_wallet(
+        _session: object, *, user_id: object, wallet_id: object, lock: bool = False
+    ):
         assert user_id == buyer_id
         assert wallet_id == deal.buyer_wallet_id
         return SimpleNamespace(id=wallet_id), recipient
@@ -274,7 +276,9 @@ async def test_retry_projection_hides_third_party_and_duplicate_query_recipients
         async def rollback(self) -> None:
             return None
 
-    async def verified_wallet(_session: object, *, user_id: object, wallet_id: object):
+    async def verified_wallet(
+        _session: object, *, user_id: object, wallet_id: object, lock: bool = False
+    ):
         return SimpleNamespace(id=wallet_id), recipient
 
     rows = [
@@ -367,7 +371,7 @@ async def test_new_idempotency_key_cannot_prepare_same_active_retry_twice(
             self.rollback_calls += 1
 
     async def verified_wallet(
-        _session: object, *, user_id: object, wallet_id: object
+        _session: object, *, user_id: object, wallet_id: object, lock: bool = False
     ):
         assert user_id == buyer_id
         assert wallet_id == deal.buyer_wallet_id
@@ -458,7 +462,7 @@ async def test_retry_prepare_rejects_third_party_actor_and_wrong_recipient_walle
     assert third_party_session.calls == 1
 
     async def wrong_wallet(
-        _session: object, *, user_id: object, wallet_id: object
+        _session: object, *, user_id: object, wallet_id: object, lock: bool = False
     ):
         return SimpleNamespace(id=wallet_id), "0:" + "99" * 32
 
@@ -509,7 +513,7 @@ async def test_retry_projection_fails_closed_without_complete_trust_anchor(
             return None
 
     async def verified_wallet(
-        _session: object, *, user_id: object, wallet_id: object
+        _session: object, *, user_id: object, wallet_id: object, lock: bool = False
     ):
         return SimpleNamespace(id=wallet_id), recipient
 
@@ -559,6 +563,10 @@ async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflic
         id=deal_id,
         buyer_id=buyer_id,
         seller_id=uuid4(),
+        buyer_wallet_id=uuid4(),
+        buyer_address_snapshot="0:" + "33" * 32,
+        seller_address_snapshot="0:" + "66" * 32,
+        listing_intent_id=uuid4(),
         contract_address="0:" + "44" * 32,
         deployment_snapshot_json=deployment_snapshot,
         deployment_snapshot_sha256=_canonical_sha256(deployment_snapshot),
@@ -610,6 +618,27 @@ async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflic
     session = ReplaySession()
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
     user = SimpleNamespace(id=buyer_id)
+    verified_wallet_address = {"value": deal.buyer_address_snapshot}
+    verified_wallet_calls: list[tuple[object, object]] = []
+    deployment_terms = {
+        "buyer_address": deal.buyer_address_snapshot,
+        "seller_address": deal.seller_address_snapshot,
+    }
+
+    def build_deployment_snapshot(_deal: object):
+        return SimpleNamespace(**deployment_terms), ()
+
+    monkeypatch.setattr("app.api.escrow._build_deployment_snapshot", build_deployment_snapshot)
+
+    async def verified_wallet(
+        _session: object, *, user_id: object, wallet_id: object, lock: bool = False
+    ):
+        verified_wallet_calls.append((user_id, wallet_id))
+        if verified_wallet_address["value"] is None:
+            raise HTTPException(status_code=404, detail="Verified testnet wallet not found")
+        return SimpleNamespace(id=wallet_id), verified_wallet_address["value"]
+
+    monkeypatch.setattr("app.api.escrow._verified_wallet", verified_wallet)
 
     replay = await prepare_retry_failed_outbound_action(
         deal_id,
@@ -623,6 +652,55 @@ async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflic
     assert replay.action_id == action_id
     assert replay.payload == payload
     assert session.scalar_calls == 2
+    assert verified_wallet_calls == [(buyer_id, deal.buyer_wallet_id)]
+
+    # The mutable row's participant address must still equal the immutable
+    # deployment snapshot before an old payload is returned.
+    deployment_terms["buyer_address"] = "0:" + "99" * 32
+    with pytest.raises(HTTPException) as snapshot_changed:
+        await prepare_retry_failed_outbound_action(
+            deal_id,
+            EscrowOutboundRetryRequest(query_id="4321"),
+            request,
+            user,
+            session,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            "retry-idempotency-key-0001",
+        )
+    assert snapshot_changed.value.status_code == 409
+    assert snapshot_changed.value.detail["code"] == "escrow_retry_wallet_snapshot_changed"
+    deployment_terms["buyer_address"] = deal.buyer_address_snapshot
+
+    # A formerly valid idempotency key must not return the unsigned payload if
+    # the account's currently verified wallet no longer matches the participant
+    # snapshot.
+    verified_wallet_address["value"] = "0:" + "99" * 32
+    with pytest.raises(HTTPException) as wallet_changed:
+        await prepare_retry_failed_outbound_action(
+            deal_id,
+            EscrowOutboundRetryRequest(query_id="4321"),
+            request,
+            user,
+            session,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            "retry-idempotency-key-0001",
+        )
+    assert wallet_changed.value.status_code == 409
+    assert wallet_changed.value.detail["code"] == "escrow_retry_wallet_snapshot_changed"
+
+    verified_wallet_address["value"] = None
+    with pytest.raises(HTTPException) as wallet_unverified:
+        await prepare_retry_failed_outbound_action(
+            deal_id,
+            EscrowOutboundRetryRequest(query_id="4321"),
+            request,
+            user,
+            session,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            "retry-idempotency-key-0001",
+        )
+    assert wallet_unverified.value.status_code == 409
+    assert wallet_unverified.value.detail["code"] == "escrow_retry_wallet_not_verified"
 
     with pytest.raises(HTTPException) as conflict:
         await prepare_retry_failed_outbound_action(
@@ -636,7 +714,7 @@ async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflic
         )
     assert conflict.value.status_code == 409
     assert conflict.value.detail["code"] == "idempotency_payload_conflict"
-    assert session.rollback_calls == 1
+    assert session.rollback_calls == 4
 
 @pytest.mark.asyncio
 async def test_retry_prepare_rejects_incomplete_trust_anchor_before_snapshot_commit(
