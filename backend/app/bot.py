@@ -48,6 +48,9 @@ BOT_COMMANDS = [
     BotCommand(command="sell", description="Как продать NFT"),
     BotCommand(command="orders", description="Заказы и доставка"),
     BotCommand(command="safety", description="Правила безопасности"),
+    BotCommand(command="paysupport", description="Помощь с платежами"),
+    BotCommand(command="terms", description="Условия сервиса"),
+    BotCommand(command="support", description="Связаться с поддержкой"),
     BotCommand(command="help", description="Центр помощи"),
 ]
 

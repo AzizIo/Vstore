@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     payment_refund_max_reconcile_attempts: int = Field(default=20, gt=0)
     telegram_mini_app_url: str | None = None
     telegram_mini_app_direct_link: str | None = None
+    # Public support surfaces; leave empty until an operator configures reviewed destinations.
+    telegram_support_username: str | None = None
+    telegram_terms_url: str | None = None
     ton_connect_allowed_domains: list[str] = Field(default_factory=list)
     ton_connect_network: Literal["mainnet", "testnet"] = "mainnet"
     ton_center_api_key: SecretStr | None = None
@@ -65,6 +68,10 @@ class Settings(BaseSettings):
     ton_escrow_nft_deposit_value_nanotons: int = Field(default=10_000_000, gt=0)
     ton_escrow_nft_return_value_nanotons: int = Field(default=10_000_000, gt=0)
     # A trust-level-0 Pytoniq proof verifier is opt-in and only supports TON testnet.
+    # Explicit allowlist for collections whose canonical TEP-62 item-address
+    # derivation is proven from collection and item account state at one trusted
+    # testnet masterchain block. Empty means escrow NFT identity checks fail closed.
+    ton_escrow_nft_collection_policies: list[dict[str, str]] = Field(default_factory=list)
     ton_escrow_finality_enabled: bool = False
     ton_escrow_finality_min_depth: int = Field(default=2, ge=1, le=16)
     ton_escrow_finality_batch_deals: int = Field(default=25, ge=1, le=100)

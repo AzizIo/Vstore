@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "backend/**"
+      - "contracts/ton-escrow-poc/**"
       - "docker-compose.yml"
       - "docker-compose.preview.yml"
       - "docker-compose.stars-test.yml"
@@ -14,6 +15,7 @@ on:
   pull_request:
     paths:
       - "backend/**"
+      - "contracts/ton-escrow-poc/**"
       - "docker-compose.yml"
       - "docker-compose.preview.yml"
       - "docker-compose.stars-test.yml"

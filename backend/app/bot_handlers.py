@@ -1,3 +1,4 @@
+import re
 from urllib.parse import urlsplit
 
 from aiogram import F, Router
@@ -44,6 +45,57 @@ def _mini_app_button(url: str | None) -> InlineKeyboardButton | None:
         text="💎 Открыть VILTARA SHOP",
         web_app=WebAppInfo(url=candidate),
         style="primary",
+    )
+
+
+def _public_https_url(url: str | None) -> str | None:
+    """Accept only an absolute public HTTPS URL without credentials or whitespace."""
+    if not isinstance(url, str) or not url.strip():
+        return None
+
+    candidate = url.strip()
+    try:
+        parsed = urlsplit(candidate)
+        hostname = parsed.hostname
+        # Accessing .port validates malformed and out-of-range port values.
+        _ = parsed.port
+    except ValueError:
+        return None
+
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or not hostname
+        or parsed.username
+        or parsed.password
+        or any(character.isspace() for character in candidate)
+    ):
+        return None
+    return candidate
+
+
+def _support_keyboard(username: str | None) -> InlineKeyboardMarkup | None:
+    """Build a contact button only for a syntactically valid Telegram username."""
+    if not isinstance(username, str):
+        return None
+    candidate = username.strip().removeprefix("@")
+    if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", candidate):
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Связаться с поддержкой", url=f"https://t.me/{candidate}")]
+        ]
+    )
+
+
+def _terms_keyboard(url: str | None) -> InlineKeyboardMarkup | None:
+    candidate = _public_https_url(url)
+    if candidate is None:
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Открыть полные условия", url=candidate)]
+        ]
     )
 
 
@@ -108,7 +160,8 @@ HELP_MESSAGE = (
     "💎 <b>Поддерживаемые активы:</b> TON NFT стандарта TEP-62. "
     "Telegram Gifts пока не поддерживаются.\n\n"
     "Важно: резервирование заказа — не оплата. Платёж, escrow и гарантия "
-    "сделки в текущей версии не реализованы."
+    "сделки в текущей версии не реализованы. Используйте /terms, /support или "
+    "/paysupport для информации о правилах и обращениях."
 )
 
 SCREENS = {
@@ -270,6 +323,60 @@ async def handle_safety(message: Message) -> None:
     await _send_screen(message, "safety")
 
 
+@router.message(Command("terms"))
+async def handle_terms(message: Message) -> None:
+    """Show the current service limitations and, when configured, the full terms URL."""
+    settings = get_settings()
+    keyboard = _terms_keyboard(getattr(settings, "telegram_terms_url", None))
+    text = (
+        "📄 Условия VILTARA SHOP\n\n"
+        "Полные условия сервиса пока не опубликованы. До их публикации коммерческие "
+        "функции остаются отключёнными: checkout, оплата, TON escrow, хранение активов "
+        "и выплаты продавцам недоступны. Резервирование объявления не является оплатой "
+        "или гарантией передачи NFT. Не отправляйте TON или NFT по просьбе посторонних."
+    )
+    if keyboard is not None:
+        text += "\n\nПо ссылке доступны полные опубликованные условия."
+    await message.answer(text, reply_markup=keyboard, disable_web_page_preview=True)
+
+
+@router.message(Command("support"))
+async def handle_support(message: Message) -> None:
+    """Expose only an operator-configured support account; never invent a contact."""
+    settings = get_settings()
+    keyboard = _support_keyboard(getattr(settings, "telegram_support_username", None))
+    if keyboard is None:
+        await message.answer(
+            "Контакт поддержки пока не опубликован. Платёжные операции отключены — "
+            "не отправляйте средства. Для навигации используйте /help.",
+        )
+        return
+    await message.answer(
+        "Поддержка VILTARA SHOP. Опишите вопрос и приложите только безопасные "
+        "идентификаторы заказа/обращения. Не отправляйте seed-фразы, приватные ключи "
+        "или коды доступа.",
+        reply_markup=keyboard,
+        disable_web_page_preview=True,
+    )
+
+
+@router.message(Command("paysupport"))
+async def handle_paysupport(message: Message) -> None:
+    """Give payment-incident guidance without enabling or pretending to process checkout."""
+    settings = get_settings()
+    keyboard = _support_keyboard(getattr(settings, "telegram_support_username", None))
+    text = (
+        "🧾 Помощь с платежами VILTARA SHOP\n\n"
+        "Платёжный checkout сейчас отключён; не оплачивайте заказ и не отправляйте "
+        "повторный перевод. Если Telegram уже показывает списание, сохраните ID заказа, "
+        "сумму, дату и Telegram payment charge ID и обратитесь в поддержку. "
+        "Никогда не отправляйте данные карты, seed-фразу или приватный ключ."
+    )
+    if keyboard is None:
+        text += "\n\nКонтакт поддержки ещё не настроен. Сохраните квитанцию и не повторяйте оплату."
+    await message.answer(text, reply_markup=keyboard, disable_web_page_preview=True)
+
+
 @router.callback_query(F.data == "bot:help")
 async def handle_help_callback(callback: CallbackQuery) -> None:
     await callback.answer()
@@ -344,5 +451,5 @@ async def handle_text_fallback(message: Message) -> None:
         "💬 Пока я не умею отвечать на свободные сообщения, но могу помочь "
         "с навигацией по VILTARA SHOP.\n\n"
         "Выберите раздел ниже или используйте /start, /app, /buy, /sell, "
-        "/orders, /safety или /help.",
+        "/orders, /safety, /paysupport, /terms, /support или /help.",
     )

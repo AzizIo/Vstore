@@ -18,6 +18,7 @@ from app.escrow.models import (
     EscrowWalletActionRecord,
     EscrowWithdrawal,
     assert_deal_terms_immutable,
+    assert_listing_intent_terms_immutable,
 )
 
 
@@ -109,6 +110,8 @@ def test_escrow_models_use_separate_metadata_registry() -> None:
         "price_currency",
         "principal_nanotons",
         "idempotency_key",
+        "nft_identity_snapshot_json",
+        "nft_identity_snapshot_sha256",
     ],
 )
 def test_deal_deployment_terms_cannot_be_mutated_after_creation(field: str) -> None:
@@ -130,6 +133,8 @@ def test_deal_deployment_terms_cannot_be_mutated_after_creation(field: str) -> N
         price_currency="TON",
         principal_nanotons=2_500_000_000,
         idempotency_key="deal-create-1",
+        nft_identity_snapshot_json={"evidence_sha256": "g" * 64},
+        nft_identity_snapshot_sha256="g" * 64,
     )
     for immutable_field in (
         "id",
@@ -149,6 +154,8 @@ def test_deal_deployment_terms_cannot_be_mutated_after_creation(field: str) -> N
         "price_currency",
         "principal_nanotons",
         "idempotency_key",
+        "nft_identity_snapshot_json",
+        "nft_identity_snapshot_sha256",
     ):
         set_committed_value(
             deal, immutable_field, getattr(deal, immutable_field)
@@ -172,11 +179,141 @@ def test_deal_deployment_terms_cannot_be_mutated_after_creation(field: str) -> N
         "price_currency": "XTR",
         "principal_nanotons": 2_600_000_000,
         "idempotency_key": "deal-create-2",
+        "nft_identity_snapshot_json": {"evidence_sha256": "h" * 64},
+        "nft_identity_snapshot_sha256": "h" * 64,
     }
     setattr(deal, field, replacements[field])
 
     with pytest.raises(ValueError, match="Immutable DealEscrow terms"):
         assert_deal_terms_immutable(deal)
+
+
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "id",
+        "marketplace_listing_id",
+        "asset_id",
+        "seller_id",
+        "seller_wallet_id",
+        "network",
+        "item_address",
+        "listing_key",
+        "collection_address_snapshot",
+        "nft_identity_snapshot_json",
+        "nft_identity_snapshot_sha256",
+        "seller_address_snapshot",
+        "price_amount",
+        "price_currency",
+        "idempotency_key",
+    ],
+)
+def test_listing_intent_identity_terms_cannot_be_mutated_after_creation(
+    field: str,
+) -> None:
+    intent = EscrowListingIntent(
+        id=uuid4(),
+        marketplace_listing_id=uuid4(),
+        asset_id=uuid4(),
+        seller_id=uuid4(),
+        seller_wallet_id=uuid4(),
+        network="testnet",
+        item_address="0:" + "a" * 64,
+        listing_key="b" * 64,
+        collection_address_snapshot="0:" + "c" * 64,
+        nft_identity_snapshot_json={"evidence_sha256": "d" * 64},
+        nft_identity_snapshot_sha256="d" * 64,
+        seller_address_snapshot="0:" + "e" * 64,
+        price_amount=Decimal("2.5"),
+        price_currency="TON",
+        status="intent_only",
+        idempotency_key="listing-intent-create-1",
+    )
+    immutable_fields = (
+        "id",
+        "marketplace_listing_id",
+        "asset_id",
+        "seller_id",
+        "seller_wallet_id",
+        "network",
+        "item_address",
+        "listing_key",
+        "collection_address_snapshot",
+        "nft_identity_snapshot_json",
+        "nft_identity_snapshot_sha256",
+        "seller_address_snapshot",
+        "price_amount",
+        "price_currency",
+        "idempotency_key",
+    )
+    for immutable_field in immutable_fields:
+        set_committed_value(intent, immutable_field, getattr(intent, immutable_field))
+
+    replacements = {
+        "id": uuid4(),
+        "marketplace_listing_id": uuid4(),
+        "asset_id": uuid4(),
+        "seller_id": uuid4(),
+        "seller_wallet_id": uuid4(),
+        "network": "mainnet",
+        "item_address": "0:" + "f" * 64,
+        "listing_key": "f" * 64,
+        "collection_address_snapshot": "0:" + "f" * 64,
+        "nft_identity_snapshot_json": {"evidence_sha256": "f" * 64},
+        "nft_identity_snapshot_sha256": "f" * 64,
+        "seller_address_snapshot": "0:" + "f" * 64,
+        "price_amount": Decimal("2.6"),
+        "price_currency": "XTR",
+        "idempotency_key": "listing-intent-create-2",
+    }
+    setattr(intent, field, replacements[field])
+
+    with pytest.raises(ValueError, match="Immutable escrow listing-intent terms"):
+        assert_listing_intent_terms_immutable(intent)
+
+
+def test_listing_intent_status_can_advance_without_mutating_its_identity() -> None:
+    intent = EscrowListingIntent(
+        id=uuid4(),
+        marketplace_listing_id=uuid4(),
+        asset_id=uuid4(),
+        seller_id=uuid4(),
+        seller_wallet_id=uuid4(),
+        network="testnet",
+        item_address="0:" + "a" * 64,
+        listing_key="b" * 64,
+        collection_address_snapshot="0:" + "c" * 64,
+        nft_identity_snapshot_json={"evidence_sha256": "d" * 64},
+        nft_identity_snapshot_sha256="d" * 64,
+        seller_address_snapshot="0:" + "e" * 64,
+        price_amount=Decimal("2.5"),
+        price_currency="TON",
+        status="intent_only",
+        idempotency_key="listing-intent-create-1",
+    )
+    for immutable_field in (
+        "id",
+        "marketplace_listing_id",
+        "asset_id",
+        "seller_id",
+        "seller_wallet_id",
+        "network",
+        "item_address",
+        "listing_key",
+        "collection_address_snapshot",
+        "nft_identity_snapshot_json",
+        "nft_identity_snapshot_sha256",
+        "seller_address_snapshot",
+        "price_amount",
+        "price_currency",
+        "idempotency_key",
+    ):
+        set_committed_value(intent, immutable_field, getattr(intent, immutable_field))
+    set_committed_value(intent, "status", "intent_only")
+    intent.status = "active"
+    assert_listing_intent_terms_immutable(intent)
 
 
 def test_deployed_contract_address_cannot_be_replaced() -> None:
