@@ -40,7 +40,7 @@ The current main frozen contract manifest is not yet aligned with the backend ad
 - Former exact PR #250 head `7b8775b628e9df9d22cbb18549bb9a51cf51828d` passed Contract CI #43829081437; artifact #14208215967.
 - Adds deterministic RFC 1950/DEFLATE stored-block encoding (fixed 65,535-byte blocks, fixed header and Adler-32), plus byte-exact, empty-input, multi-block and wrong-digest tests.
 - Frozen contract manifest compressed BOC SHA-256: `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7`.
-- Updated #248 head is now `08daf5afe63c83f6f892fd469d90b3788e0f989c`; Contract CI #43832141975 is in progress on this exact head and must pass before #247 is refreshed.
+- Updated #248 head is now `08daf5afe63c83f6f892fd469d90b3788e0f989c`; Contract CI #43832141975 completed successfully on this exact head; #247 can now refresh from this frozen artifact, followed by integrated cross-track CI.
 
 ### PR #247 — backend artifact pin and cross-track guard (Issue #206)
 
@@ -56,18 +56,18 @@ The current main frozen contract manifest is not yet aligned with the backend ad
 
 ### PR #248 — contract lifecycle/refund follow-up (Issue #225)
 
-- Latest #248 head: `170dafb2180ec37ada903f3d17518c8d50d25c8c`; Draft.
+- Latest #248 head: `08daf5afe63c83f6f892fd469d90b3788e0f989c`; Draft; exact-head Contract CI #43832141975 passed.
 - Exact Contract CI #43824843864 — success on that SHA; all 35 Sandbox tests passed, Tolk formatting/static checks, frozen ABI/raw BOC checks, StateInit/address cross-check and message vectors passed. Contract tree coverage is 85.9% lines / 68.7% branches.
 - Compiled code hash: `498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46`.
 - StateInit hash/address: `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75`.
 - BOC base64/decoded digests: `0e7bc7b35eee4ae7003fba0a0e5368df3428b7e32ad0f4fc5ddf0f3230d5daf3` / `86ed08596d0595c711aa2cf7659ee396ff443d7b01c65659b8e7543dd23c6173`.
-- **Canonical compressed-BOC verification is now integrated into #248's feature branch:** PR #250 was squash-merged into the #248 branch as `08daf5afe63c83f6f892fd469d90b3788e0f989c` (not main). The canonical stored-block zlib digest is `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7`; exact #250 pre-merge head passed Contract CI #43829081437 / artifact #14208215967. Fresh Contract CI #43832141975 is now running on the new exact #248 head `08daf5afe63c83f6f892fd469d90b3788e0f989c`; do not refresh #247 until this passes.
+- **Canonical compressed-BOC verification is now integrated into #248's feature branch:** PR #250 was squash-merged into the #248 branch as `08daf5afe63c83f6f892fd469d90b3788e0f989c` (not main). The canonical stored-block zlib digest is `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7`; exact #250 pre-merge head passed Contract CI #43829081437 / artifact #14208215967. Fresh Contract CI #43832141975 completed successfully on the new exact #248 head `08daf5afe63c83f6f892fd469d90b3788e0f989c`; refresh #247 from this artifact and require integrated cross-track checks.
 - The 35-test suite covers seller-allowance-before-buyer-reserve retry, duplicate TEP-62 callback idempotency, timed-out escrowed-dispute resolver recovery, exact late buyer NFT return, replay rejection and sub-minimum action-value rejection.
 
 ### PR #251 — production bot support surfaces
 
 - [PR #251](https://github.com/AzizIo/Vstore/pull/251) adds production command registration and information-only `/paysupport`, `/terms`, `/support` handlers without importing the isolated Stars test router.
-- Exact head `018ee6ed4181fe8fc4f2e7ee2504e199f37d5dd7`: Frontend CI #43831818022 and Backend CI #43831818067 are running. PR remains Draft pending exact-head CI and review.
+- Exact head `f51400e24ea5da8db4dc47bd2e450626f753bacc`: Frontend CI #1958 and Backend CI #1758 completed successfully. PR remains Draft pending review and production-policy/operations gates.
 - Contact/terms destinations appear only when operators configure validated `TELEGRAM_SUPPORT_USERNAME` and public HTTPS `TELEGRAM_TERMS_URL`. Missing values produce explicit unavailable messages; checkout remains off.
 - This provides the user-facing command surfaces but does not itself implement case-managed payment disputes, production Stars refund orchestration, publish legal terms or satisfy Telegram/legal policy. Do not enable checkout until those separate gates are completed.
 
@@ -95,7 +95,7 @@ The current main frozen contract manifest is not yet aligned with the backend ad
 - No approved disposable testnet wallets, valueless NFT/collection, concrete collection allowlist or independent oracle/resolver operators are provisioned.
 - No live deployment address, transaction trace, masterchain inclusion proof, getter snapshot or NFT owner transition has been recorded.
 - Telegram's public Bot Developer Terms §6.2/§6.2.1 require Stars for covered digital-goods transactions and warn against irreversible virtual-item sales; §7 and the Blockchain Guidelines permit TON/TON Connect for blockchain functionality. The exact wallet-to-wallet secondary TEP-62 resale coordinated in a Mini App is not expressly classified by the public text. Written Telegram guidance and legal review remain necessary.
-- PR #251 is adding production `/paysupport`, `/terms` and `/support` information surfaces without importing the test router; exact-head Backend/Frontend CI and review remain pending. Full terms/support contacts and actual payment-support/refund workflow remain unconfigured and are still required before any Stars checkout.
+- PR #251 adds production `/paysupport`, `/terms` and `/support` information surfaces without importing the test router; exact-head Backend CI #1758 and Frontend CI #1958 are green. Review, configured terms/support destinations and full payment-support/refund workflow remain open. Full terms/support contacts and actual payment-support/refund workflow remain unconfigured and are still required before any Stars checkout.
 - No mainnet configuration, production signing/broadcast, real TON charges/refunds, seller payouts or real NFT transfers are authorized.
 
 **Assessment: BLOCKED.** Green individual PR checks are not equivalent to an integrated candidate, independent audit or live testnet acceptance.
