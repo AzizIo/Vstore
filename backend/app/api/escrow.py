@@ -7,6 +7,7 @@ import json
 import re
 import secrets
 from dataclasses import asdict
+from types import SimpleNamespace
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated
@@ -61,11 +62,11 @@ from app.escrow.schemas import (
     EscrowListingIntentCreate,
     EscrowListingIntentResponse,
     EscrowNftProjection,
+    EscrowOutboundRetryRequest,
     EscrowPageResponse,
+    EscrowRetryableOutboundActionResponse,
     EscrowSellerBalanceResponse,
     EscrowTransactionPreparationResponse,
-    EscrowOutboundRetryRequest,
-    EscrowRetryableOutboundActionResponse,
     EscrowWalletReferenceInput,
     EscrowWalletReferenceResponse,
     EscrowWithdrawalCreate,
@@ -474,21 +475,6 @@ def _retry_descriptor_from_proof(
     expected_deal_salt: str,
 ) -> OutboundActionRetryDescriptor:
     """Select exactly one canonical, BOUNCED descriptor from a fresh trusted proof."""
-    proof_seqno = getter.get("_proof_masterchain_seqno")
-    proof_block_hash = getter.get("_proof_masterchain_block_hash")
-    state_data_hash = getter.get("_proof_state_data_hash")
-    proof_provider_id = getter.get("_proof_provider_id")
-    if (
-        proof_seqno != masterchain_seqno
-        or proof_block_hash != masterchain_block_hash
-        or not isinstance(state_data_hash, str)
-        or not _HEX_256.fullmatch(state_data_hash)
-        or proof_provider_id != provider_id
-    ):
-        raise HTTPException(
-            status_code=503, detail={"code": "outbound_action_proof_anchor_incomplete"}
-        )
-
     rows = getter.get("outbound_actions")
     if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
         raise HTTPException(
@@ -1927,6 +1913,21 @@ async def list_retryable_outbound_actions(
     ):
         raise HTTPException(
             status_code=503, detail={"code": "outbound_action_proof_incomplete"}
+        )
+
+    proof_seqno = getter.get("_proof_masterchain_seqno")
+    proof_block_hash = getter.get("_proof_masterchain_block_hash")
+    state_data_hash = getter.get("_proof_state_data_hash")
+    proof_provider_id = getter.get("_proof_provider_id")
+    if (
+        proof_seqno != masterchain_seqno
+        or proof_block_hash != masterchain_block_hash
+        or not isinstance(state_data_hash, str)
+        or not _HEX_256.fullmatch(state_data_hash)
+        or proof_provider_id != provider_id
+    ):
+        raise HTTPException(
+            status_code=503, detail={"code": "outbound_action_proof_anchor_incomplete"}
         )
 
     rows = getter.get("outbound_actions")
