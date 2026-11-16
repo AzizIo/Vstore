@@ -1,7 +1,7 @@
 # Issue #225 — current contract security and release-gate assessment
 
 **Executable code baseline:** `b592a4b889221aeb314e521a357b1746091a5976`  
-**Current main HEAD:** `c74af7ceb9ba3c9893e7800ed85b155e762840a0` (docs-only PR #249 merge)  
+**Mainline note:** release-gate and audit documentation has been updated on main; executable escrow code baseline remains `b592a4b889221aeb314e521a357b1746091a5976`.  
 **Network scope:** TON testnet only (`global_id = -3`)  
 **Toolchain:** Acton 1.2.1 / Tolk 1.5.0  
 **Assessment class:** internal source/CI review and integration check; not an independent audit.
