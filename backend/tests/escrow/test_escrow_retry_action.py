@@ -458,9 +458,8 @@ async def test_retry_prepare_rejects_third_party_actor_and_wrong_recipient_walle
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("testnet_network", ["testnet"])
 async def test_retry_projection_fails_closed_without_complete_trust_anchor(
-    monkeypatch: pytest.MonkeyPatch, testnet_network: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
     buyer_id, deal_id, wallet_id = uuid4(), uuid4(), uuid4()
