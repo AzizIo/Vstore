@@ -7,6 +7,33 @@
 
 This document supersedes the older handoff material based on `525215b9a51a34be811e73a1cc26995cd3cb25a1`. It is a release-coordination snapshot, not an independent security audit, live testnet acceptance, or authorization to deploy.
 
+## Superseding implementation status — 2026-11-16 19:49 UTC
+
+> This status block supersedes the older branch heads and CI outcomes recorded in the historical snapshot sections below. Main remains b592a4b889221aeb314e521a357b1746091a5976; no escrow change from this stack has been merged to main.
+
+| Track | Current head | Exact evidence |
+|---|---|---|
+| Contract lifecycle / [PR #248](https://github.com/AzizIo/Vstore/pull/248) | 08daf5afe63c83f6f892fd469d90b3788e0f989c | TON Contract CI #43832141975 passed on the exact source/artifact head; 35/35 Sandbox tests, frozen manifest, code/BOC/ABI, StateInit and message-vector checks passed |
+| NFT identity / [PR #241](https://github.com/AzizIo/Vstore/pull/241) | e1c891a99b5359585f2b7b2d391699a1a11737eb | Backend CI #43931218291 and Frontend CI #43931217044 passed; still unmerged and awaiting independent review |
+| Backend artifact + retry API / [PR #247](https://github.com/AzizIo/Vstore/pull/247) | e98e1b6873d65c0504d05c9d217b8c08e8fc4120 | Backend CI #43942177488 passed (961 tests); Frontend/API-backed E2E #43942177624 passed (31 + 4); proof-anchor hardening is included |
+| Integrated retry stack / [PR #255](https://github.com/AzizIo/Vstore/pull/255) | 1e1a12e9d79e936a5d0df28461012df562f6e8d0 | **All three workflows green on this exact SHA:** Backend #43942937032 (961 passed), TON Contract #43942936983 (35/35 Sandbox), Frontend + API-backed E2E #43942937000 (248 unit, 31 Playwright, 4 API-backed) |
+
+Cross-layer path filters now cause Backend CI to run for frontend escrow API/UI/test changes and TON Contract CI to run for backend/frontend escrow changes. This allows the integrated stack to receive the three required workflows on one immutable commit instead of assembling evidence from unrelated heads.
+
+### Issue #252 implementation status
+
+The proof-bound recipient-authorized retry path is implemented across the provider, backend API/adapter and frontend. Both discovery and preparation require proof-anchor fields to match the trust-level-0 provider tuple. Preparation rejects missing/malformed state-data hash before updating the persisted snapshot or creating a wallet action. Route-level regression covers this fail-closed condition. The retry is unsigned and testnet-only.
+
+### Remaining release gates
+
+1. Independent TON/Tolk audit bound to final source, ABI, code BOC and StateInit hashes. Internal review and green CI are not an independent audit.
+2. Explicit operator approval of a reviewed testnet NFT collection policy. The default allowlist remains empty.
+3. Owner-approved valueless live-testnet acceptance with trusted masterchain inclusion, NFT owner transitions, retry/bounce traces and balance/storage-floor reconciliation.
+4. Written Telegram policy/legal review for the exact TON NFT resale/payment flow.
+5. Reconcile npm audit's deepmerge notice: GitHub Advisory Database withdrew GHSA-gcqx-w48m-w2h4 on 2026-11-16 because it does not describe a security vulnerability, but the npm audit feed still prints three low findings. See [the withdrawn advisory](https://github.com/advisories/GHSA-gcqx-w48m-w2h4) and Issue #256. No forced dependency override was applied.
+
+**Decision remains BLOCKED — not a production release candidate.** No server signing/broadcast, mainnet, real TON, checkout, custody or user funds are enabled.
+
 ## 1. Current candidate tracks
 
 | Track | Exact head at snapshot | Status | Release condition |
