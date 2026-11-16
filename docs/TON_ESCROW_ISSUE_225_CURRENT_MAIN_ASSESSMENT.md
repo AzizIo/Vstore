@@ -64,15 +64,30 @@ The current main frozen contract manifest is not yet aligned with the backend ad
 - **Canonical compressed-BOC follow-up:** [PR #250](https://github.com/AzizIo/Vstore/pull/250) is stacked on the exact #248 head. It adds a portable RFC 1950/DEFLATE stored-block encoder and makes Contract CI verify the compressed representation itself. Canonical compressed digest: `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7`. Exact PR #250 head `7b8775b628e9df9d22cbb18549bb9a51cf51828d` passed Contract CI #43829081437 (artifact #14208215967), including verifier tests, Acton build, StateInit/message vectors, static checks and the emulator suite. **PR #250 is green but still stacked; it must be integrated into #248 and Contract CI rerun on the resulting #248 head before #247 is refreshed.**
 - The 35-test suite covers seller-allowance-before-buyer-reserve retry, duplicate TEP-62 callback idempotency, timed-out escrowed-dispute resolver recovery, exact late buyer NFT return, replay rejection and sub-minimum action-value rejection.
 
+### PR #251 — production bot support surfaces
+
+- [PR #251](https://github.com/AzizIo/Vstore/pull/251) adds production command registration and information-only `/paysupport`, `/terms`, `/support` handlers without importing the isolated Stars test router.
+- Exact head `018ee6ed4181fe8fc4f2e7ee2504e199f37d5dd7`: Frontend CI #43831818022 and Backend CI #43831818067 are running. PR remains Draft pending exact-head CI and review.
+- Contact/terms destinations appear only when operators configure validated `TELEGRAM_SUPPORT_USERNAME` and public HTTPS `TELEGRAM_TERMS_URL`. Missing values produce explicit unavailable messages; checkout remains off.
+- This provides the user-facing command surfaces but does not itself implement case-managed payment disputes, production Stars refund orchestration, publish legal terms or satisfy Telegram/legal policy. Do not enable checkout until those separate gates are completed.
+
+### Issue #252 — proof-bound backend retry for bounced outbound actions
+
+- Contract #248 includes opcode `RetryFailedOutboundAction` (`0x56450009`), but backend action enum/adapter, API route and frontend action model do not expose it.
+- The contract requires the exact recipient stored in the matching BOUNCED descriptor. The decoder already reads descriptors for observer RichBounce matching; the API getter snapshot does not currently include them for user action preparation.
+- Issue [#252](https://github.com/AzizIo/Vstore/issues/252) is the release implementation task: read current storage at a trusted masterchain anchor, validate the exact BOUNCED descriptor/query ID/deal salt/retry window, require a verified wallet equal to the exact recipient, then prepare a durable idempotent unsigned request. Unsupported third-party recipients must fail closed.
+- This is a functional integration blocker even though the contract's emulator tests pass. A raw client-provided query ID must never be enough to authorize a retry.
+
 ## 3. Required integration sequence
 
 1. Complete independent code review and collection-policy review for #241; keep the default collection allowlist empty.
 2. Integrate reviewed PR #250 into #248, then rerun Contract CI on the resulting exact #248 SHA. The canonical compressed-BOC digest must be reproduced by the verifier alongside code/raw/base64 BOC and StateInit vectors.
 3. Refresh #247 backend manifest/physical BOC/code pin/StateInit golden vectors from the final post-#250 #248 artifact, not from any older candidate.
-4. Build one integrated candidate tree containing #241 identity work, the final #248 contract and matching #247 backend pin.
-5. Run Backend, Contract, Frontend/API E2E and PostgreSQL 16 migration tests on the same exact SHA. The strict backend↔contract artifact test must pass.
-6. Obtain independent TON/Tolk audit and remediate all Critical/High findings.
-7. Complete owner-approved valueless testnet acceptance and retain immutable evidence before any live-value path is considered.
+4. Implement #252 proof-bound recipient-authorized outbound retry through provider, backend adapter/API and frontend, including positive and adversarial tests.
+5. Build one integrated candidate tree containing #241 identity work, final #248 + #250 contract, matching #247 backend pin and #252 retry path.
+6. Run Backend, Contract, Frontend/API E2E and PostgreSQL 16 migration tests on the same exact SHA. The strict backend↔contract artifact test must pass.
+7. Obtain independent TON/Tolk audit and remediate all Critical/High findings.
+8. Complete owner-approved valueless testnet acceptance and retain immutable evidence before any live-value path is considered.
 
 ## 4. External and operational gates
 
@@ -80,7 +95,7 @@ The current main frozen contract manifest is not yet aligned with the backend ad
 - No approved disposable testnet wallets, valueless NFT/collection, concrete collection allowlist or independent oracle/resolver operators are provisioned.
 - No live deployment address, transaction trace, masterchain inclusion proof, getter snapshot or NFT owner transition has been recorded.
 - Telegram's public Bot Developer Terms §6.2/§6.2.1 require Stars for covered digital-goods transactions and warn against irreversible virtual-item sales; §7 and the Blockchain Guidelines permit TON/TON Connect for blockchain functionality. The exact wallet-to-wallet secondary TEP-62 resale coordinated in a Mini App is not expressly classified by the public text. Written Telegram guidance and legal review remain necessary.
-- The production bot does not wire the existing isolated test-bot `/paysupport` handler; production-safe `/paysupport`, `/terms` and `/support` are required before any Stars checkout.
+- PR #251 is adding production `/paysupport`, `/terms` and `/support` information surfaces without importing the test router; exact-head Backend/Frontend CI and review remain pending. Full terms/support contacts and actual payment-support/refund workflow remain unconfigured and are still required before any Stars checkout.
 - No mainnet configuration, production signing/broadcast, real TON charges/refunds, seller payouts or real NFT transfers are authorized.
 
 **Assessment: BLOCKED.** Green individual PR checks are not equivalent to an integrated candidate, independent audit or live testnet acceptance.
