@@ -609,7 +609,7 @@ def test_pinned_code_boc_rejects_trailing_compressed_artifact_bytes(
     try:
         with pytest.raises(
             ton_abi.TONABIError,
-            match="pinned DealEscrow code BOC is unavailable or corrupt",
+            match="DealEscrow compressed code BOC digest mismatch",
         ):
             ton_abi.load_pinned_code_boc()
     finally:
