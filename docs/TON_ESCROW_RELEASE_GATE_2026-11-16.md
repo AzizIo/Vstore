@@ -55,6 +55,13 @@ The latest manifest at #248 head `75926f137f057c56253a87a63b52d8c08586c52f` has 
 
 The current frozen manifest still pins StateInit `cfa1d4f9...`; the exact run failed at the expected strict vector comparison. Agent 2 has been sent the computed new vector and zlib digest. Refresh the complete manifest and `artifacts/VERIFYING.md`, then rerun Contract CI.
 
+The previous emulator run #43814617994 (head `5b65380e33c814be95bea0c931873a7620b56783`) also found two lifecycle issues, which have not yet been revalidated against the newer source:
+
+- In `duplicate nft delivery callbacks are idempotent and buyer refund bounce is retryable`, the buyer-refund retry leaves progress at `STATE_MANUAL_REVIEW` (13) where the test expects `STATE_BUYER_REFUND_PENDING` (9). The retry must actually create a new pending outbound action, preserve locked principal and be reconcilable; do not accept a terminal/manual-review state as a substitute for successful retry.
+- In `expired dispute with NFT in escrow remains resolvable by the resolver quorum`, replay after the first resolver decision returns `Errors.Deadline` (710) before the state guard, while the expected state-specific rejection is `Errors.InvalidState` (703). Validate the state class first, then the deadline for an active dispute; preserve the explicit timed-out escrowed-dispute resolver path.
+
+Both findings were sent to Agent 2. They require a fresh exact-head emulator run after manifest/vector and source are finalized.
+
 The backend pin in PR #247 is currently for the prior frozen artifact (code hash `9011F274BC3D7E32B76A17F13FCBA17AC49429BB4EECBC4AB97FA202BDAC2940`, StateInit `674227296eff6ac5ee02c8e2eaa12857ac339d10a9ed7f4f7ea0591e7b4adfca`). It must be updated only from the final, successful #248 compiler artifact and must pass the cross-track test against that final manifest. No runtime action may be prepared against a stale code hash.
 
 ## 4. Security and acceptance gates still open
