@@ -777,6 +777,7 @@ class PytoniqTONTestnetEscrowProvider:
             "snapshot_sha256": stored_hash,
             "getter": decoded,
         }
+        decoded["_proof_state_data_hash"] = data_hash
         return decoded, state_name, _sha256(getter_identity)
 
     async def verify_deployed_account(
@@ -806,6 +807,9 @@ class PytoniqTONTestnetEscrowProvider:
             # available; raw_get_account_state above verifies inclusion proof.
             await client.raw_get_block(masterchain_id)
             block_hash = masterchain_id.root_hash.hex()
+            getter["_proof_masterchain_seqno"] = int(masterchain_id.seqno)
+            getter["_proof_masterchain_block_hash"] = block_hash
+            getter["_proof_provider_id"] = _PROVIDER_ID
             if require_initial_state and (
                 state_name != "intent_created" or getter.get("contract_state") != 0
             ):
