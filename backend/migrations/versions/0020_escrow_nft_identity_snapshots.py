@@ -129,46 +129,6 @@ def upgrade() -> None:
         """
     )
 
-    op.get_bind().exec_driver_sql(
-        """
-        CREATE FUNCTION guard_escrow_deal_nft_identity_terms()
-        RETURNS trigger
-        LANGUAGE plpgsql
-        AS $$
-        BEGIN
-            IF (
-                NEW.listing_intent_id IS DISTINCT FROM OLD.listing_intent_id
-                OR NEW.listing_key_snapshot IS DISTINCT FROM OLD.listing_key_snapshot
-                OR NEW.buyer_id IS DISTINCT FROM OLD.buyer_id
-                OR NEW.buyer_wallet_id IS DISTINCT FROM OLD.buyer_wallet_id
-                OR NEW.buyer_address_snapshot IS DISTINCT FROM OLD.buyer_address_snapshot
-                OR NEW.deal_salt IS DISTINCT FROM OLD.deal_salt
-                OR NEW.principal_nanotons IS DISTINCT FROM OLD.principal_nanotons
-                OR (
-                    OLD.contract_address IS NOT NULL
-                    AND NEW.contract_address IS DISTINCT FROM OLD.contract_address
-                )
-                OR (
-                    OLD.contract_abi_version IS NOT NULL
-                    AND NEW.contract_abi_version IS DISTINCT FROM OLD.contract_abi_version
-                )
-            ) THEN
-                RAISE EXCEPTION 'Persisted escrow deal NFT identity and bound terms are immutable'
-                    USING ERRCODE = 'integrity_constraint_violation';
-            END IF;
-            RETURN NEW;
-        END;
-        $$
-        """
-    )
-
-    op.execute(
-        """
-        CREATE TRIGGER trg_escrow_deal_nft_identity_terms_immutable
-        BEFORE UPDATE ON escrow_deals
-        FOR EACH ROW EXECUTE FUNCTION guard_escrow_deal_nft_identity_terms()
-        """
-    )
 
 
 def downgrade() -> None:
@@ -197,10 +157,6 @@ def downgrade() -> None:
     op.execute(
         "DROP TRIGGER IF EXISTS trg_escrow_deal_nft_identity_immutable ON escrow_deals"
     )
-    op.execute(
-        "DROP TRIGGER IF EXISTS trg_escrow_deal_nft_identity_terms_immutable ON escrow_deals"
-    )
-    op.execute("DROP FUNCTION IF EXISTS guard_escrow_deal_nft_identity_terms()")
     op.execute("DROP FUNCTION IF EXISTS guard_escrow_nft_identity_snapshot()")
     op.drop_constraint(
         "ck_escrow_deal_nft_identity_snapshot_pair", "escrow_deals", type_="check"
