@@ -4,6 +4,12 @@ on:
   pull_request:
     paths:
       - "contracts/ton-escrow-poc/**"
+      - "backend/app/api/escrow.py"
+      - "backend/app/escrow/**"
+      - "backend/tests/escrow/**"
+      - "frontend/src/api/escrow.ts"
+      - "frontend/src/escrow/**"
+      - "frontend/src/test/escrow/**"
       - ".github/workflows/ton-escrow-contract.yml"
   push:
     branches:
@@ -11,6 +17,12 @@ on:
       - "feat/ton-escrow-*"
     paths:
       - "contracts/ton-escrow-poc/**"
+      - "backend/app/api/escrow.py"
+      - "backend/app/escrow/**"
+      - "backend/tests/escrow/**"
+      - "frontend/src/api/escrow.ts"
+      - "frontend/src/escrow/**"
+      - "frontend/src/test/escrow/**"
       - ".github/workflows/ton-escrow-contract.yml"
   workflow_dispatch:
 
