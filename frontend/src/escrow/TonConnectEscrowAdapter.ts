@@ -61,6 +61,7 @@ function allowedDestination(transaction: PreparedEscrowTransaction): string {
     case "accept_deal":
     case "open_dispute":
     case "withdraw_unsold_nft":
+    case "retry_failed_outbound_action":
       if (!transaction.escrow_address) {
         throw new Error("Для этой операции Backend не вернул адрес DealEscrow.");
       }

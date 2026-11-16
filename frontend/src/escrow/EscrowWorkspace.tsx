@@ -14,6 +14,7 @@ import {
   type EscrowAction,
   type EscrowDeal,
   type EscrowListingIntent,
+  type EscrowRetryableOutboundAction,
   type EscrowWithdrawal,
   type PreparedEscrowTransaction,
 } from "../api/escrow";
@@ -49,6 +50,7 @@ interface Props {
 interface PendingWalletAction {
   transaction: PreparedEscrowTransaction;
   expectedWalletAddress: string;
+  dealId: string;
 }
 
 interface WalletInventory {
@@ -85,6 +87,19 @@ function shortAddress(value: string | null | undefined): string {
   return `${value.slice(0, 11)}…${value.slice(-8)}`;
 }
 
+function outboundActionLabel(kind: number): string {
+  switch (kind) {
+    case 1: return "Передача NFT покупателю";
+    case 2: return "Возврат NFT продавцу";
+    case 3: return "Возврат неожиданно полученного NFT";
+    case 4: return "Выплата продавцу";
+    case 5: return "Возврат покупателю";
+    case 6: return "Возврат резерва развёртывания продавцу";
+    case 7: return "Возврат остатка execution reserve";
+    default: return "Исходящее действие";
+  }
+}
+
 function actionLabel(action: EscrowAction): string {
   switch (action) {
     case "create_deal_escrow": return "Создать DealEscrow";
@@ -94,6 +109,7 @@ function actionLabel(action: EscrowAction): string {
     case "open_dispute": return "Открыть спор";
     case "return_nft_to_escrow": return "Вернуть NFT в escrow";
     case "withdraw_unsold_nft": return "Вернуть непроданный NFT";
+    case "retry_failed_outbound_action": return "Повторить неудавшуюся отправку";
   }
 }
 
@@ -303,6 +319,8 @@ function WorkspaceBody({
   const [buyerDeals, setBuyerDeals] = useState<EscrowDeal[]>([]);
   const [sellerDeals, setSellerDeals] = useState<EscrowDeal[]>([]);
   const [withdrawals, setWithdrawals] = useState<EscrowWithdrawal[]>([]);
+  const [retryableOutboundActions, setRetryableOutboundActions] = useState<EscrowRetryableOutboundAction[]>([]);
+  const [retryableOutboundError, setRetryableOutboundError] = useState("");
   const [inventory, setInventory] = useState<WalletInventory>({ wallets: [], nfts: [] });
   const [selectedListingId, setSelectedListingId] = useState("");
   const [selectedDealId, setSelectedDealId] = useState("");
@@ -416,6 +434,25 @@ function WorkspaceBody({
   const selectedDeal = (role === "buyer" ? ownedBuyerDeals : ownedSellerDeals)
     .find((deal) => deal.id === selectedDealId) ?? null;
 
+  useEffect(() => {
+    const controller = new AbortController();
+    setRetryableOutboundActions([]);
+    setRetryableOutboundError("");
+    if (!api || !selectedDeal) return () => controller.abort();
+    void api.listRetryableOutboundActions(selectedDeal.id, controller.signal)
+      .then((actions) => {
+        if (!controller.signal.aborted) setRetryableOutboundActions(actions);
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setRetryableOutboundError(
+            reason instanceof Error ? reason.message : "Не удалось проверить bounced outbound-действия.",
+          );
+        }
+      });
+    return () => controller.abort();
+  }, [api, selectedDeal?.id, retry]);
+
   const signingEnabled = Boolean(
     allowTestnetSigning === true &&
     import.meta.env.VITE_ESCROW_TESTNET_SIGNING_ENABLED === "true" &&
@@ -502,7 +539,10 @@ function WorkspaceBody({
     prepare: () => Promise<PreparedEscrowTransaction>,
     expectedWallet: WalletRecord | null,
   ) {
-    if (!api || !allowed(action, deal.available_actions)) {
+    if (
+      !api ||
+      (action !== "retry_failed_outbound_action" && !allowed(action, deal.available_actions))
+    ) {
       setActionError("Backend не разрешил это действие для текущего состояния сделки.");
       return;
     }
@@ -519,7 +559,11 @@ function WorkspaceBody({
         setActionError("Backend вернул неподходящее действие или сеть. Подписание заблокировано.");
         return;
       }
-      setPending({ transaction, expectedWalletAddress: expectedWallet.address });
+      setPending({
+        transaction,
+        expectedWalletAddress: expectedWallet.address,
+        dealId: deal.id,
+      });
     }
   }
 
@@ -844,6 +888,54 @@ function WorkspaceBody({
                 {selectedDeal.state === "seller_payout_pending" && <p className="escrow-inline-message" role="status">Контракт инициировал seller payout. Ручного claim нет; ждём подтверждение финальности от observer.</p>}
                 {selectedDeal.state === "buyer_refund_pending" && <p className="escrow-warning" role="status">Контракт инициировал refund. Он не считается завершённым, пока observer не подтвердит финальность.</p>}
                 {selectedDeal.state === "manual_review" && <p className="escrow-warning" role="status">Операции приостановлены. Не отправляйте повторные платежи или переводы NFT до завершения reconciliation.</p>}
+                {retryableOutboundError && <p className="escrow-inline-error" role="status">{retryableOutboundError}</p>}
+                {retryableOutboundActions.length > 0 && (
+                  <section className="escrow-return-nft" aria-label="Доступные повторные отправки">
+                    <strong>Подтверждённые bounced outbound-действия</strong>
+                    <p className="escrow-muted">Список получен из актуального proof-read состояния TON testnet. Повторная подготовка ещё раз проверит recipient и proof anchor.</p>
+                    {retryableOutboundActions.map((outbound) => {
+                      const recipientWallet = verifiedWalletForAddress(outbound.recipient_address);
+                      return (
+                        <div className="escrow-buyer-actions" key={outbound.query_id}>
+                          <p>
+                            Действие: {outboundActionLabel(outbound.kind)}
+                            <br />
+                            Получатель: <code>{shortAddress(outbound.recipient_address)}</code>
+                            <br />
+                            {outbound.kind === 7
+                              ? "Сумма определяется контрактом: перевод остатка баланса"
+                              : `Сумма исходного действия: ${nanoToTon(outbound.amount_nanotons)} TON`}
+                            <br />
+                            Masterchain seqno: {outbound.proof_masterchain_seqno}
+                            <br />
+                            {outbound.retry_window_seconds === 0
+                              ? "Терминальный возврат: дополнительный срок не задаётся"
+                              : `Срок следующего этапа после успешного повтора: ${outbound.retry_window_seconds} сек.`}
+                            <br />
+                            Proof: {outbound.proof_provider_id} · block {outbound.proof_masterchain_block_hash.slice(0, 8)} · state {outbound.proof_state_data_hash.slice(0, 8)}
+                          </p>
+                          <button
+                            className="escrow-button escrow-button-primary"
+                            type="button"
+                            disabled={!api || busy || (pending?.transaction.action === "retry_failed_outbound_action" && pending.dealId === selectedDeal.id) || !recipientWallet}
+                            onClick={() => recipientWallet && void prepareWalletAction(
+                              "retry_failed_outbound_action",
+                              selectedDeal,
+                              () => api!.prepareFailedOutboundRetry({
+                                deal_id: selectedDeal.id,
+                                query_id: outbound.query_id,
+                              }),
+                              recipientWallet,
+                            )}
+                          >
+                            Повторить отправку · query {outbound.query_id}
+                          </button>
+                          {!recipientWallet && <p className="escrow-warning">Нет подтверждённого testnet-кошелька, совпадающего с получателем. Повтор заблокирован.</p>}
+                        </div>
+                      );
+                    })}
+                  </section>
+                )}
                 {allowed("fund_deal", selectedDeal.available_actions) && (
                   <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !selectedDealBuyerWallet} onClick={() => selectedDealBuyerWallet && void prepareWalletAction("fund_deal", selectedDeal, () => api!.prepareBuyerFunding({ deal_id: selectedDeal.id, wallet_id: selectedDealBuyerWallet.id }), selectedDealBuyerWallet)}>
                     Внести TON
