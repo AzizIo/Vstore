@@ -11,6 +11,7 @@ from app.escrow.contracts import (
     DealEscrowDeploymentSnapshot,
     EscrowContractABIUnavailable,
     EscrowWalletAction,
+    OutboundActionRetryDescriptor,
     PinnedTONEscrowContractAdapter,
     UnconfiguredTONEscrowContractAdapter,
 )
@@ -433,6 +434,71 @@ async def test_unexpected_nft_recovery_requires_recorded_previous_owner() -> Non
             query_id=2004,
             valid_until=1_800_000_000,
         )
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_outbound_action_is_proof_descriptor_bound_and_recipient_only() -> None:
+    adapter = PinnedTONEscrowContractAdapter()
+    deal = snapshot(contract_state=13)
+    descriptor = OutboundActionRetryDescriptor(
+        query_id=3007,
+        deal_salt=deal.deal_salt,
+        recipient_address=deal.buyer_address,
+        status=1,
+        retry_window_seconds=1800,
+    )
+
+    prepared = await adapter.prepare_transaction(
+        EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION,
+        actor_wallet=wallet(deal.buyer_address),  # type: ignore[arg-type]
+        resource_id="deal-retry-1",
+        deal_snapshot=deal,
+        query_id=descriptor.query_id,
+        retry_descriptor=descriptor,
+        valid_until=1_800_000_000,
+    )
+    message = prepared.messages[0]
+    assert message.address == derive_deployment(load_pinned_code_boc(), deal).address
+    assert message.amount == str(deal.action_value_nanotons)
+    assert message.payload is not None
+
+    from pytoniq_core import Cell
+    body = Cell.one_from_boc(base64.b64decode(message.payload, validate=True)).begin_parse()
+    assert body.load_uint(32) == 0x56450009
+    assert body.load_uint(64) == descriptor.query_id
+    assert body.load_uint(256) == int(deal.deal_salt, 16)
+    assert body.remaining_bits == 0 and body.remaining_refs == 0
+
+    mutations = [
+        (replace(descriptor, status=0), "bounced"),
+        (replace(descriptor, query_id=3008), "query_id"),
+        (replace(descriptor, deal_salt="02" * 32), "salt"),
+        (replace(descriptor, recipient_address=deal.seller_address), "recipient"),
+        (replace(descriptor, retry_window_seconds=0), "window"),
+    ]
+    for bad_descriptor, error in mutations:
+        with pytest.raises(EscrowContractABIUnavailable, match=error):
+            await adapter.prepare_transaction(
+                EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION,
+                actor_wallet=wallet(deal.buyer_address),  # type: ignore[arg-type]
+                resource_id="deal-retry-1",
+                deal_snapshot=deal,
+                query_id=3007,
+                retry_descriptor=bad_descriptor,
+                valid_until=1_800_000_000,
+            )
+
+    with pytest.raises(EscrowContractABIUnavailable, match="recipient"):
+        await adapter.prepare_transaction(
+            EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION,
+            actor_wallet=wallet(deal.seller_address),  # type: ignore[arg-type]
+            resource_id="deal-retry-1",
+            deal_snapshot=deal,
+            query_id=descriptor.query_id,
+            retry_descriptor=descriptor,
+            valid_until=1_800_000_000,
+        )
+
 
 @pytest.mark.asyncio
 async def test_contract_initiated_payout_and_refund_are_never_wallet_actions() -> None:

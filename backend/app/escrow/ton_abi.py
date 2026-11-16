@@ -32,6 +32,7 @@ _OPCODES = {
     "open_dispute": 0x56450004,
     "timeout_deal": 0x56450007,
     "recover_unexpected_nft": 0x56450008,
+    "retry_failed_outbound_action": 0x56450009,
 }
 _TERMINAL_STORAGE_RESERVE = 10_000_000
 _MIN_ACTION_VALUE = 10_000_000
