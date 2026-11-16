@@ -255,6 +255,9 @@ describe("proof-bound outbound retry API", () => {
     amount_nanotons: "90000000",
     retry_window_seconds: 0,
     proof_masterchain_seqno: 700,
+    proof_masterchain_block_hash: "aa".repeat(32),
+    proof_state_data_hash: "bb".repeat(32),
+    proof_provider_id: "pytoniq-trust0-testnet-v1",
   };
 
   it("accepts the contract's zero-window secondary refund descriptor", () => {
