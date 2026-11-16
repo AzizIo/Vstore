@@ -10,6 +10,7 @@ from app.api.escrow import (
     _prepare_action,
     _retry_descriptor_from_proof,
     list_retryable_outbound_actions,
+    prepare_retry_failed_outbound_action,
 )
 from app.escrow.contracts import EscrowWalletAction
 from app.escrow.schemas import (
@@ -166,7 +167,6 @@ def test_retry_request_uses_bounded_decimal_uint64_string() -> None:
 async def test_retry_projection_uses_current_proof_and_exact_recipient_wallet(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
     buyer_id, deal_id, wallet_id = uuid4(), uuid4(), uuid4()
     recipient = "0:" + "33" * 32
     deployment_snapshot = {"deal_salt": "ab" * 32}
@@ -176,7 +176,6 @@ async def test_retry_projection_uses_current_proof_and_exact_recipient_wallet(
         seller_id=uuid4(),
         buyer_wallet_id=wallet_id,
         buyer_address_snapshot=recipient,
-        seller_address_snapshot="0:" + "44" * 32,
         listing_intent_id=uuid4(),
         contract_address="0:" + "44" * 32,
         deployment_snapshot_json=deployment_snapshot,
@@ -258,8 +257,8 @@ async def test_retry_projection_hides_third_party_and_duplicate_query_recipients
         buyer_id=buyer_id,
         seller_id=uuid4(),
         buyer_wallet_id=wallet_id,
-        buyer_address_snapshot=recipient,
         listing_intent_id=uuid4(),
+        buyer_address_snapshot=recipient,
         contract_address="0:" + "44" * 32,
         deployment_snapshot_json=deployment_snapshot,
         deployment_snapshot_sha256=_canonical_sha256(deployment_snapshot),
@@ -458,3 +457,163 @@ async def test_retry_prepare_rejects_third_party_actor_and_wrong_recipient_walle
         )
     assert wrong_recipient.value.status_code == 409
     assert wrong_recipient.value.detail["code"] == "escrow_wallet_snapshot_changed"
+
+
+@pytest.mark.asyncio
+async def test_retry_projection_fails_closed_without_complete_trust_anchor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    buyer_id, deal_id, wallet_id = uuid4(), uuid4(), uuid4()
+    recipient = "0:" + "33" * 32
+    deployment_snapshot = {"deal_salt": "ab" * 32}
+    deal = SimpleNamespace(
+        id=deal_id,
+        buyer_id=buyer_id,
+        seller_id=uuid4(),
+        buyer_wallet_id=wallet_id,
+        buyer_address_snapshot=recipient,
+        listing_intent_id=uuid4(),
+        contract_address="0:" + "44" * 32,
+        deployment_snapshot_json=deployment_snapshot,
+        deployment_snapshot_sha256=_canonical_sha256(deployment_snapshot),
+        deal_salt="ab" * 32,
+        network="testnet",
+    )
+
+    class ProjectionSession:
+        async def scalar(self, _statement: object):
+            return deal
+
+        async def rollback(self) -> None:
+            return None
+
+    async def verified_wallet(
+        _session: object, *, user_id: object, wallet_id: object
+    ):
+        return SimpleNamespace(id=wallet_id), recipient
+
+    class IncompleteProofProvider:
+        async def verify_deployed_account(
+            self, _deal: object, *, require_initial_state: bool
+        ):
+            assert require_initial_state is False
+            return ({
+                "outbound_actions": [_retry_row()],
+                "_proof_masterchain_seqno": 700,
+                "_proof_masterchain_block_hash": "aa" * 32,
+                # A missing state-data hash must never be replaced with a
+                # getter/indexer hash or inferred from the cached observer row.
+                "_proof_provider_id": "pytoniq-trust0-testnet-v1",
+            }, 700, "aa" * 32, "pytoniq-trust0-testnet-v1")
+
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                ton_escrow_finality_provider=IncompleteProofProvider()
+            )
+        )
+    )
+    monkeypatch.setattr("app.api.escrow._verified_wallet", verified_wallet)
+
+    with pytest.raises(HTTPException) as error:
+        await list_retryable_outbound_actions(
+            deal_id,
+            request,
+            SimpleNamespace(id=buyer_id),
+            ProjectionSession(),  # type: ignore[arg-type]
+        )
+
+    assert error.value.status_code == 503
+    assert error.value.detail["code"] == "outbound_action_proof_anchor_incomplete"
+
+
+@pytest.mark.asyncio
+async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    buyer_id, deal_id, action_id = uuid4(), uuid4(), uuid4()
+    deployment_snapshot = {"deal_salt": "ab" * 32}
+    deal = SimpleNamespace(
+        id=deal_id,
+        buyer_id=buyer_id,
+        seller_id=uuid4(),
+        contract_address="0:" + "44" * 32,
+        deployment_snapshot_json=deployment_snapshot,
+        deployment_snapshot_sha256=_canonical_sha256(deployment_snapshot),
+        deal_salt="ab" * 32,
+    )
+    payload = {
+        "network": "-3",
+        "validUntil": 1_800_000_000,
+        "messages": [{
+            "address": deal.contract_address,
+            "amount": "10000000",
+            "payload": "unsigned-boc",
+        }],
+    }
+    unsigned_bocs = {
+        "format": "tonconnect-message-bocs-v1",
+        "network": "testnet",
+        "messages": [{
+            "index": 0,
+            "address": deal.contract_address,
+            "amount_nanotons": "10000000",
+            "payload_boc_base64": "unsigned-boc",
+            "state_init_boc_base64": None,
+        }],
+    }
+    existing = SimpleNamespace(
+        id=action_id,
+        deal_id=deal_id,
+        query_id="4321",
+        unsigned_payload_json=payload,
+        unsigned_payload_sha256=_canonical_sha256(payload),
+        unsigned_bocs_json=unsigned_bocs,
+        unsigned_boc_sha256=_canonical_sha256(unsigned_bocs),
+        unsigned_boc_ref=f"db://escrow_wallet_actions/{action_id}/unsigned_bocs_json",
+    )
+
+    class ReplaySession:
+        def __init__(self) -> None:
+            self.scalar_calls = 0
+            self.rollback_calls = 0
+
+        async def scalar(self, _statement: object):
+            self.scalar_calls += 1
+            return deal if self.scalar_calls % 2 else existing
+
+        async def rollback(self) -> None:
+            self.rollback_calls += 1
+
+    session = ReplaySession()
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    user = SimpleNamespace(id=buyer_id)
+
+    replay = await prepare_retry_failed_outbound_action(
+        deal_id,
+        EscrowOutboundRetryRequest(query_id="4321"),
+        request,
+        user,
+        session,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+        "retry-idempotency-key-0001",
+    )
+    assert replay.action_id == action_id
+    assert replay.payload == payload
+    assert session.scalar_calls == 2
+
+    with pytest.raises(HTTPException) as conflict:
+        await prepare_retry_failed_outbound_action(
+            deal_id,
+            EscrowOutboundRetryRequest(query_id="4322"),
+            request,
+            user,
+            session,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            "retry-idempotency-key-0001",
+        )
+    assert conflict.value.status_code == 409
+    assert conflict.value.detail["code"] == "idempotency_payload_conflict"
+    assert session.rollback_calls == 1
