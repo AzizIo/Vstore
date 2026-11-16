@@ -310,7 +310,7 @@ async def test_prepare_action_persists_idempotency_before_incomplete_snapshot_50
     session = ActionSession()
 
     async def verified_wallet(
-        _session: object, *, user_id: object, wallet_id: object
+        _session: object, *, user_id: object, wallet_id: object, lock: bool = False
     ) -> tuple[SimpleNamespace, str]:
         assert user_id == buyer_id
         assert wallet_id == wallet_id_expected
