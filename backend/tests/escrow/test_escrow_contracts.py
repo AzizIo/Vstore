@@ -504,7 +504,13 @@ async def test_retry_failed_outbound_action_is_proof_descriptor_bound_and_recipi
         (replace(descriptor, recipient_address=deal.seller_address), "recipient"),
         (replace(descriptor, retry_window_seconds=0), "fields"),
         (replace(descriptor, kind=6, retry_window_seconds=1800), "fields"),
-        (replace(descriptor, kind=7, retry_window_seconds=0, amount_nanotons=1, message_value_nanotons=1), "fields"),
+        (
+            replace(
+                descriptor, kind=7, retry_window_seconds=0,
+                amount_nanotons=1, message_value_nanotons=1,
+            ),
+            "fields",
+        ),
         (replace(descriptor, attempt_id=0), "fields"),
         (replace(descriptor, bounce_phase=0), "fields"),
         (replace(descriptor, message_body_hash="bad"), "fields"),
