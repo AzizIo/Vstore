@@ -237,7 +237,7 @@ def validate_nft_identity_snapshot(
         raise NFTIdentityEvidenceError("Persisted NFT identity evidence hash mismatch")
     required = {
         "version", "network", "policy", "policy_sha256", "provider_id",
-        "masterchain_seqno", "masterchain_block_hash", "item_address",
+        "masterchain_seqno", "masterchain_block_hash", "observed_chain_time_unix", "item_address",
         "collection_address", "item_index", "owner_address", "item_code_hash",
         "collection_code_hash", "collection_item_code_hash", "item_data_hash",
         "collection_data_hash", "derived_item_address",
@@ -245,7 +245,7 @@ def validate_nft_identity_snapshot(
     if not required.issubset(snapshot):
         raise NFTIdentityEvidenceError("Persisted NFT identity evidence is incomplete")
 
-    if snapshot.get("version") != 1 or snapshot.get("network") != "testnet":
+    if type(snapshot.get("version")) is not int or snapshot["version"] != 1 or snapshot.get("network") != "testnet":
         raise NFTIdentityEvidenceError(
             "Persisted NFT identity evidence has an unsupported version/network"
         )
@@ -255,6 +255,13 @@ def validate_nft_identity_snapshot(
         or int(snapshot["masterchain_seqno"]) <= 0
     ):
         raise NFTIdentityEvidenceError("Persisted NFT identity masterchain sequence is invalid")
+    if (
+        isinstance(snapshot.get("observed_chain_time_unix"), bool)
+        or not isinstance(snapshot.get("observed_chain_time_unix"), int)
+        or int(snapshot["observed_chain_time_unix"]) <= 0
+    ):
+        raise NFTIdentityEvidenceError("Persisted NFT identity chain timestamp is invalid")
+
     if (
         isinstance(snapshot.get("item_index"), bool)
         or not isinstance(snapshot.get("item_index"), int)
