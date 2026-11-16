@@ -902,11 +902,17 @@ function WorkspaceBody({
                               : `Сумма исходного действия: ${nanoToTon(outbound.amount_nanotons)} TON`}
                             <br />
                             Masterchain seqno: {outbound.proof_masterchain_seqno}
+                            <br />
+                            Окно повтора: {outbound.retry_window_seconds === 0
+                              ? "0 сек. (терминальный возврат)"
+                              : `${outbound.retry_window_seconds} сек.`}
+                            <br />
+                            Proof: {outbound.proof_provider_id} · block {outbound.proof_masterchain_block_hash.slice(0, 8)} · state {outbound.proof_state_data_hash.slice(0, 8)}
                           </p>
                           <button
                             className="escrow-button escrow-button-primary"
                             type="button"
-                            disabled={!api || busy || !recipientWallet}
+                            disabled={!api || busy || Boolean(pending) || !recipientWallet}
                             onClick={() => recipientWallet && void prepareWalletAction(
                               "retry_failed_outbound_action",
                               selectedDeal,
