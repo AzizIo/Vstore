@@ -475,7 +475,7 @@ async def test_terms_command_is_explicit_when_full_terms_are_not_configured() ->
     response = message.answer.await_args
     assert "Полные условия сервиса пока не опубликованы" in response.args[0]
     assert "checkout" in response.args[0]
-    assert "reply_markup" not in response.kwargs
+    assert response.kwargs.get("reply_markup") is None
 
 
 @pytest.mark.asyncio
