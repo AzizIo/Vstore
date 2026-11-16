@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const tonConnectMocks = vi.hoisted(() => ({
@@ -624,7 +624,7 @@ describe("TON Escrow workspace", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
     const retryButton = await screen.findByRole("button", { name: /Повторить отправку · query 42/ });
-    expect(retryButton).toBeEnabled();
+    await waitFor(() => expect(retryButton).toBeEnabled());
     expect(screen.getByText(/актуального proof-read состояния TON testnet/)).toBeInTheDocument();
     expect(screen.getByText(/Окно повтора: 0 сек/)).toBeInTheDocument();
     expect(screen.getByText(/Proof: pytoniq-trust0-testnet-v1/)).toBeInTheDocument();
