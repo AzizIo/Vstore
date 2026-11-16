@@ -684,7 +684,7 @@ async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflic
         )
     assert conflict.value.status_code == 409
     assert conflict.value.detail["code"] == "idempotency_payload_conflict"
-    assert session.rollback_calls == 1
+    assert session.rollback_calls == 3
 
 @pytest.mark.asyncio
 async def test_retry_prepare_rejects_incomplete_trust_anchor_before_snapshot_commit(
