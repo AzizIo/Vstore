@@ -28,6 +28,7 @@ from app.escrow.schemas import (
     EscrowNftProjection,
     EscrowPageResponse,
     EscrowRetryFailedOutboundInput,
+    EscrowRetryableOutboundActionResponse,
     EscrowWalletReferenceInput,
 )
 from app.escrow.service import canonical_request_sha256
@@ -823,3 +824,31 @@ async def test_retryable_outbound_projection_is_recipient_wallet_only(
     assert actions[0].query_id == "42"
     assert actions[0].recipient_address == recipient
     assert actions[0].proof_masterchain_seqno == 700
+
+
+def test_retryable_outbound_response_accepts_only_kind_specific_windows() -> None:
+    common = {
+        "query_id": "18446744073709551615",
+        "slot": "second",
+        "recipient_address": "0:" + "a" * 64,
+        "amount_nanotons": "90000000",
+        "proof_masterchain_seqno": 700,
+    }
+    terminal = EscrowRetryableOutboundActionResponse(
+        **common, kind=6, retry_window_seconds=0
+    )
+    assert terminal.retry_window_seconds == 0
+    lifecycle = EscrowRetryableOutboundActionResponse(
+        **common, kind=4, retry_window_seconds=1800
+    )
+    assert lifecycle.retry_window_seconds == 1800
+    for kind, window in ((4, 0), (6, 1800), (7, 1)):
+        with pytest.raises(ValidationError):
+            EscrowRetryableOutboundActionResponse(
+                **common, kind=kind, retry_window_seconds=window
+            )
+    with pytest.raises(ValidationError):
+        EscrowRetryableOutboundActionResponse(
+            **{**common, "query_id": "18446744073709551616"},
+            kind=6, retry_window_seconds=0,
+        )
