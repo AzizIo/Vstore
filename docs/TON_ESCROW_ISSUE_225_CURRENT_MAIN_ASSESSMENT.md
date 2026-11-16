@@ -8,7 +8,7 @@
 
 ## Latest integrated candidate — 2026-11-16 20:25 UTC
 
-> This block supersedes every earlier feature head and CI snapshot below. Current main remains `b592a4b889221aeb314e521a357b1746091a5976`; **no escrow implementation PR has been merged to main**.
+> This block supersedes every earlier feature head and CI snapshot below. The executable escrow code baseline remains `b592a4b889221aeb314e521a357b1746091a5976`; the current main branch also contains docs-only release-handoff updates. **No escrow implementation PR has been merged to main**.
 
 Integrated candidate: `f2e61b0c049d64e90dd47025d0979ce295f1e426`.
 
@@ -48,7 +48,7 @@ The proof-bound retry implementation is complete in the unmerged feature stack. 
 
 ## Superseding feature-stack status — 2026-11-16 19:49 UTC
 
-> Current main HEAD is c74af7ceb9ba3c9893e7800ed85b155e762840a0 (docs-only PR #249); executable escrow code baseline remains b592a4b889221aeb314e521a357b1746091a5976. The following active remediation status supersedes the earlier PR heads and CI outcomes further below; none of these feature PRs has been merged to main.
+> The docs-only PR #249 merge and subsequent metadata corrections did not change executable escrow code; the code baseline remains b592a4b889221aeb314e521a357b1746091a5976. The following active remediation status supersedes the earlier PR heads and CI outcomes further below; none of these feature PRs has been merged to main.
 
 | Track | Current head | CI evidence |
 |---|---|---|
