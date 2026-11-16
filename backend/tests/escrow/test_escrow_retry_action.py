@@ -463,7 +463,6 @@ async def test_retry_projection_fails_closed_without_complete_trust_anchor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
-    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
     buyer_id, deal_id, wallet_id = uuid4(), uuid4(), uuid4()
     recipient = "0:" + "33" * 32
     deployment_snapshot = {"deal_salt": "ab" * 32}
