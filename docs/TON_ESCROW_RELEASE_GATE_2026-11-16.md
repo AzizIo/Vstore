@@ -11,7 +11,7 @@ This document supersedes the older handoff material based on `525215b9a51a34be81
 
 | Track | Exact head at snapshot | Status | Release condition |
 |---|---|---|---|
-| NFT identity / Issue #213 / [PR #241](https://github.com/AzizIo/Vstore/pull/241) | `9be7a06fa1ca8207dfb0934b1bb36836bf869b50` | Draft; Backend CI #43816635436 passed; Frontend/API E2E #43816635486 passed; PG16 migration upgrade/downgrade/re-upgrade passed; previous test assertion now exercises the new #20 identity trigger independently | Exact-head Backend, Frontend and API-backed E2E green; PostgreSQL 16 migration upgrade/downgrade and immutable-evidence tests pass; collection policy remains empty until explicitly approved |
+| NFT identity / Issue #213 / [PR #241](https://github.com/AzizIo/Vstore/pull/241) | `9be7a06fa1ca8207dfb0934b1bb36836bf869b50` | Ready for Review (not merged); Backend CI #43816635436 and Frontend/API #43816635486 passed; PG16 upgrade/downgrade/re-upgrade passed; no independent review submission recorded yet | Exact-head Backend, Frontend and API-backed E2E green; PostgreSQL 16 migration upgrade/downgrade and immutable-evidence tests pass; collection policy remains empty until explicitly approved |
 | Backend artifact pin / Issue #206 / [PR #247](https://github.com/AzizIo/Vstore/pull/247) | `2c83cd3f2af3faba902d5d809ffe83f889fd6086` | Draft; strict compressed/decoded/base64 BOC guard passed Backend #43815732686 (866 tests), Frontend/API #43815732770 and Contract #43815732694 | Pin must be refreshed to the final contract artifact from the #248 track before integration |
 | Contract lifecycle and refund ordering / Issue #225 / [PR #248](https://github.com/AzizIo/Vstore/pull/248) | `75926f137f057c56253a87a63b52d8c08586c52f` | Draft; code hash/BOC digests refreshed but manifest warning remains; Contract CI #43815040780 fails strict StateInit vector comparison; agent has exact new vector and zlib SHA to pin | Frozen manifest must contain non-null StateInit, raw address and data hash reproduced by generated wrapper and `@ton/core`; exact-head emulator and static checks green; backend adapter must consume this same artifact |
 | Earlier audit handoff / [PR #246](https://github.com/AzizIo/Vstore/pull/246) | `d0b19d2bd948edacbaf336285f9fff6afef0a748` | Draft; stale base | Based on older main and must not be used as current release evidence; this document is the current coordination snapshot |
@@ -103,7 +103,7 @@ Until every gate above is closed:
 
 ## 6. Merge and release sequence
 
-1. Agent 1 completes PR #241, fixes every exact-head Backend lint/test failure, proves PostgreSQL 16 migration behavior and obtains exact-head Backend + Frontend/API E2E success.
+1. PR #241 code/CI work is complete on `9be7a06fa1ca8207dfb0934b1bb36836bf869b50`; obtain an independent code review and approve the collection policy/runbook before merging. Keep the collection allowlist empty by default.
 2. Agent 2 completes PR #248, resolves every lifecycle/bounce/retry finding, regenerates the frozen compiler artifacts and passes exact-head Contract CI with non-null independently reproduced StateInit/address/data vectors.
 3. Release integration refreshes PR #247's backend code BOC, manifest, expected code hash and message/StateInit vectors from that final #248 artifact.
 4. Create an integrated candidate tree containing the final contract source and matching backend pin. Run Backend, Contract, Frontend, API-backed E2E and migration checks on the **same exact SHA**; verify the cross-track artifact test passes.
