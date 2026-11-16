@@ -743,3 +743,32 @@ async def test_bounced_lifecycle_action_is_not_hidden_when_contract_clears_deadl
 
     assert len(proofs) == 1
     assert proofs[0].action.kind == 4
+
+
+@pytest.mark.asyncio
+async def test_current_retry_proof_rejects_getter_time_not_bound_to_proved_masterchain_block(
+    monkeypatch,
+) -> None:
+    deal = _deal()
+    client = _FakeRetryLiteClient()
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(),
+        http_client=_FakeHttp({"transactions": []}),
+        lite_client_factory=lambda: client,
+    )
+
+    async def get_client():
+        return client
+
+    async def read_state(_deal, _masterchain, _client):
+        return ({
+            "outbound_actions": [_retry_descriptor(kind=6, retry_window_seconds=0)],
+            "deadline_unix": 0,
+            "observed_chain_time_unix": 1_700_000_101,
+        }, "refunded", "getter-identity")
+
+    monkeypatch.setattr(provider, "_get_lite_client", get_client)
+    monkeypatch.setattr(provider, "_read_contract_state", read_state)
+
+    with pytest.raises(EscrowProviderInvalidEvidence, match="retry time fields"):
+        await provider.read_current_outbound_retry_proofs(deal)
