@@ -575,7 +575,7 @@ async def test_unconfigured_testnet_provider_fails_closed() -> None:
     with pytest.raises(EscrowProviderUnavailable):
         await provider.scan_events(cursor=None, limit=10)
 
-def test_pinned_code_boc_rejects_compressed_artifact_digest_mismatch(
+def test_pinned_code_boc_rejects_trailing_compressed_artifact_bytes(
     tmp_path, monkeypatch
 ) -> None:
     import base64
@@ -607,7 +607,10 @@ def test_pinned_code_boc_rejects_compressed_artifact_digest_mismatch(
     monkeypatch.setattr(ton_abi, "_ARTIFACTS", tmp_path)
     ton_abi.load_pinned_abi.cache_clear()
     try:
-        with pytest.raises(ton_abi.TONABIError, match="compressed code BOC digest mismatch"):
+        with pytest.raises(
+            ton_abi.TONABIError,
+            match="pinned DealEscrow code BOC is unavailable or corrupt",
+        ):
             ton_abi.load_pinned_code_boc()
     finally:
         ton_abi.load_pinned_abi.cache_clear()
