@@ -502,7 +502,10 @@ def _retry_descriptor_from_proof(
         or not isinstance(retry_window, int)
         or not 0 < retry_window < (1 << 32)
     ):
-        raise HTTPException(status_code=409, detail={"code": "outbound_action_retry_window_invalid"})
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "outbound_action_retry_window_invalid"},
+        )
     raw_recipient = row.get("recipient_address")
     if not isinstance(raw_recipient, str):
         raise HTTPException(status_code=409, detail={"code": "outbound_action_recipient_invalid"})
