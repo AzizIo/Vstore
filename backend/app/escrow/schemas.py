@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 
 class EscrowListingIntentCreate(BaseModel):
@@ -27,7 +27,54 @@ class EscrowDisputeCreate(BaseModel):
 
 class EscrowOutboundRetryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    query_id: int = Field(strict=True, ge=1, lt=(1 << 64))
+    query_id: str = Field(pattern=r"^[1-9][0-9]{0,19}$", min_length=1, max_length=20)
+
+    @field_validator("query_id")
+    @classmethod
+    def validate_uint64_query_id(cls, value: str) -> str:
+        if int(value) >= (1 << 64):
+            raise ValueError("query_id must fit a non-zero uint64")
+        return value
+
+
+class EscrowRetryableOutboundActionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    query_id: str = Field(pattern=r"^[1-9][0-9]{0,19}$", min_length=1, max_length=20)
+    slot: Literal["first", "second"]
+    kind: int = Field(ge=1, le=7)
+    recipient_address: str = Field(min_length=1, max_length=128)
+    amount_nanotons: str = Field(pattern=r"^(0|[1-9][0-9]*)$")
+    retry_window_seconds: int = Field(ge=0, le=4_294_967_295)
+    proof_masterchain_seqno: int = Field(gt=0)
+
+    @field_validator("query_id")
+    @classmethod
+    def validate_response_query_id(cls, value: str) -> str:
+        if int(value) >= (1 << 64):
+            raise ValueError("query_id must fit a non-zero uint64")
+        return value
+
+    @field_validator("amount_nanotons")
+    @classmethod
+    def validate_kind_specific_amount(cls, value: str, info: ValidationInfo) -> str:
+        kind = info.data.get("kind")
+        if kind == 7 and value == "0":
+            return value
+        if kind in {1, 2, 3, 4, 5, 6} and int(value) > 0:
+            return value
+        raise ValueError("amount_nanotons does not match the outbound action kind")
+
+    @field_validator("retry_window_seconds")
+    @classmethod
+    def validate_kind_specific_retry_window(
+        cls, value: int, info: ValidationInfo
+    ) -> int:
+        kind = info.data.get("kind")
+        if kind in {1, 2, 3, 4, 5} and value == 1800:
+            return value
+        if kind in {6, 7} and value == 0:
+            return value
+        raise ValueError("retry_window_seconds does not match the outbound action kind")
 
 
 class EscrowWithdrawalCreate(BaseModel):
@@ -91,7 +138,8 @@ class EscrowDealResponse(BaseModel):
     dispute_deadline: datetime | None
     available_actions: list[Literal[
         "create_deal_escrow", "activate_deal", "deposit_nft", "fund_deal", "accept_deal",
-        "open_dispute", "return_nft_to_escrow", "withdraw_unsold_nft"
+        "open_dispute", "return_nft_to_escrow", "withdraw_unsold_nft",
+        "retry_failed_outbound_action"
     ]]
     created_at: datetime
     updated_at: datetime
