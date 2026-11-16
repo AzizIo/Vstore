@@ -1450,6 +1450,34 @@ async def _prepare_action(
         raise HTTPException(
             status_code=409, detail={"code": "escrow_wallet_changed_during_validation"}
         )
+    if action is EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION:
+        if retry_descriptor is None:
+            await session.rollback()
+            raise HTTPException(
+                status_code=503, detail={"code": "outbound_action_proof_incomplete"}
+            )
+        active_retry = await session.scalar(
+            select(EscrowWalletActionRecord)
+            .where(
+                EscrowWalletActionRecord.deal_id == deal.id,
+                EscrowWalletActionRecord.actor_id == user.id,
+                EscrowWalletActionRecord.action_type == action.value,
+                EscrowWalletActionRecord.query_id == str(retry_descriptor.query_id),
+                EscrowWalletActionRecord.status.in_(
+                    {"pending", "prepared", "submitted", "ambiguous", "manual_review"}
+                ),
+            )
+            .with_for_update()
+        )
+        if active_retry is not None:
+            await session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "outbound_action_retry_already_prepared",
+                    "action_status": active_retry.status,
+                },
+            )
     action_hash = canonical_request_sha256({
         "actor_id": str(user.id),
         "deal_id": str(deal.id),
