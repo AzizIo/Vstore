@@ -36,11 +36,11 @@ The current main frozen contract manifest is not yet aligned with the backend ad
 
 ### PR #250 — deterministic compressed BOC verifier follow-up
 
-- Exact head: `7b8775b628e9df9d22cbb18549bb9a51cf51828d`; Draft and stacked on #248's exact prior head.
-- Contract CI #43829081437 — SUCCESS; artifact #14208215967.
-- Adds deterministic RFC 1950/DEFLATE stored-block encoding (fixed 65,535-byte blocks, fixed header and Adler-32), plus tests for byte-exact small vectors, empty input, multi-block round-trip and wrong-digest rejection.
-- Updates frozen contract manifest compressed BOC SHA-256 to `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7`.
-- This closes the contract CI verifier gap on the #250 stack, but #250 is not yet integrated into the #248 branch. Keep it stacked until reviewed/integrated; rerun Contract CI on the new resulting #248 head.
+- PR #250 was merged into the #248 feature branch (not main) by squash commit `08daf5afe63c83f6f892fd469d90b3788e0f989c`.
+- Former exact PR #250 head `7b8775b628e9df9d22cbb18549bb9a51cf51828d` passed Contract CI #43829081437; artifact #14208215967.
+- Adds deterministic RFC 1950/DEFLATE stored-block encoding (fixed 65,535-byte blocks, fixed header and Adler-32), plus byte-exact, empty-input, multi-block and wrong-digest tests.
+- Frozen contract manifest compressed BOC SHA-256: `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7`.
+- Updated #248 head is now `08daf5afe63c83f6f892fd469d90b3788e0f989c`; Contract CI #43832141975 is in progress on this exact head and must pass before #247 is refreshed.
 
 ### PR #247 — backend artifact pin and cross-track guard (Issue #206)
 
@@ -61,7 +61,7 @@ The current main frozen contract manifest is not yet aligned with the backend ad
 - Compiled code hash: `498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46`.
 - StateInit hash/address: `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75`.
 - BOC base64/decoded digests: `0e7bc7b35eee4ae7003fba0a0e5368df3428b7e32ad0f4fc5ddf0f3230d5daf3` / `86ed08596d0595c711aa2cf7659ee396ff443d7b01c65659b8e7543dd23c6173`.
-- **Canonical compressed-BOC follow-up:** [PR #250](https://github.com/AzizIo/Vstore/pull/250) is stacked on the exact #248 head. It adds a portable RFC 1950/DEFLATE stored-block encoder and makes Contract CI verify the compressed representation itself. Canonical compressed digest: `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7`. Exact PR #250 head `7b8775b628e9df9d22cbb18549bb9a51cf51828d` passed Contract CI #43829081437 (artifact #14208215967), including verifier tests, Acton build, StateInit/message vectors, static checks and the emulator suite. **PR #250 is green but still stacked; it must be integrated into #248 and Contract CI rerun on the resulting #248 head before #247 is refreshed.**
+- **Canonical compressed-BOC verification is now integrated into #248's feature branch:** PR #250 was squash-merged into the #248 branch as `08daf5afe63c83f6f892fd469d90b3788e0f989c` (not main). The canonical stored-block zlib digest is `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7`; exact #250 pre-merge head passed Contract CI #43829081437 / artifact #14208215967. Fresh Contract CI #43832141975 is now running on the new exact #248 head `08daf5afe63c83f6f892fd469d90b3788e0f989c`; do not refresh #247 until this passes.
 - The 35-test suite covers seller-allowance-before-buyer-reserve retry, duplicate TEP-62 callback idempotency, timed-out escrowed-dispute resolver recovery, exact late buyer NFT return, replay rejection and sub-minimum action-value rejection.
 
 ### PR #251 — production bot support surfaces
@@ -81,7 +81,7 @@ The current main frozen contract manifest is not yet aligned with the backend ad
 ## 3. Required integration sequence
 
 1. Complete independent code review and collection-policy review for #241; keep the default collection allowlist empty.
-2. Integrate reviewed PR #250 into #248, then rerun Contract CI on the resulting exact #248 SHA. The canonical compressed-BOC digest must be reproduced by the verifier alongside code/raw/base64 BOC and StateInit vectors.
+2. PR #250 has been integrated into the #248 feature branch; confirm Contract CI #43832141975 passes on exact head `08daf5afe63c83f6f892fd469d90b3788e0f989c`. The canonical compressed-BOC digest must be reproduced by the verifier alongside code/raw/base64 BOC and StateInit vectors.
 3. Refresh #247 backend manifest/physical BOC/code pin/StateInit golden vectors from the final post-#250 #248 artifact, not from any older candidate.
 4. Implement #252 proof-bound recipient-authorized outbound retry through provider, backend adapter/API and frontend, including positive and adversarial tests.
 5. Build one integrated candidate tree containing #241 identity work, final #248 + #250 contract, matching #247 backend pin and #252 retry path.
