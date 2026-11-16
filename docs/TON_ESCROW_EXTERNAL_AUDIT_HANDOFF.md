@@ -1,6 +1,6 @@
 # VILTARA TON Escrow — external audit and live acceptance handoff
 
-**Prepared against current main:** `525215b9a51a34be811e73a1cc26995cd3cb25a1`  
+**Prepared against current main:** `b592a4b889221aeb314e521a357b1746091a5976`  
 **Network scope:** TON testnet only (`global_id = -3`)  
 **Contract:** `contracts/ton-escrow-poc/contracts/DealEscrow.tolk`  
 **Toolchain:** Acton 1.2.1 / Tolk 1.5.0  
