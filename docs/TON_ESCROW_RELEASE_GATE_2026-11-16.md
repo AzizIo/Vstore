@@ -2,7 +2,7 @@
 
 **Snapshot date:** 2026-11-16  
 **Executable code baseline:** `b592a4b889221aeb314e521a357b1746091a5976`  
-**Current main HEAD:** `c74af7ceb9ba3c9893e7800ed85b155e762840a0` (docs-only PR #249 merge)  
+**Mainline note:** release-gate and audit documentation has been updated on main; executable escrow code baseline remains `b592a4b889221aeb314e521a357b1746091a5976`.  
 **Network:** TON testnet only (`global_id = -3`)  
 **Decision:** **BLOCKED — not a production release candidate**
 
