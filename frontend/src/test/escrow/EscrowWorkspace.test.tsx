@@ -20,6 +20,7 @@ import type {
   EscrowDeal,
   EscrowListingIntent,
   EscrowPage,
+  EscrowRetryableOutboundAction,
   EscrowWithdrawal,
   PreparedEscrowTransaction,
 } from "../../api/escrow";
@@ -153,6 +154,7 @@ function makeApi(options: {
   sellerListings?: EscrowListingIntent[];
   buyerDeals?: EscrowDeal[];
   sellerDeals?: EscrowDeal[];
+  retryableOutboundActions?: EscrowRetryableOutboundAction[];
   listMarketplaceListings?: () => Promise<EscrowPage<EscrowListingIntent>>;
 } = {}): EscrowApiClient {
   return {
@@ -172,6 +174,8 @@ function makeApi(options: {
     prepareDispute: vi.fn(async () => prepared("open_dispute")),
     prepareBuyerNftReturn: vi.fn(async () => prepared("return_nft_to_escrow")),
     prepareUnsoldNftWithdrawal: vi.fn(async () => prepared("withdraw_unsold_nft")),
+    listRetryableOutboundActions: vi.fn(async () => options.retryableOutboundActions ?? []),
+    prepareFailedOutboundRetry: vi.fn(async () => prepared("retry_failed_outbound_action")),
     submitWalletReference: vi.fn(async () => undefined),
   };
 }
@@ -597,3 +601,89 @@ describe("TON Escrow workspace", () => {
     expect(screen.getAllByText(/TON testnet/i).length).toBeGreaterThan(0);
   });
 });
+
+
+  it("shows proof-backed retry only for the exact verified recipient wallet", async () => {
+    const outbound: EscrowRetryableOutboundAction = {
+      query_id: "42",
+      slot: "first",
+      kind: 6,
+      recipient_address: sellerAddress,
+      amount_nanotons: "90000000",
+      retry_window_seconds: 0,
+      proof_masterchain_seqno: 700,
+      proof_masterchain_block_hash: "aa".repeat(32),
+      proof_state_data_hash: "bb".repeat(32),
+      proof_provider_id: "pytoniq-trust0-testnet-v1",
+    };
+    const api = makeApi({
+      buyerDeals: [deal({ state: "refunded", available_actions: [] })],
+      retryableOutboundActions: [outbound],
+    });
+    renderWorkspace(api);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
+    const retryButton = await screen.findByRole("button", { name: /Повторить отправку · query 42/ });
+    expect(retryButton).toBeEnabled();
+    expect(screen.getByText(/актуального proof-read состояния TON testnet/)).toBeInTheDocument();
+
+    fireEvent.click(retryButton);
+    expect(api.prepareFailedOutboundRetry).toHaveBeenCalledWith({
+      deal_id: "deal-1",
+      query_id: "42",
+    });
+    expect(await screen.findByRole("dialog", { name: /Повторить неудавшуюся отправку/ }))
+      .toBeInTheDocument();
+    expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("disables retry when the proved recipient has no matching verified testnet wallet", async () => {
+    const api = makeApi({
+      buyerDeals: [deal({ state: "refunded", available_actions: [] })],
+      retryableOutboundActions: [{
+        query_id: "43",
+        slot: "second",
+        kind: 4,
+        recipient_address: "0:" + "9".repeat(64),
+        amount_nanotons: "90000000",
+        retry_window_seconds: 1800,
+        proof_masterchain_seqno: 701,
+        proof_masterchain_block_hash: "aa".repeat(32),
+        proof_state_data_hash: "bb".repeat(32),
+        proof_provider_id: "pytoniq-trust0-testnet-v1",
+      }],
+    });
+    renderWorkspace(api);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
+    expect(await screen.findByRole("button", { name: /Повторить отправку · query 43/ }))
+      .toBeDisabled();
+    expect(screen.getByText(/совпадающего с получателем/)).toBeInTheDocument();
+    expect(api.prepareFailedOutboundRetry).not.toHaveBeenCalled();
+  });
+
+
+  it("explains that execution-reserve retry carries the contract balance rather than a fixed amount", async () => {
+    const api = makeApi({
+      buyerDeals: [deal({ state: "refunded", available_actions: [] })],
+      retryableOutboundActions: [{
+        query_id: "44",
+        slot: "second",
+        kind: 7,
+        recipient_address: sellerAddress,
+        amount_nanotons: "0",
+        retry_window_seconds: 0,
+        proof_masterchain_seqno: 702,
+        proof_masterchain_block_hash: "aa".repeat(32),
+        proof_state_data_hash: "bb".repeat(32),
+        proof_provider_id: "pytoniq-trust0-testnet-v1",
+      }],
+    });
+    renderWorkspace(api);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть сделку Moon Lantern/ }));
+    expect(await screen.findByText(/Сумма определяется контрактом: перевод остатка баланса/))
+      .toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Повторить отправку · query 44/ }))
+      .toBeEnabled();
+  });
