@@ -44,7 +44,7 @@ class EscrowRetryableOutboundActionResponse(BaseModel):
     slot: Literal["first", "second"]
     kind: int = Field(ge=1, le=7)
     recipient_address: str = Field(min_length=1, max_length=128)
-    amount_nanotons: str = Field(pattern=r"^[1-9][0-9]*$")
+    amount_nanotons: str = Field(pattern=r"^(0|[1-9][0-9]*)$")
     retry_window_seconds: int = Field(ge=0, le=4_294_967_295)
     proof_masterchain_seqno: int = Field(gt=0)
 
