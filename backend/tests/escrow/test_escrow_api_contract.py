@@ -255,7 +255,22 @@ async def test_prepare_action_persists_idempotency_before_incomplete_snapshot_50
         network="testnet",
         listing_intent_id=listing_intent_id,
         buyer_wallet_id=wallet_id,
+        nft_identity_snapshot_json={},
+        nft_identity_snapshot_sha256="a" * 64,
     )
+    identity_snapshot = {
+        "network": "testnet",
+        "policy_sha256": "b" * 64,
+        "item_address": deal.item_address,
+        "collection_address": deal.collection_address_snapshot,
+        "item_index": 1,
+        "item_code_hash": "c" * 64,
+        "collection_code_hash": "d" * 64,
+        "collection_item_code_hash": "c" * 64,
+        "derived_item_address": deal.item_address,
+        "owner_address": deal.seller_address_snapshot,
+        "masterchain_seqno": 500,
+    }
     wallet = SimpleNamespace(id=wallet_id)
     listing_intent = SimpleNamespace(seller_wallet_id=uuid4())
     action_record = SimpleNamespace(
@@ -283,6 +298,9 @@ async def test_prepare_action_persists_idempotency_before_incomplete_snapshot_50
         async def get(self, _model: type[object], _identity: object) -> SimpleNamespace:
             return listing_intent
 
+        async def rollback(self) -> None:
+            return None
+
         async def commit(self) -> None:
             self.commit_calls += 1
 
@@ -305,6 +323,24 @@ async def test_prepare_action_persists_idempotency_before_incomplete_snapshot_50
     ) -> tuple[SimpleNamespace, bool]:
         return action_record, True
 
+    async def verify_identity(
+        _provider: object,
+        *,
+        item_address: str,
+        collection_address: str,
+        expected_owner_address: str | None = None,
+        minimum_masterchain_seqno: int = 0,
+    ) -> dict[str, object]:
+        assert item_address == deal.item_address
+        assert collection_address == deal.collection_address_snapshot
+        assert minimum_masterchain_seqno == 500
+        return identity_snapshot
+
+    monkeypatch.setattr(
+        "app.api.escrow.validate_nft_identity_snapshot",
+        lambda _snapshot, _digest: identity_snapshot,
+    )
+    monkeypatch.setattr("app.api.escrow._verify_escrow_nft_identity", verify_identity)
     monkeypatch.setattr("app.api.escrow._verified_wallet", verified_wallet)
     monkeypatch.setattr("app.api.escrow.create_or_replay_action", create_action)
 
