@@ -1922,7 +1922,7 @@ class PytoniqTONTestnetEscrowProvider:
                 deal_collection = _canonical_address(deal.collection_address_snapshot)
                 if deal_item != item or deal_collection is None:
                     raise NFTIdentityEvidenceError(
-                        "Persisted escrow deal has a missing or inconsistent item/collection address"
+                        "Persisted escrow deal address is missing or inconsistent"
                     )
 
                 identity = validate_nft_identity_snapshot(
