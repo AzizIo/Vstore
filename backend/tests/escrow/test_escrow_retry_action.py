@@ -195,7 +195,9 @@ async def test_retry_projection_uses_current_proof_and_exact_recipient_wallet(
         async def rollback(self) -> None:
             self.rollback_calls += 1
 
-    async def verified_wallet(_session: object, *, user_id: object, wallet_id: object, lock: bool = False):
+    async def verified_wallet(
+        _session: object, *, user_id: object, wallet_id: object, lock: bool = False
+    ):
         assert user_id == buyer_id
         assert wallet_id == deal.buyer_wallet_id
         return SimpleNamespace(id=wallet_id), recipient
@@ -274,7 +276,9 @@ async def test_retry_projection_hides_third_party_and_duplicate_query_recipients
         async def rollback(self) -> None:
             return None
 
-    async def verified_wallet(_session: object, *, user_id: object, wallet_id: object, lock: bool = False):
+    async def verified_wallet(
+        _session: object, *, user_id: object, wallet_id: object, lock: bool = False
+    ):
         return SimpleNamespace(id=wallet_id), recipient
 
     rows = [
