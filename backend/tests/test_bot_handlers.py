@@ -19,7 +19,7 @@ def dispatcher() -> Dispatcher:
 
 
 def _settings(url: str | None = APP_URL) -> SimpleNamespace:
-    return SimpleNamespace(telegram_mini_app_url=url)
+    return SimpleNamespace(telegram_mini_app_url=url, telegram_support_username=None, telegram_terms_url=None)
 
 
 def test_dispatcher_registers_all_user_facing_handlers(
@@ -41,6 +41,9 @@ def test_dispatcher_registers_all_user_facing_handlers(
         "handle_sell",
         "handle_orders",
         "handle_safety",
+        "handle_terms",
+        "handle_support",
+        "handle_paysupport",
         "handle_text_fallback",
     }.issubset(message_handlers)
     assert {
@@ -326,7 +329,10 @@ async def test_plain_text_fallback_points_to_new_commands(
 
     response = message.answer.await_args
     assert "не умею отвечать на свободные сообщения" in response.args[0]
-    for command in ("/start", "/app", "/buy", "/sell", "/orders", "/safety", "/help"):
+    for command in (
+        "/start", "/app", "/buy", "/sell", "/orders", "/safety",
+        "/paysupport", "/terms", "/support", "/help",
+    ):
         assert command in response.args[0]
 
 
@@ -372,6 +378,9 @@ async def test_register_bot_commands_publishes_russian_command_menu() -> None:
         ("sell", "Как продать NFT"),
         ("orders", "Заказы и доставка"),
         ("safety", "Правила безопасности"),
+        ("paysupport", "Помощь с платежами"),
+        ("terms", "Условия сервиса"),
+        ("support", "Связаться с поддержкой"),
         ("help", "Центр помощи"),
     ]
 
@@ -452,3 +461,83 @@ async def test_about_callback_opens_marketplace_overview(
     assert "Telegram Gifts" in edit_text.await_args.args[0]
     rows = edit_text.await_args.kwargs["reply_markup"].inline_keyboard
     assert rows[-1][0].callback_data == "bot:menu"
+
+@pytest.mark.asyncio
+async def test_terms_command_is_explicit_when_full_terms_are_not_configured() -> None:
+    message = SimpleNamespace(answer=AsyncMock())
+
+    await bot_handlers.handle_terms(message)  # type: ignore[arg-type]
+
+    response = message.answer.await_args
+    assert "Полные условия сервиса пока не опубликованы" in response.args[0]
+    assert "checkout" in response.args[0]
+    assert "reply_markup" not in response.kwargs
+
+
+@pytest.mark.asyncio
+async def test_terms_command_links_only_to_valid_https_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings()
+    settings.telegram_terms_url = "https://shop.example.com/terms"
+    monkeypatch.setattr(bot_handlers, "get_settings", lambda: settings)
+    message = SimpleNamespace(answer=AsyncMock())
+
+    await bot_handlers.handle_terms(message)  # type: ignore[arg-type]
+
+    keyboard = message.answer.await_args.kwargs["reply_markup"]
+    assert keyboard.inline_keyboard[0][0].url == "https://shop.example.com/terms"
+
+
+@pytest.mark.parametrize(
+    "url",
+    ("http://shop.example.com/terms", "https://user:pass@example.com/terms", "javascript:alert(1)"),
+)
+def test_public_terms_url_rejects_unsafe_destinations(url: str) -> None:
+    assert bot_handlers._terms_keyboard(url) is None
+
+
+@pytest.mark.asyncio
+async def test_support_command_is_transparent_when_contact_is_not_configured() -> None:
+    message = SimpleNamespace(answer=AsyncMock())
+
+    await bot_handlers.handle_support(message)  # type: ignore[arg-type]
+
+    response = message.answer.await_args
+    assert "Контакт поддержки пока не опубликован" in response.args[0]
+    assert "Платёжные операции отключены" in response.args[0]
+    assert "reply_markup" not in response.kwargs
+
+
+@pytest.mark.asyncio
+async def test_support_command_links_to_configured_telegram_username(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings()
+    settings.telegram_support_username = "@ViltaraHelpBot"
+    monkeypatch.setattr(bot_handlers, "get_settings", lambda: settings)
+    message = SimpleNamespace(answer=AsyncMock())
+
+    await bot_handlers.handle_support(message)  # type: ignore[arg-type]
+
+    keyboard = message.answer.await_args.kwargs["reply_markup"]
+    assert keyboard.inline_keyboard[0][0].url == "https://t.me/ViltaraHelpBot"
+    assert "Не отправляйте seed-фразы" in message.answer.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_paysupport_never_claims_that_checkout_or_refunds_are_enabled() -> None:
+    message = SimpleNamespace(answer=AsyncMock())
+
+    await bot_handlers.handle_paysupport(message)  # type: ignore[arg-type]
+
+    response = message.answer.await_args
+    assert "checkout сейчас отключён" in response.args[0]
+    assert "не оплачивайте заказ" in response.args[0]
+    assert "charge ID" in response.args[0]
+    assert "Контакт поддержки ещё не настроен" in response.args[0]
+
+
+def test_support_username_validation_rejects_urls_and_invalid_usernames() -> None:
+    for value in ("https://t.me/attacker", "@too-short", "name with spaces", "a" * 33):
+        assert bot_handlers._support_keyboard(value) is None
