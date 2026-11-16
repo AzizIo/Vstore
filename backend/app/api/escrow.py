@@ -472,7 +472,7 @@ def _retry_descriptor_from_proof(
     query_id: int,
     expected_deal_salt: str,
 ) -> OutboundActionRetryDescriptor:
-    """Select exactly one canonical, bounced descriptor from a fresh trusted proof."""
+    """Select exactly one canonical, BOUNCED descriptor from a fresh trusted proof."""
     rows = getter.get("outbound_actions")
     if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
         raise HTTPException(
@@ -489,26 +489,103 @@ def _retry_descriptor_from_proof(
             else "outbound_action_descriptor_not_found"
         )
         raise HTTPException(status_code=409, detail={"code": code})
+
     row = matches[0]
     row_salt = row.get("deal_salt")
-    if not isinstance(row_salt, str) or row_salt.lower() != expected_deal_salt.lower():
-        raise HTTPException(status_code=409, detail={"code": "outbound_action_deal_salt_mismatch"})
+    if (
+        not isinstance(row_salt, str)
+        or len(row_salt) != 64
+        or any(char not in "0123456789abcdefABCDEF" for char in row_salt)
+        or row_salt.lower() != expected_deal_salt.lower()
+    ):
+        raise HTTPException(
+            status_code=409, detail={"code": "outbound_action_deal_salt_mismatch"}
+        )
     status_value = row.get("status")
     if isinstance(status_value, bool) or status_value != 1:
-        raise HTTPException(status_code=409, detail={"code": "outbound_action_not_bounced"})
+        raise HTTPException(
+            status_code=409, detail={"code": "outbound_action_not_bounced"}
+        )
+
+    slot = row.get("slot")
+    kind = row.get("kind")
+    descriptor_query_id = row.get("query_id")
     retry_window = row.get("retry_window_seconds")
+    attempt_id = row.get("attempt_id")
+    amount = row.get("amount_nanotons")
+    message_value = row.get("message_value_nanotons")
+    expected_state = row.get("expected_state")
+    expected_pending_action = row.get("expected_pending_action")
+    bounce_phase = row.get("bounce_phase")
+    message_body_hash = row.get("message_body_hash")
+
     if (
-        isinstance(retry_window, bool)
+        slot not in {"first", "second"}
+        or type(kind) is not int
+        or kind not in {1, 2, 3, 4, 5, 6, 7}
+        or isinstance(descriptor_query_id, bool)
+        or not isinstance(descriptor_query_id, int)
+        or not 0 < descriptor_query_id < (1 << 64)
+        or isinstance(retry_window, bool)
         or not isinstance(retry_window, int)
-        or not 0 < retry_window < (1 << 32)
+        or isinstance(attempt_id, bool)
+        or not isinstance(attempt_id, int)
+        or not 0 < attempt_id < (1 << 64)
+        or type(expected_state) is not int
+        or not 0 <= expected_state <= 13
+        or type(expected_pending_action) is not int
+        or not 0 <= expected_pending_action <= 255
+        or type(bounce_phase) is not int
+        or bounce_phase not in {1, 2}
+        or not isinstance(message_body_hash, str)
+        or not _HEX_256.fullmatch(message_body_hash)
     ):
+        raise HTTPException(
+            status_code=409, detail={"code": "outbound_action_descriptor_invalid"}
+        )
+
+    valid_retry_window = (
+        kind in {1, 2, 3, 4, 5} and retry_window == 1800
+    ) or (
+        kind in {6, 7} and retry_window == 0
+    )
+    valid_amounts = (
+        kind == 7
+        and type(amount) is int and amount == 0
+        and type(message_value) is int and message_value == 0
+    ) or (
+        kind in {1, 2, 3, 4, 5, 6}
+        and type(amount) is int and amount > 0
+        and type(message_value) is int and message_value > 0
+    )
+    if not valid_retry_window:
         raise HTTPException(
             status_code=409,
             detail={"code": "outbound_action_retry_window_invalid"},
         )
+    if not valid_amounts:
+        raise HTTPException(
+            status_code=409, detail={"code": "outbound_action_amount_invalid"}
+        )
+
+    # The contract requires the seller deployment allowance to be retried
+    # before the carry-all execution reserve can be sent to its recipient.
+    if kind == 7 and any(
+        isinstance(item, dict)
+        and item.get("kind") == 6
+        and item.get("status") == 1
+        for item in rows
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "outbound_action_retry_order_not_ready"},
+        )
+
     raw_recipient = row.get("recipient_address")
     if not isinstance(raw_recipient, str):
-        raise HTTPException(status_code=409, detail={"code": "outbound_action_recipient_invalid"})
+        raise HTTPException(
+            status_code=409, detail={"code": "outbound_action_recipient_invalid"}
+        )
     try:
         recipient = parse_basechain_address(raw_recipient, "recipient_address")
     except TONABIError as exc:
@@ -518,23 +595,25 @@ def _retry_descriptor_from_proof(
     canonical_recipient = recipient.to_str(is_user_friendly=False)
     if raw_recipient != canonical_recipient:
         raise HTTPException(
-            status_code=409, detail={"code": "outbound_action_recipient_not_canonical"}
+            status_code=409,
+            detail={"code": "outbound_action_recipient_not_canonical"},
         )
-    descriptor_query_id = row.get("query_id")
-    if (
-        isinstance(descriptor_query_id, bool)
-        or not isinstance(descriptor_query_id, int)
-        or not 0 < descriptor_query_id < (1 << 64)
-    ):
-        raise HTTPException(
-            status_code=409, detail={"code": "outbound_action_query_id_invalid"}
-        )
+
     return OutboundActionRetryDescriptor(
+        slot=slot,
+        kind=kind,
         query_id=descriptor_query_id,
         deal_salt=row_salt.lower(),
         recipient_address=canonical_recipient,
         status=status_value,
         retry_window_seconds=retry_window,
+        attempt_id=attempt_id,
+        amount_nanotons=amount,
+        message_value_nanotons=message_value,
+        expected_state=expected_state,
+        expected_pending_action=expected_pending_action,
+        bounce_phase=bounce_phase,
+        message_body_hash=message_body_hash,
     )
 
 
