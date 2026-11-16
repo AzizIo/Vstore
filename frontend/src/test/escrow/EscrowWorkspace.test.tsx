@@ -199,7 +199,7 @@ function installInventoryApi() {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.endsWith("/api/wallets/me")) {
-      return jsonResponse([testWallet, ignoredMainnetWallet]);
+      return jsonResponse([testWallet, verifiedRetrySellerWallet, ignoredMainnetWallet]);
     }
     if (url.includes("/api/assets/me?")) {
       return jsonResponse({
