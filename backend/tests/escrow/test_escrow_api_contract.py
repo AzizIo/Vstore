@@ -26,6 +26,7 @@ from app.escrow.schemas import (
     EscrowListingIntentResponse,
     EscrowNftProjection,
     EscrowPageResponse,
+    EscrowRetryFailedOutboundInput,
     EscrowWalletReferenceInput,
 )
 from app.escrow.service import canonical_request_sha256
@@ -97,6 +98,13 @@ def test_deal_response_serializes_frontend_projection_fields() -> None:
     assert payload["available_actions"] == ["accept_deal", "open_dispute"]
 
 
+def test_retry_query_id_is_a_bounded_uint64_decimal_string() -> None:
+    assert EscrowRetryFailedOutboundInput(query_id="18446744073709551615").query_id == "18446744073709551615"
+    for invalid in ("0", "-1", "18446744073709551616", "1.0", "abc"):
+        with pytest.raises(ValidationError):
+            EscrowRetryFailedOutboundInput(query_id=invalid)
+
+
 def test_page_response_uses_frontend_pagination_envelope() -> None:
     page = EscrowPageResponse(items=[], total=0, next_cursor=None)
     assert page.model_dump(mode="json") == {"items": [], "total": 0, "next_cursor": None}
@@ -115,6 +123,8 @@ def test_backend_exposes_expected_deal_scoped_preparation_routes() -> None:
     assert "/escrow/deals/{deal_id}/prepare/dispute" in paths
     assert "/escrow/deals/{deal_id}/prepare/nft-return" in paths
     assert "/escrow/deals/{deal_id}/prepare/withdraw-unsold-nft" in paths
+    assert "/escrow/deals/{deal_id}/retryable-outbound-actions" in paths
+    assert "/escrow/deals/{deal_id}/prepare/retry-failed-outbound" in paths
     assert "/escrow/deals/{deal_id}/receipt" not in paths
 
 
