@@ -1,6 +1,7 @@
 """TON escrow wallet payloads, backed by the pinned DealEscrow ABI."""
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from enum import StrEnum
@@ -412,14 +413,19 @@ class PinnedTONEscrowContractAdapter:
                     type(descriptor.kind) is not int
                     or descriptor.kind not in {1, 2, 3, 4, 5, 6, 7}
                     or descriptor.slot not in {"first", "second"}
+                    or type(descriptor.retry_window_seconds) is not int
                     or not valid_retry_window
                     or not valid_amounts
                     or isinstance(descriptor.attempt_id, bool)
                     or not isinstance(descriptor.attempt_id, int)
                     or not 0 < descriptor.attempt_id < (1 << 64)
+                    or type(descriptor.bounce_phase) is not int
                     or descriptor.bounce_phase not in {1, 2}
+                    or type(descriptor.expected_state) is not int
                     or not 0 <= descriptor.expected_state <= 13
+                    or type(descriptor.expected_pending_action) is not int
                     or not 0 <= descriptor.expected_pending_action <= 255
+                    or not isinstance(descriptor.message_body_hash, str)
                     or not re.fullmatch(r"[0-9a-f]{64}", descriptor.message_body_hash)
                 ):
                     raise TONABIError("retry descriptor fields are invalid")
