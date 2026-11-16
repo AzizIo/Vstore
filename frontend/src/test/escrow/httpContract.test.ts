@@ -46,7 +46,7 @@ describe("TON escrow HTTP contract", () => {
       query_id: "18446744073709551615",
     });
     expect(retry.url).toBe(
-      "/api-host/api/escrow/deals/deal%2F1/prepare/retry-failed-outbound",
+      "/api-host/api/escrow/deals/deal%2F1/prepare/retry-failed-outbound-action",
     );
     expect(retry.body).toEqual({ query_id: "18446744073709551615" });
     expect(retry.headers?.["Idempotency-Key"]).toBeTruthy();
