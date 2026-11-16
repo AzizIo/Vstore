@@ -1932,7 +1932,7 @@ async def prepare_retry_failed_outbound_action(
         )
     descriptor = _retry_descriptor_from_proof(
         getter,
-        query_id=payload.query_id,
+        query_id=int(payload.query_id),
         expected_deal_salt=str(deal.deal_salt),
     )
 
