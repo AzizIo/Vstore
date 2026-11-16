@@ -842,6 +842,11 @@ def test_retryable_outbound_response_accepts_only_kind_specific_windows() -> Non
         **common, kind=4, retry_window_seconds=1800
     )
     assert lifecycle.retry_window_seconds == 1800
+    reserve = EscrowRetryableOutboundActionResponse(
+        **{**common, "amount_nanotons": "0"},
+        kind=7, retry_window_seconds=0,
+    )
+    assert reserve.amount_nanotons == "0"
     for kind, window in ((4, 0), (6, 1800), (7, 1)):
         with pytest.raises(ValidationError):
             EscrowRetryableOutboundActionResponse(
