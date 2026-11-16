@@ -2544,6 +2544,24 @@ async def prepare_retry_failed_outbound_action(
         raise HTTPException(
             status_code=503, detail={"code": "outbound_action_proof_incomplete"}
         )
+    # The provider tuple and getter metadata must describe the exact same
+    # trusted read. Discovery enforces this too; preparation must fail closed
+    # before changing the persisted snapshot or creating a wallet action.
+    proof_seqno = getter.get("_proof_masterchain_seqno")
+    proof_block_hash = getter.get("_proof_masterchain_block_hash")
+    state_data_hash = getter.get("_proof_state_data_hash")
+    proof_provider_id = getter.get("_proof_provider_id")
+    if (
+        proof_seqno != masterchain_seqno
+        or proof_block_hash != masterchain_block_hash
+        or not isinstance(state_data_hash, str)
+        or not _HEX_256.fullmatch(state_data_hash)
+        or proof_provider_id != provider_id
+    ):
+        raise HTTPException(
+            status_code=503, detail={"code": "outbound_action_proof_anchor_incomplete"}
+        )
+
     descriptor = _retry_descriptor_from_proof(
         getter,
         query_id=int(payload.query_id),
@@ -2590,7 +2608,7 @@ async def prepare_retry_failed_outbound_action(
             "masterchain_seqno": masterchain_seqno,
             "masterchain_block_hash": masterchain_block_hash.lower(),
             "provider_id": provider_id,
-            "state_data_hash": getter.get("_proof_state_data_hash"),
+            "state_data_hash": state_data_hash,
             "getter_sha256": _canonical_sha256(getter_json),
         },
     }

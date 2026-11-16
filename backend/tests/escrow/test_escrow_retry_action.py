@@ -639,6 +639,91 @@ async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflic
     assert session.rollback_calls == 1
 
 @pytest.mark.asyncio
+async def test_retry_prepare_rejects_incomplete_trust_anchor_before_snapshot_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
+    buyer_id, deal_id = uuid4(), uuid4()
+    deployment_snapshot = {"deal_salt": "ab" * 32}
+    deal = SimpleNamespace(
+        id=deal_id,
+        buyer_id=buyer_id,
+        seller_id=uuid4(),
+        contract_address="0:" + "44" * 32,
+        deployment_snapshot_json=deployment_snapshot,
+        deployment_snapshot_sha256=_canonical_sha256(deployment_snapshot),
+        deal_salt="ab" * 32,
+        network="testnet",
+        getter_snapshot_json=None,
+        getter_snapshot_sha256=None,
+        getter_snapshot_masterchain_seqno=None,
+    )
+
+    class IncompleteAnchorSession:
+        def __init__(self) -> None:
+            self.scalar_calls = 0
+            self.rollback_calls = 0
+            self.commit_calls = 0
+
+        async def scalar(self, _statement: object):
+            self.scalar_calls += 1
+            return deal if self.scalar_calls == 1 else None
+
+        async def rollback(self) -> None:
+            self.rollback_calls += 1
+
+        async def commit(self) -> None:
+            self.commit_calls += 1
+
+    class IncompleteAnchorProvider:
+        async def verify_deployed_account(
+            self, _deal: object, *, require_initial_state: bool
+        ):
+            assert require_initial_state is False
+            # The tuple is internally plausible, but the getter omits the
+            # state-data hash needed to bind the action to the proved account.
+            return (
+                {
+                    "outbound_actions": [_retry_row()],
+                    "_proof_masterchain_seqno": 700,
+                    "_proof_masterchain_block_hash": "aa" * 32,
+                    "_proof_provider_id": "pytoniq-trust0-testnet-v1",
+                },
+                700,
+                "aa" * 32,
+                "pytoniq-trust0-testnet-v1",
+            )
+
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                ton_escrow_finality_provider=IncompleteAnchorProvider()
+            )
+        )
+    )
+    session = IncompleteAnchorSession()
+
+    with pytest.raises(HTTPException) as error:
+        await prepare_retry_failed_outbound_action(
+            deal_id,
+            EscrowOutboundRetryRequest(query_id="4321"),
+            request,
+            SimpleNamespace(id=buyer_id),
+            session,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            "retry-incomplete-anchor-key-0001",
+        )
+
+    assert error.value.status_code == 503
+    assert error.value.detail["code"] == "outbound_action_proof_anchor_incomplete"
+    assert session.scalar_calls == 2
+    assert session.rollback_calls == 1
+    assert session.commit_calls == 0
+    assert deal.getter_snapshot_json is None
+    assert deal.getter_snapshot_masterchain_seqno is None
+
+
+@pytest.mark.asyncio
 async def test_retry_prepare_rejects_stale_proof_without_rolling_back_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
