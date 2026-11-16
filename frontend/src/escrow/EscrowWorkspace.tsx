@@ -86,6 +86,19 @@ function shortAddress(value: string | null | undefined): string {
   return `${value.slice(0, 11)}…${value.slice(-8)}`;
 }
 
+function outboundActionLabel(kind: number): string {
+  switch (kind) {
+    case 1: return "Передача NFT покупателю";
+    case 2: return "Возврат NFT продавцу";
+    case 3: return "Возврат неожиданно полученного NFT";
+    case 4: return "Выплата продавцу";
+    case 5: return "Возврат покупателю";
+    case 6: return "Возврат резерва развёртывания продавцу";
+    case 7: return "Возврат остатка execution reserve";
+    default: return "Исходящее действие";
+  }
+}
+
 function actionLabel(action: EscrowAction): string {
   switch (action) {
     case "create_deal_escrow": return "Создать DealEscrow";
@@ -880,9 +893,13 @@ function WorkspaceBody({
                       return (
                         <div className="escrow-buyer-actions" key={outbound.query_id}>
                           <p>
+                            Действие: {outboundActionLabel(outbound.kind)}
+                            <br />
                             Получатель: <code>{shortAddress(outbound.recipient_address)}</code>
                             <br />
-                            Сумма исходного действия: {nanoToTon(outbound.amount_nanotons)} TON
+                            {outbound.kind === 7
+                              ? "Сумма определяется контрактом: перевод остатка баланса"
+                              : `Сумма исходного действия: ${nanoToTon(outbound.amount_nanotons)} TON`}
                             <br />
                             Masterchain seqno: {outbound.proof_masterchain_seqno}
                           </p>
