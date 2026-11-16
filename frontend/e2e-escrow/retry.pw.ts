@@ -70,6 +70,8 @@ const preparedRetry = {
 };
 
 test("recipient can prepare the bounced outbound retry; signing remains disabled", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
   await mockMarketplaceApi(page, { authenticated: true });
 
   const apiRequests: Array<{
@@ -181,6 +183,7 @@ test("recipient can prepare the bounced outbound retry; signing remains disabled
   await page.getByRole("button", { name: "Escrow · testnet" }).click();
 
   await expect(page.getByRole("heading", { name: "TON Escrow" })).toBeVisible();
+  expect(pageErrors).toEqual([]);
   await expect(page.getByRole("button", { name: /Открыть сделку Bounced Retry NFT/ })).toBeVisible();
 
   const retryButton = page.getByRole("button", { name: "Повторить отправку · query 424242" });
