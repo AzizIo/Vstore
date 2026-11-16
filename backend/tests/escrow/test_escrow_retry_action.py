@@ -454,6 +454,7 @@ async def test_retry_prepare_rejects_third_party_actor_and_wrong_recipient_walle
     assert wrong_recipient.value.status_code == 409
     assert wrong_recipient.value.detail["code"] == "escrow_wallet_snapshot_changed"
 
+
 @pytest.mark.asyncio
 async def test_retry_projection_fails_closed_without_complete_trust_anchor(
     monkeypatch: pytest.MonkeyPatch,
