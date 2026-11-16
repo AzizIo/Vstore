@@ -298,9 +298,9 @@ export function isRetryableOutboundAction(value: unknown): value is EscrowRetrya
     || typeof value.recipient_address !== "string"
     || value.recipient_address.length === 0
     || typeof value.amount_nanotons !== "string"
-    || !/^\\d+$/.test(value.amount_nanotons)
+    || !/^(0|[1-9][0-9]*)$/.test(value.amount_nanotons)
     || !Number.isInteger(value.retry_window_seconds)
-    || !Number.isInteger(value.proof_masterchain_seqno)
+    || !Number.isSafeInteger(value.proof_masterchain_seqno)
     || Number(value.proof_masterchain_seqno) <= 0
   ) return false;
   const kind = Number(value.kind);
