@@ -506,3 +506,141 @@ def test_pinned_code_boc_rejects_compressed_artifact_digest_mismatch(
             ton_abi.load_pinned_code_boc()
     finally:
         ton_abi.load_pinned_abi.cache_clear()
+
+
+def _outbound_retry_proof(
+    deal: DealEscrowDeploymentSnapshot,
+    *,
+    kind: int = 4,
+    query_id: int = 42,
+    recipient: str | None = None,
+    retry_window_seconds: int = 1800,
+    status: int = 1,
+    amount_nanotons: int = 90_000_000,
+):
+    from app.escrow.contracts import OutboundRetryProof, ProofBoundOutboundAction
+
+    recipient = recipient or deal.buyer_address
+    return OutboundRetryProof(
+        action=ProofBoundOutboundAction(
+            slot="first",
+            kind=kind,
+            query_id=query_id,
+            deal_salt=deal.deal_salt,
+            attempt_id=7,
+            amount_nanotons=amount_nanotons,
+            message_value_nanotons=amount_nanotons,
+            expected_state=10,
+            expected_pending_action=0,
+            retry_window_seconds=retry_window_seconds,
+            message_body_hash="ab" * 32,
+            status=status,
+            bounce_phase=1,
+            exit_code=37,
+            item_address=deal.item_address,
+            destination_address=recipient,
+            recipient_address=recipient,
+            response_address=recipient,
+        ),
+        masterchain_seqno=700,
+        masterchain_block_hash="cd" * 32,
+        state_data_hash="ef" * 32,
+        provider_id="pytoniq-trust0-testnet-v1",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("kind", "window", "recipient_role"),
+    [(1, 1800, "buyer"), (4, 1800, "seller"), (6, 0, "seller"), (7, 0, "buyer")],
+)
+async def test_retry_failed_outbound_action_encodes_exact_proved_query_and_deal_salt(
+    kind: int, window: int, recipient_role: str
+) -> None:
+    from pytoniq_core import Cell
+
+    adapter = PinnedTONEscrowContractAdapter()
+    deal = snapshot()
+    recipient = deal.buyer_address if recipient_role == "buyer" else deal.seller_address
+    proof = _outbound_retry_proof(
+        deal, kind=kind, query_id=42, recipient=recipient,
+        retry_window_seconds=window,
+    )
+
+    prepared = await adapter.prepare_transaction(
+        EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION,
+        actor_wallet=wallet(recipient),  # type: ignore[arg-type]
+        resource_id="deal-1",
+        deal_snapshot=deal,
+        query_id=42,
+        retry_proof=proof,
+        valid_until=1_800_000_000,
+    )
+
+    assert prepared.network == "-3"
+    assert prepared.messages[0].address == derive_deployment(load_pinned_code_boc(), deal).address
+    assert prepared.messages[0].amount == str(deal.action_value_nanotons)
+    assert prepared.messages[0].payload is not None
+    body = Cell.one_from_boc(base64.b64decode(prepared.messages[0].payload)).begin_parse()
+    assert body.load_uint(32) == 0x56450009
+    assert body.load_uint(64) == 42
+    assert body.load_uint(256) == int(deal.deal_salt, 16)
+    assert body.remaining_bits == 0
+    assert body.remaining_refs == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("proof_changes", "query_id", "wallet_address", "message"),
+    [
+        ({"retry_window_seconds": 0}, 42, None, "not uniquely retryable"),
+        ({"kind": 6, "retry_window_seconds": 1800}, 42, None, "not uniquely retryable"),
+        ({"kind": 7, "retry_window_seconds": 1}, 42, None, "not uniquely retryable"),
+        ({"status": 0}, 42, None, "not uniquely retryable"),
+        ({"amount_nanotons": 0}, 42, None, "not uniquely retryable"),
+        ({}, 43, None, "not uniquely retryable"),
+        ({}, 42, "0:" + "55" * 32, "exact snapshotted outbound recipient"),
+    ],
+)
+async def test_retry_failed_outbound_action_rejects_invalid_descriptor_or_recipient(
+    proof_changes: dict[str, object],
+    query_id: int,
+    wallet_address: str | None,
+    message: str,
+) -> None:
+    adapter = PinnedTONEscrowContractAdapter()
+    deal = snapshot()
+    proof = _outbound_retry_proof(deal, **proof_changes)
+    actor_address = wallet_address or proof.action.recipient_address
+
+    with pytest.raises(EscrowContractABIUnavailable, match=message):
+        await adapter.prepare_transaction(
+            EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION,
+            actor_wallet=wallet(actor_address),  # type: ignore[arg-type]
+            resource_id="deal-1",
+            deal_snapshot=deal,
+            query_id=query_id,
+            retry_proof=proof,
+            valid_until=1_800_000_000,
+        )
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_outbound_action_rejects_invalid_proof_anchor() -> None:
+    adapter = PinnedTONEscrowContractAdapter()
+    deal = snapshot()
+    proof = replace(
+        _outbound_retry_proof(deal),
+        masterchain_block_hash="not-a-hash",
+    )
+
+    with pytest.raises(EscrowContractABIUnavailable, match="proof anchor is invalid"):
+        await adapter.prepare_transaction(
+            EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION,
+            actor_wallet=wallet(deal.buyer_address),  # type: ignore[arg-type]
+            resource_id="deal-1",
+            deal_snapshot=deal,
+            query_id=42,
+            retry_proof=proof,
+            valid_until=1_800_000_000,
+        )
