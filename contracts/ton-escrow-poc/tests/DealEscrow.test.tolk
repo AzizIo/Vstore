@@ -2354,9 +2354,7 @@ get fun `test post-delivery buyer dispute outcome returns NFT and refunds buyer`
         { value: grams("0.03"), bounce: true },
     );
     expect(nftReturnConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
-    // The test buyer rejects the principal refund; its RichBounce is processed
-    // in the same emulator trace and moves this critical payout to MANUAL_REVIEW.
-    expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
+    expect(escrow.getState()).toEqual(STATE_BUYER_REFUND_PENDING);
 
     val refund = buildTestOracleAttestation(
         escrow, salt, ORACLE_ACTION_BUYER_REFUND, 3,
@@ -2514,7 +2512,9 @@ get fun `test duplicate nft delivery callbacks are idempotent and buyer refund b
         { value: grams("0.03"), bounce: true },
     );
     expect(nftReturnConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
-    expect(escrow.getState()).toEqual(STATE_BUYER_REFUND_PENDING);
+    // The buyer contract rejects the principal refund in this same trace; its
+    // correlated RichBounce moves the critical payout to MANUAL_REVIEW.
+    expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
 
     // Buyer contract deliberately rejects the principal refund. The bounce must
     // preserve principalLocked and a recipient-authorized retry must use a new id.
