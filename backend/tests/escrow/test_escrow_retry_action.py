@@ -453,3 +453,69 @@ async def test_retry_prepare_rejects_third_party_actor_and_wrong_recipient_walle
         )
     assert wrong_recipient.value.status_code == 409
     assert wrong_recipient.value.detail["code"] == "escrow_wallet_snapshot_changed"
+
+@pytest.mark.asyncio
+async def test_retry_projection_fails_closed_without_complete_trust_anchor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    buyer_id, deal_id, wallet_id = uuid4(), uuid4(), uuid4()
+    recipient = "0:" + "33" * 32
+    deployment_snapshot = {"deal_salt": "ab" * 32}
+    deal = SimpleNamespace(
+        id=deal_id,
+        buyer_id=buyer_id,
+        seller_id=uuid4(),
+        buyer_wallet_id=wallet_id,
+        listing_intent_id=uuid4(),
+        contract_address="0:" + "44" * 32,
+        deployment_snapshot_json=deployment_snapshot,
+        deployment_snapshot_sha256=_canonical_sha256(deployment_snapshot),
+        deal_salt="ab" * 32,
+        network="testnet",
+    )
+
+    class ProjectionSession:
+        async def scalar(self, _statement: object):
+            return deal
+
+        async def rollback(self) -> None:
+            return None
+
+    async def verified_wallet(
+        _session: object, *, user_id: object, wallet_id: object
+    ):
+        return SimpleNamespace(id=wallet_id), recipient
+
+    class IncompleteProofProvider:
+        async def verify_deployed_account(
+            self, _deal: object, *, require_initial_state: bool
+        ):
+            assert require_initial_state is False
+            return ({
+                "outbound_actions": [_retry_row()],
+                "_proof_masterchain_seqno": 700,
+                "_proof_masterchain_block_hash": "aa" * 32,
+                # A missing state-data hash must never be replaced with a
+                # getter/indexer hash or inferred from the cached observer row.
+                "_proof_provider_id": "pytoniq-trust0-testnet-v1",
+            }, 700, "aa" * 32, "pytoniq-trust0-testnet-v1")
+
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                ton_escrow_finality_provider=IncompleteProofProvider()
+            )
+        )
+    )
+    monkeypatch.setattr("app.api.escrow._verified_wallet", verified_wallet)
+
+    with pytest.raises(HTTPException) as error:
+        await list_retryable_outbound_actions(
+            deal_id,
+            request,
+            SimpleNamespace(id=buyer_id),
+            ProjectionSession(),  # type: ignore[arg-type]
+        )
+
+    assert error.value.status_code == 503
+    assert error.value.detail["code"] == "outbound_action_proof_anchor_incomplete"
