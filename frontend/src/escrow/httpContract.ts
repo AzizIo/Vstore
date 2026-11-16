@@ -41,6 +41,9 @@ export function createEscrowHttpContract(baseUrl = API_BASE_URL): EscrowHttpCont
     prepareDispute: ({ deal_id, reason }) => write(`${deal(deal_id)}/prepare/dispute`, { reason }),
     prepareBuyerNftReturn: ({ deal_id }) => write(`${deal(deal_id)}/prepare/nft-return`),
     prepareUnsoldNftWithdrawal: ({ deal_id }) => write(`${deal(deal_id)}/prepare/withdraw-unsold-nft`),
+    retryableOutboundActions: (dealId) => `${deal(dealId)}/retryable-outbound-actions`,
+    prepareFailedOutboundRetry: ({ deal_id, query_id }) =>
+      write(`${deal(deal_id)}/prepare/retry-failed-outbound`, { query_id }),
     submitWalletReference: (input) => write(`${root}/wallet-references`, input),
   };
 }
