@@ -106,14 +106,22 @@ def load_pinned_abi() -> tuple[dict[str, Any], dict[str, Any]]:
 def load_pinned_code_boc() -> str:
     """Verify the pinned compiler BOC after decompression.
 
-    zlib is only a transport encoding; the canonical base64 and raw BOC
-    digests pin the exact compiler output independent of compression level.
+    zlib is a transport encoding. Both the local compressed artifact and the
+    canonical base64/raw BOC digests are pinned independently.
     """
     try:
         compressed_b64 = (
             _ARTIFACTS / "DealEscrow.code.boc.zlib.b64"
         ).read_text(encoding="ascii").strip()
         compressed = base64.b64decode(compressed_b64, validate=True)
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise TONABIError("pinned DealEscrow code BOC is unavailable or corrupt") from exc
+
+    _, manifest = load_pinned_abi()
+    if _sha256(compressed) != manifest.get("backend_code_boc_zlib_sha256"):
+        raise TONABIError("DealEscrow compressed code BOC digest mismatch")
+
+    try:
         decompressor = zlib.decompressobj()
         raw_boc = decompressor.decompress(compressed)
         raw_boc += decompressor.flush()
@@ -123,12 +131,9 @@ def load_pinned_code_boc() -> str:
             or decompressor.unconsumed_tail
         ):
             raise ValueError("pinned BOC is not one complete zlib stream")
-    except (OSError, UnicodeError, ValueError, zlib.error) as exc:
+    except (ValueError, zlib.error) as exc:
         raise TONABIError("pinned DealEscrow code BOC is unavailable or corrupt") from exc
 
-    _, manifest = load_pinned_abi()
-    if _sha256(compressed) != manifest.get("backend_code_boc_zlib_sha256"):
-        raise TONABIError("DealEscrow compressed code BOC digest mismatch")
     code_boc_base64 = base64.b64encode(raw_boc).decode("ascii")
     if _sha256(code_boc_base64.encode("ascii")) != manifest.get(
         "compiled_code_boc_base64_sha256"
