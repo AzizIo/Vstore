@@ -531,7 +531,10 @@ async def test_terminal_owner_verification_rejects_missing_collection_on_any_dea
         lite_client_factory=lambda: _FakeLiteClient(fixture),
     )
 
-    with pytest.raises(EscrowProviderInvalidEvidence, match="missing or inconsistent item/collection address"):
+    with pytest.raises(
+        EscrowProviderInvalidEvidence,
+        match="address is missing or inconsistent",
+    ):
         await provider.verify_terminal_owner(
             item_address=fixture["item_address"],
             expected_owner_address=OTHER_OWNER,
@@ -577,7 +580,10 @@ async def test_terminal_owner_verification_checks_model_addresses_for_every_deal
         lite_client_factory=lambda: _FakeLiteClient(fixture),
     )
 
-    with pytest.raises(EscrowProviderInvalidEvidence, match="missing or inconsistent item/collection address"):
+    with pytest.raises(
+        EscrowProviderInvalidEvidence,
+        match="address is missing or inconsistent",
+    ):
         await provider.verify_terminal_owner(
             item_address=fixture["item_address"],
             expected_owner_address=OTHER_OWNER,
