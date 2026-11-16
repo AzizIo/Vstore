@@ -14,11 +14,17 @@ struct TestNftStorage {
     policy: Cell<TestNftTransferPolicy>
 }
 
+struct (0x5645ff02) ReplayNftNotification {
+    destination: address
+    oldOwnerAddress: address
+    queryId: uint64
+}
+
 struct (0x5645ff01) UpdateNftTransferPolicy {
     rejectRecipient: address?
 }
 
-type TestNftMessage = NftTransfer | UpdateNftTransferPolicy
+type TestNftMessage = NftTransfer | UpdateNftTransferPolicy | ReplayNftNotification
 
 contract TestNftItem {
     author: "AzizIo"
@@ -63,6 +69,27 @@ fun onInternalMessage(in: InMessage) {
                     queryId: msg.queryId,
                     oldOwnerAddress: previousOwner,
                     payload: msg.forwardPayload,
+                },
+            });
+            notification.send(SEND_MODE_PAY_FEES_SEPARATELY);
+        }
+        ReplayNftNotification => {
+            var storage = TestNftStorage.load();
+            val policy = storage.policy.load();
+            assert (in.senderAddress == policy.adminAddress) throw 404;
+            val payload = beginCell()
+                .storeBool(false)
+                .storeUint(NFT_FORWARD_MAGIC, 32)
+                .storeUint(storage.fixtureSalt, 256)
+                .toSlice();
+            val notification = createMessage({
+                bounce: BounceMode.NoBounce,
+                value: grams("0.01"),
+                dest: msg.destination,
+                body: NotificationForNewOwner {
+                    queryId: msg.queryId,
+                    oldOwnerAddress: msg.oldOwnerAddress,
+                    payload,
                 },
             });
             notification.send(SEND_MODE_PAY_FEES_SEPARATELY);

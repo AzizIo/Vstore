@@ -495,6 +495,12 @@ fun handleNftOwnershipNotification(
     val asset = terms.asset.load();
     val money = terms.money.load();
 
+    val existingRecovery = progress.recovery.load();
+    val hasUnexpectedRecovery = (
+        existingRecovery.unexpectedPreviousOwner != null
+        || existingRecovery.unexpectedItemAddress != null
+    );
+
     // Only the exact item fixed in StateInit may alter this DealEscrow.
     // An unrelated NFT notification cannot be used as collateral.
     if (senderAddress != asset.itemAddress) {
@@ -515,10 +521,50 @@ fun handleNftOwnershipNotification(
         && msg.queryId == money.nftReturnToEscrowQueryId
         && blockchain.now() <= progress.deadlineUnix
     );
+    // If post-delivery arbitration timed out while the buyer still owns the NFT,
+    // the escrow remains in MANUAL_REVIEW with principal locked. The exact TEP-62
+    // return from the snapshotted buyer is still a safe custody transition and
+    // restores a resolver-controlled dispute; it does not itself settle principal.
+    val lateExpectedBuyerReturn = (
+        progress.state == STATE_MANUAL_REVIEW
+        && progress.deadlineUnix == 0
+        && progress.disputePhase == DISPUTE_PHASE_POST_DELIVERY
+        && progress.pendingAction == PENDING_NONE
+        && progress.principalLocked
+        && !progress.nftInEscrow
+        && !hasUnexpectedRecovery
+        && msg.oldOwnerAddress == roles.buyer
+        && msg.queryId == money.nftReturnToEscrowQueryId
+    );
+    val validExpectedPayload = hasValidInlineNftPayload(msg.payload, asset);
+    // A replayed TEP-62 ownership_assigned notification can arrive after the
+    // original transfer has already been accepted. Treat the exact seller
+    // deposit / buyer return callback as idempotent while the NFT is still
+    // recorded in escrow. Do not create an "unexpected NFT" recovery record:
+    // that would let the previous owner withdraw collateral during funding
+    // or arbitration.
+    val duplicateExpectedDeposit = (
+        progress.nftInEscrow
+        && !hasUnexpectedRecovery
+        && msg.oldOwnerAddress == roles.seller
+        && msg.queryId == money.nftDepositQueryId
+        && validExpectedPayload
+    );
+    val duplicateExpectedBuyerReturn = (
+        progress.nftInEscrow
+        && progress.disputePhase == DISPUTE_PHASE_POST_DELIVERY
+        && !hasUnexpectedRecovery
+        && msg.oldOwnerAddress == roles.buyer
+        && msg.queryId == money.nftReturnToEscrowQueryId
+        && validExpectedPayload
+    );
+    if (duplicateExpectedDeposit || duplicateExpectedBuyerReturn) {
+        return;
+    }
 
     if (
-        (isExpectedDeposit || isExpectedBuyerReturn)
-        && hasValidInlineNftPayload(msg.payload, asset)
+        (isExpectedDeposit || isExpectedBuyerReturn || lateExpectedBuyerReturn)
+        && validExpectedPayload
     ) {
         progress.nftInEscrow = true;
         if (isExpectedDeposit) {
@@ -526,7 +572,13 @@ fun handleNftOwnershipNotification(
             progress.deadlineUnix = (blockchain.now() + BUYER_FUNDING_WINDOW_SECONDS) as uint64;
         } else {
             // Exact configured item is back in escrow; resolver authorization
-            // remains required before the NFT or principal can move.
+            // remains required before the NFT or principal can move. A late
+            // post-delivery return restores the dispute state only after actual
+            // TEP-62 custody has moved back to this contract.
+            if (lateExpectedBuyerReturn) {
+                progress.state = STATE_DISPUTED;
+                progress.pendingAction = PENDING_NONE;
+            }
             progress.deadlineUnix = (blockchain.now() + ARBITRATION_WINDOW_SECONDS) as uint64;
         }
         storage.progress = progress.toCell();
@@ -802,9 +854,29 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
 
 fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
     var progress = storage.progress.load();
+    val recovery = progress.recovery.load();
+    // If the arbitration deadline expires while the NFT and principal are still
+    // safely held by this escrow, TimeoutDeal moves the contract to MANUAL_REVIEW.
+    // Keep the 2-of-3 resolver path available for that exact quarantine state so
+    // an unavailable resolver at the deadline cannot permanently strand collateral.
+    // A post-delivery dispute where the buyer never returned the NFT is excluded.
+    val timedOutEscrowedDispute = (
+        progress.state == STATE_MANUAL_REVIEW
+        && progress.deadlineUnix == 0
+        && progress.disputePhase != DISPUTE_PHASE_NONE
+        && progress.pendingAction == PENDING_NONE
+        && progress.nftInEscrow
+        && progress.principalLocked
+        && recovery.unexpectedPreviousOwner == null
+        && recovery.unexpectedItemAddress == null
+    );
     assert (
-        progress.deadlineUnix > 0
-        && blockchain.now() <= progress.deadlineUnix
+        timedOutEscrowedDispute
+        || (
+            progress.state == STATE_DISPUTED
+            && progress.deadlineUnix > 0
+            && blockchain.now() <= progress.deadlineUnix
+        )
     ) throw Errors.Deadline;
     val terms = storage.terms.load();
     assertTestnet(terms);
@@ -815,8 +887,10 @@ fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
     val security = terms.security.load();
     val context = msg.data.load().context.load();
 
-    assert (progress.state == STATE_DISPUTED) throw Errors.InvalidState;
-    assert (progress.nftInEscrow) throw Errors.InvalidState;
+    assert (
+        progress.state == STATE_DISPUTED || timedOutEscrowedDispute
+    ) throw Errors.InvalidState;
+    assert (progress.nftInEscrow && progress.principalLocked) throw Errors.InvalidState;
     assert (context.domain == ESCROW_DOMAIN) throw Errors.InvalidAttestation;
     assert (context.protocolVersion == terms.protocolVersion) throw Errors.InvalidAttestation;
     assert (context.networkId == TESTNET_NETWORK_ID) throw Errors.InvalidAttestation;
@@ -879,6 +953,29 @@ fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
     storage.save();
 }
 
+fun hasBouncedSellerDeploymentRefund(progress: DealProgress): bool {
+    val actions = progress.outboundActions.load();
+    if (actions.first != null) {
+        val action = actions.first.load();
+        if (
+            action.kind == OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND
+            && action.status == OUTBOUND_STATUS_BOUNCED
+        ) {
+            return true;
+        }
+    }
+    if (actions.second != null) {
+        val action = actions.second.load();
+        if (
+            action.kind == OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND
+            && action.status == OUTBOUND_STATUS_BOUNCED
+        ) {
+            return true;
+        }
+    }
+    return false;
+}
+
 fun retryBouncedOutboundAction(
     mutate progress: DealProgress,
     action: OutboundAction,
@@ -887,6 +984,12 @@ fun retryBouncedOutboundAction(
     money: DealMoney,
 ) {
     assert (action.status == OUTBOUND_STATUS_BOUNCED) throw Errors.RetryNotReady;
+    // The carry-all buyer refund must not sweep back a seller allowance that has
+    // already bounced into escrow. Require the seller's fixed refund to be retried
+    // first; otherwise the buyer could capture that returned allowance.
+    if (action.kind == OUTBOUND_KIND_EXECUTION_RESERVE_REFUND) {
+        assert (!hasBouncedSellerDeploymentRefund(progress)) throw Errors.RetryNotReady;
+    }
     val retryAttemptId = progress.startOracleAttempt();
 
     val addresses = action.addresses.load();
