@@ -40,13 +40,30 @@ class EscrowRetryFailedOutboundInput(BaseModel):
 
 class EscrowRetryableOutboundActionResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    query_id: str
+    query_id: str = Field(pattern=r"^[1-9][0-9]{0,19}$", min_length=1, max_length=20)
     slot: Literal["first", "second"]
     kind: int = Field(ge=1, le=7)
-    recipient_address: str
-    amount_nanotons: str = Field(pattern=r"^[0-9]+$")
-    retry_window_seconds: int = Field(gt=0, le=4_294_967_295)
+    recipient_address: str = Field(min_length=1, max_length=128)
+    amount_nanotons: str = Field(pattern=r"^[1-9][0-9]*$")
+    retry_window_seconds: int = Field(ge=0, le=4_294_967_295)
     proof_masterchain_seqno: int = Field(gt=0)
+
+    @field_validator("query_id")
+    @classmethod
+    def validate_uint64_query_id(cls, value: str) -> str:
+        if int(value) >= (1 << 64):
+            raise ValueError("query_id must fit a non-zero uint64")
+        return value
+
+    @field_validator("retry_window_seconds")
+    @classmethod
+    def validate_kind_specific_retry_window(cls, value: int, info) -> int:
+        kind = info.data.get("kind")
+        if kind in {1, 2, 3, 4, 5} and value == 1800:
+            return value
+        if kind in {6, 7} and value == 0:
+            return value
+        raise ValueError("retry_window_seconds does not match the outbound action kind")
 
 
 class EscrowWithdrawalCreate(BaseModel):
