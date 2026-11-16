@@ -11,7 +11,20 @@ This document supersedes the older handoff material based on `525215b9a51a34be81
 
 | Track | Exact head at snapshot | Status | Release condition |
 |---|---|---|---|
-| NFT identity / Issue #213 / [PR #241](https://github.com/AzizIo/Vstore/pull/241) | `e296f1d3586473c775abcbea6f845237f7474954` | Draft; Frontend CI #43814016090 passed; Backend CI #43814016114 failed only Ruff ASYNC240 at `tests/test_escrow_order_reservation_integration.py:365` | Exact-head Backend, Frontend and API-backed E2E green; PostgreSQL 16 migration upgrade/downgrade and immutable-evidence tests pass; collection policy remains empty until explicitly approved |
+| NFT identity / Issue #213 / [PR #241](https://github.com/AzizIo/Vstore/pull/241) | `c8f883ef0360ea844a19252f399c4cf92a47d09d` | Draft; Frontend build/unit job passed but API E2E migration failed; Backend migration validation failed on the same malformed SQL delimiter (`AS $ ... # VILTARA TON Escrow — release gate snapshot
+
+**Snapshot date:** 2026-11-16  
+**Baseline:** `main` at `b592a4b889221aeb314e521a357b1746091a5976`  
+**Network:** TON testnet only (`global_id = -3`)  
+**Decision:** **BLOCKED — not a production release candidate**
+
+This document supersedes the older handoff material based on `525215b9a51a34be811e73a1cc26995cd3cb25a1`. It is a release-coordination snapshot, not an independent security audit, live testnet acceptance, or authorization to deploy.
+
+## 1. Current candidate tracks
+
+| Track | Exact head at snapshot | Status | Release condition |
+|---|---|---|---|
+) in migration 0020 | Exact-head Backend, Frontend and API-backed E2E green; PostgreSQL 16 migration upgrade/downgrade and immutable-evidence tests pass; collection policy remains empty until explicitly approved |
 | Backend artifact pin / Issue #206 / [PR #247](https://github.com/AzizIo/Vstore/pull/247) | `c93867f2e3469807135bffd2f5a7701c4b1fbabe` | Draft; Backend, Frontend/API E2E and Contract CI passed | Pin must be refreshed to the final contract artifact from the #248 track before integration |
 | Contract lifecycle and refund ordering / Issue #225 / [PR #248](https://github.com/AzizIo/Vstore/pull/248) | `cae0912c1a78a95ca5a834a80cdac20bc0d29ece` | Draft; Contract CI #43814168361 failed at the strict StateInit golden comparison after compiler build and wrapper verification | Frozen manifest must contain non-null StateInit, raw address and data hash reproduced by generated wrapper and `@ton/core`; exact-head emulator and static checks green; backend adapter must consume this same artifact |
 | Earlier audit handoff / [PR #246](https://github.com/AzizIo/Vstore/pull/246) | `d0b19d2bd948edacbaf336285f9fff6afef0a748` | Draft; stale base | Based on older main and must not be used as current release evidence; this document is the current coordination snapshot |
