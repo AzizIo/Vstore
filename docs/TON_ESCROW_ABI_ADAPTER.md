@@ -8,7 +8,7 @@ The adapter packages these files under `backend/app/escrow/abi_artifacts/`:
 
 - `DealEscrow.abi.json` — frozen Tolk ABI v1.
 - `manifest.json` — provenance and digest manifest copied from `contracts/ton-escrow-poc/artifacts/frozen/`.
-- `DealEscrow.code.boc.b64` — Acton-built code cell BOC used for deterministic StateInit construction.
+- `DealEscrow.code.boc.zlib.b64` — compressed Acton-built code cell BOC consumed by the backend loader.
 
 Pinned provenance:
 
@@ -16,14 +16,22 @@ Pinned provenance:
 |---|---|
 | Contract / protocol | `DealEscrow` / v1 |
 | Network scope | TON testnet only |
-| Source commit in frozen manifest | `079fa1f4717cde1d8963faed180b2fa1e9ea9ac6` |
+| Source commit in frozen manifest | `01963603df7fb4ad819ab4a8f4a68315cec47c5d` |
+| Successful contract workflow | [#43766860437](https://github.com/AzizIo/Vstore/actions/runs/43766860437) |
+| Artifact ID | `14181479725` |
+| Artifact archive SHA-256 | `25a4769ba2e4fee2f0ef913e2d7060524bc2143f6b060267651cab95b9fbf5be` |
+| Build descriptor SHA-256 | `4a782edd062c83897c7e9dc62bb2f011547bbf7d371b9f822934fdf36877f5c5` |
 | Acton / Tolk | `1.2.1` / `1.5.0` |
-| ABI compact SHA-256 | `25fc5f338f45db7d7198961a75c1d5cfe04f996ae36013cca0d70f03870c3923` |
-| Code cell hash | `359B02C177CE033C6FE1A673C4E04B59D6D43434AF09B1CBE4BDCD8BE4779450` |
-| Code BOC base64 SHA-256 | `9dcf1449971a1ba69e5bf59a3feac5f290eeeac011da84e279f4d93cb8be8041` |
-| Decoded code BOC SHA-256 | `df82a5603142e77344b3f201c13d6c77d3900893bf06cfe719bece784caf0422` |
+| ABI compact SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
+| Code cell hash | `D822B8AFBB37027611A9A9DDC8E67C52F17BBBC45B4352C7F360693BD685CA54` |
+| Code BOC base64 SHA-256 | `2e9b43b902b1d4c26d358af79d731d7445cca3d562d77cb858a532a487b1e05e` |
+| Decoded code BOC SHA-256 | `fd226adafbfe7a1e14164c59538843dd024e99e3cec2f458322ac94eaa8d7ba8` |
+| Zlib-compressed BOC SHA-256 | `301c3aa6dfb729c5a0a640dc15eb527540e282c758c69a241632d4c04fd49947` |
+| Deterministic StateInit hash | `29a40423c7e8fa1390782bce7e94e32f2a0e14ceef6cf05bd0f1641d0ba3f423` |
+| Deterministic raw address | `0:29a40423c7e8fa1390782bce7e94e32f2a0e14ceef6cf05bd0f1641d0ba3f423` |
+| Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
 
-At adapter initialization the code BOC is parsed by `pytoniq-core`; its base64 digest, decoded BOC digest and TVM cell hash are checked. The ABI canonical compact JSON digest and manifest network/protocol/code identity are checked before StateInit can be derived. Missing or modified artifacts fail closed.
+At adapter initialization the compressed artifact digest, decoded BOC digest and TVM cell hash are checked; the manifest also pins the canonical base64 digest. The ABI canonical compact JSON digest and manifest network/protocol/code identity are checked before StateInit can be derived. Missing or modified artifacts fail closed. The ABI canonical compact JSON digest and manifest network/protocol/code identity are checked before StateInit can be derived. Missing or modified artifacts fail closed.
 
 ## StateInit layout
 
@@ -40,9 +48,9 @@ The fixed cross-implementation vector `deal-escrow-v1-testnet-fixed-terms-01` is
 
 | Field | Expected value |
 |---|---|
-| Raw address | `0:31ffca176042bdc4aa82e21949f900d2c068634306da76b1ebb335e64bd5cf52` |
-| StateInit hash | `31ffca176042bdc4aa82e21949f900d2c068634306da76b1ebb335e64bd5cf52` |
-| Data cell hash | `535adf460ca6ecb6e043e0655244e3c67bfee186263287655306b1b648027acd` |
+| Raw address | `0:29a40423c7e8fa1390782bce7e94e32f2a0e14ceef6cf05bd0f1641d0ba3f423` |
+| StateInit hash | `29a40423c7e8fa1390782bce7e94e32f2a0e14ceef6cf05bd0f1641d0ba3f423` |
+| Data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
 | Code cell hash | `359B02C177CE033C6FE1A673C4E04B59D6D43434AF09B1CBE4BDCD8BE4779450` |
 
 ## Message encoders
@@ -66,8 +74,8 @@ Current fixed message BOC SHA-256 values:
 | OpenDispute (query 2001, reason hash `ab` × 32) | `687c3f5300af7371f946dd9dae1c849eede2887f167f8028aa4d1da228a709cd` |
 | TimeoutDeal (query 2002) | `2cc8443c10c2749973e51ce2e051ebfaac6e8bb191e231948104a235dc3e43f3` |
 | RecoverUnexpectedNft (query 2003) | `296bbfd9ed948575f6e8dfd31d529384e016cbfe321f73d42717b294b8b3ac34` |
-| TEP-62 seller deposit (query 1002, current escrow address) | `2422073bd457c966e27afb9851ede5ed3cdc19aaf6ffccac5b77e61d24eac52b` |
-| TEP-62 buyer return (query 1004, current escrow address) | `ef84d8803e0ac57af7d9532947862e6f45e1c0676ffbd1142661b36c0e14e639` |
+| TEP-62 seller deposit (query 1002, current escrow address) | `32148753a5d3cd318a3a54f7ff8d9409e8cfbe04d70862a52833632a50362cf7` |
+| TEP-62 buyer return (query 1004, current escrow address) | `70fd158e2e4b99648fea5a4dbf759274ac35a946538dfd6ba591fb2b2de24ceb` |
 
 ## Reproduce in CI
 

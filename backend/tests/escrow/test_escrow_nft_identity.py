@@ -90,7 +90,13 @@ def _fixture(
     }
 
 
-def _verify_fixture(fixture: dict[str, Any], *, expected_owner: str | None = OWNER):
+def _verify_fixture(
+    fixture: dict[str, Any],
+    *,
+    expected_owner: str | None = OWNER,
+    masterchain_seqno: Any = 500,
+    observed_chain_time_unix: Any = 1_800_000_000,
+):
     return verify_nft_identity_cells(
         item_address=fixture["item_address"],
         collection_address=fixture["collection_address"],
@@ -100,10 +106,10 @@ def _verify_fixture(fixture: dict[str, Any], *, expected_owner: str | None = OWN
         collection_data=fixture["collection_data"],
         policies=fixture["policy_list"],
         expected_owner_address=expected_owner,
-        masterchain_seqno=500,
+        masterchain_seqno=masterchain_seqno,
         masterchain_block_hash=BLOCK_HASH,
         trusted_init_key_block_hash=INIT_HASH,
-        observed_chain_time_unix=1_800_000_000,
+        observed_chain_time_unix=observed_chain_time_unix,
         provider_id="pytoniq-trust0-testnet-v1",
     )
 
@@ -122,6 +128,24 @@ def test_identity_proof_binds_item_collection_code_and_policy_to_one_mc_block() 
     assert validated["policy"]["policy_id"] == "reviewed-testnet-collection-v1"
     assert evidence["masterchain_seqno"] == 500
     assert len(str(evidence["evidence_sha256"])) == 64
+
+
+@pytest.mark.parametrize("invalid_seqno", [True, False, 0, -1, 500.0, "500"])
+def test_identity_proof_rejects_invalid_trusted_masterchain_sequence(
+    invalid_seqno: Any,
+) -> None:
+    with pytest.raises(NFTIdentityEvidenceError, match="Trusted masterchain sequence"):
+        _verify_fixture(_fixture(), masterchain_seqno=invalid_seqno)
+
+
+@pytest.mark.parametrize(
+    "invalid_timestamp", [True, False, 0, -1, 1.5, "1800000000"]
+)
+def test_identity_proof_rejects_invalid_trusted_masterchain_timestamp(
+    invalid_timestamp: Any,
+) -> None:
+    with pytest.raises(NFTIdentityEvidenceError, match="Trusted masterchain timestamp"):
+        _verify_fixture(_fixture(), observed_chain_time_unix=invalid_timestamp)
 
 
 def test_identity_rejects_unallowlisted_collection() -> None:

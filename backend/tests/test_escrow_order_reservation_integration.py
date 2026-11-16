@@ -29,7 +29,7 @@ from app.db.models import (
     User,
     Wallet,
 )
-from app.escrow.models import EscrowListingIntent
+from app.escrow.models import EscrowDeal, EscrowListingIntent
 from app.escrow.reservation import (
     EscrowListingReservationConflict,
     reserve_listing_for_escrow,
@@ -136,7 +136,16 @@ async def _seed(session):
     return seller, buyer, asset, wallet, listing, intent
 
 
-async def _cleanup(session_factory, *, listing_id, intent_id, asset_id, wallet_id, user_ids):
+async def _cleanup(
+    session_factory,
+    *,
+    listing_id,
+    intent_id,
+    asset_id,
+    wallet_id,
+    user_ids,
+    extra_wallet_ids=(),
+):
     async with session_factory.begin() as session:
         await session.execute(
             text("DELETE FROM escrow_wallet_actions WHERE deal_id IN "
@@ -180,7 +189,9 @@ async def _cleanup(session_factory, *, listing_id, intent_id, asset_id, wallet_i
                               {"listing_id": listing_id})
         await session.execute(Listing.__table__.delete().where(Listing.id == listing_id))
         await session.execute(NFTAsset.__table__.delete().where(NFTAsset.id == asset_id))
-        await session.execute(Wallet.__table__.delete().where(Wallet.id == wallet_id))
+        await session.execute(
+            Wallet.__table__.delete().where(Wallet.id.in_([wallet_id, *extra_wallet_ids]))
+        )
         await session.execute(User.__table__.delete().where(User.id.in_(user_ids)))
 
 
@@ -245,6 +256,125 @@ async def test_postgres_listing_identity_snapshot_is_immutable_but_status_can_ad
             assert stored.status == "reserved"
             assert stored.item_address == original_item_address
             assert stored.nft_identity_snapshot_sha256 == original_snapshot_hash
+    finally:
+        await _cleanup(
+            session_factory,
+            listing_id=listing.id,
+            intent_id=intent.id,
+            asset_id=asset.id,
+            wallet_id=wallet.id,
+            user_ids=[seller.id, buyer.id],
+        )
+        await engine.dispose()
+
+
+
+@pytest.mark.asyncio
+async def test_postgres_deal_identity_snapshot_is_immutable_but_status_can_advance(
+    escrow_reservation_database: str,
+) -> None:
+    engine = create_async_engine(escrow_reservation_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        seller, buyer, asset, wallet, listing, intent = await _seed(session)
+        buyer_wallet = Wallet(
+            user_id=buyer.id,
+            address="0:" + uuid4().hex + uuid4().hex,
+            network="testnet",
+            is_verified=True,
+            is_primary=True,
+        )
+        session.add(buyer_wallet)
+        await session.flush()
+        deal = EscrowDeal(
+            listing_intent_id=intent.id,
+            marketplace_listing_id=listing.id,
+            listing_key_snapshot=intent.listing_key,
+            seller_id=seller.id,
+            buyer_id=buyer.id,
+            buyer_wallet_id=buyer_wallet.id,
+            network="testnet",
+            deal_salt=uuid4().hex * 2,
+            collection_address_snapshot=intent.collection_address_snapshot,
+            item_address=intent.item_address,
+            seller_address_snapshot=intent.seller_address_snapshot,
+            buyer_address_snapshot=buyer_wallet.address,
+            price_amount=Decimal("1.250000000"),
+            price_currency="TON",
+            principal_nanotons=Decimal("1250000000"),
+            status="intent_created",
+            nft_identity_snapshot_json=intent.nft_identity_snapshot_json,
+            nft_identity_snapshot_sha256=intent.nft_identity_snapshot_sha256,
+            idempotency_key="escrow-deal-" + uuid4().hex[:20],
+        )
+        session.add(deal)
+        await session.flush()
+    deal_id = deal.id
+    original_hash = deal.nft_identity_snapshot_sha256
+
+    try:
+        with pytest.raises(
+            DBAPIError,
+            match="Persisted escrow NFT identity and bound terms are immutable",
+        ):
+            async with session_factory() as session:
+                async with session.begin():
+                    await session.execute(
+                        text(
+                            "UPDATE escrow_deals SET collection_address_snapshot = :address "
+                            "WHERE id = :deal_id"
+                        ),
+                        {"address": "0:" + "8" * 64, "deal_id": deal_id},
+                    )
+
+        async with session_factory.begin() as session:
+            await session.execute(
+                text("UPDATE escrow_deals SET status = 'manual_review' WHERE id = :deal_id"),
+                {"deal_id": deal_id},
+            )
+        async with session_factory() as session:
+            stored = await session.get(EscrowDeal, deal_id)
+            assert stored is not None
+            assert stored.status == "manual_review"
+            assert stored.nft_identity_snapshot_sha256 == original_hash
+    finally:
+        await _cleanup(
+            session_factory,
+            listing_id=listing.id,
+            intent_id=intent.id,
+            asset_id=asset.id,
+            wallet_id=wallet.id,
+            user_ids=[seller.id, buyer.id],
+            extra_wallet_ids=[buyer_wallet.id],
+        )
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_postgres_migration_downgrade_refuses_to_drop_identity_snapshots(
+    escrow_reservation_database: str,
+) -> None:
+    engine = create_async_engine(escrow_reservation_database, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory.begin() as session:
+        seller, buyer, asset, wallet, listing, intent = await _seed(session)
+
+    try:
+        config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot downgrade while escrow NFT identity evidence is referenced",
+        ):
+            await asyncio.to_thread(
+                command.downgrade, config, "0019_escrow_deployment_snapshots"
+            )
+
+        async with session_factory() as session:
+            revision = await session.scalar(text("SELECT version_num FROM alembic_version"))
+            assert revision == "0020_escrow_nft_identity"
+            stored = await session.get(EscrowListingIntent, intent.id)
+            assert stored is not None
+            assert stored.nft_identity_snapshot_sha256 == "f" * 64
     finally:
         await _cleanup(
             session_factory,

@@ -1252,9 +1252,13 @@ get fun `test seller deployment allowance bounce is correlated and retryable aft
     expect(buyerReserveRefund.status).toEqual(OUTBOUND_STATUS_PENDING);
     expect(escrow.getProgress().oracleAttemptId).toEqual(4);
 
+    // The terminal reserve from the original settlement is transaction-local;
+    // retain the storage floor before and after retrying the seller allowance bounce.
+    expect(testing.getAccountBalance(escrow.address)).toBeGreater(grams("0.009"));
     partySetRejectAction(sellerParty, sellerController, 0);
     partyRetryOutbound(sellerParty, sellerController, escrow, salt, bouncedAllowance.queryId);
     expect(escrow.getState()).toEqual(STATE_SETTLED);
+    expect(testing.getAccountBalance(escrow.address)).toBeGreater(grams("0.009"));
     expect(escrow.getProgress().principalLocked).toEqual(false);
     expect(escrow.getProgress().oracleAttemptId).toEqual(5);
     actions = escrow.getProgress().outboundActions.load();
@@ -1349,10 +1353,15 @@ get fun `test execution reserve refund bounce is correlated and retryable after 
     expect(bouncedReserve.exitCode).toEqual(911);
     expect(escrow.getProgress().oracleAttemptId).toEqual(4);
 
+    // The reserve survived the first bounce and must survive the new retry
+    // transaction as well; reserve actions are transaction-local.
+    expect(testing.getAccountBalance(escrow.address)).toBeGreater(grams("0.009"));
+
     partySetRejectAction(buyerParty, buyerController, 0);
     partyRetryOutbound(buyerParty, buyerController, escrow, salt, bouncedReserve.queryId);
     expect(escrow.getState()).toEqual(STATE_SETTLED);
     expect(escrow.getProgress().oracleAttemptId).toEqual(5);
+    expect(testing.getAccountBalance(escrow.address)).toBeGreater(grams("0.009"));
     actions = escrow.getProgress().outboundActions.load();
     assert (actions.first != null && actions.second != null) throw Errors.OutboundActionMissing;
     expect(actions.first.load().kind).toEqual(OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND);

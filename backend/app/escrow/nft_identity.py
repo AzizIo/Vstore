@@ -124,11 +124,21 @@ def verify_nft_identity_cells(
         if expected_owner_address is not None
         else None
     )
-    if masterchain_seqno <= 0:
+    if (
+        isinstance(masterchain_seqno, bool)
+        or not isinstance(masterchain_seqno, int)
+        or masterchain_seqno <= 0
+    ):
         raise NFTIdentityEvidenceError("Trusted masterchain sequence is invalid")
+    if (
+        isinstance(observed_chain_time_unix, bool)
+        or not isinstance(observed_chain_time_unix, int)
+        or observed_chain_time_unix <= 0
+    ):
+        raise NFTIdentityEvidenceError("Trusted masterchain timestamp is invalid")
     if not _valid_hash(masterchain_block_hash) or not _valid_hash(trusted_init_key_block_hash):
         raise NFTIdentityEvidenceError("Trusted masterchain block identity is malformed")
-    if not provider_id or not provider_id.strip():
+    if not isinstance(provider_id, str) or not provider_id.strip():
         raise NFTIdentityEvidenceError("Proof provider identity is missing")
 
     policy, policy_sha256 = _parse_policy(policies, collection)

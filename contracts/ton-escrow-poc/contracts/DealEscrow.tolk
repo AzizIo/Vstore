@@ -923,6 +923,9 @@ fun retryBouncedOutboundAction(
     } else if (action.kind == OUTBOUND_KIND_BUYER_REFUND) {
         sendBuyerRefund(mutate progress, roles, asset, money, retryAttemptId);
     } else if (action.kind == OUTBOUND_KIND_SELLER_DEPLOYMENT_REFUND) {
+        // The terminal storage-floor reservation belongs to the original
+        // settlement transaction and must be recreated for this retry.
+        reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, RESERVE_MODE_EXACT_AMOUNT);
         sendSellerDeploymentRefund(
             mutate progress,
             roles,
@@ -932,6 +935,10 @@ fun retryBouncedOutboundAction(
             action.expectedState,
         );
     } else if (action.kind == OUTBOUND_KIND_EXECUTION_RESERVE_REFUND) {
+        // A reserve action applies only to the current transaction. Re-create the
+        // terminal storage floor before retrying a bounced carry-all refund, or
+        // SEND_MODE_CARRY_ALL_BALANCE could drain the contract's storage reserve.
+        reserveGramsOnBalance(TERMINAL_STORAGE_RESERVE, RESERVE_MODE_EXACT_AMOUNT);
         sendRemainingBalanceTo(
             mutate progress,
             recipientAndResponse.first,
