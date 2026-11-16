@@ -55,6 +55,16 @@ class EscrowRetryableOutboundActionResponse(BaseModel):
             raise ValueError("query_id must fit a non-zero uint64")
         return value
 
+    @field_validator("amount_nanotons")
+    @classmethod
+    def validate_kind_specific_amount(cls, value: str, info: ValidationInfo) -> str:
+        kind = info.data.get("kind")
+        if kind == 7 and value == "0":
+            return value
+        if kind in {1, 2, 3, 4, 5, 6} and int(value) > 0:
+            return value
+        raise ValueError("amount_nanotons does not match the outbound action kind")
+
     @field_validator("retry_window_seconds")
     @classmethod
     def validate_kind_specific_retry_window(cls, value: int, info: ValidationInfo) -> int:
