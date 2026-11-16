@@ -11,9 +11,9 @@ This document supersedes the older handoff material based on `525215b9a51a34be81
 
 | Track | Exact head at snapshot | Status | Release condition |
 |---|---|---|---|
-| NFT identity / Issue #213 / [PR #241](https://github.com/AzizIo/Vstore/pull/241) | `e4d707ef6cf6b4f6910dc351723e11dafda35e11` | Draft; Backend #43815069949 and Frontend/API #43815069935 running; source review still found an unbalanced first-function dollar-quote delimiter | Exact-head Backend, Frontend and API-backed E2E green; PostgreSQL 16 migration upgrade/downgrade and immutable-evidence tests pass; collection policy remains empty until explicitly approved |
+| NFT identity / Issue #213 / [PR #241](https://github.com/AzizIo/Vstore/pull/241) | `e4d707ef6cf6b4f6910dc351723e11dafda35e11` | Draft; Backend #43815360012 and API E2E #43815360064 failed on the same unterminated dollar-quote; newer reruns #43815564139/#43815564137 in progress, but source still contains the mismatched first trigger delimiter | Exact-head Backend, Frontend and API-backed E2E green; PostgreSQL 16 migration upgrade/downgrade and immutable-evidence tests pass; collection policy remains empty until explicitly approved |
 | Backend artifact pin / Issue #206 / [PR #247](https://github.com/AzizIo/Vstore/pull/247) | `c93867f2e3469807135bffd2f5a7701c4b1fbabe` | Draft; Backend, Frontend/API E2E and Contract CI passed | Pin must be refreshed to the final contract artifact from the #248 track before integration |
-| Contract lifecycle and refund ordering / Issue #225 / [PR #248](https://github.com/AzizIo/Vstore/pull/248) | `75926f137f057c56253a87a63b52d8c08586c52f` | Draft; code/BOC refreshed; Contract CI #43815040780 fails strict StateInit vector comparison; final StateInit and zlib BOC hashes still need pinning | Frozen manifest must contain non-null StateInit, raw address and data hash reproduced by generated wrapper and `@ton/core`; exact-head emulator and static checks green; backend adapter must consume this same artifact |
+| Contract lifecycle and refund ordering / Issue #225 / [PR #248](https://github.com/AzizIo/Vstore/pull/248) | `75926f137f057c56253a87a63b52d8c08586c52f` | Draft; code hash/BOC digests refreshed but manifest warning remains; Contract CI #43815040780 fails strict StateInit vector comparison; agent has exact new vector and zlib SHA to pin | Frozen manifest must contain non-null StateInit, raw address and data hash reproduced by generated wrapper and `@ton/core`; exact-head emulator and static checks green; backend adapter must consume this same artifact |
 | Earlier audit handoff / [PR #246](https://github.com/AzizIo/Vstore/pull/246) | `d0b19d2bd948edacbaf336285f9fff6afef0a748` | Draft; stale base | Based on older main and must not be used as current release evidence; this document is the current coordination snapshot |
 
 PR heads and CI status can move. Always re-query the exact head SHA before treating a check as evidence.
@@ -73,7 +73,12 @@ No evidence bundle currently demonstrates an owner-approved valueless live testn
 
 ### Telegram Stars and NFT resale policy
 
-Issue #155 remains a separate policy gate. There is no recorded written ruling approving the exact third-party P2P NFT resale/purchase flow inside the Telegram Mini App. Keep paid checkout and any fee-taking resale flow disabled until Telegram's written position and legal review are recorded. Do not treat Telegram Stars as interchangeable with TON escrow funds.
+Issue #155 remains a separate policy gate. Current official wording is stricter than a generic TON integration permission:
+
+- [Bot Developer Terms §6.2](https://telegram.org/tos/bot-developers#6-2-digital-goods-and-services) requires transactions pertaining to digital goods/services in a TPA to be executed exclusively through Telegram Stars. §6.2.1 expressly discourages real-time sales of digital products/virtual items with inherent value that cannot be reclaimed, frozen, rescinded or suspended following a successful dispute/chargeback.
+- [Bot Developer Terms §7](https://telegram.org/tos/bot-developers#7-blockchain-integration) and the [official Blockchain Guidelines](https://core.telegram.org/bots/blockchain-guidelines) require TON for Mini App blockchain assets and TON Connect for wallet interaction; the guidelines list TON collectible NFTs as permitted.
+
+The public documents do not expressly classify this exact wallet-to-wallet resale of an already-existing TEP-62 NFT between two users, where the Mini App coordinates the sale, under §6.2, nor explicitly approve an external TON payment/escrow UX. The permission to use TON for blockchain functionality is not an exemption from §6.2. Keep paid checkout, escrow deposits, platform resale fees and external payment CTAs disabled until Telegram answers the exact model in writing and legal review accepts the resulting UX. Do not treat Telegram Stars as interchangeable with TON escrow funds.
 
 ## 5. Release controls
 
