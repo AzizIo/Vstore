@@ -559,6 +559,10 @@ async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflic
         id=deal_id,
         buyer_id=buyer_id,
         seller_id=uuid4(),
+        buyer_wallet_id=uuid4(),
+        buyer_address_snapshot="0:" + "33" * 32,
+        seller_address_snapshot="0:" + "66" * 32,
+        listing_intent_id=uuid4(),
         contract_address="0:" + "44" * 32,
         deployment_snapshot_json=deployment_snapshot,
         deployment_snapshot_sha256=_canonical_sha256(deployment_snapshot),
@@ -610,6 +614,18 @@ async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflic
     session = ReplaySession()
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
     user = SimpleNamespace(id=buyer_id)
+    verified_wallet_address = {"value": deal.buyer_address_snapshot}
+    verified_wallet_calls: list[tuple[object, object]] = []
+
+    async def verified_wallet(
+        _session: object, *, user_id: object, wallet_id: object
+    ):
+        verified_wallet_calls.append((user_id, wallet_id))
+        if verified_wallet_address["value"] is None:
+            raise HTTPException(status_code=404, detail="Verified testnet wallet not found")
+        return SimpleNamespace(id=wallet_id), verified_wallet_address["value"]
+
+    monkeypatch.setattr("app.api.escrow._verified_wallet", verified_wallet)
 
     replay = await prepare_retry_failed_outbound_action(
         deal_id,
@@ -623,6 +639,38 @@ async def test_retry_idempotency_replays_exact_payload_and_rejects_query_conflic
     assert replay.action_id == action_id
     assert replay.payload == payload
     assert session.scalar_calls == 2
+    assert verified_wallet_calls == [(buyer_id, deal.buyer_wallet_id)]
+
+    # A formerly valid idempotency key must not return the unsigned payload if
+    # the account's currently verified wallet no longer matches the participant
+    # snapshot.
+    verified_wallet_address["value"] = "0:" + "99" * 32
+    with pytest.raises(HTTPException) as wallet_changed:
+        await prepare_retry_failed_outbound_action(
+            deal_id,
+            EscrowOutboundRetryRequest(query_id="4321"),
+            request,
+            user,
+            session,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            "retry-idempotency-key-0001",
+        )
+    assert wallet_changed.value.status_code == 409
+    assert wallet_changed.value.detail["code"] == "escrow_retry_wallet_snapshot_changed"
+
+    verified_wallet_address["value"] = None
+    with pytest.raises(HTTPException) as wallet_unverified:
+        await prepare_retry_failed_outbound_action(
+            deal_id,
+            EscrowOutboundRetryRequest(query_id="4321"),
+            request,
+            user,
+            session,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            "retry-idempotency-key-0001",
+        )
+    assert wallet_unverified.value.status_code == 409
+    assert wallet_unverified.value.detail["code"] == "escrow_retry_wallet_not_verified"
 
     with pytest.raises(HTTPException) as conflict:
         await prepare_retry_failed_outbound_action(
