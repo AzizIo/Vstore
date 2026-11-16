@@ -8,17 +8,17 @@
 
 This document supersedes the older handoff material based on `525215b9a51a34be811e73a1cc26995cd3cb25a1`. It is a release-coordination snapshot, not an independent security audit, live testnet acceptance, or authorization to deploy.
 
-## Latest integrated candidate — 2026-11-16 20:25 UTC
+## Latest integrated candidate — 2026-11-16 20:57 UTC
 
 > This block supersedes every earlier feature head and CI snapshot below. The executable escrow code baseline remains `b592a4b889221aeb314e521a357b1746091a5976`; the current main branch also contains docs-only release-handoff updates. **No escrow implementation PR has been merged to main**.
 
-Integrated candidate: `f2e61b0c049d64e90dd47025d0979ce295f1e426`.
+Integrated candidate: `168f4bbd43bc818474b6be82ef98babfe8835f3b`.
 
 | Workflow | Exact evidence on the integrated SHA |
 |---|---|
-| Backend CI [#43948985127](https://github.com/AzizIo/Vstore/actions/runs/43948985127) | **Success** — 961 passed, Ruff, migration upgrade and Python dependency audit passed |
-| TON Contract CI [#43948984661](https://github.com/AzizIo/Vstore/actions/runs/43948984661) | **Success** — frozen source/ABI/BOC, code hash, StateInit and message vectors passed; **35/35 Sandbox tests** |
-| Frontend CI [#43948984632](https://github.com/AzizIo/Vstore/actions/runs/43948984632) | **Success** — 248 unit tests, production build, preview container, Nginx, TON Connect manifest; **31 standard Playwright + 1 dedicated escrow retry browser E2E** |
+| Backend CI [#43950978214](https://github.com/AzizIo/Vstore/actions/runs/43950978214) | **Success** — 961 passed, Ruff, migration upgrade and Python dependency audit passed |
+| TON Contract CI [#43950978302](https://github.com/AzizIo/Vstore/actions/runs/43950978302) | **Success** — frozen source/ABI/BOC, code hash, StateInit and message vectors passed; **35/35 Sandbox tests** |
+| Frontend CI [#43950978229](https://github.com/AzizIo/Vstore/actions/runs/43950978229) | **Success** — 248 unit tests, production build, preview container, Nginx, TON Connect manifest; **31 standard Playwright + 1 dedicated escrow retry browser E2E** |
 | API-backed E2E (within #43948984632) | **Success** — 4/4 marketplace journey tests and persisted order/event/outbox assertions. These are marketplace tests, not retry-path evidence. |
 
 The dedicated escrow browser E2E runs in a separate Vite server with testnet UI visible, deterministic wallet/API fixtures, blank TON Connect manifest and signing disabled. It verifies the recipient-bound retry review, exact query ID/idempotency header and unsigned transaction display. It does not sign, broadcast or contact a live chain.
@@ -26,7 +26,7 @@ The dedicated escrow browser E2E runs in a separate Vite server with testnet UI 
 Additional branch evidence:
 - PR #247 backend head `c28c8e0cc2037a7a82e48bee84dea3a350a8161a`: Backend CI [#43946958283](https://github.com/AzizIo/Vstore/actions/runs/43946958283) — 961 passed; Frontend CI #43946958233 passed.
 - PR #248 contract source/artifact head `08daf5afe63c83f6f892fd469d90b3788e0f989c` is unchanged; it is included in the integrated build above.
-- PR #241 NFT identity base remains `e1c891a99b5359585f2b7b2d391699a1a11737eb`; independent review and collection approval remain outstanding.
+- PR #241 NFT identity head is `bb25b6b2f79792df44a5c1a02246d413829f8c6c`; independent review and collection approval remain outstanding.
 
 The browser retry E2E exposed a runtime defect hidden while the escrow feature flag was off: `@ton/core` required a global Buffer in the browser. The frontend now loads the existing `buffer` dependency before importing App/TON modules, and the escrow retry browser test passes with a no-pageerror assertion.
 
