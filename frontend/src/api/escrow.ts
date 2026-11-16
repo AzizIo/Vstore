@@ -34,7 +34,8 @@ export type EscrowAction =
   | "accept_deal"
   | "open_dispute"
   | "return_nft_to_escrow"
-  | "withdraw_unsold_nft";
+  | "withdraw_unsold_nft"
+  | "retry_failed_outbound_action";
 
 export type EscrowDisputeStatus =
   | "open"
@@ -160,6 +161,21 @@ export interface EscrowPrepareDealActionInput {
   wallet_id: string;
 }
 
+export interface EscrowRetryFailedOutboundInput {
+  deal_id: string;
+  query_id: string;
+}
+
+export interface EscrowRetryableOutboundAction {
+  query_id: string;
+  slot: "first" | "second";
+  kind: number;
+  recipient_address: string;
+  amount_nanotons: string;
+  retry_window_seconds: number;
+  proof_masterchain_seqno: number;
+}
+
 export interface EscrowOpenDisputeInput {
   deal_id: string;
   reason: string;
@@ -196,6 +212,8 @@ export interface EscrowHttpContract {
   prepareDispute: (input: EscrowOpenDisputeInput) => EscrowHttpOperation;
   prepareBuyerNftReturn: (input: EscrowPrepareDealActionInput) => EscrowHttpOperation;
   prepareUnsoldNftWithdrawal: (input: EscrowPrepareDealActionInput) => EscrowHttpOperation;
+  retryableOutboundActions: (dealId: string) => string;
+  prepareFailedOutboundRetry: (input: EscrowRetryFailedOutboundInput) => EscrowHttpOperation;
   submitWalletReference: (input: EscrowWalletReferenceInput) => EscrowHttpOperation;
 }
 
@@ -216,6 +234,8 @@ export interface EscrowApiClient {
   prepareDispute(input: EscrowOpenDisputeInput): Promise<PreparedEscrowTransaction>;
   prepareBuyerNftReturn(input: EscrowPrepareDealActionInput): Promise<PreparedEscrowTransaction>;
   prepareUnsoldNftWithdrawal(input: EscrowPrepareDealActionInput): Promise<PreparedEscrowTransaction>;
+  listRetryableOutboundActions(dealId: string, signal?: AbortSignal): Promise<EscrowRetryableOutboundAction[]>;
+  prepareFailedOutboundRetry(input: EscrowRetryFailedOutboundInput): Promise<PreparedEscrowTransaction>;
   submitWalletReference(input: EscrowWalletReferenceInput): Promise<void>;
 }
 
@@ -265,6 +285,23 @@ function isListingAction(value: unknown): value is EscrowListingAction {
   return value === "create_deal_intent" || value === "cancel_listing_intent";
 }
 
+export function isRetryableOutboundAction(value: unknown): value is EscrowRetryableOutboundAction {
+  if (!isRecord(value)) return false;
+  return typeof value.query_id === "string"
+    && /^[1-9][0-9]{0,19}$/.test(value.query_id)
+    && BigInt(value.query_id) < (1n << 64n)
+    && (value.slot === "first" || value.slot === "second")
+    && Number.isInteger(value.kind) && Number(value.kind) >= 1 && Number(value.kind) <= 7
+    && typeof value.recipient_address === "string"
+    && typeof value.amount_nanotons === "string" && /^\d+$/.test(value.amount_nanotons)
+    && Number.isInteger(value.retry_window_seconds) && Number(value.retry_window_seconds) > 0
+    && Number.isInteger(value.proof_masterchain_seqno) && Number(value.proof_masterchain_seqno) > 0;
+}
+
+function isRetryableOutboundActionList(value: unknown): value is EscrowRetryableOutboundAction[] {
+  return Array.isArray(value) && value.every(isRetryableOutboundAction);
+}
+
 function isAction(value: unknown): value is EscrowAction {
   return value === "create_deal_escrow"
     || value === "deposit_nft"
@@ -272,7 +309,8 @@ function isAction(value: unknown): value is EscrowAction {
     || value === "accept_deal"
     || value === "open_dispute"
     || value === "return_nft_to_escrow"
-    || value === "withdraw_unsold_nft";
+    || value === "withdraw_unsold_nft"
+    || value === "retry_failed_outbound_action";
 }
 
 function isNftSnapshot(value: unknown): value is EscrowNftSnapshot {
@@ -482,6 +520,13 @@ export function createEscrowApiClient(
     prepareDispute: (input) => getPrepared(contract.prepareDispute(input)),
     prepareBuyerNftReturn: (input) => getPrepared(contract.prepareBuyerNftReturn(input)),
     prepareUnsoldNftWithdrawal: (input) => getPrepared(contract.prepareUnsoldNftWithdrawal(input)),
+    listRetryableOutboundActions: (dealId, signal) => readJson(
+      contract.retryableOutboundActions(dealId),
+      accessToken,
+      isRetryableOutboundActionList,
+      { signal },
+    ),
+    prepareFailedOutboundRetry: (input) => getPrepared(contract.prepareFailedOutboundRetry(input)),
     submitWalletReference: async (input) => {
       await writeJson(contract.submitWalletReference(input), accessToken, (value): value is { accepted: boolean } =>
         isRecord(value) && value.accepted === true);
