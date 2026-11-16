@@ -90,9 +90,13 @@ Issue #155 remains a separate policy gate. Current official wording is stricter 
 
 The public documents do not expressly classify this exact wallet-to-wallet resale of an already-existing TEP-62 NFT between two users, where the Mini App coordinates the sale, under §6.2, nor explicitly approve an external TON payment/escrow UX. The permission to use TON for blockchain functionality is not an exemption from §6.2.
 
-There is also a production support-surface gap for any future Stars checkout: `/paysupport` exists only in the isolated Stars test bot (`payments_test_bot.py` requires `environment=test` and a dedicated local test database). The regular production bot dispatcher does not register that payment router, and its `BOT_COMMANDS` menu omits `paysupport`, `terms` and `support`. Before any live digital-goods checkout, wire a production-safe payment support handler and publish/test all three commands; do not expose the isolated test bot in production.
+Production support command surfaces are being added separately in [PR #251](https://github.com/AzizIo/Vstore/pull/251): production `/paysupport`, `/terms` and `/support` are information-only, fail closed and do not import the isolated Stars test router. Exact head `018ee6ed4181fe8fc4f2e7ee2504e199f37d5dd7` has Frontend CI #43831818022 and Backend CI #43831818067 running; PR #251 remains Draft. The PR does not implement an actual payment dispute case-management/refund workflow and full legal terms/support contact still require operator-provided URLs/username and legal review. Do not expose the isolated test bot in production.
 
 Keep paid checkout, escrow deposits, platform resale fees and external payment CTAs disabled until Telegram answers the exact model in writing, production support flows are implemented, and legal review accepts the resulting UX. Do not treat Telegram Stars as interchangeable with TON escrow funds.
+
+### Backend recipient-authorized outbound retry
+
+Issue [#252](https://github.com/AzizIo/Vstore/issues/252) tracks a functional backend/frontend gap discovered during integration review: contract #248 adds `RetryFailedOutboundAction` (`0x56450009`), but the adapter/API/client do not expose a user retry action. The contract authorizes only the exact recipient stored in the matching BOUNCED descriptor. The provider can decode outbound descriptors for observer correlation, but they are not included in the runtime getter snapshot used by action preparation. Do not add a shortcut that accepts a client-supplied query ID or recipient. Required implementation: fresh trust-level-0 getter read of current deployed storage, code/snapshot verification, unique BOUNCED descriptor + salt + retry-window validation, exact verified recipient-wallet matching, durable idempotency, positive and adversarial tests including unsupported third-party recipients failing closed. This must be integrated after the #248/#247 artifact pins are aligned and included in same-SHA backend/frontend/contract validation.
 
 ## 5. Release controls
 
@@ -109,8 +113,9 @@ Until every gate above is closed:
 1. PR #241 code/CI work is green on `605612436df49db2a4414de28b9c5e8beb49d7b9` (Backend + Frontend/API E2E + PG16 migration); obtain an independent code review and approve the collection policy/runbook before merging. Keep the collection allowlist empty by default.
 2. Agent 2 reviews and integrates [PR #250](https://github.com/AzizIo/Vstore/pull/250) into the PR #248 branch; Contract CI must pass on the resulting new #248 head with canonical compressed BOC digest verification, all 35+ Sandbox tests and the same frozen StateInit/address/data vectors.
 3. Release integration refreshes PR #247's physical backend code BOC, manifest, expected code hash and message/StateInit vectors from the final post-#250 #248 artifact.
-4. Create an integrated candidate tree containing the final contract source and matching backend pin. Run Backend, Contract, Frontend, API-backed E2E and migration checks on the **same exact SHA**; verify the cross-track artifact test passes.
-5. Obtain independent TON/Tolk audit and remediate all Critical/High findings. Then complete owner-approved valueless testnet acceptance and record the evidence bundle.
-6. Resolve Telegram/ legal policy for the exact NFT resale flow before enabling paid checkout or any platform fee.
+4. Implement [Issue #252](https://github.com/AzizIo/Vstore/issues/252): proof-bound recipient-authorized retry action across provider, backend adapter/API and frontend, with adversarial tests. Do not infer recipient from the caller's chosen query ID.
+5. Create an integrated candidate tree containing #241, final #248 + #250, matching #247 backend pin and the #252 retry path. Run Backend, Contract, Frontend, API-backed E2E and migration checks on the **same exact SHA**; verify the cross-track artifact test passes.
+6. Obtain independent TON/Tolk audit and remediate all Critical/High findings. Then complete owner-approved valueless testnet acceptance and record the evidence bundle.
+7. Resolve Telegram/legal policy for the exact NFT resale flow before enabling paid checkout or any platform fee.
 
 **Release decision at this snapshot: BLOCKED.** A green PR in isolation is not enough. The only acceptable candidate is a single immutable revision with matching contract/backend artifacts, all required CI green, independent review and approved live-testnet evidence.
