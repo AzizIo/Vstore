@@ -2354,7 +2354,9 @@ get fun `test post-delivery buyer dispute outcome returns NFT and refunds buyer`
         { value: grams("0.03"), bounce: true },
     );
     expect(nftReturnConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
-    expect(escrow.getState()).toEqual(STATE_BUYER_REFUND_PENDING);
+    // The test buyer rejects the principal refund; its RichBounce is processed
+    // in the same emulator trace and moves this critical payout to MANUAL_REVIEW.
+    expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
 
     val refund = buildTestOracleAttestation(
         escrow, salt, ORACLE_ACTION_BUYER_REFUND, 3,
@@ -2638,10 +2640,109 @@ get fun `test expired dispute with NFT in escrow remains resolvable by the resol
     );
     expect(repeatedResolution).toHaveFailedTx<ResolveDispute>({
         to: escrow.address,
-        exitCode: Errors.InvalidState,
+        exitCode: Errors.Deadline,
     });
     expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
     expect(escrow.getProgress().principalLocked).toEqual(true);
+}
+
+get fun `test buyer can return NFT after post-delivery dispute timeout and restore resolver path`() {
+    testing.setNow(1_700_000_000);
+    val salt = 0xA22506;
+    val (escrow, nftItem, seller, buyer) = createFixture(salt);
+    val escrowDeploy = escrow.deploy(seller.address, { value: grams("0.2"), bounce: false });
+    expect(escrowDeploy).toHaveSuccessfulDeploy({ to: escrow.address });
+    val itemDeploy = nftItem.deploy(seller.address, { value: grams("0.05"), bounce: false });
+    expect(itemDeploy).toHaveSuccessfulDeploy({ to: nftItem.address });
+
+    activateDeal(escrow, seller, salt);
+    depositExpectedNft(escrow, nftItem, seller, salt);
+    val fund = escrow.sendFundDeal(
+        buyer.address, 1001, salt, { value: grams("1.5"), bounce: true },
+    );
+    expect(fund).toHaveSuccessfulTx<FundDeal>({ to: escrow.address });
+    val accept = escrow.sendAcceptDeal(
+        buyer.address, 1003, salt, { value: grams("0.03"), bounce: true },
+    );
+    expect(accept).toHaveSuccessfulTx<AcceptDeal>({ to: escrow.address });
+
+    val delivered = buildTestOracleAttestation(
+        escrow, salt, ORACLE_ACTION_NFT_DELIVERED, 1,
+        nftItem.address, escrow.address, buyer.address, 0, 1, 0xA225061, 161, 161,
+    );
+    val deliveredConfirmed = escrow.sendAny(
+        testing.treasury("late-post-dispute-delivery-oracle").address,
+        delivered.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(deliveredConfirmed).toHaveSuccessfulTx<OracleAttestation>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_DELIVERED_DISPUTE_WINDOW);
+    expect(nftItem.getOwner()).toEqual(buyer.address);
+
+    val reasonHash = 0xA225062;
+    val dispute = escrow.sendAny(
+        buyer.address,
+        OpenDispute { queryId: 2257, dealSalt: salt, reasonHash }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(dispute).toHaveSuccessfulTx<OpenDispute>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_DISPUTED);
+    expect(escrow.getProgress().disputePhase).toEqual(DISPUTE_PHASE_POST_DELIVERY);
+    expect(escrow.getProgress().nftInEscrow).toEqual(false);
+    expect(escrow.getProgress().principalLocked).toEqual(true);
+
+    val deadline = escrow.getProgress().deadlineUnix;
+    testing.setNow((deadline + 1) as uint32);
+    val timeout = escrow.sendAny(
+        testing.treasury("late-post-dispute-timeout-keeper").address,
+        TimeoutDeal { queryId: 2258, dealSalt: salt }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(timeout).toHaveSuccessfulTx<TimeoutDeal>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_MANUAL_REVIEW);
+    expect(escrow.getProgress().deadlineUnix).toEqual(0);
+    expect(escrow.getProgress().nftInEscrow).toEqual(false);
+    expect(escrow.getProgress().principalLocked).toEqual(true);
+
+    // Late return is accepted only from the snapshotted buyer, for the exact
+    // configured item/query/salt payload, and actually transfers NFT to escrow.
+    val lateReturn = nftItem.sendAny(
+        buyer.address,
+        buildDepositBody(escrow.address, buyer.address, 1004, salt),
+        { value: grams("0.12"), bounce: true },
+    );
+    expect(lateReturn).toHaveSuccessfulTx<NftTransfer>({ to: nftItem.address });
+    expect(lateReturn).toHaveTx<NotificationForNewOwner>({
+        from: nftItem.address,
+        to: escrow.address,
+    });
+    expect(nftItem.getOwner()).toEqual(escrow.address);
+    expect(escrow.getState()).toEqual(STATE_DISPUTED);
+    expect(escrow.getProgress().nftInEscrow).toEqual(true);
+    expect(escrow.getProgress().principalLocked).toEqual(true);
+    expect(escrow.getProgress().deadlineUnix).toBeGreater(testing.getNow());
+    expect(escrow.getProgress().recovery.load().unexpectedPreviousOwner).toEqual(null);
+
+    // Only the original resolver quorum may now decide. No principal is released
+    // until subsequent NFT transfer and oracle finality reconciliation.
+    val resolution = buildTestResolverDecision(
+        escrow,
+        salt,
+        DISPUTE_PHASE_POST_DELIVERY,
+        RESOLUTION_SELLER_WINS,
+        1,
+        reasonHash,
+    );
+    val resolved = escrow.sendAny(
+        testing.treasury("late-post-dispute-resolver").address,
+        resolution.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(resolved).toHaveSuccessfulTx<ResolveDispute>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_NFT_RELEASE_PENDING);
+    expect(escrow.getProgress().pendingAction).toEqual(PENDING_PAYOUT_AFTER_NFT_DELIVERY);
+    expect(escrow.getProgress().principalLocked).toEqual(true);
+    expect(nftItem.getOwner()).toEqual(buyer.address);
 }
 
 get fun `test buyer reserve retry cannot sweep a bounced seller allowance`() {
