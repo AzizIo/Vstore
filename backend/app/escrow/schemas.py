@@ -25,6 +25,11 @@ class EscrowDisputeCreate(BaseModel):
     reason_code: Literal["not_received", "wrong_asset", "payment_mismatch", "other"] = "other"
 
 
+class EscrowOutboundRetryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    query_id: int = Field(strict=True, ge=1, lt=(1 << 64))
+
+
 class EscrowWithdrawalCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     wallet_id: UUID

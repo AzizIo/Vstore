@@ -96,6 +96,7 @@ _GETTER_FIELDS = (
     "principal_locked",
     "recovery_previous_owner",
     "recovery_item_address",
+    "outbound_actions",
 )
 _DIRECT_OPCODES = {
     _OP_ACTIVATE,
@@ -779,7 +780,7 @@ class PytoniqTONTestnetEscrowProvider:
         return decoded, state_name, _sha256(getter_identity)
 
     async def verify_deployed_account(
-        self, deal: EscrowDeal
+        self, deal: EscrowDeal, *, require_initial_state: bool = True
     ) -> tuple[dict[str, object], int, str, str]:
         """Prove that the deterministic DealEscrow is deployed and still unactivated.
 
@@ -805,7 +806,9 @@ class PytoniqTONTestnetEscrowProvider:
             # available; raw_get_account_state above verifies inclusion proof.
             await client.raw_get_block(masterchain_id)
             block_hash = masterchain_id.root_hash.hex()
-            if state_name != "intent_created" or getter.get("contract_state") != 0:
+            if require_initial_state and (
+                state_name != "intent_created" or getter.get("contract_state") != 0
+            ):
                 raise EscrowProviderInvalidEvidence(
                     "DealEscrow is not in its initial unactivated state"
                 )

@@ -39,6 +39,7 @@ from app.escrow.contracts import (
     DealEscrowDeploymentSnapshot,
     EscrowContractABIUnavailable,
     EscrowWalletAction,
+    OutboundActionRetryDescriptor,
     PinnedTONEscrowContractAdapter,
 )
 from app.escrow.domain import EscrowDealStatus
@@ -63,6 +64,7 @@ from app.escrow.schemas import (
     EscrowPageResponse,
     EscrowSellerBalanceResponse,
     EscrowTransactionPreparationResponse,
+    EscrowOutboundRetryRequest,
     EscrowWalletReferenceInput,
     EscrowWalletReferenceResponse,
     EscrowWithdrawalCreate,
@@ -77,6 +79,7 @@ from app.escrow.ton_abi import (
     TONABIError,
     derive_deployment,
     load_pinned_code_boc,
+    parse_basechain_address,
     validate_snapshot,
     verify_compiled_code,
 )
@@ -463,10 +466,80 @@ def _prepared_action_response(
     )
 
 
+def _retry_descriptor_from_proof(
+    getter: dict[str, object],
+    *,
+    query_id: int,
+    expected_deal_salt: str,
+) -> OutboundActionRetryDescriptor:
+    """Select exactly one canonical, bounced descriptor from a fresh trusted proof."""
+    rows = getter.get("outbound_actions")
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        raise HTTPException(
+            status_code=503, detail={"code": "outbound_action_proof_incomplete"}
+        )
+    matches = [
+        row for row in rows
+        if not isinstance(row.get("query_id"), bool) and row.get("query_id") == query_id
+    ]
+    if len(matches) != 1:
+        code = (
+            "outbound_action_descriptor_duplicate"
+            if len(matches) > 1
+            else "outbound_action_descriptor_not_found"
+        )
+        raise HTTPException(status_code=409, detail={"code": code})
+    row = matches[0]
+    row_salt = row.get("deal_salt")
+    if not isinstance(row_salt, str) or row_salt.lower() != expected_deal_salt.lower():
+        raise HTTPException(status_code=409, detail={"code": "outbound_action_deal_salt_mismatch"})
+    status_value = row.get("status")
+    if isinstance(status_value, bool) or status_value != 1:
+        raise HTTPException(status_code=409, detail={"code": "outbound_action_not_bounced"})
+    retry_window = row.get("retry_window_seconds")
+    if (
+        isinstance(retry_window, bool)
+        or not isinstance(retry_window, int)
+        or not 0 < retry_window < (1 << 32)
+    ):
+        raise HTTPException(status_code=409, detail={"code": "outbound_action_retry_window_invalid"})
+    raw_recipient = row.get("recipient_address")
+    if not isinstance(raw_recipient, str):
+        raise HTTPException(status_code=409, detail={"code": "outbound_action_recipient_invalid"})
+    try:
+        recipient = parse_basechain_address(raw_recipient, "recipient_address")
+    except TONABIError as exc:
+        raise HTTPException(
+            status_code=409, detail={"code": "outbound_action_recipient_invalid"}
+        ) from exc
+    canonical_recipient = recipient.to_str(is_user_friendly=False)
+    if raw_recipient != canonical_recipient:
+        raise HTTPException(
+            status_code=409, detail={"code": "outbound_action_recipient_not_canonical"}
+        )
+    descriptor_query_id = row.get("query_id")
+    if (
+        isinstance(descriptor_query_id, bool)
+        or not isinstance(descriptor_query_id, int)
+        or not 0 < descriptor_query_id < (1 << 64)
+    ):
+        raise HTTPException(
+            status_code=409, detail={"code": "outbound_action_query_id_invalid"}
+        )
+    return OutboundActionRetryDescriptor(
+        query_id=descriptor_query_id,
+        deal_salt=row_salt.lower(),
+        recipient_address=canonical_recipient,
+        status=status_value,
+        retry_window_seconds=retry_window,
+    )
+
+
 def _action_query_id(
     action: EscrowWalletAction,
     snapshot: DealEscrowDeploymentSnapshot,
     action_record: EscrowWalletActionRecord,
+    request_context: dict[str, object] | None = None,
 ) -> int | None:
     fixed_ids = {
         EscrowWalletAction.ACTIVATE_DEAL: snapshot.activation_query_id,
@@ -514,6 +587,24 @@ def _action_query_id(
                 detail={"code": "stored_action_query_id_invalid"},
             )
         return query_id
+    if action is EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION:
+        requested = (request_context or {}).get("query_id")
+        if (
+            isinstance(requested, bool)
+            or not isinstance(requested, int)
+            or not 0 < requested < (1 << 64)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"code": "outbound_action_query_id_invalid"},
+            )
+        if action_record.query_id is not None and action_record.query_id != str(requested):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "stored_action_query_id_conflict"},
+            )
+        action_record.query_id = str(requested)
+        return requested
     return None
 
 
@@ -1049,6 +1140,7 @@ async def _prepare_action(
     deal_id: UUID, action: EscrowWalletAction, user: User,
     session: AsyncSession, verifier: TONNFTVerifier, idempotency_key: str,
     request_context: dict[str, object] | None = None,
+    retry_descriptor: OutboundActionRetryDescriptor | None = None,
 ):
     _require_testnet()
     # Do not hold a database row lock across ownership-provider calls.
@@ -1193,6 +1285,34 @@ async def _prepare_action(
             raise HTTPException(status_code=409,
                 detail="Verified buyer wallet snapshot has changed")
         ownership_check = (deal.item_address, deal.buyer_address_snapshot)
+    elif action is EscrowWalletAction.RETRY_FAILED_OUTBOUND_ACTION:
+        if retry_descriptor is None:
+            raise HTTPException(
+                status_code=503, detail={"code": "outbound_action_proof_incomplete"}
+            )
+        if deal.seller_id == user.id:
+            wallet_id = (
+                (await session.get(EscrowListingIntent, deal.listing_intent_id)).seller_wallet_id
+            )
+            expected_address = deal.seller_address_snapshot
+        elif deal.buyer_id == user.id:
+            wallet_id = deal.buyer_wallet_id
+            expected_address = deal.buyer_address_snapshot
+        else:
+            raise HTTPException(status_code=404, detail={"code": "escrow_deal_not_found"})
+        if wallet_id is None:
+            raise HTTPException(status_code=503, detail={"code": "escrow_wallet_unavailable"})
+        wallet, wallet_address = await _verified_wallet(
+            session, user_id=user.id, wallet_id=wallet_id
+        )
+        if wallet_address != expected_address:
+            raise HTTPException(
+                status_code=409, detail={"code": "escrow_wallet_snapshot_changed"}
+            )
+        if wallet_address != retry_descriptor.recipient_address:
+            raise HTTPException(
+                status_code=409, detail={"code": "outbound_action_wrong_recipient_wallet"}
+            )
     else:
         raise HTTPException(status_code=409, detail="Unsupported escrow action")
 
@@ -1334,7 +1454,9 @@ async def _prepare_action(
     try:
         if action_record.attempt_id is None:
             action_record.attempt_id = uuid4().hex
-        query_id = _action_query_id(action, snapshot, action_record)
+        query_id = _action_query_id(
+            action, snapshot, action_record, request_context=request_context
+        )
         if action_record.attempt_count == 0:
             action_record.attempt_count = 1
         # Persist attempt/query identity before local serialization. A process crash
@@ -1357,6 +1479,7 @@ async def _prepare_action(
             deal_snapshot=snapshot,
             reason_hash=reason_hash,
             query_id=query_id,
+            retry_descriptor=retry_descriptor,
         )
         payload_dict = prepared.to_tonconnect_dict()
         unsigned_bocs = {
