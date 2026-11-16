@@ -1897,7 +1897,7 @@ async def _prepare_action(
         )
     deal = locked_deal
     wallet, wallet_address = await _verified_wallet(
-        session, user_id=actor_id, wallet_id=validated_wallet_id
+        session, user_id=actor_id, wallet_id=validated_wallet_id, lock=True
     )
     if wallet_address != validated_wallet_address:
         await session.rollback()
