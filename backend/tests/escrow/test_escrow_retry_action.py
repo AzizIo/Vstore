@@ -256,6 +256,7 @@ async def test_retry_projection_hides_third_party_and_duplicate_query_recipients
         seller_id=uuid4(),
         buyer_wallet_id=wallet_id,
         listing_intent_id=uuid4(),
+        buyer_address_snapshot=recipient,
         contract_address="0:" + "44" * 32,
         deployment_snapshot_json=deployment_snapshot,
         deployment_snapshot_sha256=_canonical_sha256(deployment_snapshot),
@@ -457,9 +458,11 @@ async def test_retry_prepare_rejects_third_party_actor_and_wrong_recipient_walle
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("testnet_network", ["testnet"])
 async def test_retry_projection_fails_closed_without_complete_trust_anchor(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, testnet_network: str,
 ) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
     buyer_id, deal_id, wallet_id = uuid4(), uuid4(), uuid4()
     recipient = "0:" + "33" * 32
     deployment_snapshot = {"deal_salt": "ab" * 32}
