@@ -515,6 +515,21 @@ fun handleNftOwnershipNotification(
         && msg.queryId == money.nftReturnToEscrowQueryId
         && blockchain.now() <= progress.deadlineUnix
     );
+    // If post-delivery arbitration timed out while the buyer still owns the NFT,
+    // the escrow remains in MANUAL_REVIEW with principal locked. The exact TEP-62
+    // return from the snapshotted buyer is still a safe custody transition and
+    // restores a resolver-controlled dispute; it does not itself settle principal.
+    val lateExpectedBuyerReturn = (
+        progress.state == STATE_MANUAL_REVIEW
+        && progress.deadlineUnix == 0
+        && progress.disputePhase == DISPUTE_PHASE_POST_DELIVERY
+        && progress.pendingAction == PENDING_NONE
+        && progress.principalLocked
+        && !progress.nftInEscrow
+        && !hasUnexpectedRecovery
+        && msg.oldOwnerAddress == roles.buyer
+        && msg.queryId == money.nftReturnToEscrowQueryId
+    );
     val validExpectedPayload = hasValidInlineNftPayload(msg.payload, asset);
     val existingRecovery = progress.recovery.load();
     val hasUnexpectedRecovery = (
@@ -548,7 +563,7 @@ fun handleNftOwnershipNotification(
     }
 
     if (
-        (isExpectedDeposit || isExpectedBuyerReturn)
+        (isExpectedDeposit || isExpectedBuyerReturn || lateExpectedBuyerReturn)
         && validExpectedPayload
     ) {
         progress.nftInEscrow = true;
@@ -557,7 +572,13 @@ fun handleNftOwnershipNotification(
             progress.deadlineUnix = (blockchain.now() + BUYER_FUNDING_WINDOW_SECONDS) as uint64;
         } else {
             // Exact configured item is back in escrow; resolver authorization
-            // remains required before the NFT or principal can move.
+            // remains required before the NFT or principal can move. A late
+            // post-delivery return restores the dispute state only after actual
+            // TEP-62 custody has moved back to this contract.
+            if (lateExpectedBuyerReturn) {
+                progress.state = STATE_DISPUTED;
+                progress.pendingAction = PENDING_NONE;
+            }
             progress.deadlineUnix = (blockchain.now() + ARBITRATION_WINDOW_SECONDS) as uint64;
         }
         storage.progress = progress.toCell();
