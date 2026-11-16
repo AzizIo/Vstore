@@ -917,7 +917,9 @@ class PytoniqTONTestnetEscrowProvider:
                 message_value = descriptor.get("message_value_nanotons")
                 amounts_valid = (
                     kind == 7
+                    and type(amount) is int
                     and amount == 0
+                    and type(message_value) is int
                     and message_value == 0
                 ) or (
                     kind in {1, 2, 3, 4, 5, 6}
