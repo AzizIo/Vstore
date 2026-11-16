@@ -1,3 +1,4 @@
+import pytest
 from fastapi import HTTPException
 
 from app.api.escrow import _retry_descriptor_from_proof
@@ -35,8 +36,18 @@ def test_retry_descriptor_requires_one_canonical_bounced_match() -> None:
         ({"outbound_actions": [_retry_row(), _retry_row()]}, 4321, "ab" * 32, "duplicate"),
         ({"outbound_actions": [_retry_row(status=0)]}, 4321, "ab" * 32, "not_bounced"),
         ({"outbound_actions": [_retry_row(deal_salt="cd" * 32)]}, 4321, "ab" * 32, "salt_mismatch"),
-        ({"outbound_actions": [_retry_row(recipient_address="not-an-address")]}, 4321, "ab" * 32, "recipient_invalid"),
-        ({"outbound_actions": [_retry_row(retry_window_seconds=0)]}, 4321, "ab" * 32, "window_invalid"),
+        (
+            {"outbound_actions": [_retry_row(recipient_address="not-an-address")]},
+            4321,
+            "ab" * 32,
+            "recipient_invalid",
+        ),
+        (
+            {"outbound_actions": [_retry_row(retry_window_seconds=0)]},
+            4321,
+            "ab" * 32,
+            "window_invalid",
+        ),
         ({"outbound_actions": [_retry_row(query_id=True)]}, 4321, "ab" * 32, "not_found"),
         ({}, 4321, "ab" * 32, "proof_incomplete"),
     ],
