@@ -38,6 +38,13 @@ struct (0x5645f105) PartyRetryOutbound {
     queryId: uint64
 }
 
+struct (0x5645f107) PartyOpenDispute {
+    escrowAddress: address
+    dealSalt: uint256
+    queryId: uint64
+    reasonHash: uint256
+}
+
 struct (0x5645f106) PartySetRejectAction {
     rejectSettlementAction: uint8
 }
@@ -49,6 +56,7 @@ type TestEscrowPartyMessage =
     | PartyAcceptEscrow
     | PartyRetryOutbound
     | PartySetRejectAction
+    | PartyOpenDispute
     | NotificationForNewOwner
 
 contract TestEscrowParty {
@@ -165,6 +173,21 @@ fun onInternalMessage(in: InMessage) {
                 },
             });
             retry.send(SEND_MODE_PAY_FEES_SEPARATELY);
+        }
+        PartyOpenDispute => {
+            val storage = TestEscrowPartyStorage.load();
+            assert (in.senderAddress == storage.controllerAddress) throw 910;
+            val dispute = createMessage({
+                bounce: BounceMode.RichBounce,
+                value: grams("0.03"),
+                dest: msg.escrowAddress,
+                body: OpenDispute {
+                    queryId: msg.queryId,
+                    dealSalt: msg.dealSalt,
+                    reasonHash: msg.reasonHash,
+                },
+            });
+            dispute.send(SEND_MODE_PAY_FEES_SEPARATELY);
         }
         PartySetRejectAction => {
             var storage = TestEscrowPartyStorage.load();
