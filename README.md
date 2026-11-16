@@ -6,6 +6,18 @@ VILTARA SHOP is a Telegram Mini App and optional bot for a peer-to-peer marketpl
 
 Product boundaries and decisions approved for the current MVP are recorded in [docs/PRODUCT_MODEL.md](docs/PRODUCT_MODEL.md). Production and monetization launch gates are tracked in [docs/RELEASE_READINESS_2026-11-14.md](docs/RELEASE_READINESS_2026-11-14.md); do not treat the Stars test harness or testnet escrow as live settlement.
 
+### TON escrow development status — not a live feature
+
+The TON escrow work is being developed and reviewed separately from the current non-custodial reservation/direct-transfer MVP. **There is no production escrow checkout, payment collection, refund processing, seller payout or custody on main.** Do not infer that an unsigned testnet action-preparation route is a live settlement rail.
+
+The implementation and release evidence are tracked in:
+- [Current TON escrow release gate](docs/TON_ESCROW_RELEASE_GATE_2026-11-16.md)
+- [Independent TON/Tolk audit and valueless testnet acceptance handoff](docs/TON_ESCROW_EXTERNAL_AUDIT_HANDOFF.md)
+- [Issue #225 current-main security assessment](docs/TON_ESCROW_ISSUE_225_CURRENT_MAIN_ASSESSMENT.md)
+
+The relevant implementation PRs are [#241 — proof-backed TEP-62 identity](https://github.com/AzizIo/Vstore/pull/241), [#247 — backend contract artifact pin and integrity guard](https://github.com/AzizIo/Vstore/pull/247), and [#248 — TON escrow contract lifecycle follow-up](https://github.com/AzizIo/Vstore/pull/248). These branches must not be treated as a released, integrated feature until one exact candidate SHA contains matching backend/contract artifacts and passes all required CI, independent TON/Tolk audit and owner-approved valueless testnet acceptance. Mainnet, real funds and real NFT transfers are out of scope.
+
+
 Admin workspace: `/admin`. Access is fail-closed and requires the server-side `ADMIN_TELEGRAM_IDS` JSON array of numeric Telegram user IDs. The default is `[]` (no admin access). Never commit real administrator IDs or credentials.
 
 ## Current MVP status
