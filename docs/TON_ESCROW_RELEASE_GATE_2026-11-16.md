@@ -1,7 +1,8 @@
 # VILTARA TON Escrow — release gate snapshot
 
 **Snapshot date:** 2026-11-16  
-**Baseline:** `main` at `b592a4b889221aeb314e521a357b1746091a5976`  
+**Executable code baseline:** `b592a4b889221aeb314e521a357b1746091a5976`  
+**Current main HEAD:** `c74af7ceb9ba3c9893e7800ed85b155e762840a0` (docs-only PR #249 merge)  
 **Network:** TON testnet only (`global_id = -3`)  
 **Decision:** **BLOCKED — not a production release candidate**
 
