@@ -290,7 +290,7 @@ describe("proof-bound outbound retry API", () => {
     expect(listInit.headers).toMatchObject({ Authorization: "Bearer access-token" });
 
     const [prepareUrl, prepareInit] = vi.mocked(fetch).mock.calls[1] as [string, RequestInit];
-    expect(prepareUrl).toBe("/test/escrow/prepare-failed-outbound-retry");
+    expect(prepareUrl).toBe("/test/escrow/prepare-failed-outbound-retry-action");
     expect(prepareInit.method).toBe("POST");
     expect(JSON.parse(String(prepareInit.body))).toEqual({
       deal_id: "deal-1",
