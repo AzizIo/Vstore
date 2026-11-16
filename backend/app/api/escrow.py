@@ -521,7 +521,7 @@ def _retry_descriptor_from_proof(
     message_body_hash = row.get("message_body_hash")
 
     if (
-        slot not in {"first", "second"}
+        not isinstance(slot, str) or slot not in {"first", "second"}
         or type(kind) is not int
         or kind not in {1, 2, 3, 4, 5, 6, 7}
         or isinstance(descriptor_query_id, bool)
