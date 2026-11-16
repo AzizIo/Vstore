@@ -2483,6 +2483,39 @@ async def prepare_retry_failed_outbound_action(
                 status_code=409, detail={"code": "idempotency_payload_conflict"}
             )
         if getattr(existing, "unsigned_payload_json", None) is not None:
+            # Replays must still be bound to the actor's currently verified
+            # recipient wallet. Do not hand back an old unsigned retry payload
+            # after the account's wallet verification or participant snapshot
+            # has changed since the original preparation.
+            if deal.seller_id == user.id:
+                intent = await session.get(EscrowListingIntent, deal.listing_intent_id)
+                wallet_id = intent.seller_wallet_id if intent is not None else None
+                expected_wallet_address = deal.seller_address_snapshot
+            else:
+                wallet_id = deal.buyer_wallet_id
+                expected_wallet_address = deal.buyer_address_snapshot
+            if wallet_id is None:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "escrow_retry_wallet_not_verified"},
+                )
+            try:
+                _wallet, verified_wallet_address = await _verified_wallet(
+                    session, user_id=user.id, wallet_id=wallet_id,
+                )
+            except HTTPException as exc:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "escrow_retry_wallet_not_verified"},
+                ) from exc
+            if verified_wallet_address != expected_wallet_address:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "escrow_retry_wallet_snapshot_changed"},
+                )
             return _prepared_action_response(existing)
         raise HTTPException(
             status_code=409,
