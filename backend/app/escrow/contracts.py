@@ -391,15 +391,20 @@ class PinnedTONEscrowContractAdapter:
                 )
                 valid_amounts = (
                     descriptor.kind == 7
+                    and type(descriptor.amount_nanotons) is int
                     and descriptor.amount_nanotons == 0
+                    and type(descriptor.message_value_nanotons) is int
                     and descriptor.message_value_nanotons == 0
                 ) or (
                     descriptor.kind in {1, 2, 3, 4, 5, 6}
+                    and type(descriptor.amount_nanotons) is int
                     and descriptor.amount_nanotons > 0
+                    and type(descriptor.message_value_nanotons) is int
                     and descriptor.message_value_nanotons > 0
                 )
                 if (
                     descriptor.slot not in {"first", "second"}
+                    or type(descriptor.kind) is not int
                     or descriptor.kind not in {1, 2, 3, 4, 5, 6, 7}
                     or descriptor.query_id != retry_query_id
                     or descriptor.deal_salt != f"{salt:064x}"
