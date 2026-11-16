@@ -167,6 +167,7 @@ def test_retry_request_uses_bounded_decimal_uint64_string() -> None:
 async def test_retry_projection_uses_current_proof_and_exact_recipient_wallet(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr("app.api.escrow._require_testnet", lambda: None)
     buyer_id, deal_id, wallet_id = uuid4(), uuid4(), uuid4()
     recipient = "0:" + "33" * 32
     deployment_snapshot = {"deal_salt": "ab" * 32}
