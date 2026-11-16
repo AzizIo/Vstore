@@ -801,22 +801,22 @@ function WorkspaceBody({
                       )}
                       <div className="escrow-buyer-actions">
                         {allowed("create_deal_escrow", deal.available_actions) && (
-                          <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !signer} onClick={() => signer && void prepareWalletAction("create_deal_escrow", deal, () => api!.prepareDealEscrow({ deal_id: deal.id, wallet_id: signer.id }), signer)}>
+                          <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !signer} onClick={() => signer && void prepareWalletAction("create_deal_escrow", deal, () => api!.prepareDealEscrow({ deal_id: deal.id, wallet_id: signer.id, context: deal }), signer)}>
                             Создать DealEscrow
                           </button>
                         )}
                         {allowed("activate_deal", deal.available_actions) && (
-                          <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !signer} onClick={() => signer && void prepareWalletAction("activate_deal", deal, () => api!.prepareDealActivation({ deal_id: deal.id, wallet_id: signer.id }), signer)}>
+                          <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !signer} onClick={() => signer && void prepareWalletAction("activate_deal", deal, () => api!.prepareDealActivation({ deal_id: deal.id, wallet_id: signer.id, context: deal }), signer)}>
                             Активировать DealEscrow
                           </button>
                         )}
                         {allowed("deposit_nft", deal.available_actions) && (
-                          <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !signer} onClick={() => signer && void prepareWalletAction("deposit_nft", deal, () => api!.prepareNftDeposit({ deal_id: deal.id, wallet_id: signer.id }), signer)}>
+                          <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !signer} onClick={() => signer && void prepareWalletAction("deposit_nft", deal, () => api!.prepareNftDeposit({ deal_id: deal.id, wallet_id: signer.id, context: deal }), signer)}>
                             Внести NFT в DealEscrow
                           </button>
                         )}
                         {allowed("withdraw_unsold_nft", deal.available_actions) && (
-                          <button className="escrow-button escrow-button-secondary" type="button" disabled={!api || busy || !signer} onClick={() => signer && void prepareWalletAction("withdraw_unsold_nft", deal, () => api!.prepareUnsoldNftWithdrawal({ deal_id: deal.id, wallet_id: signer.id }), signer)}>
+                          <button className="escrow-button escrow-button-secondary" type="button" disabled={!api || busy || !signer} onClick={() => signer && void prepareWalletAction("withdraw_unsold_nft", deal, () => api!.prepareUnsoldNftWithdrawal({ deal_id: deal.id, wallet_id: signer.id, context: deal }), signer)}>
                             Вернуть непроданный NFT
                           </button>
                         )}
@@ -929,6 +929,7 @@ function WorkspaceBody({
                               () => api!.prepareFailedOutboundRetry({
                                 deal_id: selectedDeal.id,
                                 query_id: outbound.query_id,
+                                context: selectedDeal,
                               }),
                               recipientWallet,
                             )}
@@ -942,19 +943,19 @@ function WorkspaceBody({
                   </section>
                 )}
                 {allowed("fund_deal", selectedDeal.available_actions) && (
-                  <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !selectedDealBuyerWallet} onClick={() => selectedDealBuyerWallet && void prepareWalletAction("fund_deal", selectedDeal, () => api!.prepareBuyerFunding({ deal_id: selectedDeal.id, wallet_id: selectedDealBuyerWallet.id }), selectedDealBuyerWallet)}>
+                  <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !selectedDealBuyerWallet} onClick={() => selectedDealBuyerWallet && void prepareWalletAction("fund_deal", selectedDeal, () => api!.prepareBuyerFunding({ deal_id: selectedDeal.id, wallet_id: selectedDealBuyerWallet.id, context: selectedDeal }), selectedDealBuyerWallet)}>
                     Внести TON
                   </button>
                 )}
                 {allowed("accept_deal", selectedDeal.available_actions) && (
-                  <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !selectedDealBuyerWallet} onClick={() => selectedDealBuyerWallet && void prepareWalletAction("accept_deal", selectedDeal, () => api!.prepareBuyerAcceptance({ deal_id: selectedDeal.id, wallet_id: selectedDealBuyerWallet.id }), selectedDealBuyerWallet)}>
+                  <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !selectedDealBuyerWallet} onClick={() => selectedDealBuyerWallet && void prepareWalletAction("accept_deal", selectedDeal, () => api!.prepareBuyerAcceptance({ deal_id: selectedDeal.id, wallet_id: selectedDealBuyerWallet.id, context: selectedDeal }), selectedDealBuyerWallet)}>
                     Принять условия и передать NFT
                   </button>
                 )}
                 {allowed("open_dispute", selectedDeal.available_actions) && (
                   <div className="escrow-buyer-actions">
                     <label className="escrow-dispute-reason"><span>Причина спора</span><textarea rows={3} value={disputeReason} onChange={(event) => setDisputeReason(event.target.value)} placeholder="Опишите проблему с депозитом, оплатой или передачей NFT." /></label>
-                    <button className="escrow-button escrow-button-danger" type="button" disabled={!api || busy || !selectedDealBuyerWallet || disputeReason.trim().length < 8} onClick={() => selectedDealBuyerWallet && void prepareWalletAction("open_dispute", selectedDeal, () => api!.prepareDispute({ deal_id: selectedDeal.id, reason: disputeReason.trim() }), selectedDealBuyerWallet)}>
+                    <button className="escrow-button escrow-button-danger" type="button" disabled={!api || busy || !selectedDealBuyerWallet || disputeReason.trim().length < 8} onClick={() => selectedDealBuyerWallet && void prepareWalletAction("open_dispute", selectedDeal, () => api!.prepareDispute({ deal_id: selectedDeal.id, reason: disputeReason.trim(), context: selectedDeal }), selectedDealBuyerWallet)}>
                       Открыть спор
                     </button>
                   </div>
@@ -962,7 +963,7 @@ function WorkspaceBody({
                 {allowed("return_nft_to_escrow", selectedDeal.available_actions) && (
                   <div className="escrow-return-nft">
                     <p className="escrow-warning">Для buyer-favourable post-delivery resolution нужно вернуть именно этот NFT в escrow. Refund невозможен, пока NFT остаётся у покупателя.</p>
-                    <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !selectedDealBuyerWallet} onClick={() => selectedDealBuyerWallet && void prepareWalletAction("return_nft_to_escrow", selectedDeal, () => api!.prepareBuyerNftReturn({ deal_id: selectedDeal.id, wallet_id: selectedDealBuyerWallet.id }), selectedDealBuyerWallet)}>
+                    <button className="escrow-button escrow-button-primary" type="button" disabled={!api || busy || !selectedDealBuyerWallet} onClick={() => selectedDealBuyerWallet && void prepareWalletAction("return_nft_to_escrow", selectedDeal, () => api!.prepareBuyerNftReturn({ deal_id: selectedDeal.id, wallet_id: selectedDealBuyerWallet.id, context: selectedDeal }), selectedDealBuyerWallet)}>
                       Вернуть NFT в escrow
                     </button>
                   </div>
