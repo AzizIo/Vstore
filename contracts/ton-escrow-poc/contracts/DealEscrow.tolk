@@ -870,8 +870,22 @@ fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
         && recovery.unexpectedPreviousOwner == null
         && recovery.unexpectedItemAddress == null
     );
+    // Post-delivery disputes are different: the buyer already owns the NFT.
+    // If the buyer does not return it before the deadline, keep the resolver
+    // quorum available so a seller-wins decision can settle principal directly.
+    val timedOutPostDeliveryDispute = (
+        progress.state == STATE_MANUAL_REVIEW
+        && progress.deadlineUnix == 0
+        && progress.disputePhase == DISPUTE_PHASE_POST_DELIVERY
+        && progress.pendingAction == PENDING_NONE
+        && !progress.nftInEscrow
+        && progress.principalLocked
+        && recovery.unexpectedPreviousOwner == null
+        && recovery.unexpectedItemAddress == null
+    );
     assert (
         timedOutEscrowedDispute
+        || timedOutPostDeliveryDispute
         || (
             progress.state == STATE_DISPUTED
             && progress.deadlineUnix > 0
@@ -888,9 +902,11 @@ fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
     val context = msg.data.load().context.load();
 
     assert (
-        progress.state == STATE_DISPUTED || timedOutEscrowedDispute
+        progress.state == STATE_DISPUTED
+        || timedOutEscrowedDispute
+        || timedOutPostDeliveryDispute
     ) throw Errors.InvalidState;
-    assert (progress.nftInEscrow && progress.principalLocked) throw Errors.InvalidState;
+    assert (progress.principalLocked) throw Errors.InvalidState;
     assert (context.domain == ESCROW_DOMAIN) throw Errors.InvalidAttestation;
     assert (context.protocolVersion == terms.protocolVersion) throw Errors.InvalidAttestation;
     assert (context.networkId == TESTNET_NETWORK_ID) throw Errors.InvalidAttestation;
@@ -908,8 +924,9 @@ fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
     assert (signatureCount >= 2) throw Errors.InvalidSignatures;
 
     if (context.outcome == RESOLUTION_BUYER_WINS) {
-        // The exact item is already held by this contract (pre-delivery dispute)
-        // or has been returned by the buyer (post-delivery dispute).
+        // Buyer-win still requires custody of the exact NFT before any refund.
+        // Never refund principal while the buyer retains or has transferred it.
+        assert (progress.nftInEscrow) throw Errors.InvalidNft;
         val returnAttemptId = progress.startOracleAttempt();
         sendNftTo(
             mutate progress,
@@ -928,23 +945,38 @@ fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
         progress.pendingAction = PENDING_REFUND_AFTER_NFT_RETURN;
         progress.deadlineUnix = (blockchain.now() + DELIVERY_CONFIRMATION_GRACE_SECONDS) as uint64;
     } else if (context.outcome == RESOLUTION_SELLER_WINS) {
-        val releaseAttemptId = progress.startOracleAttempt();
-        sendNftTo(
-            mutate progress,
-            OUTBOUND_KIND_NFT_RELEASE,
-            asset.itemAddress,
-            roles.buyer,
-            roles.seller,
-            releaseAttemptId,
-            asset,
-            money.nftTransferValue,
-            STATE_NFT_RELEASE_PENDING,
-            PENDING_PAYOUT_AFTER_NFT_DELIVERY,
-            DELIVERY_CONFIRMATION_GRACE_SECONDS,
-        );
-        progress.state = STATE_NFT_RELEASE_PENDING;
-        progress.pendingAction = PENDING_PAYOUT_AFTER_NFT_DELIVERY;
-        progress.deadlineUnix = (blockchain.now() + DELIVERY_CONFIRMATION_GRACE_SECONDS) as uint64;
+        if (progress.nftInEscrow) {
+            // Pre-delivery disputes (or post-delivery disputes with a real NFT
+            // return) keep the existing escrow-to-buyer delivery flow.
+            val releaseAttemptId = progress.startOracleAttempt();
+            sendNftTo(
+                mutate progress,
+                OUTBOUND_KIND_NFT_RELEASE,
+                asset.itemAddress,
+                roles.buyer,
+                roles.seller,
+                releaseAttemptId,
+                asset,
+                money.nftTransferValue,
+                STATE_NFT_RELEASE_PENDING,
+                PENDING_PAYOUT_AFTER_NFT_DELIVERY,
+                DELIVERY_CONFIRMATION_GRACE_SECONDS,
+            );
+            progress.state = STATE_NFT_RELEASE_PENDING;
+            progress.pendingAction = PENDING_PAYOUT_AFTER_NFT_DELIVERY;
+            progress.deadlineUnix = (blockchain.now() + DELIVERY_CONFIRMATION_GRACE_SECONDS) as uint64;
+        } else {
+            // After delivery the buyer already owns the NFT. A quorum-approved
+            // seller-win therefore settles only the locked principal; attempting
+            // another NFT transfer would target an item no longer in escrow.
+            assert (progress.disputePhase == DISPUTE_PHASE_POST_DELIVERY)
+                throw Errors.InvalidNft;
+            val payoutAttemptId = progress.startOracleAttempt();
+            sendSellerPayout(mutate progress, roles, asset, money, payoutAttemptId);
+            progress.state = STATE_SELLER_PAYOUT_PENDING;
+            progress.pendingAction = PENDING_PAYOUT_RECONCILIATION;
+            progress.deadlineUnix = (blockchain.now() + SETTLEMENT_RECONCILIATION_GRACE_SECONDS) as uint64;
+        }
     } else {
         throw Errors.InvalidAttestation;
     }
