@@ -34,18 +34,18 @@ describe("AdminPage Telegram launch and authorization states", () => {
   it(
     "explains that the workspace must be launched through the bot when initData is missing",
     () => {
-    vi.mocked(useSession).mockReturnValue({
-      status: "unauthenticated",
-      reason: "missing_init_data",
-    });
+      vi.mocked(useSession).mockReturnValue({
+        status: "unauthenticated",
+        reason: "missing_init_data",
+      });
 
-    render(<AdminPage />);
+      render(<AdminPage />);
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Telegram не передал данные запуска",
-    );
-    expect(screen.getByRole("alert")).toHaveTextContent("/admin");
-    expect(fetchAdminAccess).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Telegram не передал данные запуска",
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent("/admin");
+      expect(fetchAdminAccess).not.toHaveBeenCalled();
     },
   );
 
