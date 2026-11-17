@@ -6,12 +6,12 @@ This directory pins the ABI and compiler output for the current testnet-only Dea
 
 | Field | Value |
 |---|---|
-| Exact source commit | `5f5ecfba94147140e53b66c482da336ddd8f0eee` |
-| Contract source commit | `ef74ca0b9bfc0045bf9a31cb0a01d37487002567` |
+| Exact PR #262 build head | `cf48e3fa9fd79ed0a8d9c469af078e2a4e98142d` |
+| Contract source commit | `5f5ecfba94147140e53b66c482da336ddd8f0eee` |
 | Toolchain | Acton `1.2.1`, Tolk `1.5.0` |
-| Successful exact-head Contract CI | [#44052744923](https://github.com/AzizIo/Vstore/actions/runs/44052744923) — artifact capture run; StateInit match still pending |
-| Artifact ID | `14314745991` |
-| Artifact ZIP SHA-256 | `e0024407de5d011712f419a4f2769e7343a234289bc36319d452371c9bbe04bb` |
+| Successful exact-head Contract CI | [#44053217775](https://github.com/AzizIo/Vstore/actions/runs/44053217775) |
+| Artifact ID | `14314552321` |
+| Artifact ZIP SHA-256 | `fc84d2f467aacb9f63d36abd2807f393e212b93355d4da850cbb2a69aadd8a96` |
 | Build descriptor SHA-256 | `7d183fcdfea088494a04aa7fe59ff7a3b6c2ad044eba870aff8e6059880016b1` |
 | Compact ABI SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
 | Compiled code hash | `1A4F3E95226B5B6ACB3F81D324E2AB6038D5734C47253AF957E7E92887370A3D` |
@@ -35,7 +35,7 @@ Do not regenerate this value with `zlib.compress`, `gzip`, Node `deflateSync`, o
 - The observer recognizes proof-backed retry opcode `0x56450009`, verifies the fresh pending outbound descriptor, and backfills v1 scan cursors.
 - Unexpected NFT recovery after a financial terminal state is kept separate from the terminal financial lifecycle.
 
-The artifact from run #44052744923 matches the compiled Code BOC; `build/state_init_vector.json` yields the new StateInit hash/address above. That run stopped at the stale fixed-vector assertion. The next exact-head run must pass StateInit comparison, message-vector checks, static analysis and Sandbox.
+The exact-head Contract CI #44053217775 passed the frozen Code BOC, generated Acton wrapper, StateInit vector, message BOC vectors, formatting, static analysis and Sandbox. It recorded 37/37 Sandbox tests on the same PR #262 head.
 
 ## Previously validated baseline controls
 
@@ -47,7 +47,7 @@ The artifact from run #44052744923 matches the compiled Code BOC; `build/state_i
 - A timed-out pre-delivery dispute with NFT and principal still escrowed remains resolver-controlled in manual review; an expired post-delivery dispute can accept only the exact late buyer return, restore the dispute window, and still requires a fresh resolver quorum before further NFT movement.
 - Failed buyer principal refund, seller payout, seller allowance, execution-reserve refund, late finality, duplicate oracle delivery/refund, and terminal bounce cases are covered in emulator fixtures.
 
-The latest available successful Sandbox result applies to the earlier code build only, not this revision. Run #44052744923 compiled the current source and confirmed the frozen Code BOC, but stopped at StateInit cross-check before Sandbox. The refreshed StateInit pins must be followed by a green exact-head Contract CI before treating this source as emulator-validated.
+Exact-head integration verification on `cf48e3fa9fd79ed0a8d9c469af078e2a4e98142d`: Contract CI #44053217775 — 37/37 Acton Sandbox tests; Backend CI #44053217765 — 979 tests passed, lint, migration compatibility and dependency audit passed; Frontend CI #44053217805 — 248/248 unit tests, 31/31 Playwright E2E, isolated escrow retry E2E 1/1, API-backed journey and persisted order/event/outbox assertions passed. All three workflows completed successfully on the same head SHA.
 
 ## Reproduction
 
