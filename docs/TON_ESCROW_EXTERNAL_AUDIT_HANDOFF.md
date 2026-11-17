@@ -36,6 +36,20 @@ Candidate artifact pins: code hash `1A4F3E95226B5B6ACB3F81D324E2AB6038D5734C4725
 
 The internal source findings are tracked in [#259](https://github.com/AzizIo/Vstore/issues/259), [#260](https://github.com/AzizIo/Vstore/issues/260), and [#261](https://github.com/AzizIo/Vstore/issues/261). They are not closed until the remediation PR is reviewed and merged. Green CI is not an independent audit or live Testnet acceptance.
 
+### Independent auditor procurement shortlist — not yet contacted
+
+These are candidates to request a fixed-scope quote from, not endorsements or proof of engagement. The request must explicitly confirm a **human-led independent Tolk 1.5.0 / Acton 1.2.1 review** of the frozen PR #262 candidate, including generated ABI/StateInit/BOC, asynchronous TON message flows, bounce/retry, 2-of-3 oracle/resolver signatures, reserves and terminal invariants.
+
+| Candidate | Publicly documented fit | Qualification to confirm before engagement |
+|---|---|---|
+| [Hacken — TON Smart Contract Audit](https://hacken.io/services/blockchain-security/ton-smart-contract-audit/) | Public TON audit service; describes TVM-specialized engineers, manual code review, static/dynamic analysis, fuzzing, attack simulation, gas optimization and remediation review. | Its page mentions FunC in the language list but does not explicitly promise Tolk/Acton; require written confirmation of named Tolk-capable reviewers. |
+| [CertiK — TON ecosystem](https://www.certik.com/ecosystems/ton) | Public TON audit offering and a Tolk security analysis article dated 7 September 2026. | Confirm the actual engagement includes manual Tolk/TVM review, not only automated scanning or monitoring. |
+| [Cecuro — TON audits](https://cecuro.ai/ecosystems/ton) | Public page explicitly lists Tolk, FunC and Tact and TON-specific asynchronous-message, bounce and gas/storage risks. | Confirm independent human review, auditor identities/experience, report format and remediation retest. |
+
+[TON Audit Studio](https://ton.app/audit/ton-audit-studio?id=5315) advertises AI-assisted Tolk checks and CI integration. It may be used as an additional static-analysis signal, but **must not substitute for the independent human audit** required by the release gate.
+
+Suggested quote request should ask for: (1) fixed commit and artifact hash acceptance; (2) scope across contract + proof observer + ABI adapter; (3) manual review hours and named reviewers; (4) adversarial tests/fuzzing and TVM gas review; (5) written findings with severity/reproducers; (6) remediation verification; (7) public/private report options, timeline, fee and conflicts-of-interest declaration. No vendor has been contacted and no engagement/quote is represented as obtained.
+
 ### Release decision remains BLOCKED
 
 Merging implementation into `main` is source integration, **not production acceptance or permission to enable paid escrow**. Before any real transaction or production checkout:
