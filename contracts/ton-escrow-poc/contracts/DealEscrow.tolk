@@ -594,7 +594,16 @@ fun handleNftOwnershipNotification(
     recovery.unexpectedItemAddress = senderAddress;
     recovery.unexpectedPreviousOwner = msg.oldOwnerAddress;
     progress.recovery = recovery.toCell();
-    progress = asManualReview(progress);
+    // An unsolicited NFT may arrive after a deal's financial settlement.
+    // Record it for independent recovery without reopening terminal accounting.
+    val terminalFinancialState = (
+        progress.state == STATE_SETTLED
+        || progress.state == STATE_REFUNDED
+        || progress.state == STATE_EXPIRED
+    );
+    if (!terminalFinancialState) {
+        progress = asManualReview(progress);
+    }
     storage.progress = progress.toCell();
     storage.save();
 }
@@ -681,8 +690,23 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
             route.queryId,
         )
     );
+    val pendingTerminalRecovery = (
+        (progress.state == STATE_SETTLED
+            || progress.state == STATE_REFUNDED
+            || progress.state == STATE_EXPIRED)
+        && progress.pendingAction == PENDING_UNEXPECTED_RECOVERY
+        && context.action == ORACLE_ACTION_UNEXPECTED_NFT_RECOVERED
+        && context.attemptId == progress.oracleAttemptId
+        && route.queryId == progress.oracleAttemptId
+        && hasPendingOracleOutboundAction(
+            progress,
+            OUTBOUND_KIND_UNEXPECTED_NFT_RECOVERY,
+            route.queryId,
+        )
+    );
     assert (
         pendingFinalityInManualReview
+        || pendingTerminalRecovery
         || (
             progress.deadlineUnix > 0
             && blockchain.now() <= progress.deadlineUnix
@@ -818,7 +842,9 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
         settleRemainingBalanceForBuyer(mutate progress, roles, asset, money);
     } else if (context.action == ORACLE_ACTION_UNEXPECTED_NFT_RECOVERED) {
         assert (
-            progress.state == STATE_NFT_RETURN_PENDING || pendingFinalityInManualReview
+            progress.state == STATE_NFT_RETURN_PENDING
+            || pendingFinalityInManualReview
+            || pendingTerminalRecovery
         ) throw Errors.InvalidState;
         assert (progress.pendingAction == PENDING_UNEXPECTED_RECOVERY) throw Errors.InvalidState;
         assert (route.sourceAddress == contract.getAddress()) throw Errors.InvalidAttestation;
@@ -837,9 +863,15 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
             false,
         )) throw Errors.OutboundActionMissing;
         progress.nftInEscrow = false;
-        progress.state = STATE_MANUAL_REVIEW;
+        if (
+            progress.state != STATE_SETTLED
+            && progress.state != STATE_REFUNDED
+            && progress.state != STATE_EXPIRED
+        ) {
+            progress.state = STATE_MANUAL_REVIEW;
+            progress.deadlineUnix = 0;
+        }
         progress.pendingAction = PENDING_NONE;
-        progress.deadlineUnix = 0;
         var clearedRecovery = progress.recovery.load();
         clearedRecovery.unexpectedPreviousOwner = null;
         clearedRecovery.unexpectedItemAddress = null;
@@ -1331,7 +1363,15 @@ fun onInternalMessage(in: InMessage) {
             assertTestnet(terms);
             val asset = terms.asset.load();
             val money = terms.money.load();
-            assert (progress.state == STATE_MANUAL_REVIEW) throw Errors.InvalidState;
+            val terminalFinancialState = (
+                progress.state == STATE_SETTLED
+                || progress.state == STATE_REFUNDED
+                || progress.state == STATE_EXPIRED
+            );
+            assert (
+                progress.state == STATE_MANUAL_REVIEW || terminalFinancialState
+            ) throw Errors.InvalidState;
+            assert (progress.pendingAction == PENDING_NONE) throw Errors.InvalidState;
             assert (msg.dealSalt == asset.dealSalt) throw Errors.InvalidDeal;
             val recovery = progress.recovery.load();
             assert (recovery.unexpectedItemAddress != null) throw Errors.NothingToRecover;
@@ -1350,13 +1390,17 @@ fun onInternalMessage(in: InMessage) {
                 recoveryAttemptId,
                 asset,
                 money.nftTransferValue,
-                STATE_NFT_RETURN_PENDING,
+                terminalFinancialState ? progress.state : STATE_NFT_RETURN_PENDING,
                 PENDING_UNEXPECTED_RECOVERY,
                 DELIVERY_CONFIRMATION_GRACE_SECONDS,
             );
-            progress.state = STATE_NFT_RETURN_PENDING;
+            if (!terminalFinancialState) {
+                progress.state = STATE_NFT_RETURN_PENDING;
+                progress.deadlineUnix = (
+                    blockchain.now() + DELIVERY_CONFIRMATION_GRACE_SECONDS
+                ) as uint64;
+            }
             progress.pendingAction = PENDING_UNEXPECTED_RECOVERY;
-            progress.deadlineUnix = (blockchain.now() + DELIVERY_CONFIRMATION_GRACE_SECONDS) as uint64;
             storage.progress = progress.toCell();
             storage.save();
         }
@@ -1418,7 +1462,12 @@ fun onBouncedMessage(in: InMessageBounced) {
             action.exitCode = rich.exitCode;
             actions.first = action.toCell();
             matched = true;
-            criticalAction = action.kind <= OUTBOUND_KIND_BUYER_REFUND;
+            criticalAction = (
+                action.kind == OUTBOUND_KIND_NFT_RELEASE
+                || action.kind == OUTBOUND_KIND_NFT_RETURN
+                || action.kind == OUTBOUND_KIND_SELLER_PAYOUT
+                || action.kind == OUTBOUND_KIND_BUYER_REFUND
+            );
             if (criticalAction && progress.state == action.expectedState) {
                 progress = asManualReview(progress);
             }
