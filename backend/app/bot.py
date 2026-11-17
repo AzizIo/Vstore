@@ -44,6 +44,7 @@ def notification_worker_batch_limit(settings: Settings) -> int:
 BOT_COMMANDS = [
     BotCommand(command="start", description="Открыть главное меню"),
     BotCommand(command="app", description="Открыть VILTARA SHOP"),
+    BotCommand(command="admin", description="Панель модерации для администраторов"),
     BotCommand(command="buy", description="Как купить NFT"),
     BotCommand(command="sell", description="Как продать NFT"),
     BotCommand(command="orders", description="Заказы и доставка"),
