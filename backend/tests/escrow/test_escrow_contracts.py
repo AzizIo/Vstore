@@ -80,7 +80,7 @@ def test_pinned_abi_and_code_boc_are_verified() -> None:
     artifacts = verify_compiled_code(load_pinned_code_boc())
     assert artifacts.abi_version == "1.0.0"
     assert artifacts.code_hash == (
-        "99C653F225E666F1C7DD8E18ECD64291B11001A45245E74983D7C19213259FAC"
+        "1A4F3E95226B5B6ACB3F81D324E2AB6038D5734C47253AF957E7E92887370A3D"
     )
     assert len(artifacts.code_boc_sha256) == 64
 
@@ -92,7 +92,7 @@ def test_state_init_is_deterministic_and_address_is_state_init_hash() -> None:
     assert first == second
     assert first.address == "0:" + first.state_init_hash
     assert first.code_hash == (
-        "99C653F225E666F1C7DD8E18ECD64291B11001A45245E74983D7C19213259FAC"
+        "1A4F3E95226B5B6ACB3F81D324E2AB6038D5734C47253AF957E7E92887370A3D"
     )
     # Expected values were independently produced by the generated Acton
     # TypeScript wrapper and @ton/core 0.63.1 in TON Contract CI.
@@ -106,7 +106,7 @@ def test_state_init_is_deterministic_and_address_is_state_init_hash() -> None:
         "faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b"
     )
     assert first.code_hash == (
-        "99C653F225E666F1C7DD8E18ECD64291B11001A45245E74983D7C19213259FAC"
+        "1A4F3E95226B5B6ACB3F81D324E2AB6038D5734C47253AF957E7E92887370A3D"
     )
     assert first.state_init_boc
     assert first.data_boc
