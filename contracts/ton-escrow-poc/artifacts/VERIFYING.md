@@ -6,21 +6,21 @@ This directory pins the ABI and compiler output for the current testnet-only Dea
 
 | Field | Value |
 |---|---|
-| Exact source commit | `9d80a65a974b54f115fc697158974bdcee2c6be8` |
-| Contract source commit | `d87e4a81e07ec0c1e95619f6e5188c5be5433d62` |
+| Exact source commit | `ef74ca0b9bfc0045bf9a31cb0a01d37487002567` |
+| Contract source commit | `ef74ca0b9bfc0045bf9a31cb0a01d37487002567` |
 | Toolchain | Acton `1.2.1`, Tolk `1.5.0` |
-| Green exact-head Contract CI | [#43824551943](https://github.com/AzizIo/Vstore/actions/runs/43824551943) |
-| Artifact ID | `14205079269` |
-| Artifact ZIP SHA-256 | `622174053559929887d34c0ae0b8f3318efe2a4b9c661bf1925bd4760cf48c9a` |
-| Build descriptor SHA-256 | `32c5ff1e392d77ade6c4a99b6010e41bcc2c1c9700e768fe190be45f98aeb5db` |
+| Green exact-head Contract CI | [[failed build/provenance capture #44049772170](https://github.com/AzizIo/Vstore/actions/runs/44049772170)](https://github.com/AzizIo/Vstore/actions/runs/43824551943) |
+| Artifact ID | `14313191726` |
+| Artifact ZIP SHA-256 | `6d0b8e8b321f940d5fc7b7aed03166dcc5bc535eda2a6d180a2f14387e8e9da5` |
+| Build descriptor SHA-256 | `7d183fcdfea088494a04aa7fe59ff7a3b6c2ad044eba870aff8e6059880016b1` |
 | Compact ABI SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
-| Compiled code hash | `498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46` |
-| Code BOC base64 SHA-256 | `0e7bc7b35eee4ae7003fba0a0e5368df3428b7e32ad0f4fc5ddf0f3230d5daf3` |
-| Decoded code BOC SHA-256 | `86ed08596d0595c711aa2cf7659ee396ff443d7b01c65659b8e7543dd23c6173` |
-| Canonical zlib BOC SHA-256 | `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7` |
-| Deterministic StateInit hash | `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
-| Deterministic raw address | `0:4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
-| Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
+| Compiled code hash | `99C653F225E666F1C7DD8E18ECD64291B11001A45245E74983D7C19213259FAC` |
+| Code BOC base64 SHA-256 | `4ddca1709370badff1d9270b3469a468158388955c894503a9600f114763714f` |
+| Decoded code BOC SHA-256 | `9934aaa1612720d3a39358d579a7c7a6054de4a1af65ebe6e1954236ae33b69c` |
+| Canonical zlib BOC SHA-256 | `fa195a3c3ca46f352ea2da57e1cbaae3af9c9fb0dee7d2b52b012344b8b3313f` |
+| Deterministic StateInit hash | **Pending new fixed-vector generation on updated code** |
+| Deterministic raw address | **Pending new fixed-vector generation; old address is not reusable** |
+| Initial data cell hash | **Pending regenerated fixed vector** |
 
 ## Canonical compressed BOC representation
 
@@ -28,7 +28,15 @@ The backend adapter consumes a base64-encoded zlib stream. To keep that stream b
 
 Do not regenerate this value with `zlib.compress`, `gzip`, Node `deflateSync`, or another general-purpose compressor. Those can produce valid but byte-different streams across implementations and settings. The verifier constructs the canonical byte stream itself and compares its SHA-256 to `compiled_code_boc_zlib_sha256`; the backend artifact-integrity test must compare the checked-in payload bytes to this same digest.
 
-## Security changes exercised by the current Sandbox suite
+## Security changes proposed in PR #262
+
+- A post-delivery seller-wins resolver decision can settle the locked principal directly when the buyer withholds the NFT; buyer-wins remains custody-gated.
+- The observer recognizes proof-backed retry opcode `0x56450009`, verifies the fresh pending outbound descriptor, and backfills v1 scan cursors.
+- Unexpected NFT recovery after a financial terminal state is kept separate from the terminal financial lifecycle.
+
+These changes are not yet fully validated by an exact-head green Contract CI run.
+
+## Previously validated baseline controls
 
 - RichBounce correlation requires the exact original body hash, destination/sender, and stored message value (except carry-all descriptors, whose message value is dynamic). Unmatched or malformed bounces do not mutate custody state.
 - Critical principal/NFT bounces move to manual review without clearing principal/NFT custody flags. Retry is recipient-authorized, consumes the old descriptor, and uses a fresh monotonic attempt/query ID.
@@ -38,7 +46,7 @@ Do not regenerate this value with `zlib.compress`, `gzip`, Node `deflateSync`, o
 - A timed-out pre-delivery dispute with NFT and principal still escrowed remains resolver-controlled in manual review; an expired post-delivery dispute can accept only the exact late buyer return, restore the dispute window, and still requires a fresh resolver quorum before further NFT movement.
 - Failed buyer principal refund, seller payout, seller allowance, execution-reserve refund, late finality, duplicate oracle delivery/refund, and terminal bounce cases are covered in emulator fixtures.
 
-The green run reports **35 passing Sandbox tests**. Coverage for the contract tree is 85.9% lines and 68.7% branches; DealEscrow itself is 83.5% lines and 68.1% branches. Coverage is useful evidence, not a proof of correctness.
+The previous frozen build reported 35 passing Sandbox tests. That result does not apply to this changed source. The new source compiles, but the first PR #262 run stopped at the old frozen-code digest before Sandbox tests; updated fixed StateInit values and a green exact-head Sandbox run are still pending. Coverage from the previous build is not evidence for this revision.
 
 ## Reproduction
 
@@ -67,7 +75,7 @@ Before any live testnet deal:
 1. An independent reviewer must audit the exact code hash, message/state machine, bounce/retry handling, gas/fee invariants, and financial invariants.
 2. A trusted NFT provider must prove that the exact item belongs to the stated collection before immutable deal terms are built; the contract's collection address is metadata and is not itself a membership proof.
 3. A separately approved valueless testnet acceptance must record actual transaction/message/trace evidence, masterchain finality, getter state, and the NFT's actual owner at each terminal transition.
-4. Backend adapter PR #247 must pin this exact artifact. Its current artifact hash/address are from an older contract build and are not compatible with this artifact yet. No backend changes are included here.
+4. Backend artifact pins and the compressed Code BOC were updated alongside this manifest for PR #262; exact-head backend CI and StateInit alignment must pass before this package is mergeable.
 5. Signing/deployment activation, mainnet, real funds, and real NFTs remain disabled.
 
 Passing CI does not close those independent release gates.
