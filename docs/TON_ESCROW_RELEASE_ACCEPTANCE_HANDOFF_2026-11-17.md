@@ -171,7 +171,7 @@ Do not call an event finalized because a wallet displayed “sent”, an indexer
 >
 > Thank you.
 
-Use Telegram's official developer support path to submit this question and ask for routing to the relevant policy/product/legal team. A developer-support reply is not automatically a legal opinion or a guaranteed platform approval; preserve the complete response, date, sender/team and any conditions in Issue #155. No Telegram request has been sent from this repository or on the user's behalf, and no written Telegram ruling is currently recorded.
+Submit the question to Telegram's official [@BotSupport](https://t.me/BotSupport) developer-support account, which Telegram identifies as support for Mini App and bot developers, and explicitly ask for routing to the relevant policy/product/legal team. This is a support contact path, not a promise of a formal policy ruling: a support reply is not automatically a legal opinion or guaranteed platform approval. Preserve the complete response, date, sender/team and any conditions in Issue #155. No Telegram request has been sent from this repository or on the user's behalf, and no written Telegram ruling is currently recorded.
 
 ## 6. Relevant first-party policy sources
 
