@@ -3166,7 +3166,7 @@ get fun `test post-delivery seller win pays seller when buyer withholds the NFT`
     expect(escrow.getProgress().pendingAction).toEqual(PENDING_PAYOUT_RECONCILIATION);
     expect(escrow.getProgress().nftInEscrow).toEqual(false);
     expect(escrow.getProgress().principalLocked).toEqual(true);
-    expect(nftItem.getOwner()).toEqual(buyer.address);
+    expect(nftItem.getOwner()).toEqual(thirdParty.address);
     val actions = escrow.getProgress().outboundActions.load();
     assert (actions.first != null) throw Errors.OutboundActionMissing;
     expect(actions.first.load().kind).toEqual(OUTBOUND_KIND_SELLER_PAYOUT);
