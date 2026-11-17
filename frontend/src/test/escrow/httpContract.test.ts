@@ -85,7 +85,16 @@ describe("TON escrow HTTP contract", () => {
 
   it("keeps dispute reason in the request body and wallet actions address-scoped", () => {
     const contract = createEscrowHttpContract();
-    const dispute = contract.prepareDispute({ deal_id: "deal-id", reason: "NFT was not deposited" });
+    const dispute = contract.prepareDispute({
+      deal_id: "deal-id",
+      reason: "NFT was not deposited",
+      context: {
+        escrow_address: "0:" + "2".repeat(64),
+        nft: { asset_id: "asset", title: "NFT", image_url: null, item_address: "0:" + "1".repeat(64), collection_address: null },
+        price_nano: "1000000000",
+        fee_bps: 0,
+      },
+    });
     expect(dispute.url).toContain("/deals/deal-id/prepare/dispute");
     expect(dispute.body).toEqual({ reason: "NFT was not deposited" });
 
