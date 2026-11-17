@@ -445,7 +445,7 @@ async def handle_help_callback(callback: CallbackQuery) -> None:
         try:
             await callback.message.edit_text(
                 HELP_MESSAGE,
-                reply_markup=_menu_keyboard(getattr(callback.from_user, "id", None)),
+                reply_markup=_menu_keyboard(getattr(getattr(callback, "from_user", None), "id", None)),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
@@ -461,7 +461,7 @@ async def handle_menu_callback(callback: CallbackQuery) -> None:
         try:
             await callback.message.edit_text(
                 START_MESSAGE,
-                reply_markup=_menu_keyboard(getattr(callback.from_user, "id", None)),
+                reply_markup=_menu_keyboard(getattr(getattr(callback, "from_user", None), "id", None)),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
