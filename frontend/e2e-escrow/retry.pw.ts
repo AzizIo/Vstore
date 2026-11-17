@@ -50,23 +50,18 @@ const retryableOutbound = {
 };
 
 const preparedRetry = {
+  status: "prepared",
   action_id: "a252a252-a252-4252-8252-a252a252a252",
-  action: "retry_failed_outbound_action",
   network: "testnet",
-  factory_address: null,
-  escrow_address: escrowAddress,
-  nft_item_address: nftItemAddress,
-  price_nano: "1000000000",
-  fee_bps: 0,
-  execution_reserve_nano: "500000000",
-  valid_until: "2099-01-01T00:00:00Z",
-  messages: [{
-    address: escrowAddress,
-    amount_nano: "10000000",
-    payload_boc: "te6ccgEBAQEA",
-    state_init_boc: null,
-  }],
-  display_purpose: "Повторить bounced refund для query 424242 в TON testnet.",
+  payload: {
+    network: "testnet",
+    validUntil: 4070908800,
+    messages: [{
+      address: escrowAddress,
+      amount: "10000000",
+      payload: "te6ccgEBAQEA",
+    }],
+  },
 };
 
 test("recipient can prepare the bounced outbound retry; signing remains disabled", async ({ page }) => {
@@ -197,7 +192,7 @@ test("recipient can prepare the bounced outbound retry; signing remains disabled
   await expect(review).toContainText(escrowAddress);
   await expect(review).toContainText(nftItemAddress);
   await expect(review).toContainText(buyerWalletAddress);
-  await expect(review).toContainText("Повторить bounced refund для query 424242 в TON testnet.");
+  await expect(review).toContainText("Повторите исходящее действие по свежему доказательству");
   await expect(review.getByRole("button", { name: "Подписать в TON Connect" })).toBeDisabled();
   await expect(review.getByRole("status")).toContainText("Подписание отключено");
 

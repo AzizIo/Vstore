@@ -10,21 +10,20 @@ const sellerAddress = "0:" + "1".repeat(64);
 const wrongAddress = "0:" + "2".repeat(64);
 const itemAddress = "0:" + "3".repeat(64);
 const escrowAddress = "0:" + "4".repeat(64);
-const factoryAddress = "0:" + "5".repeat(64);
 
 function preparedTransaction(
   action: PreparedEscrowTransaction["action"] = "fund_deal",
   overrides: Partial<PreparedEscrowTransaction> = {},
 ): PreparedEscrowTransaction {
-  const factoryAction = action === "create_deal_escrow";
+  const deploymentAction = action === "create_deal_escrow";
   const nftAction = action === "deposit_nft" || action === "return_nft_to_escrow";
-  const destination = factoryAction ? factoryAddress : nftAction ? itemAddress : escrowAddress;
+  const destination = nftAction ? itemAddress : escrowAddress;
   return {
     action_id: "operation-1",
     action,
     network: "testnet",
-    factory_address: factoryAction ? factoryAddress : null,
-    escrow_address: factoryAction ? null : escrowAddress,
+    factory_address: null,
+    escrow_address: escrowAddress,
     nft_item_address: itemAddress,
     price_nano: "2500000000",
     fee_bps: 0,
@@ -34,8 +33,8 @@ function preparedTransaction(
     messages: [{
       address: destination,
       amount_nano: "2520000000",
-      payload_boc: "server-prepared-payload-boc",
-      state_init_boc: null,
+      payload_boc: deploymentAction ? null : "server-prepared-payload-boc",
+      state_init_boc: deploymentAction ? "server-prepared-state-init-boc" : null,
     }],
     ...overrides,
   };
@@ -100,7 +99,7 @@ describe("TON Connect escrow adapter", () => {
     expect(sendTransaction).not.toHaveBeenCalled();
   });
 
-  it("forwards server-prepared escrow messages unchanged after checking the Factory recipient", async () => {
+  it("forwards the direct StateInit deployment to the exact backend-derived DealEscrow address", async () => {
     const adapter = createTonConnectEscrowAdapter({
       connectedWallet: { address: sellerAddress, chain: TON_TESTNET_CHAIN_ID },
       sendTransaction,
@@ -115,14 +114,15 @@ describe("TON Connect escrow adapter", () => {
       validUntil: Math.floor(Date.parse(transaction.valid_until) / 1000),
       network: TON_TESTNET_CHAIN_ID,
       messages: [{
-        address: factoryAddress,
+        address: escrowAddress,
         amount: "2520000000",
-        payload: "server-prepared-payload-boc",
+        stateInit: "server-prepared-state-init-boc",
       }],
     });
   });
 
   it.each([
+    ["activate_deal", escrowAddress],
     ["deposit_nft", itemAddress],
     ["fund_deal", escrowAddress],
     ["accept_deal", escrowAddress],
@@ -162,6 +162,37 @@ describe("TON Connect escrow adapter", () => {
       }),
       sellerAddress,
     )).rejects.toThrow(/получатель TON-сообщения/i);
+    expect(sendTransaction).not.toHaveBeenCalled();
+  });
+
+
+  it("rejects a legacy Factory topology or malformed direct deployment message", async () => {
+    const adapter = createTonConnectEscrowAdapter({
+      connectedWallet: { address: sellerAddress, chain: TON_TESTNET_CHAIN_ID },
+      sendTransaction,
+      enabled: true,
+      now,
+    });
+
+    await expect(adapter.sendPreparedTransaction(
+      preparedTransaction("create_deal_escrow", {
+        factory_address: "0:" + "5".repeat(64),
+      } as unknown as Partial<PreparedEscrowTransaction>),
+      sellerAddress,
+    )).rejects.toThrow(/неподтверждённый формат/i);
+
+    await expect(adapter.sendPreparedTransaction(
+      preparedTransaction("create_deal_escrow", {
+        messages: [{
+          address: escrowAddress,
+          amount_nano: "2520000000",
+          payload_boc: "legacy-payload",
+          state_init_boc: null,
+        }],
+      }),
+      sellerAddress,
+    )).rejects.toThrow(/неподтверждённый формат/i);
+
     expect(sendTransaction).not.toHaveBeenCalled();
   });
 

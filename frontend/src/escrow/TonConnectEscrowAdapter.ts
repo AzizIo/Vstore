@@ -50,13 +50,14 @@ function normalizedAddress(value: string): string {
 function allowedDestination(transaction: PreparedEscrowTransaction): string {
   switch (transaction.action) {
     case "create_deal_escrow":
-      if (!transaction.factory_address) {
-        throw new Error("Для создания DealEscrow Backend не вернул адрес Factory.");
+      if (transaction.factory_address !== null || !transaction.escrow_address) {
+        throw new Error("Для создания DealEscrow Backend должен вернуть прямой адрес договора без Factory.");
       }
-      return transaction.factory_address;
+      return transaction.escrow_address;
     case "deposit_nft":
     case "return_nft_to_escrow":
       return transaction.nft_item_address;
+    case "activate_deal":
     case "fund_deal":
     case "accept_deal":
     case "open_dispute":
@@ -106,10 +107,19 @@ export function createTonConnectEscrowAdapter(options: {
 
       const expectedDestination = normalizedAddress(allowedDestination(transaction));
       normalizedAddress(transaction.nft_item_address);
-      if (transaction.action === "create_deal_escrow") {
-        normalizedAddress(transaction.factory_address!);
-      } else {
-        normalizedAddress(transaction.escrow_address!);
+      if (transaction.factory_address !== null) {
+        throw new Error("DealEscrow v1 не поддерживает Factory deployment.");
+      }
+      normalizedAddress(transaction.escrow_address);
+      if (
+        transaction.action === "create_deal_escrow"
+        && (
+          transaction.messages.length !== 1
+          || !transaction.messages[0].state_init_boc
+          || transaction.messages[0].payload_boc
+        )
+      ) {
+        throw new Error("Для прямого deployment требуется одно StateInit-сообщение без payload.");
       }
 
       const validUntil = Math.floor(Date.parse(transaction.valid_until) / 1000);

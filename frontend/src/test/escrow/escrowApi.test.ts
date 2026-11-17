@@ -6,6 +6,7 @@ import {
   isEscrowListingIntent,
   isEscrowWithdrawal,
   isRetryableOutboundAction,
+  isPreparedEscrowTransaction,
   type EscrowDeal,
   type EscrowHttpContract,
   type EscrowListingIntent,
@@ -15,7 +16,6 @@ import {
 
 const item = "0:" + "1".repeat(64);
 const escrow = "0:" + "2".repeat(64);
-const factory = "0:" + "3".repeat(64);
 
 function listing(): EscrowListingIntent {
   return {
@@ -79,16 +79,14 @@ function withdrawal(): EscrowWithdrawal {
 }
 
 function prepared(action: PreparedEscrowTransaction["action"] = "fund_deal") {
-  const isFactoryAction = action === "create_deal_escrow";
-  const destination = isFactoryAction ? factory
-    : action === "deposit_nft" || action === "return_nft_to_escrow" ? item
-      : escrow;
+  const deploymentAction = action === "create_deal_escrow";
+  const destination = action === "deposit_nft" || action === "return_nft_to_escrow" ? item : escrow;
   return {
     action_id: "operation-1",
     action,
     network: "testnet",
-    factory_address: isFactoryAction ? factory : null,
-    escrow_address: isFactoryAction ? null : escrow,
+    factory_address: null,
+    escrow_address: escrow,
     nft_item_address: item,
     price_nano: "2500000000",
     fee_bps: 0,
@@ -99,10 +97,38 @@ function prepared(action: PreparedEscrowTransaction["action"] = "fund_deal") {
       address: destination,
       amount_nano: "2520000000",
       payload_boc: null,
-      state_init_boc: null,
+      state_init_boc: deploymentAction ? "server-prepared-state-init-boc" : null,
     }],
   };
 }
+
+function preparationEnvelope(action: PreparedEscrowTransaction["action"] = "fund_deal") {
+  const transaction = prepared(action);
+  return {
+    status: "prepared",
+    network: "testnet",
+    action_id: transaction.action_id,
+    payload: {
+      network: "testnet",
+      validUntil: Math.floor(Date.parse(transaction.valid_until) / 1000),
+      messages: transaction.messages.map((message) => ({
+        address: message.address,
+        amount: message.amount_nano,
+        ...(message.payload_boc ? { payload: message.payload_boc } : {}),
+        ...(message.state_init_boc ? { stateInit: message.state_init_boc } : {}),
+      })),
+    },
+    payload_sha256: "a".repeat(64),
+    unsigned_boc_sha256: "b".repeat(64),
+  };
+}
+
+const preparationContext = {
+  escrow_address: escrow,
+  nft: listing().nft,
+  price_nano: "2500000000",
+  fee_bps: 0 as const,
+};
 
 function contract(): EscrowHttpContract {
   const operation = (url: string, body?: unknown) => ({ url, method: "POST" as const, body });
@@ -116,15 +142,16 @@ function contract(): EscrowHttpContract {
     dealDetails: (id) => `/test/escrow/deals/${id}`,
     createListingIntent: (input) => operation("/test/escrow/listing-intents", input),
     createBuyerDealIntent: (input) => operation("/test/escrow/deal-intents", input),
-    prepareDealEscrow: (input) => operation("/test/escrow/prepare-deal-escrow", input),
-    prepareNftDeposit: (input) => operation("/test/escrow/prepare-nft-deposit", input),
-    prepareBuyerFunding: (input) => operation("/test/escrow/prepare-buyer-funding", input),
-    prepareBuyerAcceptance: (input) => operation("/test/escrow/prepare-buyer-acceptance", input),
-    prepareDispute: (input) => operation("/test/escrow/prepare-dispute", input),
-    prepareBuyerNftReturn: (input) => operation("/test/escrow/prepare-nft-return", input),
-    prepareUnsoldNftWithdrawal: (input) => operation("/test/escrow/prepare-unsold-withdrawal", input),
+    prepareDealEscrow: (input) => operation("/test/escrow/prepare-deal-escrow", { deal_id: input.deal_id, wallet_id: input.wallet_id }),
+    prepareDealActivation: (input) => operation("/test/escrow/prepare-deal-activation", { deal_id: input.deal_id, wallet_id: input.wallet_id }),
+    prepareNftDeposit: (input) => operation("/test/escrow/prepare-nft-deposit", { deal_id: input.deal_id, wallet_id: input.wallet_id }),
+    prepareBuyerFunding: (input) => operation("/test/escrow/prepare-buyer-funding", { deal_id: input.deal_id, wallet_id: input.wallet_id }),
+    prepareBuyerAcceptance: (input) => operation("/test/escrow/prepare-buyer-acceptance", { deal_id: input.deal_id, wallet_id: input.wallet_id }),
+    prepareDispute: (input) => operation("/test/escrow/prepare-dispute", { deal_id: input.deal_id, reason: input.reason }),
+    prepareBuyerNftReturn: (input) => operation("/test/escrow/prepare-nft-return", { deal_id: input.deal_id, wallet_id: input.wallet_id }),
+    prepareUnsoldNftWithdrawal: (input) => operation("/test/escrow/prepare-unsold-withdrawal", { deal_id: input.deal_id, wallet_id: input.wallet_id }),
     retryableOutboundActions: (dealId) => `/test/escrow/deals/${dealId}/retryable-outbound-actions`,
-    prepareFailedOutboundRetry: (input) => operation("/test/escrow/prepare-failed-outbound-retry-action", input),
+    prepareFailedOutboundRetry: (input) => operation("/test/escrow/prepare-failed-outbound-retry-action", { deal_id: input.deal_id, query_id: input.query_id }),
     submitWalletReference: (input) => operation("/test/escrow/submit-reference", input),
   };
 }
@@ -187,10 +214,10 @@ describe("escrow API boundary", () => {
   });
 
   it("uses the injected path and request body for a prepared TON action", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(response(prepared("fund_deal")));
+    vi.mocked(fetch).mockResolvedValueOnce(response(preparationEnvelope("fund_deal")));
     const api = createEscrowApiClient("access-token", contract());
 
-    await api.prepareBuyerFunding({ deal_id: "deal-1", wallet_id: "wallet-buyer" });
+    await api.prepareBuyerFunding({ deal_id: "deal-1", wallet_id: "wallet-buyer", context: preparationContext });
 
     const [url, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/test/escrow/prepare-buyer-funding");
@@ -200,6 +227,78 @@ describe("escrow API boundary", () => {
       Authorization: "Bearer access-token",
       "Content-Type": "application/json",
     });
+  });
+
+
+  it("accepts only a direct per-deal StateInit deployment and the null-Factory topology", () => {
+    const deployment = prepared("create_deal_escrow");
+    expect(isPreparedEscrowTransaction(deployment)).toBe(true);
+    expect(isPreparedEscrowTransaction({ ...deployment, factory_address: "0:" + "3".repeat(64) })).toBe(false);
+    expect(isPreparedEscrowTransaction({
+      ...deployment,
+      messages: [{ ...deployment.messages[0], address: "0:" + "3".repeat(64) }],
+    })).toBe(false);
+    expect(isPreparedEscrowTransaction({
+      ...deployment,
+      messages: [{ ...deployment.messages[0], state_init_boc: null }],
+    })).toBe(false);
+    expect(isPreparedEscrowTransaction({
+      ...deployment,
+      messages: [
+        deployment.messages[0],
+        { ...deployment.messages[0] },
+      ],
+    })).toBe(false);
+  });
+
+  it("prepares seller activation through the dedicated idempotent API route", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response(preparationEnvelope("activate_deal")));
+    const api = createEscrowApiClient("access-token", contract());
+
+    await api.prepareDealActivation({ deal_id: "deal-1", wallet_id: "wallet-seller", context: { ...preparationContext, escrow_address: null } });
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/test/escrow/prepare-deal-activation");
+    expect(JSON.parse(String(init.body))).toEqual({ deal_id: "deal-1", wallet_id: "wallet-seller" });
+    expect(init.method).toBe("POST");
+  });
+
+  it("normalizes the real backend preparation envelope into a direct StateInit transaction", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response(preparationEnvelope("create_deal_escrow")));
+    const api = createEscrowApiClient("access-token", contract());
+    const transaction = await api.prepareDealEscrow({
+      deal_id: "deal-1",
+      wallet_id: "wallet-seller",
+      context: { ...preparationContext, escrow_address: null },
+    });
+    expect(transaction).toMatchObject({
+      action: "create_deal_escrow",
+      factory_address: null,
+      escrow_address: escrow,
+      nft_item_address: item,
+      messages: [{
+        address: escrow,
+        amount_nano: "2520000000",
+        state_init_boc: "server-prepared-state-init-boc",
+      }],
+    });
+  });
+
+  it("rejects an unavailable backend preparation instead of fabricating a transaction", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({
+      status: "unavailable",
+      network: "testnet",
+      action_id: null,
+      payload: null,
+      reason_code: "escrow_provider_unavailable",
+      detail: "Trusted testnet provider is unavailable",
+    }));
+    const api = createEscrowApiClient("access-token", contract());
+    await expect(api.prepareBuyerFunding({
+      deal_id: "deal-1",
+      wallet_id: "wallet-buyer",
+      context: preparationContext,
+    })).rejects.toThrow("Trusted testnet provider is unavailable");
   });
 
   it("rejects an empty session before any fetch", () => {
@@ -220,14 +319,18 @@ describe("escrow API boundary", () => {
   });
 
   it("rejects a prepared transaction with a non-testnet network or nonzero fee", async () => {
+    const invalidNetwork = preparationEnvelope("fund_deal");
+    invalidNetwork.payload.network = "mainnet";
+    const invalidAmount = preparationEnvelope("fund_deal");
+    invalidAmount.payload.messages[0].amount = "0";
     vi.mocked(fetch)
-      .mockResolvedValueOnce(response({ ...prepared(), network: "mainnet" }))
-      .mockResolvedValueOnce(response({ ...prepared(), fee_bps: 1 }));
+      .mockResolvedValueOnce(response(invalidNetwork))
+      .mockResolvedValueOnce(response(invalidAmount));
 
     const api = createEscrowApiClient("access-token", contract());
-    await expect(api.prepareBuyerFunding({ deal_id: "deal-1", wallet_id: "wallet-buyer" }))
+    await expect(api.prepareBuyerFunding({ deal_id: "deal-1", wallet_id: "wallet-buyer", context: preparationContext }))
       .rejects.toThrow(/не соответствует ожидаемому контракту/i);
-    await expect(api.prepareBuyerFunding({ deal_id: "deal-1", wallet_id: "wallet-buyer" }))
+    await expect(api.prepareBuyerFunding({ deal_id: "deal-1", wallet_id: "wallet-buyer", context: preparationContext }))
       .rejects.toThrow(/не соответствует ожидаемому контракту/i);
   });
 
@@ -277,7 +380,7 @@ describe("proof-bound outbound retry API", () => {
   it("loads only validated retry descriptors and prepares the exact decimal query ID", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(response([terminalRefund]))
-      .mockResolvedValueOnce(response(prepared("retry_failed_outbound_action")));
+      .mockResolvedValueOnce(response(preparationEnvelope("retry_failed_outbound_action")));
 
     const api = createEscrowApiClient("access-token", contract());
     await expect(api.listRetryableOutboundActions("deal-1"))
@@ -285,6 +388,7 @@ describe("proof-bound outbound retry API", () => {
     await api.prepareFailedOutboundRetry({
       deal_id: "deal-1",
       query_id: terminalRefund.query_id,
+      context: preparationContext,
     });
 
     const [listUrl, listInit] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];

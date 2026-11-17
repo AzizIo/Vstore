@@ -29,7 +29,6 @@ import { EscrowWorkspace } from "../../escrow/EscrowWorkspace";
 const sellerAddress = "0:" + "1".repeat(64);
 const itemAddress = "0:" + "2".repeat(64);
 const escrowAddress = "0:" + "3".repeat(64);
-const factoryAddress = "0:" + "4".repeat(64);
 
 const testWallet = {
   id: "wallet-testnet",
@@ -121,15 +120,15 @@ function withdrawal(): EscrowWithdrawal {
 }
 
 function prepared(action: PreparedEscrowTransaction["action"]): PreparedEscrowTransaction {
-  const isFactoryAction = action === "create_deal_escrow";
+  const deploymentAction = action === "create_deal_escrow";
   const nftAction = action === "deposit_nft" || action === "return_nft_to_escrow";
-  const destination = isFactoryAction ? factoryAddress : nftAction ? itemAddress : escrowAddress;
+  const destination = nftAction ? itemAddress : escrowAddress;
   return {
     action_id: "operation-" + action,
     action,
     network: "testnet",
-    factory_address: isFactoryAction ? factoryAddress : null,
-    escrow_address: isFactoryAction ? null : escrowAddress,
+    factory_address: null,
+    escrow_address: escrowAddress,
     nft_item_address: itemAddress,
     price_nano: "2500000000",
     fee_bps: 0,
@@ -139,8 +138,8 @@ function prepared(action: PreparedEscrowTransaction["action"]): PreparedEscrowTr
     messages: [{
       address: destination,
       amount_nano: "2520000000",
-      payload_boc: "server-prepared-payload",
-      state_init_boc: null,
+      payload_boc: deploymentAction ? null : "server-prepared-payload",
+      state_init_boc: deploymentAction ? "server-prepared-state-init-boc" : null,
     }],
   };
 }
@@ -168,6 +167,7 @@ function makeApi(options: {
     createListingIntent: vi.fn(async () => listing()),
     createBuyerDealIntent: vi.fn(async () => deal({ state: "intent_created", available_actions: [] })),
     prepareDealEscrow: vi.fn(async () => prepared("create_deal_escrow")),
+    prepareDealActivation: vi.fn(async () => prepared("activate_deal")),
     prepareNftDeposit: vi.fn(async () => prepared("deposit_nft")),
     prepareBuyerFunding: vi.fn(async () => prepared("fund_deal")),
     prepareBuyerAcceptance: vi.fn(async () => prepared("accept_deal")),
@@ -290,6 +290,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareBuyerFunding).toHaveBeenCalledWith({
       deal_id: "deal-1",
       wallet_id: "wallet-testnet",
+      context: deal({ state: "awaiting_buyer_funds", available_actions: ["fund_deal"] }),
     });
     expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
   });
@@ -307,6 +308,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareBuyerAcceptance).toHaveBeenCalledWith({
       deal_id: "deal-1",
       wallet_id: "wallet-testnet",
+      context: deal({ state: "funded_review", available_actions: ["accept_deal"] }),
     });
   });
 
@@ -324,6 +326,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareDispute).toHaveBeenCalledWith({
       deal_id: "deal-1",
       reason: "NFT не совпадает с описанием",
+      context: deal({ state: "delivered_dispute_window", available_actions: ["open_dispute"] }),
     });
   });
 
@@ -360,6 +363,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareBuyerNftReturn).toHaveBeenCalledWith({
       deal_id: "deal-return",
       wallet_id: "wallet-testnet",
+      context: returnPending,
     });
   });
 
@@ -397,7 +401,7 @@ describe("TON Escrow workspace", () => {
     expect(api.createListingIntent).not.toHaveBeenCalled();
   });
 
-  it("lets the seller prepare DealEscrow only when the incoming deal action allows it", async () => {
+  it("lets the seller prepare direct DealEscrow deployment only when Backend allows it", async () => {
     const incoming = deal({
       buyer_id: "buyer-2",
       seller_id: "seller-1",
@@ -409,10 +413,33 @@ describe("TON Escrow workspace", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
 
     fireEvent.click(await screen.findByRole("button", { name: "Создать DealEscrow" }));
-    expect(await screen.findByRole("dialog", { name: /Создать DealEscrow/ })).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: /Создать DealEscrow/ });
+    expect(dialog).toHaveTextContent(escrowAddress);
+    expect(dialog).not.toHaveTextContent("Factory");
     expect(api.prepareDealEscrow).toHaveBeenCalledWith({
       deal_id: "deal-1",
       wallet_id: "wallet-testnet",
+      context: incoming,
+    });
+  });
+
+  it("lets the seller activate an already deployed DealEscrow only when Backend allows it", async () => {
+    const incoming = deal({
+      buyer_id: "buyer-2",
+      seller_id: "seller-1",
+      state: "intent_created",
+      available_actions: ["activate_deal"],
+    });
+    const api = makeApi({ sellerDeals: [incoming] });
+    renderWorkspace(api, "seller-1");
+    fireEvent.click(screen.getByRole("tab", { name: "Продавец" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Активировать DealEscrow" }));
+    expect(await screen.findByRole("dialog", { name: /Активировать DealEscrow/ })).toBeInTheDocument();
+    expect(api.prepareDealActivation).toHaveBeenCalledWith({
+      deal_id: "deal-1",
+      wallet_id: "wallet-testnet",
+      context: incoming,
     });
   });
 
@@ -432,6 +459,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareNftDeposit).toHaveBeenCalledWith({
       deal_id: "deal-1",
       wallet_id: "wallet-testnet",
+      context: incoming,
     });
   });
 
@@ -453,6 +481,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareUnsoldNftWithdrawal).toHaveBeenCalledWith({
       deal_id: "deal-1",
       wallet_id: "wallet-testnet",
+      context: incoming,
     });
   });
 
@@ -616,8 +645,9 @@ describe("TON Escrow workspace", () => {
       proof_state_data_hash: "bb".repeat(32),
       proof_provider_id: "pytoniq-trust0-testnet-v1",
     };
+    const retryDeal = deal({ buyer_id: "buyer-1", seller_id: "seller-1", state: "refunded", available_actions: [] });
     const api = makeApi({
-      buyerDeals: [deal({ buyer_id: "buyer-1", seller_id: "seller-1", state: "refunded", available_actions: [] })],
+      buyerDeals: [retryDeal],
       retryableOutboundActions: [outbound],
     });
     installInventoryApi();
@@ -634,6 +664,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareFailedOutboundRetry).toHaveBeenCalledWith({
       deal_id: "deal-1",
       query_id: "42",
+      context: retryDeal,
     });
     expect(await screen.findByRole("dialog", { name: /Повторить неудавшуюся отправку/ }))
       .toBeInTheDocument();
