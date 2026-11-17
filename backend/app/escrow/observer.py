@@ -709,6 +709,7 @@ _ACTION_TYPE_FOR_VERIFIED_EVENT = {
     EscrowChainEventType.DISPUTE_OPENED_ONCHAIN: "open_dispute",
     EscrowChainEventType.DEAL_TIMEOUT_ACCEPTED: "timeout_deal",
     EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED: "recover_unexpected_nft",
+    EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED: "retry_failed_outbound_action",
     EscrowChainEventType.NFT_RETURN_EVIDENCE_OBSERVED: "return_nft_to_escrow",
 }
 
