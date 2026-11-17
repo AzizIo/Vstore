@@ -61,6 +61,8 @@ class EscrowChainEventType(StrEnum):
     MANUAL_REVIEW_REQUIRED = "manual_review_required"
     DEAL_TIMEOUT_ACCEPTED = "deal_timeout_accepted"
     RECOVERY_NFT_RETURN_STARTED = "recovery_nft_return_started"
+    OUTBOUND_ACTION_RETRY_ACCEPTED = "outbound_action_retry_accepted"
+    UNEXPECTED_NFT_RECOVERY_RECONCILED = "unexpected_nft_recovery_reconciled"
     OUTBOUND_ACTION_BOUNCED = "outbound_action_bounced"
     OUTBOUND_BOUNCE_UNMATCHED = "outbound_bounce_unmatched"
 
@@ -199,6 +201,31 @@ def transition_for_verified_event(
         )
     if event is EscrowChainEventType.OUTBOUND_BOUNCE_UNMATCHED:
         raise EscrowDomainError("An unmatched bounce cannot advance a deal state")
+    if event is EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED:
+        if observed_contract_state == source.value:
+            # Allow retries of non-critical reserve/allowance actions without
+            # changing the financial lifecycle, including terminal deals.
+            return source
+        retry_targets = {
+            "nft_release_pending": EscrowDealStatus.NFT_RELEASE_PENDING,
+            "nft_return_pending": EscrowDealStatus.NFT_RETURN_PENDING,
+            "seller_payout_pending": EscrowDealStatus.SELLER_PAYOUT_PENDING,
+            "buyer_refund_pending": EscrowDealStatus.BUYER_REFUND_PENDING,
+        }
+        if (
+            source is EscrowDealStatus.MANUAL_REVIEW
+            and observed_contract_state in retry_targets
+        ):
+            return retry_targets[observed_contract_state]
+        raise EscrowDomainError(
+            "Retry result does not match the manual-review or unchanged contract state"
+        )
+    if event is EscrowChainEventType.UNEXPECTED_NFT_RECOVERY_RECONCILED:
+        if source in TERMINAL_DEAL_STATES and observed_contract_state == source.value:
+            return source
+        raise EscrowDomainError(
+            "Unexpected NFT recovery must preserve an existing terminal financial state"
+        )
 
     # Several DealEscrow v1 messages have more than one legitimate result. The
     # proof-verified contract storage state selects the transition; event labels
@@ -221,6 +248,7 @@ def transition_for_verified_event(
         EscrowChainEventType.DISPUTE_RESOLUTION_ACCEPTED: {
             "nft_release_pending": EscrowDealStatus.NFT_RELEASE_PENDING,
             "nft_return_pending": EscrowDealStatus.NFT_RETURN_PENDING,
+            "seller_payout_pending": EscrowDealStatus.SELLER_PAYOUT_PENDING,
         },
         EscrowChainEventType.DEAL_TIMEOUT_ACCEPTED: {
             "nft_return_pending": EscrowDealStatus.NFT_RETURN_PENDING,
@@ -230,6 +258,9 @@ def transition_for_verified_event(
         },
         EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED: {
             "nft_return_pending": EscrowDealStatus.NFT_RETURN_PENDING,
+            "settled": EscrowDealStatus.SETTLED,
+            "refunded": EscrowDealStatus.REFUNDED,
+            "expired": EscrowDealStatus.EXPIRED,
         },
     }
     if event in dynamic_targets:
@@ -257,6 +288,7 @@ def transition_for_verified_event(
             },
             EscrowChainEventType.DISPUTE_RESOLUTION_ACCEPTED: {
                 EscrowDealStatus.DISPUTED,
+                EscrowDealStatus.MANUAL_REVIEW,
             },
             EscrowChainEventType.DEAL_TIMEOUT_ACCEPTED: {
                 EscrowDealStatus.INTENT_CREATED,
@@ -271,6 +303,9 @@ def transition_for_verified_event(
             },
             EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED: {
                 EscrowDealStatus.MANUAL_REVIEW,
+                EscrowDealStatus.SETTLED,
+                EscrowDealStatus.REFUNDED,
+                EscrowDealStatus.EXPIRED,
             },
         }[event]
         if source not in allowed_sources:

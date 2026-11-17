@@ -76,6 +76,7 @@ _OP_ORACLE = 0x56450005
 _OP_RESOLVE = 0x56450006
 _OP_TIMEOUT = 0x56450007
 _OP_RECOVER = 0x56450008
+_OP_RETRY = 0x56450009
 
 _STATE_NAMES = {
     0: "intent_created",
@@ -112,6 +113,7 @@ _DIRECT_OPCODES = {
     _OP_RESOLVE,
     _OP_TIMEOUT,
     _OP_RECOVER,
+    _OP_RETRY,
 }
 
 
@@ -263,6 +265,8 @@ def _candidate_type(opcode: int, state: int | None = None) -> EscrowChainEventTy
         return EscrowChainEventType.DEAL_TIMEOUT_ACCEPTED
     if opcode == _OP_RECOVER:
         return EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED
+    if opcode == _OP_RETRY:
+        return EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED
     if opcode == _OP_ORACLE:
         return EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED
     if opcode == _NFT_NOTIFICATION_OPCODE:
@@ -433,30 +437,35 @@ class PytoniqTONTestnetEscrowProvider:
             raise ValueError("escrow scan limit must be between 1 and 100")
         if self._closed:
             raise EscrowProviderUnavailable("TON escrow provider is closed")
-        cursor_state: dict[str, Any] = {"version": 1, "last_lt_by_address": {}}
+        cursor_state: dict[str, Any] = {"version": 2, "last_lt_by_address": {}}
         if cursor:
             try:
                 parsed = json.loads(cursor)
                 if (
                     not isinstance(parsed, dict)
-                    or parsed.get("version") != 1
                     or not isinstance(parsed.get("last_lt_by_address"), dict)
+                    or parsed.get("version") not in {1, 2}
                 ):
                     raise ValueError("unsupported cursor shape")
-                cursor_state = {
-                    "version": 1,
-                    "last_lt_by_address": {
-                        str(key): str(value)
-                        for key, value in parsed["last_lt_by_address"].items()
-                    },
-                }
+                legacy_cursors = parsed["last_lt_by_address"]
                 if any(
-                    not isinstance(value, str)
+                    not isinstance(key, str)
+                    or not key
+                    or not isinstance(value, str)
                     or not value.isdecimal()
                     or int(value) < 0
-                    for value in cursor_state["last_lt_by_address"].values()
+                    for key, value in legacy_cursors.items()
                 ):
                     raise ValueError("invalid logical-time cursor")
+                # v1 cursoring skipped unknown opcodes before they were recognized.
+                # Reset once on migration so historical retry messages are backfilled.
+                if parsed.get("version") == 1:
+                    cursor_state = {"version": 2, "last_lt_by_address": {}}
+                else:
+                    cursor_state = {
+                        "version": 2,
+                        "last_lt_by_address": dict(legacy_cursors),
+                    }
             except (ValueError, TypeError, json.JSONDecodeError) as exc:
                 raise EscrowProviderInvalidEvidence("Escrow scan cursor is malformed") from exc
 
@@ -510,7 +519,7 @@ class PytoniqTONTestnetEscrowProvider:
         selected = scanned[:limit]
         events: list[NormalizedChainEvent] = []
         next_cursor_state = {
-            "version": 1,
+            "version": 2,
             "last_lt_by_address": dict(cursor_state["last_lt_by_address"]),
         }
         for mc_seqno, _now, address, row, deal in selected:
@@ -885,10 +894,27 @@ class PytoniqTONTestnetEscrowProvider:
             snapshot = deal.deployment_snapshot_json
             if not isinstance(snapshot, dict):
                 raise ValueError("immutable deployment snapshot is missing")
-            expected_state = {1: 7, 2: 4}.get(outcome)
             getter_reason = getter.get("dispute_reason_hash")
             if not isinstance(getter_reason, str):
                 raise ValueError("proof-read dispute reason is missing")
+            post_delivery = dispute_phase == 2
+            nft_in_escrow = bool(getter.get("nft_in_escrow"))
+            principal_locked = bool(getter.get("principal_locked"))
+            # outcome 1 = buyer wins; outcome 2 = seller wins. In a
+            # post-delivery seller-win the NFT is already buyer-owned and the
+            # contract moves directly to seller_payout_pending (state 8).
+            if outcome == 1:
+                expected_state = 7
+                custody_valid = nft_in_escrow
+            elif outcome == 2 and post_delivery and not nft_in_escrow:
+                expected_state = 8
+                custody_valid = True
+            elif outcome == 2 and nft_in_escrow:
+                expected_state = 4
+                custody_valid = True
+            else:
+                expected_state = None
+                custody_valid = False
             if (
                 domain != _ESCROW_DOMAIN
                 or protocol_version != _PROTOCOL_VERSION
@@ -897,13 +923,15 @@ class PytoniqTONTestnetEscrowProvider:
                     != _canonical_address(deal.contract_address)
                 or deal_salt != int(deal.deal_salt, 16)
                 or dispute_phase != int(getter["dispute_phase"])
+                or dispute_phase not in {1, 2}
                 or attempt_id <= 0
                 or attempt_id != int(getter["dispute_attempt_id"])
                 or evidence_hash <= 0
                 or evidence_hash != int(getter_reason, 16)
                 or expected_state is None
                 or int(getter["contract_state"]) != expected_state
-                or not bool(getter["nft_in_escrow"])
+                or not principal_locked
+                or not custody_valid
             ):
                 raise ValueError("resolver context does not match final contract state")
             return {
@@ -989,8 +1017,25 @@ class PytoniqTONTestnetEscrowProvider:
                 # contract verifies both the attested item and prior owner against
                 # its pre-transition recovery storage before clearing those fields.
                 # The accepted result never authorizes automatic listing release.
-                if int(getter["contract_state"]) != 13:
-                    raise ValueError("unexpected-NFT recovery must remain in manual review")
+                recovery_state = int(getter["contract_state"])
+                # The contract clears the recovery record after the NFT transfer
+                # has succeeded and the 2-of-3 oracle attestation is accepted.
+                # Verify the resulting empty recovery state, not fields that the
+                # successful transition intentionally deleted.
+                if (
+                    recovery_state not in {10, 11, 12, 13}
+                    or int(getter.get("pending_action", 0)) != 0
+                    or bool(getter.get("nft_in_escrow"))
+                    or getter.get("recovery_item_address") is not None
+                    or getter.get("recovery_previous_owner") is not None
+                    or _canonical_address(source_address.to_str(is_user_friendly=False))
+                        != _canonical_address(deal.contract_address)
+                    or amount_nanotons != 0
+                ):
+                    raise ValueError(
+                        "unexpected-NFT recovery did not clear custody "
+                        "while preserving financial state"
+                    )
             return {
                 "action": action,
                 "attempt_id": attempt_id,
@@ -1338,6 +1383,96 @@ class PytoniqTONTestnetEscrowProvider:
                 raise EscrowProviderInvalidEvidence(
                     "ResolverDecision state name differs from the proof-read state"
                 )
+        elif opcode == _OP_RETRY:
+            # RetryFailedOutboundAction carries the OLD bounced descriptor ID.
+            # The successful post-state must contain exactly one replacement
+            # pending descriptor whose new ID equals the monotonic on-chain
+            # oracleAttemptId, and whose recipient is the proven message sender.
+            old_query_id, salt, _reason_hash = self._decode_direct_body(
+                tx.in_msg.body, opcode, deal
+            )
+            if event.query_id is not None and event.query_id != str(old_query_id):
+                raise EscrowProviderInvalidEvidence(
+                    "Indexed retry query id differs from the proof-decoded old descriptor id"
+                )
+            actions = getter.get("outbound_actions")
+            if not isinstance(actions, list):
+                raise EscrowProviderInvalidEvidence("Retry post-state has no outbound descriptors")
+            attempt_id = getter.get("oracle_attempt_id")
+            try:
+                attempt_id = int(attempt_id)
+            except (TypeError, ValueError) as exc:
+                raise EscrowProviderInvalidEvidence(
+                    "Retry post-state has no valid oracle attempt id"
+                ) from exc
+            candidates = [
+                action for action in actions
+                if isinstance(action, dict)
+                and action.get("status") == 0
+                and action.get("query_id") == attempt_id
+                and action.get("attempt_id") == attempt_id
+                and action.get("deal_salt") == f"{salt:064x}"
+                and action.get("expected_state") == state
+                and action.get("recipient_address") is not None
+                and _canonical_address(action.get("recipient_address"))
+                    == _canonical_address(message_source)
+                and attempt_id > old_query_id
+            ]
+            if len(candidates) != 1:
+                raise EscrowProviderInvalidEvidence(
+                    "Retry does not produce one sender-bound fresh pending descriptor"
+                )
+            descriptor = candidates[0]
+            kind = descriptor.get("kind")
+            if isinstance(kind, bool) or not isinstance(kind, int) or kind not in range(1, 8):
+                raise EscrowProviderInvalidEvidence("Retry descriptor has an unknown action kind")
+            if kind in {1, 2, 4, 5} and state not in {4, 7, 8, 9}:
+                raise EscrowProviderInvalidEvidence(
+                    "Critical retry descriptor is inconsistent with the proof-read state"
+                )
+            snapshot = deal.deployment_snapshot_json
+            if not isinstance(snapshot, dict):
+                raise EscrowProviderInvalidEvidence("Retry deal snapshot is missing")
+            if kind == 1:
+                expected_recipient = _canonical_address(snapshot["buyer_address"])
+            elif kind in {2, 4, 6}:
+                expected_recipient = _canonical_address(snapshot["seller_address"])
+            elif kind in {5, 7}:
+                expected_recipient = _canonical_address(snapshot["buyer_address"])
+            else:
+                expected_recipient = _canonical_address(getter.get("recovery_previous_owner"))
+            if (
+                expected_recipient is None
+                or _canonical_address(message_source) != expected_recipient
+            ):
+                raise EscrowProviderInvalidEvidence(
+                    "Retry sender is not the immutable participant/recovery recipient"
+                )
+            verified_query_id = old_query_id
+            event_type = EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED
+            source = message_source
+            destination = message_destination
+            item = _canonical_address(snapshot["item_address"])
+            collection = _canonical_address(snapshot["collection_address"])
+            amount = message_value
+            accepted = True
+            details = {
+                "verified_attempt_id": str(attempt_id),
+                "outbound_action_kind": kind,
+                "outbound_action_status": 0,
+                "outbound_action_expected_state": state,
+            }
+            return (
+                event_type,
+                source,
+                destination,
+                item,
+                collection,
+                amount,
+                accepted,
+                str(verified_query_id),
+                details,
+            )
         elif opcode in _DIRECT_OPCODES:
             query_id, _salt, _reason_hash = self._decode_direct_body(
                 tx.in_msg.body, opcode, deal
@@ -1352,12 +1487,30 @@ class PytoniqTONTestnetEscrowProvider:
                 _OP_FUND: 3,
                 _OP_ACCEPT: 4,
                 _OP_DISPUTE: 6,
-                _OP_RECOVER: 7,
             }.get(opcode)
             if opcode == _OP_TIMEOUT and state not in {7, 8, 12, 13}:
                 raise EscrowProviderInvalidEvidence("TimeoutDeal did not reach an allowed state")
             if expected_state is not None and state != expected_state:
                 raise EscrowProviderInvalidEvidence("Direct message and getter state disagree")
+            if opcode == _OP_RECOVER:
+                recovery_state_valid = state == 7 or (
+                    state in {10, 11, 12}
+                    and int(getter.get("pending_action", 0)) == 6
+                )
+                recovery_item = _canonical_address(getter.get("recovery_item_address"))
+                recovery_owner = _canonical_address(getter.get("recovery_previous_owner"))
+                if (
+                    not recovery_state_valid
+                    or int(getter.get("pending_action", 0)) != 6
+                    or not bool(getter.get("nft_in_escrow"))
+                    or recovery_item is None
+                    or recovery_owner is None
+                    or source != recovery_owner
+                    or destination != _canonical_address(deal.contract_address)
+                ):
+                    raise EscrowProviderInvalidEvidence(
+                        "Unexpected NFT recovery does not match the proof-read recovery state"
+                    )
             if opcode == _OP_FUND:
                 required_amount = int(snapshot["principal_nanotons"]) + int(
                     snapshot["execution_reserve_nanotons"]
@@ -1398,19 +1551,6 @@ class PytoniqTONTestnetEscrowProvider:
             amount = message_value
             accepted = False
             if opcode == _OP_RECOVER:
-                recovery_item = _canonical_address(getter.get("recovery_item_address"))
-                recovery_owner = _canonical_address(getter.get("recovery_previous_owner"))
-                if (
-                    state != 7
-                    or not bool(getter.get("nft_in_escrow"))
-                    or recovery_item is None
-                    or recovery_owner is None
-                    or source != recovery_owner
-                    or destination != _canonical_address(deal.contract_address)
-                ):
-                    raise EscrowProviderInvalidEvidence(
-                        "Unexpected NFT recovery does not match the proof-read recovery state"
-                    )
                 item = recovery_item
         elif opcode == _NFT_NOTIFICATION_OPCODE:
             parser = tx.in_msg.body.begin_parse()
@@ -1490,7 +1630,7 @@ class PytoniqTONTestnetEscrowProvider:
                 2: ("contract", "seller", {9, 12}, 0),
                 3: ("contract", "seller", {10}, int(snapshot["principal_nanotons"])),
                 4: ("contract", "buyer", {11}, int(snapshot["principal_nanotons"])),
-                5: ("contract", None, {13}, 0),
+                5: ("contract", None, {10, 11, 12, 13}, 0),
             }
             if action not in expected_routes:
                 raise EscrowProviderInvalidEvidence("Unknown oracle attestation action")
@@ -1516,7 +1656,7 @@ class PytoniqTONTestnetEscrowProvider:
                 else _canonical_address(getter.get("recovery_previous_owner"))
             )
             item_matches_snapshot = item == _canonical_address(snapshot["item_address"])
-            recovery_action = action == 5 and state == 13
+            recovery_action = action == 5 and state in {10, 11, 12, 13}
             if (
                 state not in expected_states
                 or source != expected_source
@@ -1539,6 +1679,9 @@ class PytoniqTONTestnetEscrowProvider:
                 (3, 10): EscrowChainEventType.SELLER_PAYOUT_RECONCILED,
                 (4, 11): EscrowChainEventType.BUYER_REFUND_RECONCILED,
                 (5, 13): EscrowChainEventType.MANUAL_REVIEW_REQUIRED,
+                (5, 10): EscrowChainEventType.UNEXPECTED_NFT_RECOVERY_RECONCILED,
+                (5, 11): EscrowChainEventType.UNEXPECTED_NFT_RECOVERY_RECONCILED,
+                (5, 12): EscrowChainEventType.UNEXPECTED_NFT_RECOVERY_RECONCILED,
             }.get((action, state))
             if event_type is None:
                 raise EscrowProviderInvalidEvidence(

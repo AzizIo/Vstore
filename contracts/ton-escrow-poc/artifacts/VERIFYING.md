@@ -6,20 +6,21 @@ This directory pins the ABI and compiler output for the current testnet-only Dea
 
 | Field | Value |
 |---|---|
-| Exact source commit | `9d80a65a974b54f115fc697158974bdcee2c6be8` |
-| Contract source commit | `d87e4a81e07ec0c1e95619f6e5188c5be5433d62` |
+| Exact PR #262 build head | `cf48e3fa9fd79ed0a8d9c469af078e2a4e98142d` |
+| Contract source commit | `5f5ecfba94147140e53b66c482da336ddd8f0eee` |
 | Toolchain | Acton `1.2.1`, Tolk `1.5.0` |
-| Green exact-head Contract CI | [#43824551943](https://github.com/AzizIo/Vstore/actions/runs/43824551943) |
-| Artifact ID | `14205079269` |
-| Artifact ZIP SHA-256 | `622174053559929887d34c0ae0b8f3318efe2a4b9c661bf1925bd4760cf48c9a` |
-| Build descriptor SHA-256 | `32c5ff1e392d77ade6c4a99b6010e41bcc2c1c9700e768fe190be45f98aeb5db` |
+| Successful exact-head Contract CI | [#44053217775](https://github.com/AzizIo/Vstore/actions/runs/44053217775) |
+| Artifact ID | `14314552321` |
+| Artifact ZIP SHA-256 | `fc84d2f467aacb9f63d36abd2807f393e212b93355d4da850cbb2a69aadd8a96` |
+| Build descriptor SHA-256 | `7d183fcdfea088494a04aa7fe59ff7a3b6c2ad044eba870aff8e6059880016b1` |
 | Compact ABI SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
-| Compiled code hash | `498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46` |
-| Code BOC base64 SHA-256 | `0e7bc7b35eee4ae7003fba0a0e5368df3428b7e32ad0f4fc5ddf0f3230d5daf3` |
-| Decoded code BOC SHA-256 | `86ed08596d0595c711aa2cf7659ee396ff443d7b01c65659b8e7543dd23c6173` |
-| Canonical zlib BOC SHA-256 | `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7` |
-| Deterministic StateInit hash | `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
-| Deterministic raw address | `0:4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
+| Compiled code hash | `1A4F3E95226B5B6ACB3F81D324E2AB6038D5734C47253AF957E7E92887370A3D` |
+| Code BOC base64 SHA-256 | `e2a98a6303204855b934bd3365c22025dc4638ed1a8216a85ba5e04b808d7d8e` |
+| Decoded code BOC SHA-256 | `c2659cfed0f7303804198ee472526d8bda788e4f4a61be68f4137d0c2d12274a` |
+| Canonical zlib BOC SHA-256 | `5873ea1de49382c632fa83679e32bed7b1b14ceb653f1da3173a771cf5ee3c5c` |
+| Backend compressed Code BOC SHA-256 | `10e965df1f3206dc680ebfece95798f170e403645bb15562027764ac4b956932` |
+| Deterministic StateInit hash | `3d36fb591c0eb42d3a216e6cd7ce71325a923355cfd9af1b345313a3d98e4732` |
+| Deterministic raw address | `0:3d36fb591c0eb42d3a216e6cd7ce71325a923355cfd9af1b345313a3d98e4732` |
 | Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
 
 ## Canonical compressed BOC representation
@@ -28,7 +29,15 @@ The backend adapter consumes a base64-encoded zlib stream. To keep that stream b
 
 Do not regenerate this value with `zlib.compress`, `gzip`, Node `deflateSync`, or another general-purpose compressor. Those can produce valid but byte-different streams across implementations and settings. The verifier constructs the canonical byte stream itself and compares its SHA-256 to `compiled_code_boc_zlib_sha256`; the backend artifact-integrity test must compare the checked-in payload bytes to this same digest.
 
-## Security changes exercised by the current Sandbox suite
+## Security changes proposed in PR #262
+
+- A post-delivery seller-wins resolver decision can settle the locked principal directly when the buyer withholds the NFT; buyer-wins remains custody-gated.
+- The observer recognizes proof-backed retry opcode `0x56450009`, verifies the fresh pending outbound descriptor, and backfills v1 scan cursors.
+- Unexpected NFT recovery after a financial terminal state is kept separate from the terminal financial lifecycle.
+
+The frozen artifact was built and captured by Contract CI #44053217775 from source commit `5f5ecfba94147140e53b66c482da336ddd8f0eee` at build head `cf48e3fa9fd79ed0a8d9c469af078e2a4e98142d`. A later full verification of the expanded test suite passed on final PR head `6d52310b9f5493e4207cd286b889659acc462d51`: Contract CI #44069972616 passed 38/38 Acton Sandbox tests, including the additional REFUNDED and EXPIRED unsolicited-NFT recovery cases.
+
+## Previously validated baseline controls
 
 - RichBounce correlation requires the exact original body hash, destination/sender, and stored message value (except carry-all descriptors, whose message value is dynamic). Unmatched or malformed bounces do not mutate custody state.
 - Critical principal/NFT bounces move to manual review without clearing principal/NFT custody flags. Retry is recipient-authorized, consumes the old descriptor, and uses a fresh monotonic attempt/query ID.
@@ -38,7 +47,7 @@ Do not regenerate this value with `zlib.compress`, `gzip`, Node `deflateSync`, o
 - A timed-out pre-delivery dispute with NFT and principal still escrowed remains resolver-controlled in manual review; an expired post-delivery dispute can accept only the exact late buyer return, restore the dispute window, and still requires a fresh resolver quorum before further NFT movement.
 - Failed buyer principal refund, seller payout, seller allowance, execution-reserve refund, late finality, duplicate oracle delivery/refund, and terminal bounce cases are covered in emulator fixtures.
 
-The green run reports **35 passing Sandbox tests**. Coverage for the contract tree is 85.9% lines and 68.7% branches; DealEscrow itself is 83.5% lines and 68.1% branches. Coverage is useful evidence, not a proof of correctness.
+Exact final-head integration verification on `6d52310b9f5493e4207cd286b889659acc462d51`: Contract CI [#44069972616](https://github.com/AzizIo/Vstore/actions/runs/44069972616) — 38/38 Acton Sandbox tests; Backend CI [#44069972806](https://github.com/AzizIo/Vstore/actions/runs/44069972806) — 979 tests passed, lint, migration compatibility and dependency audit passed; Frontend CI [#44069972608](https://github.com/AzizIo/Vstore/actions/runs/44069972608) — 248/248 unit tests, 31/31 Playwright E2E, isolated escrow retry E2E 1/1, API-backed journey and persisted order/event/outbox assertions passed. All three workflows completed successfully on the same head SHA.
 
 ## Reproduction
 
@@ -67,7 +76,7 @@ Before any live testnet deal:
 1. An independent reviewer must audit the exact code hash, message/state machine, bounce/retry handling, gas/fee invariants, and financial invariants.
 2. A trusted NFT provider must prove that the exact item belongs to the stated collection before immutable deal terms are built; the contract's collection address is metadata and is not itself a membership proof.
 3. A separately approved valueless testnet acceptance must record actual transaction/message/trace evidence, masterchain finality, getter state, and the NFT's actual owner at each terminal transition.
-4. Backend adapter PR #247 must pin this exact artifact. Its current artifact hash/address are from an older contract build and are not compatible with this artifact yet. No backend changes are included here.
+4. Backend artifact pins and the compressed Code BOC were updated alongside this manifest for PR #262; the frozen artifact build provenance and final-head StateInit/ABI checks are recorded above.
 5. Signing/deployment activation, mainnet, real funds, and real NFTs remain disabled.
 
 Passing CI does not close those independent release gates.

@@ -499,3 +499,64 @@ def test_principal_settlement_requires_accepted_attestation_and_getter(
         payload.update(changes)
         with pytest.raises(EscrowDomainError):
             validate_event_against_deal(evidence(event_type=event_type, **payload), deal)
+
+
+def test_post_delivery_seller_win_can_settle_without_buyer_nft_return() -> None:
+    for source in (
+        EscrowDealStatus.DISPUTED,
+        EscrowDealStatus.MANUAL_REVIEW,
+    ):
+        assert transition_for_verified_event(
+            source,
+            EscrowChainEventType.DISPUTE_RESOLUTION_ACCEPTED,
+            EscrowDealStatus.SELLER_PAYOUT_PENDING.value,
+        ) is EscrowDealStatus.SELLER_PAYOUT_PENDING
+
+    # Buyer-win remains an NFT-return path; it cannot shortcut directly to refund.
+    assert transition_for_verified_event(
+        EscrowDealStatus.MANUAL_REVIEW,
+        EscrowChainEventType.DISPUTE_RESOLUTION_ACCEPTED,
+        EscrowDealStatus.NFT_RETURN_PENDING.value,
+    ) is EscrowDealStatus.NFT_RETURN_PENDING
+
+
+def test_retry_event_uses_only_proof_read_replacement_state() -> None:
+    assert transition_for_verified_event(
+        EscrowDealStatus.MANUAL_REVIEW,
+        EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED,
+        EscrowDealStatus.SELLER_PAYOUT_PENDING.value,
+    ) is EscrowDealStatus.SELLER_PAYOUT_PENDING
+    assert transition_for_verified_event(
+        EscrowDealStatus.SETTLED,
+        EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED,
+        EscrowDealStatus.SETTLED.value,
+    ) is EscrowDealStatus.SETTLED
+    with pytest.raises(EscrowDomainError, match="Retry result"):
+        transition_for_verified_event(
+            EscrowDealStatus.DISPUTED,
+            EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED,
+            EscrowDealStatus.BUYER_REFUND_PENDING.value,
+        )
+
+
+@pytest.mark.parametrize(
+    ("terminal", "state"),
+    [
+        (EscrowDealStatus.SETTLED, "settled"),
+        (EscrowDealStatus.REFUNDED, "refunded"),
+        (EscrowDealStatus.EXPIRED, "expired"),
+    ],
+)
+def test_unsolicited_nft_recovery_preserves_financial_terminal_state(
+    terminal: EscrowDealStatus, state: str,
+) -> None:
+    assert transition_for_verified_event(
+        terminal,
+        EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED,
+        state,
+    ) is terminal
+    assert transition_for_verified_event(
+        terminal,
+        EscrowChainEventType.UNEXPECTED_NFT_RECOVERY_RECONCILED,
+        state,
+    ) is terminal

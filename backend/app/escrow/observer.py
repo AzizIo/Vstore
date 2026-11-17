@@ -331,6 +331,17 @@ async def _terminal_owner_evidence(
         or not event.observed_contract_state
     ):
         return event
+    if (
+        event.event_type is EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED
+        and event.observed_contract_state in {
+            EscrowDealStatus.SETTLED.value,
+            EscrowDealStatus.REFUNDED.value,
+            EscrowDealStatus.EXPIRED.value,
+        }
+    ):
+        # These events recover the already-terminal NFT asset only. Do not ask
+        # the listing reconciler to validate temporary custody during recovery.
+        return event
     try:
         deal_id = uuid.UUID(event.deal_id)
     except ValueError:
@@ -630,7 +641,10 @@ async def _apply_one_event(
     deal.last_chain_seqno = max(deal.last_chain_seqno or 0, event.masterchain_seqno)
     if event.logical_time is not None:
         deal.last_chain_logical_time = max(deal.last_chain_logical_time or 0, event.logical_time)
-    if next_state in TERMINAL_DEAL_STATES:
+    if (
+        next_state in TERMINAL_DEAL_STATES
+        and event.event_type is not EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED
+    ):
         if not await _reconcile_terminal_listing(session, deal, next_state, event):
             event_row.reason_code = "terminal_listing_owner_unverified"
             # Do not advance the durable scan cursor: the same terminal evidence
@@ -709,6 +723,7 @@ _ACTION_TYPE_FOR_VERIFIED_EVENT = {
     EscrowChainEventType.DISPUTE_OPENED_ONCHAIN: "open_dispute",
     EscrowChainEventType.DEAL_TIMEOUT_ACCEPTED: "timeout_deal",
     EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED: "recover_unexpected_nft",
+    EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED: "retry_failed_outbound_action",
     EscrowChainEventType.NFT_RETURN_EVIDENCE_OBSERVED: "return_nft_to_escrow",
 }
 

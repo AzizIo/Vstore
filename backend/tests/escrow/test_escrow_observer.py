@@ -15,6 +15,7 @@ from app.escrow.models import (
     EscrowObserverCheckpoint,
 )
 from app.escrow.observer import (
+    _ACTION_TYPE_FOR_VERIFIED_EVENT,
     CHECKPOINT_ID,
     _apply_one_event,
     _payload,
@@ -1114,3 +1115,12 @@ async def test_pending_bounce_candidate_can_be_proof_reclassified_as_unmatched()
     assert existing.status == "manual_review"
     assert existing.reason_code == "outbound_action_descriptor_not_found"
     assert deal.status == EscrowDealStatus.AWAITING_NFT.value
+
+
+def test_retry_event_finalizes_the_recipient_prepared_retry_action() -> None:
+    assert (
+        _ACTION_TYPE_FOR_VERIFIED_EVENT[
+            EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED
+        ]
+        == "retry_failed_outbound_action"
+    )

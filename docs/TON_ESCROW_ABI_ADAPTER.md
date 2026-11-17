@@ -16,19 +16,19 @@ Pinned provenance:
 |---|---|
 | Contract / protocol | `DealEscrow` / v1 |
 | Network scope | TON testnet only |
-| Source commit in frozen manifest | `9d80a65a974b54f115fc697158974bdcee2c6be8` |
-| Successful contract workflow | [#43824551943](https://github.com/AzizIo/Vstore/actions/runs/43824551943) |
-| Artifact ID | `14205079269` |
-| Artifact archive SHA-256 | `622174053559929887d34c0ae0b8f3318efe2a4b9c661bf1925bd4760cf48c9a` |
-| Build descriptor SHA-256 | `32c5ff1e392d77ade6c4a99b6010e41bcc2c1c9700e768fe190be45f98aeb5db` |
+| Source commit in frozen manifest | `5f5ecfba94147140e53b66c482da336ddd8f0eee` |
+| Exact successful Contract CI | [#44053217775](https://github.com/AzizIo/Vstore/actions/runs/44053217775) |
+| Artifact ID | `14314552321` |
+| Artifact archive SHA-256 | `fc84d2f467aacb9f63d36abd2807f393e212b93355d4da850cbb2a69aadd8a96` |
+| Build descriptor SHA-256 | `7d183fcdfea088494a04aa7fe59ff7a3b6c2ad044eba870aff8e6059880016b1` |
 | Acton / Tolk | `1.2.1` / `1.5.0` |
 | ABI compact SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
-| Code cell hash | `498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46` |
-| Code BOC base64 SHA-256 | `0e7bc7b35eee4ae7003fba0a0e5368df3428b7e32ad0f4fc5ddf0f3230d5daf3` |
-| Decoded code BOC SHA-256 | `86ed08596d0595c711aa2cf7659ee396ff443d7b01c65659b8e7543dd23c6173` |
-| Zlib-compressed BOC SHA-256 | `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7` |
-| Deterministic StateInit hash | `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
-| Deterministic raw address | `0:4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
+| Code cell hash | `1A4F3E95226B5B6ACB3F81D324E2AB6038D5734C47253AF957E7E92887370A3D` |
+| Code BOC base64 SHA-256 | `e2a98a6303204855b934bd3365c22025dc4638ed1a8216a85ba5e04b808d7d8e` |
+| Decoded code BOC SHA-256 | `c2659cfed0f7303804198ee472526d8bda788e4f4a61be68f4137d0c2d12274a` |
+| Zlib-compressed BOC SHA-256 | `10e965df1f3206dc680ebfece95798f170e403645bb15562027764ac4b956932` |
+| Deterministic StateInit hash | `3d36fb591c0eb42d3a216e6cd7ce71325a923355cfd9af1b345313a3d98e4732` |
+| Deterministic raw address | `0:3d36fb591c0eb42d3a216e6cd7ce71325a923355cfd9af1b345313a3d98e4732` |
 | Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
 
 At adapter initialization the compressed artifact digest, decoded BOC digest and TVM cell hash are checked; the manifest also pins the canonical base64 digest. The ABI canonical compact JSON digest and manifest network/protocol/code identity are checked before StateInit can be derived. Missing or modified artifacts fail closed.
@@ -48,10 +48,10 @@ The fixed cross-implementation vector `deal-escrow-v1-testnet-fixed-terms-01` is
 
 | Field | Expected value |
 |---|---|
-| Raw address | `0:4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
-| StateInit hash | `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75` |
+| Raw address | `0:3d36fb591c0eb42d3a216e6cd7ce71325a923355cfd9af1b345313a3d98e4732` |
+| StateInit hash | `3d36fb591c0eb42d3a216e6cd7ce71325a923355cfd9af1b345313a3d98e4732` |
 | Data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
-| Code cell hash | `498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46` |
+| Code cell hash | `1A4F3E95226B5B6ACB3F81D324E2AB6038D5734C47253AF957E7E92887370A3D` |
 
 ## Message encoders
 
@@ -66,7 +66,7 @@ Wallet messages are constructed from the versioned Tolk structs, not from user-p
 
 `verify_message_vectors.ts` creates fixed message BOCs with the generated Acton wrapper and `@ton/core 0.63.1`. Backend tests compare decoded body BOC SHA-256 values with the cross-generated fixed vector. Regenerate only alongside an ABI/protocol review; do not update expected hashes just to make tests pass.
 
-Current fixed message BOC SHA-256 values:
+Current fixed message BOC SHA-256 values generated from the Acton TypeScript wrapper and `@ton/core 0.63.1` in successful exact-head Contract CI #44053217775:
 
 | Message | BOC SHA-256 |
 |---|---|
@@ -76,8 +76,9 @@ Current fixed message BOC SHA-256 values:
 | OpenDispute (query 2001, reason hash `ab` × 32) | `687c3f5300af7371f946dd9dae1c849eede2887f167f8028aa4d1da228a709cd` |
 | TimeoutDeal (query 2002) | `2cc8443c10c2749973e51ce2e051ebfaac6e8bb191e231948104a235dc3e43f3` |
 | RecoverUnexpectedNft (query 2003) | `296bbfd9ed948575f6e8dfd31d529384e016cbfe321f73d42717b294b8b3ac34` |
-| TEP-62 seller deposit (query 1002, current escrow address) | `b3c4115875b6814375c26e1063eee6b6c616d206280d1e36552dc612181d8a69` |
-| TEP-62 buyer return (query 1004, current escrow address) | `15be6d379e502cae14205b5c562d4045125e91b391810fe24cb7a35104f94371` |
+| RetryFailedOutboundAction (query 3001) | `ef071e39b7596f5f7d87f89fc0ade508840933852c0355494167d86417d018c9` |
+| TEP-62 seller deposit (query 1002, current escrow address) | `212e926bc8afdc7436e882a4dc9dba11e98002c982f4c6a78f44302328eea901` |
+| TEP-62 buyer return (query 1004, current escrow address) | `86bcb59cf9b278831333aa672384888fde60379a1320f3ce00a90dae43cbc4c8` |
 
 ## Reproduce in CI
 
@@ -118,6 +119,8 @@ A successful build or matching vector proves serializer consistency against the 
 
 ## Latest integration verification
 
-The backend adapter manifest and compressed BOC are synchronized to the final PR #248 artifact: source commit `9d80a65a974b54f115fc697158974bdcee2c6be8`, code hash `498A82F9B2DE206BE42108B6413D517CE63D4BCB1C20704D0BD89FCCC9509C46`, StateInit `4e3845e9d0b4df2f603b0ba7cceca4592276d25d8f43d2c611376344db393f75`, canonical compressed BOC SHA-256 `8dce117db9f0ca883b0438c2f600b10c4caf18d7febd3db26a02d78c0191cbd7`.
+PR #262 is the current candidate for the three internal escrow-audit findings. The frozen contract artifact was captured by Contract CI #44053217775 from contract source commit `5f5ecfba94147140e53b66c482da336ddd8f0eee`. The expanded final PR head `6d52310b9f5493e4207cd286b889659acc462d` passed all three workflows: Contract CI [#44069972616](https://github.com/AzizIo/Vstore/actions/runs/44069972616) (38/38 Acton Sandbox tests, including REFUNDED and EXPIRED recovery cases), Backend CI [#44069972806](https://github.com/AzizIo/Vstore/actions/runs/44069972806) (979 tests passed, lint, migration compatibility and dependency audit), and Frontend CI [#44069972608](https://github.com/AzizIo/Vstore/actions/runs/44069972608) (248/248 unit tests, 31/31 Playwright, isolated escrow retry E2E 1/1, API-backed journey and persisted order/event/outbox assertions). All three workflows completed successfully on the same head SHA.
 
-PR #248 exact head `08daf5afe63c83f6f892fd469d90b3788e0f989c` passed Contract CI #43832141975. Backend pin PR #247 is now at exact head `c63e1b1b1ed7d233c208899689a18a34a5b07bb0`; its Contract CI #43911044863 passed. Backend CI #1778 and Frontend CI #1978 were triggered on this exact #247 head and must both complete successfully before merge. A previous Backend CI failure on the preceding head was lint-only; the reported import ordering, line lengths and missing pytest import have been corrected. This remains build/test evidence, not independent audit or live testnet acceptance.
+Generated Acton artifact ID `14314552321`, archive SHA-256 `fc84d2f467aacb9f63d36abd2807f393e212b93355d4da850cbb2a69aadd8a96`. Code hash `1A4F3E95226B5B6ACB3F81D324E2AB6038D5734C47253AF957E7E92887370A3D`; StateInit `3d36fb591c0eb42d3a216e6cd7ce71325a923355cfd9af1b345313a3d98e4732`; backend compressed Code BOC SHA-256 `10e965df1f3206dc680ebfece95798f170e403645bb15562027764ac4b956932`. These are testnet-only candidate pins, not external audit or live network acceptance.
+
+PR #262 remains Draft and unmerged. Independent TON/Tolk review, live valueless Testnet acceptance with finality/NFT-owner evidence, and written Telegram policy clearance remain open release gates. Real-value checkout, mainnet deployment, signing/custody and automatic broadcast stay disabled.

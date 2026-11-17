@@ -146,6 +146,7 @@ async def test_liteclient_must_be_trust_level_zero_before_any_proof_use() -> Non
         (0x05138D91, EscrowChainEventType.NFT_DEPOSIT_ACCEPTED),
         (0x56450007, EscrowChainEventType.DEAL_TIMEOUT_ACCEPTED),
         (0x56450008, EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED),
+        (0x56450009, EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED),
         (0xFFFFFFFE, EscrowChainEventType.OUTBOUND_ACTION_BOUNCED),
         (0xFFFFFFFF, EscrowChainEventType.OUTBOUND_ACTION_BOUNCED),
     ],
@@ -234,7 +235,7 @@ async def test_scan_rejects_corrupted_or_wrong_version_cursor() -> None:
         http_client=_FakeHttp({"transactions": []}),
         lite_client_factory=lambda: object(),
     )
-    for cursor in ("{bad-json", '{"version":2,"last_lt_by_address":{}}',
+    for cursor in ("{bad-json", '{"version":3,"last_lt_by_address":{}}',
                    '{"version":1,"last_lt_by_address":{"address":"not-a-number"}}'):
         with pytest.raises(EscrowProviderInvalidEvidence, match="cursor"):
             await provider.scan_events(cursor=cursor, limit=1)
@@ -682,4 +683,126 @@ async def test_shard_inclusion_proof_failure_is_not_finalized() -> None:
         match="Could not verify TON block inclusion proof",
     ):
         await provider._trusted_shard_and_masterchain(_finality_candidate(), client)
+    await provider.close()
+
+
+def test_retry_verification_binds_old_query_to_fresh_proven_descriptor() -> None:
+    from pytoniq_core import begin_cell
+
+    from app.escrow.provider import NormalizedChainEvent
+
+    contract = "0:" + "a" * 64
+    item = "0:" + "b" * 64
+    collection = "0:" + "f" * 64
+    seller = "0:" + "c" * 64
+    buyer = "0:" + "d" * 64
+    salt = "12" * 32
+    body = (
+        begin_cell()
+        .store_uint(0x56450009, 32)
+        .store_uint(5, 64)
+        .store_uint(int(salt, 16), 256)
+        .end_cell()
+    )
+    event = NormalizedChainEvent(
+        network="testnet",
+        transaction_hash="a" * 64,
+        event_index=0,
+        event_type=EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED,
+        contract_address=contract,
+        deal_id=str(uuid4()),
+        source_address=None,
+        destination_address=None,
+        item_address=None,
+        amount_nanotons=None,
+        masterchain_seqno=100,
+        finalized=True,
+        evidence_sha256="b" * 64,
+        cursor="",
+        query_id="5",
+        operation_id="0x56450009",
+    )
+    deal = SimpleNamespace(
+        contract_address=contract,
+        deal_salt=salt,
+        deployment_snapshot_json={
+            "item_address": item,
+            "collection_address": collection,
+            "seller_address": seller,
+            "buyer_address": buyer,
+        },
+    )
+    getter = {
+        "contract_state": 4,
+        "oracle_attempt_id": 9,
+        "outbound_actions": [
+            {
+                "kind": 1,
+                "status": 0,
+                "query_id": 9,
+                "attempt_id": 9,
+                "deal_salt": salt,
+                "expected_state": 4,
+                "recipient_address": buyer,
+            }
+        ],
+    }
+    tx = SimpleNamespace(
+        in_msg=SimpleNamespace(
+            body=body,
+            info=SimpleNamespace(bounced=False),
+        )
+    )
+    provider = object.__new__(PytoniqTONTestnetEscrowProvider)
+    result = provider._verified_event(
+        event, tx, deal, getter, "nft_release_pending", None, buyer, contract, 30_000_000
+    )
+    assert result[0] is EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED
+    assert result[1] == buyer
+    assert result[2] == contract
+    assert result[7] == "5"  # durable retry action tracks the OLD bounced ID
+    assert result[8]["verified_attempt_id"] == "9"  # replacement descriptor has NEW ID
+
+    with pytest.raises(EscrowProviderInvalidEvidence, match="sender-bound"):
+        provider._verified_event(
+            event, tx, deal, getter, "nft_release_pending", None, seller, contract, 30_000_000
+        )
+
+
+@pytest.mark.asyncio
+async def test_v1_cursor_migration_backfills_previously_skipped_retry_transactions() -> None:
+    import json
+
+    deal = _deal()
+    deal.contract_address = "0:" + "a" * 64
+    row = {
+        "lt": "100",
+        "hash": _b64_hash(b"t" * 32),
+        "mc_block_seqno": 300,
+        "now": 1_700_000_000,
+        "block_ref": {"workchain": 0, "shard": "8000000000000000", "seqno": 299},
+        "in_msg": {
+            "hash": _b64_hash(b"m" * 32),
+            "source": "0:" + "c" * 64,
+            "destination": deal.contract_address,
+            "value": "30000000",
+            "opcode": 0x56450009,
+            "message_content": {"opcode": 0x56450009, "body": ""},
+        },
+    }
+    http = _FakeHttp({"transactions": [row]})
+    provider = PytoniqTONTestnetEscrowProvider(
+        settings=_settings(),
+        session_factory=_FakeSessionFactory([deal]),  # type: ignore[arg-type]
+        http_client=http,
+        lite_client_factory=lambda: object(),
+    )
+    legacy_cursor = json.dumps(
+        {"version": 1, "last_lt_by_address": {deal.contract_address: "9999"}}
+    )
+    batch = await provider.scan_events(cursor=legacy_cursor, limit=5)
+    assert http.calls[0][1].get("start_lt") == 0
+    assert len(batch.events) == 1
+    assert batch.events[0].event_type is EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED
+    assert json.loads(batch.next_cursor or "{}")["version"] == 2
     await provider.close()
