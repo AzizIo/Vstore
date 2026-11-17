@@ -1,6 +1,6 @@
-## Main integration completed — 2026-11-17
+## Prior implementation stack integrated; remediation candidate remains unmerged — 2026-11-17
 
-All implementation PRs in this escrow stack are now merged into `main`. The current main head is `842cf5562d4f13f6c9f1fef50fd4dd4e234c611d`.
+The prior implementation stack (#248, #241, #247, #255, #251) is merged. Current `main` head is `4e1308426591f1f023d6827d8744827efe4ce9f9`. The follow-on security remediation candidate [PR #262](https://github.com/AzizIo/Vstore/pull/262) is **Draft and unmerged**; it must be reviewed as a separate candidate, not treated as part of current `main`.
 
 | PR | Scope | Main merge commit |
 |---|---|---|
@@ -9,6 +9,7 @@ All implementation PRs in this escrow stack are now merged into `main`. The curr
 | [#247](https://github.com/AzizIo/Vstore/pull/247) | Pinned backend artifact and proof-bound recipient-authorized retry API | `bdae33e0e360a2800e14832aeeda139e1cb139e9` |
 | [#255](https://github.com/AzizIo/Vstore/pull/255) | Retry UI, browser E2E and cross-layer workflow triggers | `154070ad3774d5e62cecb64b220ee8a7200e2bf2` |
 | [#251](https://github.com/AzizIo/Vstore/pull/251) | Production bot support/terms command surfaces; no checkout | `842cf5562d4f13f6c9f1fef50fd4dd4e234c611d` |
+| [#262](https://github.com/AzizIo/Vstore/pull/262) | Follow-on fixes for VLT-001/002/003: post-delivery dispute, retry observer, terminal NFT recovery | **Draft / not merged** — head `57db3b58de04da9db28fa1a3dbfe19888ebf8389` |
 
 ### Exact verification evidence
 
@@ -23,6 +24,17 @@ After all merges, the actual `main` head `842cf5562d4f13f6c9f1fef50fd4dd4e234c61
 - The contract source/artifact did not change in the final bot-support merge; its exact integrated-candidate Contract CI remains #43950978302.
 
 PR #251's own exact-head Backend CI [#43832280156](https://github.com/AzizIo/Vstore/actions/runs/43832280156) and Frontend CI [#43832280175](https://github.com/AzizIo/Vstore/actions/runs/43832280175) passed before merge. No signing, broadcast, deployment, live wallet transfer, real TON or real NFT transfer was performed.
+
+### Follow-on remediation candidate #262 — exact evidence
+
+The remediation candidate is a separate Draft PR, not present on current main. Its exact head `57db3b58de04da9db28fa1a3dbfe19888ebf8389` passed:
+- TON Contract CI [#44070613963](https://github.com/AzizIo/Vstore/actions/runs/44070613963) — 38/38 Acton Sandbox tests, including post-delivery seller-wins, recipient-authorized retry/recovery, and unsolicited NFT recovery after SETTLED, REFUNDED and EXPIRED.
+- Backend CI [#44070614243](https://github.com/AzizIo/Vstore/actions/runs/44070614243) — 979 tests, lint, migration compatibility and dependency audit.
+- Frontend CI [#44070613990](https://github.com/AzizIo/Vstore/actions/runs/44070613990) — 248 unit tests, 31 Playwright E2E, isolated escrow retry E2E 1/1 and API-backed journey.
+
+Candidate artifact pins: code hash `1A4F3E95226B5B6ACB3F81D324E2AB6038D5734C47253AF957E7E92887370A3D`; StateInit `3d36fb591c0eb42d3a216e6cd7ce71325a923355cfd9af1b345313a3d98e4732`; generated artifact provenance is recorded in PR #262's frozen manifests and ABI adapter document.
+
+The internal source findings are tracked in [#259](https://github.com/AzizIo/Vstore/issues/259), [#260](https://github.com/AzizIo/Vstore/issues/260), and [#261](https://github.com/AzizIo/Vstore/issues/261). They are not closed until the remediation PR is reviewed and merged. Green CI is not an independent audit or live Testnet acceptance.
 
 ### Release decision remains BLOCKED
 
@@ -39,7 +51,7 @@ The code remains testnet-oriented and fail-closed. Do not enable mainnet, real-f
 # VILTARA TON Escrow — external audit and live acceptance handoff
 
 **Pre-integration code baseline:** `b592a4b889221aeb314e521a357b1746091a5976`  
-**Current main:** `842cf5562d4f13f6c9f1fef50fd4dd4e234c611d`; implementation PRs #248/#241/#247/#255/#251 are merged. This is an external audit/acceptance handoff, not authorization to deploy.  
+**Current main:** `4e1308426591f1f023d6827d8744827efe4ce9f9`; prior implementation PRs #248/#241/#247/#255/#251 are merged. Follow-on remediation PR #262 remains Draft and unmerged. This is an external audit/acceptance handoff, not authorization to deploy.  
 **Network scope:** TON testnet only (`global_id = -3`)  
 **Contract:** `contracts/ton-escrow-poc/contracts/DealEscrow.tolk`  
 **Toolchain:** Acton 1.2.1 / Tolk 1.5.0  
