@@ -9,7 +9,7 @@ The prior implementation stack (#248, #241, #247, #255, #251) is merged. Current
 | [#247](https://github.com/AzizIo/Vstore/pull/247) | Pinned backend artifact and proof-bound recipient-authorized retry API | `bdae33e0e360a2800e14832aeeda139e1cb139e9` |
 | [#255](https://github.com/AzizIo/Vstore/pull/255) | Retry UI, browser E2E and cross-layer workflow triggers | `154070ad3774d5e62cecb64b220ee8a7200e2bf2` |
 | [#251](https://github.com/AzizIo/Vstore/pull/251) | Production bot support/terms command surfaces; no checkout | `842cf5562d4f13f6c9f1fef50fd4dd4e234c611d` |
-| [#262](https://github.com/AzizIo/Vstore/pull/262) | Follow-on fixes for VLT-001/002/003: post-delivery dispute, retry observer, terminal NFT recovery | **Draft / not merged** — head `57db3b58de04da9db28fa1a3dbfe19888ebf8389` |
+| [#262](https://github.com/AzizIo/Vstore/pull/262) | Follow-on fixes for VLT-001/002/003: post-delivery dispute, retry observer, terminal NFT recovery | **Draft / not merged** — head `fed5ebf4bf9a280d228c8ce7133336858bf1496e` |
 
 ### Exact verification evidence
 
@@ -27,10 +27,10 @@ PR #251's own exact-head Backend CI [#43832280156](https://github.com/AzizIo/Vst
 
 ### Follow-on remediation candidate #262 — exact evidence
 
-The remediation candidate is a separate Draft PR, not present on current main. Its exact head `57db3b58de04da9db28fa1a3dbfe19888ebf8389` passed:
-- TON Contract CI [#44070613963](https://github.com/AzizIo/Vstore/actions/runs/44070613963) — 38/38 Acton Sandbox tests, including post-delivery seller-wins, recipient-authorized retry/recovery, and unsolicited NFT recovery after SETTLED, REFUNDED and EXPIRED.
-- Backend CI [#44070614243](https://github.com/AzizIo/Vstore/actions/runs/44070614243) — 979 tests, lint, migration compatibility and dependency audit.
-- Frontend CI [#44070613990](https://github.com/AzizIo/Vstore/actions/runs/44070613990) — 248 unit tests, 31 Playwright E2E, isolated escrow retry E2E 1/1 and API-backed journey.
+The remediation candidate is a separate Draft PR, not present on current main. Its exact head `fed5ebf4bf9a280d228c8ce7133336858bf1496e` passed:
+- TON Contract CI [#44085468943](https://github.com/AzizIo/Vstore/actions/runs/44085468943) — 38/38 Acton Sandbox tests, including a third-party NFT transfer during a timed-out post-delivery dispute, resolver seller-win settlement without buyer custody, retry/recovery, and unsolicited NFT recovery after SETTLED, REFUNDED and EXPIRED.
+- Backend CI [#44085468793](https://github.com/AzizIo/Vstore/actions/runs/44085468793) — 979 tests, lint, migration compatibility and dependency audit.
+- Frontend CI [#44085468814](https://github.com/AzizIo/Vstore/actions/runs/44085468814) — 248 unit tests, 31 Playwright E2E, isolated escrow retry E2E 1/1 and API-backed journey 4/4 with persisted order/event/outbox assertions.
 
 Candidate artifact pins: code hash `1A4F3E95226B5B6ACB3F81D324E2AB6038D5734C47253AF957E7E92887370A3D`; StateInit `3d36fb591c0eb42d3a216e6cd7ce71325a923355cfd9af1b345313a3d98e4732`; generated artifact provenance is recorded in PR #262's frozen manifests and ABI adapter document.
 
