@@ -2727,18 +2727,6 @@ get fun `test buyer can return NFT after post-delivery dispute timeout and resto
     expect(escrow.getProgress().nftInEscrow).toEqual(false);
     expect(escrow.getProgress().principalLocked).toEqual(true);
 
-    // The buyer may transfer the already-delivered NFT to a third party while
-    // the dispute is open. Seller-win must still settle the locked principal;
-    // it must not depend on the buyer retaining current NFT ownership.
-    val thirdParty = testing.treasury("post-dispute-third-party-owner");
-    val buyerTransfer = nftItem.sendAny(
-        buyer.address,
-        buildDepositBody(thirdParty.address, buyer.address, 22609, salt),
-        { value: grams("0.12"), bounce: true },
-    );
-    expect(buyerTransfer).toHaveSuccessfulTx<NftTransfer>({ to: nftItem.address });
-    expect(nftItem.getOwner()).toEqual(thirdParty.address);
-
     val deadline = escrow.getProgress().deadlineUnix;
     testing.setNow((deadline + 1) as uint32);
     val timeout = escrow.sendAny(
@@ -3123,6 +3111,18 @@ get fun `test post-delivery seller win pays seller when buyer withholds the NFT`
     expect(escrow.getState()).toEqual(STATE_DISPUTED);
     expect(escrow.getProgress().nftInEscrow).toEqual(false);
     expect(escrow.getProgress().principalLocked).toEqual(true);
+
+    // The buyer may transfer the already-delivered NFT to a third party while
+    // the dispute is open. Seller-win must still settle the locked principal;
+    // it must not depend on the buyer retaining current NFT ownership.
+    val thirdParty = testing.treasury("post-dispute-third-party-owner");
+    val buyerTransfer = nftItem.sendAny(
+        buyer.address,
+        buildDepositBody(thirdParty.address, buyer.address, 22609, salt),
+        { value: grams("0.12"), bounce: true },
+    );
+    expect(buyerTransfer).toHaveSuccessfulTx<NftTransfer>({ to: nftItem.address });
+    expect(nftItem.getOwner()).toEqual(thirdParty.address);
 
     val deadline = escrow.getProgress().deadlineUnix;
     testing.setNow((deadline + 1) as uint32);
