@@ -18,9 +18,13 @@ def dispatcher() -> Dispatcher:
     return create_dispatcher()
 
 
-def _settings(url: str | None = APP_URL) -> SimpleNamespace:
+def _settings(
+    url: str | None = APP_URL,
+    admin_telegram_ids: list[int] | None = None,
+) -> SimpleNamespace:
     return SimpleNamespace(
         telegram_mini_app_url=url,
+        admin_telegram_ids=admin_telegram_ids or [],
         telegram_support_username=None,
         telegram_terms_url=None,
     )
@@ -41,6 +45,7 @@ def test_dispatcher_registers_all_user_facing_handlers(
         "handle_start",
         "handle_help",
         "handle_app",
+        "handle_admin",
         "handle_buy",
         "handle_sell",
         "handle_orders",
@@ -98,6 +103,89 @@ async def test_start_shows_premium_welcome_and_full_navigation(
         "bot:safety",
         "bot:about",
     }
+
+
+@pytest.mark.asyncio
+async def test_admin_start_menu_shows_admin_button_only_to_allowlisted_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        bot_handlers,
+        "get_settings",
+        lambda: _settings("https://shop.example.com", [123456789]),
+    )
+    message = SimpleNamespace(
+        answer=AsyncMock(),
+        from_user=SimpleNamespace(id=123456789),
+    )
+
+    await bot_handlers.handle_start(message)  # type: ignore[arg-type]
+
+    rows = message.answer.await_args.kwargs["reply_markup"].inline_keyboard
+    admin_buttons = [
+        button for row in rows for button in row
+        if button.text == "🛡 Открыть админ-панель"
+    ]
+    assert len(admin_buttons) == 1
+    assert admin_buttons[0].web_app.url == "https://shop.example.com/admin"
+
+
+@pytest.mark.asyncio
+async def test_admin_command_launches_workspace_for_allowlisted_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        bot_handlers,
+        "get_settings",
+        lambda: _settings("https://shop.example.com", [123456789]),
+    )
+    message = SimpleNamespace(
+        answer=AsyncMock(),
+        from_user=SimpleNamespace(id=123456789),
+        chat=SimpleNamespace(type="private"),
+    )
+
+    await bot_handlers.handle_admin(message)  # type: ignore[arg-type]
+
+    message.answer.assert_awaited_once()
+    response = message.answer.await_args
+    assert "Панель модерации VILTARA" in response.args[0]
+    button = response.kwargs["reply_markup"].inline_keyboard[0][0]
+    assert button.web_app.url == "https://shop.example.com/admin"
+
+
+@pytest.mark.asyncio
+async def test_admin_command_denies_non_allowlisted_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        bot_handlers,
+        "get_settings",
+        lambda: _settings("https://shop.example.com", [123456789]),
+    )
+    message = SimpleNamespace(
+        answer=AsyncMock(),
+        from_user=SimpleNamespace(id=987654321),
+        chat=SimpleNamespace(type="private"),
+    )
+
+    await bot_handlers.handle_admin(message)  # type: ignore[arg-type]
+
+    response = message.answer.await_args
+    assert "только аккаунтам из списка администраторов" in response.args[0]
+    assert response.kwargs.get("reply_markup") is None
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://shop.example.com/miniapp",
+        "https://shop.example.com/?debug=true",
+        "http://shop.example.com",
+    ),
+)
+def test_admin_mini_app_button_rejects_non_origin_urls(url: str) -> None:
+    assert bot_handlers._admin_mini_app_button(url) is None
 
 
 @pytest.mark.asyncio
@@ -334,7 +422,7 @@ async def test_plain_text_fallback_points_to_new_commands(
     response = message.answer.await_args
     assert "не умею отвечать на свободные сообщения" in response.args[0]
     for command in (
-        "/start", "/app", "/buy", "/sell", "/orders", "/safety",
+        "/start", "/app", "/admin", "/buy", "/sell", "/orders", "/safety",
         "/paysupport", "/terms", "/support", "/help",
     ):
         assert command in response.args[0]
@@ -378,6 +466,7 @@ async def test_register_bot_commands_publishes_russian_command_menu() -> None:
     assert [(command.command, command.description) for command in BOT_COMMANDS] == [
         ("start", "Открыть главное меню"),
         ("app", "Открыть VILTARA SHOP"),
+        ("admin", "Панель модерации для администраторов"),
         ("buy", "Как купить NFT"),
         ("sell", "Как продать NFT"),
         ("orders", "Заказы и доставка"),
