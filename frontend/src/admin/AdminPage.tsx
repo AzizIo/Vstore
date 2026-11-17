@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { SessionProvider, useSession } from "../auth/SessionProvider";
+import { SessionProvider, useRetrySession, useSession } from "../auth/SessionProvider";
 import { fetchAdminAccess } from "./api";
 import { AdminDashboard } from "./AdminDashboard";
 
 function AdminPageContent() {
   const session = useSession();
+  const retrySession = useRetrySession();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [accessError, setAccessError] = useState("");
   const [accessRetry, setAccessRetry] = useState(0);
@@ -37,8 +38,19 @@ function AdminPageContent() {
   if (session.status === "loading") {
     return <main className="admin-route-message" role="status">Проверяем сессию Telegram…</main>;
   }
-  if (session.status !== "authenticated") {
-    return <main className="admin-route-message" role="alert">Требуется подтверждённая сессия Telegram.</main>;
+  if (session.status === "unauthenticated") {
+    const sessionMessage = session.reason === "missing_init_data"
+      ? "Telegram не передал данные запуска. Закройте это окно, отправьте боту /admin и откройте панель кнопкой внутри Telegram."
+      : "Сессия Telegram устарела. Закройте панель и откройте её заново через команду /admin в боте.";
+    return <main className="admin-route-message" role="alert">{sessionMessage}</main>;
+  }
+  if (session.status === "error") {
+    return <main className="admin-route-message" role="alert">
+      <p>{session.message}</p>
+      {session.retryable && (
+        <button type="button" onClick={retrySession}>Повторить проверку сессии</button>
+      )}
+    </main>;
   }
   if (accessError) {
     return <main className="admin-route-message" role="alert">

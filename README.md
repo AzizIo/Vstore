@@ -20,6 +20,8 @@ The implementation is integrated in main through [#248 — contract lifecycle](h
 
 Admin workspace: `/admin`. Access is fail-closed and requires the server-side `ADMIN_TELEGRAM_IDS` JSON array of numeric Telegram user IDs. The default is `[]` (no admin access). Never commit real administrator IDs or credentials.
 
+Frontend dependency audit status and the narrowly scoped, upstream-unpatched development-tool advisory are documented in [docs/DEPENDENCY_SECURITY.md](docs/DEPENDENCY_SECURITY.md).
+
 ## Current MVP status
 
 | Capability | Status on main |

@@ -124,6 +124,7 @@ jobs:
           assert api_env["AUTH_SECRET_KEY"] == bot_env["AUTH_SECRET_KEY"]
           assert api_env["BOT_TOKEN"] == bot_env["BOT_TOKEN"]
           assert api_env["ADMIN_TELEGRAM_IDS"] == "[123456789]", "Preview admin allowlist must be passed only from PREVIEW_ADMIN_TELEGRAM_IDS"
+          assert bot_env["ADMIN_TELEGRAM_IDS"] == api_env["ADMIN_TELEGRAM_IDS"], "Preview bot and API must share the same admin allowlist"
           '
 
       - name: Validate isolated Telegram Stars test Compose configuration

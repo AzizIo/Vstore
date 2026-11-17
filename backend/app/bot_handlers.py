@@ -1,5 +1,5 @@
 import re
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -74,6 +74,26 @@ def _public_https_url(url: str | None) -> str | None:
     return candidate
 
 
+def _admin_mini_app_button(url: str | None) -> InlineKeyboardButton | None:
+    """Build a fresh Telegram Mini App launch target for the admin workspace."""
+    candidate = _public_https_url(url)
+    if candidate is None:
+        return None
+
+    parsed = urlsplit(candidate)
+    # The frontend mounts the workspace at the origin-level /admin route.
+    # Reject nested paths, queries and fragments rather than creating a broken link.
+    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        return None
+
+    admin_url = urlunsplit((parsed.scheme, parsed.netloc, "/admin", "", ""))
+    return InlineKeyboardButton(
+        text="🛡 Открыть админ-панель",
+        web_app=WebAppInfo(url=admin_url),
+        style="primary",
+    )
+
+
 def _support_keyboard(username: str | None) -> InlineKeyboardMarkup | None:
     """Build a contact button only for a syntactically valid Telegram username."""
     if not isinstance(username, str):
@@ -99,11 +119,25 @@ def _terms_keyboard(url: str | None) -> InlineKeyboardMarkup | None:
     )
 
 
-def _menu_keyboard() -> InlineKeyboardMarkup:
+def _menu_keyboard(
+    telegram_user_id: int | None = None,
+    *,
+    is_private_chat: bool = False,
+) -> InlineKeyboardMarkup:
+    settings = get_settings()
     rows: list[list[InlineKeyboardButton]] = []
-    mini_app_button = _mini_app_button(get_settings().telegram_mini_app_url)
+    mini_app_button = _mini_app_button(settings.telegram_mini_app_url)
     if mini_app_button is not None:
         rows.append([mini_app_button])
+
+    if (
+        is_private_chat
+        and telegram_user_id is not None
+        and telegram_user_id in getattr(settings, "admin_telegram_ids", [])
+    ):
+        admin_button = _admin_mini_app_button(settings.telegram_mini_app_url)
+        if admin_button is not None:
+            rows.append([admin_button])
     rows.extend(
         [
             [
@@ -126,6 +160,13 @@ def _menu_keyboard() -> InlineKeyboardMarkup:
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _callback_is_private_chat(callback: CallbackQuery) -> bool:
+    """Web App buttons are exposed only from private bot chats."""
+    message = getattr(callback, "message", None)
+    chat = getattr(message, "chat", None)
+    return getattr(chat, "type", None) == "private"
 
 
 def _back_keyboard() -> InlineKeyboardMarkup:
@@ -237,9 +278,11 @@ SCREENS = {
 
 
 async def _send_menu(message: Message, text: str = START_MESSAGE) -> None:
+    telegram_user_id = getattr(getattr(message, "from_user", None), "id", None)
+    is_private_chat = getattr(getattr(message, "chat", None), "type", None) == "private"
     await message.answer(
         text,
-        reply_markup=_menu_keyboard(),
+        reply_markup=_menu_keyboard(telegram_user_id, is_private_chat=is_private_chat),
         parse_mode="HTML",
         disable_web_page_preview=True,
     )
@@ -298,6 +341,37 @@ async def handle_app(message: Message) -> None:
         "💎 <b>Ваш VILTARA SHOP уже здесь.</b>\n"
         "Нажмите кнопку, чтобы перейти в маркетплейс.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[mini_app_button]]),
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
+
+@router.message(Command("admin"))
+async def handle_admin(message: Message) -> None:
+    """Launch the admin workspace only for IDs in the server-side allowlist."""
+    settings = get_settings()
+    telegram_user = getattr(message, "from_user", None)
+    if telegram_user is None or telegram_user.id not in getattr(settings, "admin_telegram_ids", []):
+        await message.answer("⛔ Админ-панель доступна только аккаунтам из списка администраторов.")
+        return
+
+    if getattr(getattr(message, "chat", None), "type", None) != "private":
+        await message.answer("Откройте личный чат с ботом и отправьте /admin.")
+        return
+
+    admin_button = _admin_mini_app_button(settings.telegram_mini_app_url)
+    if admin_button is None:
+        await message.answer(
+            "⚙️ Админ-панель не настроена. Администратору нужно задать "
+            "TELEGRAM_MINI_APP_URL как публичный HTTPS origin Mini App."
+        )
+        return
+
+    await message.answer(
+        "🛡 <b>Панель модерации VILTARA</b>\n"
+        "Запустите её кнопкой ниже прямо в Telegram, чтобы передать свежую "
+        "подтверждаемую Telegram-сессию.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[admin_button]]),
         parse_mode="HTML",
         disable_web_page_preview=True,
     )
@@ -384,7 +458,10 @@ async def handle_help_callback(callback: CallbackQuery) -> None:
         try:
             await callback.message.edit_text(
                 HELP_MESSAGE,
-                reply_markup=_menu_keyboard(),
+                reply_markup=_menu_keyboard(
+                    getattr(getattr(callback, "from_user", None), "id", None),
+                    is_private_chat=_callback_is_private_chat(callback),
+                ),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
@@ -400,7 +477,10 @@ async def handle_menu_callback(callback: CallbackQuery) -> None:
         try:
             await callback.message.edit_text(
                 START_MESSAGE,
-                reply_markup=_menu_keyboard(),
+                reply_markup=_menu_keyboard(
+                    getattr(getattr(callback, "from_user", None), "id", None),
+                    is_private_chat=_callback_is_private_chat(callback),
+                ),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
@@ -450,6 +530,6 @@ async def handle_text_fallback(message: Message) -> None:
         message,
         "💬 Пока я не умею отвечать на свободные сообщения, но могу помочь "
         "с навигацией по VILTARA SHOP.\n\n"
-        "Выберите раздел ниже или используйте /start, /app, /buy, /sell, "
+        "Выберите раздел ниже или используйте /start, /app, /admin, /buy, /sell, "
         "/orders, /safety, /paysupport, /terms, /support или /help.",
     )
