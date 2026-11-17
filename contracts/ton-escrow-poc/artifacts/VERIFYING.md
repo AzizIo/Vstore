@@ -6,21 +6,21 @@ This directory pins the ABI and compiler output for the current testnet-only Dea
 
 | Field | Value |
 |---|---|
-| Exact source commit | `ef74ca0b9bfc0045bf9a31cb0a01d37487002567` |
+| Exact source commit | `5f5ecfba94147140e53b66c482da336ddd8f0eee` |
 | Contract source commit | `ef74ca0b9bfc0045bf9a31cb0a01d37487002567` |
 | Toolchain | Acton `1.2.1`, Tolk `1.5.0` |
-| Artifact/vector capture CI (not yet green) | [#44050784975](https://github.com/AzizIo/Vstore/actions/runs/44050784975) |
-| Artifact ID | `14313243109` |
-| Artifact ZIP SHA-256 | `02aeb48f8a339ac6d652ce29c68e661f7fa756e6df4e1cba1a2fa18fb915c5b2` |
+| Successful exact-head Contract CI | [#44052744923](https://github.com/AzizIo/Vstore/actions/runs/44052744923) — artifact capture run; StateInit match still pending |
+| Artifact ID | `14314745991` |
+| Artifact ZIP SHA-256 | `e0024407de5d011712f419a4f2769e7343a234289bc36319d452371c9bbe04bb` |
 | Build descriptor SHA-256 | `7d183fcdfea088494a04aa7fe59ff7a3b6c2ad044eba870aff8e6059880016b1` |
 | Compact ABI SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
-| Compiled code hash | `99C653F225E666F1C7DD8E18ECD64291B11001A45245E74983D7C19213259FAC` |
-| Code BOC base64 SHA-256 | `4ddca1709370badff1d9270b3469a468158388955c894503a9600f114763714f` |
-| Decoded code BOC SHA-256 | `9934aaa1612720d3a39358d579a7c7a6054de4a1af65ebe6e1954236ae33b69c` |
-| Canonical zlib BOC SHA-256 | `fa195a3c3ca46f352ea2da57e1cbaae3af9c9fb0dee7d2b52b012344b8b3313f` |
-| Backend compressed Code BOC SHA-256 | `63f2efd33d421568ca351872c7ab60dab7e154f3747441aa4af79afaa098050c` |
-| Deterministic StateInit hash | `56efd0ef4deea2293247c5d8ff714caf3402590debac5fea072ae00124d28c7d` |
-| Deterministic raw address | `0:56efd0ef4deea2293247c5d8ff714caf3402590debac5fea072ae00124d28c7d` |
+| Compiled code hash | `1A4F3E95226B5B6ACB3F81D324E2AB6038D5734C47253AF957E7E92887370A3D` |
+| Code BOC base64 SHA-256 | `e2a98a6303204855b934bd3365c22025dc4638ed1a8216a85ba5e04b808d7d8e` |
+| Decoded code BOC SHA-256 | `c2659cfed0f7303804198ee472526d8bda788e4f4a61be68f4137d0c2d12274a` |
+| Canonical zlib BOC SHA-256 | `5873ea1de49382c632fa83679e32bed7b1b14ceb653f1da3173a771cf5ee3c5c` |
+| Backend compressed Code BOC SHA-256 | `10e965df1f3206dc680ebfece95798f170e403645bb15562027764ac4b956932` |
+| Deterministic StateInit hash | `3d36fb591c0eb42d3a216e6cd7ce71325a923355cfd9af1b345313a3d98e4732` |
+| Deterministic raw address | `0:3d36fb591c0eb42d3a216e6cd7ce71325a923355cfd9af1b345313a3d98e4732` |
 | Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
 
 ## Canonical compressed BOC representation
@@ -35,7 +35,7 @@ Do not regenerate this value with `zlib.compress`, `gzip`, Node `deflateSync`, o
 - The observer recognizes proof-backed retry opcode `0x56450009`, verifies the fresh pending outbound descriptor, and backfills v1 scan cursors.
 - Unexpected NFT recovery after a financial terminal state is kept separate from the terminal financial lifecycle.
 
-Build/BOC and the generated StateInit vector have been captured and pinned. The current PR run still needs to complete the later wrapper, message-vector, static and Sandbox steps on the updated exact head.
+The artifact from run #44052744923 matches the compiled Code BOC; `build/state_init_vector.json` yields the new StateInit hash/address above. That run stopped at the stale fixed-vector assertion. The next exact-head run must pass StateInit comparison, message-vector checks, static analysis and Sandbox.
 
 ## Previously validated baseline controls
 
@@ -47,7 +47,7 @@ Build/BOC and the generated StateInit vector have been captured and pinned. The 
 - A timed-out pre-delivery dispute with NFT and principal still escrowed remains resolver-controlled in manual review; an expired post-delivery dispute can accept only the exact late buyer return, restore the dispute window, and still requires a fresh resolver quorum before further NFT movement.
 - Failed buyer principal refund, seller payout, seller allowance, execution-reserve refund, late finality, duplicate oracle delivery/refund, and terminal bounce cases are covered in emulator fixtures.
 
-The previous frozen build reported 35 passing Sandbox tests. That result does not apply to this changed source. The new source compiles, but the first PR #262 run stopped at the old frozen-code digest before Sandbox tests; updated fixed StateInit values and a green exact-head Sandbox run are still pending. Coverage from the previous build is not evidence for this revision.
+The latest available successful Sandbox result applies to the earlier code build only, not this revision. Run #44052744923 compiled the current source and confirmed the frozen Code BOC, but stopped at StateInit cross-check before Sandbox. The refreshed StateInit pins must be followed by a green exact-head Contract CI before treating this source as emulator-validated.
 
 ## Reproduction
 
