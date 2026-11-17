@@ -3189,6 +3189,16 @@ get fun `test unsolicited NFT recovery does not reopen a settled financial deal`
     expect(escrow.getProgress().nftInEscrow).toEqual(true);
     expect(escrow.getProgress().recovery.load().unexpectedPreviousOwner).toEqual(seller.address);
 
+    // Reject the first escrow-to-owner recovery transfer to exercise the
+    // RichBounce path while the financial state is already terminal.
+    val policyAdmin = testing.treasury("test-nft-policy-admin");
+    val rejectRecovery = nftItem.sendAny(
+        policyAdmin.address,
+        UpdateNftTransferPolicy { rejectRecipient: seller.address }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(rejectRecovery).toHaveSuccessfulTx<UpdateNftTransferPolicy>({ to: nftItem.address });
+
     val recovery = escrow.sendAny(
         seller.address,
         RecoverUnexpectedNft { queryId: 22604, dealSalt: salt }.toCell(),
@@ -3198,10 +3208,34 @@ get fun `test unsolicited NFT recovery does not reopen a settled financial deal`
     expect(escrow.getState()).toEqual(STATE_SETTLED);
     expect(escrow.getProgress().pendingAction).toEqual(PENDING_UNEXPECTED_RECOVERY);
     expect(escrow.getProgress().nftInEscrow).toEqual(true);
+    expect(nftItem.getOwner()).toEqual(escrow.address);
+    val bouncedActions = escrow.getProgress().outboundActions.load();
+    assert (bouncedActions.first != null) throw Errors.OutboundActionMissing;
+    expect(bouncedActions.first.load().kind).toEqual(OUTBOUND_KIND_UNEXPECTED_NFT_RECOVERY);
+    expect(bouncedActions.first.load().status).toEqual(OUTBOUND_STATUS_BOUNCED);
+    expect(escrow.getProgress().oracleAttemptId).toEqual(1);
+    expect(escrow.getState()).toEqual(STATE_SETTLED);
+
+    val allowRecovery = nftItem.sendAny(
+        policyAdmin.address,
+        UpdateNftTransferPolicy { rejectRecipient: null }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(allowRecovery).toHaveSuccessfulTx<UpdateNftTransferPolicy>({ to: nftItem.address });
+    val retryRecovery = escrow.sendAny(
+        seller.address,
+        RetryFailedOutboundAction { queryId: 1, dealSalt: salt }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(retryRecovery).toHaveSuccessfulTx<RetryFailedOutboundAction>({ to: escrow.address });
+    expect(escrow.getState()).toEqual(STATE_SETTLED);
+    expect(escrow.getProgress().oracleAttemptId).toEqual(2);
+    expect(escrow.getProgress().pendingAction).toEqual(PENDING_UNEXPECTED_RECOVERY);
+    expect(nftItem.getOwner()).toEqual(seller.address);
 
     val recovered = buildTestOracleAttestation(
-        escrow, salt, ORACLE_ACTION_UNEXPECTED_NFT_RECOVERED, 1,
-        nftItem.address, escrow.address, seller.address, 0, 1, 0xA226021, 181, 181,
+        escrow, salt, ORACLE_ACTION_UNEXPECTED_NFT_RECOVERED, 2,
+        nftItem.address, escrow.address, seller.address, 0, 2, 0xA226021, 182, 182,
     );
     val recoveryConfirmed = escrow.sendAny(
         testing.treasury("settled-unexpected-nft-recovery-oracle").address,
