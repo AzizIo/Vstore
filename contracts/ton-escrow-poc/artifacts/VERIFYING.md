@@ -9,18 +9,19 @@ This directory pins the ABI and compiler output for the current testnet-only Dea
 | Exact source commit | `ef74ca0b9bfc0045bf9a31cb0a01d37487002567` |
 | Contract source commit | `ef74ca0b9bfc0045bf9a31cb0a01d37487002567` |
 | Toolchain | Acton `1.2.1`, Tolk `1.5.0` |
-| Green exact-head Contract CI | [[failed build/provenance capture #44049772170](https://github.com/AzizIo/Vstore/actions/runs/44049772170)](https://github.com/AzizIo/Vstore/actions/runs/43824551943) |
-| Artifact ID | `14313191726` |
-| Artifact ZIP SHA-256 | `6d0b8e8b321f940d5fc7b7aed03166dcc5bc535eda2a6d180a2f14387e8e9da5` |
+| Artifact/vector capture CI (not yet green) | [#44050784975](https://github.com/AzizIo/Vstore/actions/runs/44050784975) |
+| Artifact ID | `14313243109` |
+| Artifact ZIP SHA-256 | `02aeb48f8a339ac6d652ce29c68e661f7fa756e6df4e1cba1a2fa18fb915c5b2` |
 | Build descriptor SHA-256 | `7d183fcdfea088494a04aa7fe59ff7a3b6c2ad044eba870aff8e6059880016b1` |
 | Compact ABI SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
 | Compiled code hash | `99C653F225E666F1C7DD8E18ECD64291B11001A45245E74983D7C19213259FAC` |
 | Code BOC base64 SHA-256 | `4ddca1709370badff1d9270b3469a468158388955c894503a9600f114763714f` |
 | Decoded code BOC SHA-256 | `9934aaa1612720d3a39358d579a7c7a6054de4a1af65ebe6e1954236ae33b69c` |
 | Canonical zlib BOC SHA-256 | `fa195a3c3ca46f352ea2da57e1cbaae3af9c9fb0dee7d2b52b012344b8b3313f` |
-| Deterministic StateInit hash | **Pending new fixed-vector generation on updated code** |
-| Deterministic raw address | **Pending new fixed-vector generation; old address is not reusable** |
-| Initial data cell hash | **Pending regenerated fixed vector** |
+| Backend compressed Code BOC SHA-256 | `63f2efd33d421568ca351872c7ab60dab7e154f3747441aa4af79afaa098050c` |
+| Deterministic StateInit hash | `56efd0ef4deea2293247c5d8ff714caf3402590debac5fea072ae00124d28c7d` |
+| Deterministic raw address | `0:56efd0ef4deea2293247c5d8ff714caf3402590debac5fea072ae00124d28c7d` |
+| Initial data cell hash | `faf8907c9fc1b2d78670b085b1976465533463647a7357fdb498ba223fef7e5b` |
 
 ## Canonical compressed BOC representation
 
@@ -34,7 +35,7 @@ Do not regenerate this value with `zlib.compress`, `gzip`, Node `deflateSync`, o
 - The observer recognizes proof-backed retry opcode `0x56450009`, verifies the fresh pending outbound descriptor, and backfills v1 scan cursors.
 - Unexpected NFT recovery after a financial terminal state is kept separate from the terminal financial lifecycle.
 
-These changes are not yet fully validated by an exact-head green Contract CI run.
+Build/BOC and the generated StateInit vector have been captured and pinned. The current PR run still needs to complete the later wrapper, message-vector, static and Sandbox steps on the updated exact head.
 
 ## Previously validated baseline controls
 
