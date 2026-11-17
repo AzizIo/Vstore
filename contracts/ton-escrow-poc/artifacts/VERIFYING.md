@@ -35,7 +35,7 @@ Do not regenerate this value with `zlib.compress`, `gzip`, Node `deflateSync`, o
 - The observer recognizes proof-backed retry opcode `0x56450009`, verifies the fresh pending outbound descriptor, and backfills v1 scan cursors.
 - Unexpected NFT recovery after a financial terminal state is kept separate from the terminal financial lifecycle.
 
-The exact-head Contract CI #44053217775 passed the frozen Code BOC, generated Acton wrapper, StateInit vector, message BOC vectors, formatting, static analysis and Sandbox. It recorded 37/37 Sandbox tests on the same PR #262 head.
+The frozen artifact was built and captured by Contract CI #44053217775 from source commit `5f5ecfba94147140e53b66c482da336ddd8f0eee` at build head `cf48e3fa9fd79ed0a8d9c469af078e2a4e98142d`. A later full verification of the expanded test suite passed on final PR head `6d52310b9f5493e4207cd286b889659acc462d51`: Contract CI #44069972616 passed 38/38 Acton Sandbox tests, including the additional REFUNDED and EXPIRED unsolicited-NFT recovery cases.
 
 ## Previously validated baseline controls
 
@@ -47,7 +47,7 @@ The exact-head Contract CI #44053217775 passed the frozen Code BOC, generated Ac
 - A timed-out pre-delivery dispute with NFT and principal still escrowed remains resolver-controlled in manual review; an expired post-delivery dispute can accept only the exact late buyer return, restore the dispute window, and still requires a fresh resolver quorum before further NFT movement.
 - Failed buyer principal refund, seller payout, seller allowance, execution-reserve refund, late finality, duplicate oracle delivery/refund, and terminal bounce cases are covered in emulator fixtures.
 
-Exact-head integration verification on `cf48e3fa9fd79ed0a8d9c469af078e2a4e98142d`: Contract CI #44053217775 — 37/37 Acton Sandbox tests; Backend CI #44053217765 — 979 tests passed, lint, migration compatibility and dependency audit passed; Frontend CI #44053217805 — 248/248 unit tests, 31/31 Playwright E2E, isolated escrow retry E2E 1/1, API-backed journey and persisted order/event/outbox assertions passed. All three workflows completed successfully on the same head SHA.
+Exact final-head integration verification on `6d52310b9f5493e4207cd286b889659acc462d51`: Contract CI [#44069972616](https://github.com/AzizIo/Vstore/actions/runs/44069972616) — 38/38 Acton Sandbox tests; Backend CI [#44069972806](https://github.com/AzizIo/Vstore/actions/runs/44069972806) — 979 tests passed, lint, migration compatibility and dependency audit passed; Frontend CI [#44069972608](https://github.com/AzizIo/Vstore/actions/runs/44069972608) — 248/248 unit tests, 31/31 Playwright E2E, isolated escrow retry E2E 1/1, API-backed journey and persisted order/event/outbox assertions passed. All three workflows completed successfully on the same head SHA.
 
 ## Reproduction
 
@@ -76,7 +76,7 @@ Before any live testnet deal:
 1. An independent reviewer must audit the exact code hash, message/state machine, bounce/retry handling, gas/fee invariants, and financial invariants.
 2. A trusted NFT provider must prove that the exact item belongs to the stated collection before immutable deal terms are built; the contract's collection address is metadata and is not itself a membership proof.
 3. A separately approved valueless testnet acceptance must record actual transaction/message/trace evidence, masterchain finality, getter state, and the NFT's actual owner at each terminal transition.
-4. Backend artifact pins and the compressed Code BOC were updated alongside this manifest for PR #262; exact-head backend CI and StateInit alignment must pass before this package is mergeable.
+4. Backend artifact pins and the compressed Code BOC were updated alongside this manifest for PR #262; the frozen artifact build provenance and final-head StateInit/ABI checks are recorded above.
 5. Signing/deployment activation, mainnet, real funds, and real NFTs remain disabled.
 
 Passing CI does not close those independent release gates.
