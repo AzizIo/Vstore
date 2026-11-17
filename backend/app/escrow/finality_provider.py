@@ -437,23 +437,28 @@ class PytoniqTONTestnetEscrowProvider:
             raise ValueError("escrow scan limit must be between 1 and 100")
         if self._closed:
             raise EscrowProviderUnavailable("TON escrow provider is closed")
-        cursor_state: dict[str, Any] = {"version": 1, "last_lt_by_address": {}}
+        cursor_state: dict[str, Any] = {"version": 2, "last_lt_by_address": {}}
         if cursor:
             try:
                 parsed = json.loads(cursor)
                 if (
                     not isinstance(parsed, dict)
-                    or parsed.get("version") != 1
                     or not isinstance(parsed.get("last_lt_by_address"), dict)
+                    or parsed.get("version") not in {1, 2}
                 ):
                     raise ValueError("unsupported cursor shape")
-                cursor_state = {
-                    "version": 1,
-                    "last_lt_by_address": {
-                        str(key): str(value)
-                        for key, value in parsed["last_lt_by_address"].items()
-                    },
-                }
+                # v1 cursoring skipped unknown opcodes before they were recognized.
+                # Reset once on migration so historical retry messages are backfilled.
+                if parsed.get("version") == 1:
+                    cursor_state = {"version": 2, "last_lt_by_address": {}}
+                else:
+                    cursor_state = {
+                        "version": 2,
+                        "last_lt_by_address": {
+                            str(key): str(value)
+                            for key, value in parsed["last_lt_by_address"].items()
+                        },
+                    }
                 if any(
                     not isinstance(value, str)
                     or not value.isdecimal()
@@ -514,7 +519,7 @@ class PytoniqTONTestnetEscrowProvider:
         selected = scanned[:limit]
         events: list[NormalizedChainEvent] = []
         next_cursor_state = {
-            "version": 1,
+            "version": 2,
             "last_lt_by_address": dict(cursor_state["last_lt_by_address"]),
         }
         for mc_seqno, _now, address, row, deal in selected:
