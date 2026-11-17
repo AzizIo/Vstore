@@ -3249,3 +3249,68 @@ get fun `test unsolicited NFT recovery does not reopen a settled financial deal`
     expect(escrow.getProgress().recovery.load().unexpectedPreviousOwner).toEqual(null);
     expect(nftItem.getOwner()).toEqual(seller.address);
 }
+
+
+get fun `test unsolicited NFT callbacks preserve refunded and expired terminal states`() {
+    testing.setNow(1_700_000_000);
+
+    val refundedSalt = 0xA22603;
+    val (refundedEscrow, refundedItem, refundedSeller, _) = createFixture(
+        refundedSalt, STATE_REFUNDED, 0, 0, false, false,
+    );
+    val refundedEscrowDeploy = refundedEscrow.deploy(
+        refundedSeller.address, { value: grams("0.2"), bounce: false },
+    );
+    expect(refundedEscrowDeploy).toHaveSuccessfulDeploy({ to: refundedEscrow.address });
+    val refundedItemDeploy = refundedItem.deploy(
+        refundedSeller.address, { value: grams("0.05"), bounce: false },
+    );
+    expect(refundedItemDeploy).toHaveSuccessfulDeploy({ to: refundedItem.address });
+    val refundedNotification = refundedItem.sendAny(
+        refundedSeller.address,
+        buildDepositBody(refundedEscrow.address, refundedSeller.address, 22605, refundedSalt),
+        { value: grams("0.12"), bounce: true },
+    );
+    expect(refundedNotification).toHaveSuccessfulTx<NftTransfer>({ to: refundedItem.address });
+    expect(refundedEscrow.getState()).toEqual(STATE_REFUNDED);
+    expect(refundedEscrow.getProgress().nftInEscrow).toEqual(true);
+    val refundedRecovery = refundedEscrow.sendAny(
+        refundedSeller.address,
+        RecoverUnexpectedNft { queryId: 22606, dealSalt: refundedSalt }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(refundedRecovery).toHaveSuccessfulTx<RecoverUnexpectedNft>({ to: refundedEscrow.address });
+    expect(refundedEscrow.getState()).toEqual(STATE_REFUNDED);
+    expect(refundedEscrow.getProgress().pendingAction).toEqual(PENDING_UNEXPECTED_RECOVERY);
+    expect(refundedItem.getOwner()).toEqual(refundedSeller.address);
+
+    val expiredSalt = 0xA22604;
+    val (expiredEscrow, expiredItem, expiredSeller, _) = createFixture(
+        expiredSalt, STATE_EXPIRED, 0, 0, false, false,
+    );
+    val expiredEscrowDeploy = expiredEscrow.deploy(
+        expiredSeller.address, { value: grams("0.2"), bounce: false },
+    );
+    expect(expiredEscrowDeploy).toHaveSuccessfulDeploy({ to: expiredEscrow.address });
+    val expiredItemDeploy = expiredItem.deploy(
+        expiredSeller.address, { value: grams("0.05"), bounce: false },
+    );
+    expect(expiredItemDeploy).toHaveSuccessfulDeploy({ to: expiredItem.address });
+    val expiredNotification = expiredItem.sendAny(
+        expiredSeller.address,
+        buildDepositBody(expiredEscrow.address, expiredSeller.address, 22607, expiredSalt),
+        { value: grams("0.12"), bounce: true },
+    );
+    expect(expiredNotification).toHaveSuccessfulTx<NftTransfer>({ to: expiredItem.address });
+    expect(expiredEscrow.getState()).toEqual(STATE_EXPIRED);
+    expect(expiredEscrow.getProgress().nftInEscrow).toEqual(true);
+    val expiredRecovery = expiredEscrow.sendAny(
+        expiredSeller.address,
+        RecoverUnexpectedNft { queryId: 22608, dealSalt: expiredSalt }.toCell(),
+        { value: grams("0.03"), bounce: true },
+    );
+    expect(expiredRecovery).toHaveSuccessfulTx<RecoverUnexpectedNft>({ to: expiredEscrow.address });
+    expect(expiredEscrow.getState()).toEqual(STATE_EXPIRED);
+    expect(expiredEscrow.getProgress().pendingAction).toEqual(PENDING_UNEXPECTED_RECOVERY);
+    expect(expiredItem.getOwner()).toEqual(expiredSeller.address);
+}
