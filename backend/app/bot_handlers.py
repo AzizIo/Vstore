@@ -162,6 +162,13 @@ def _menu_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _callback_is_private_chat(callback: CallbackQuery) -> bool:
+    """Web App buttons are exposed only from private bot chats."""
+    message = getattr(callback, "message", None)
+    chat = getattr(message, "chat", None)
+    return getattr(chat, "type", None) == "private"
+
+
 def _back_keyboard() -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     mini_app_button = _mini_app_button(get_settings().telegram_mini_app_url)
@@ -453,10 +460,7 @@ async def handle_help_callback(callback: CallbackQuery) -> None:
                 HELP_MESSAGE,
                 reply_markup=_menu_keyboard(
                     getattr(getattr(callback, "from_user", None), "id", None),
-                    is_private_chat=(
-                        getattr(getattr(getattr(callback, "message", None), "chat", None), "type", None)
-                        == "private"
-                    ),
+                    is_private_chat=_callback_is_private_chat(callback),
                 ),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
@@ -475,10 +479,7 @@ async def handle_menu_callback(callback: CallbackQuery) -> None:
                 START_MESSAGE,
                 reply_markup=_menu_keyboard(
                     getattr(getattr(callback, "from_user", None), "id", None),
-                    is_private_chat=(
-                        getattr(getattr(getattr(callback, "message", None), "chat", None), "type", None)
-                        == "private"
-                    ),
+                    is_private_chat=_callback_is_private_chat(callback),
                 ),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
