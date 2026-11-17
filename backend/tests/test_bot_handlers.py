@@ -117,6 +117,7 @@ async def test_admin_start_menu_shows_admin_button_only_to_allowlisted_user(
     message = SimpleNamespace(
         answer=AsyncMock(),
         from_user=SimpleNamespace(id=123456789),
+        chat=SimpleNamespace(type="private"),
     )
 
     await bot_handlers.handle_start(message)  # type: ignore[arg-type]
@@ -142,6 +143,31 @@ async def test_start_menu_hides_admin_button_from_regular_user(
     message = SimpleNamespace(
         answer=AsyncMock(),
         from_user=SimpleNamespace(id=987654321),
+        chat=SimpleNamespace(type="private"),
+    )
+
+    await bot_handlers.handle_start(message)  # type: ignore[arg-type]
+
+    rows = message.answer.await_args.kwargs["reply_markup"].inline_keyboard
+    assert all(
+        button.text != "🛡 Открыть админ-панель"
+        for row in rows for button in row
+    )
+
+
+@pytest.mark.asyncio
+async def test_start_menu_hides_admin_button_in_group_chats(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        bot_handlers,
+        "get_settings",
+        lambda: _settings("https://shop.example.com", [123456789]),
+    )
+    message = SimpleNamespace(
+        answer=AsyncMock(),
+        from_user=SimpleNamespace(id=123456789),
+        chat=SimpleNamespace(type="group"),
     )
 
     await bot_handlers.handle_start(message)  # type: ignore[arg-type]
