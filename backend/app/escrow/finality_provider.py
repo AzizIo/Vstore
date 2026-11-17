@@ -76,6 +76,7 @@ _OP_ORACLE = 0x56450005
 _OP_RESOLVE = 0x56450006
 _OP_TIMEOUT = 0x56450007
 _OP_RECOVER = 0x56450008
+_OP_RETRY = 0x56450009
 
 _STATE_NAMES = {
     0: "intent_created",
@@ -112,6 +113,7 @@ _DIRECT_OPCODES = {
     _OP_RESOLVE,
     _OP_TIMEOUT,
     _OP_RECOVER,
+    _OP_RETRY,
 }
 
 
@@ -263,6 +265,8 @@ def _candidate_type(opcode: int, state: int | None = None) -> EscrowChainEventTy
         return EscrowChainEventType.DEAL_TIMEOUT_ACCEPTED
     if opcode == _OP_RECOVER:
         return EscrowChainEventType.RECOVERY_NFT_RETURN_STARTED
+    if opcode == _OP_RETRY:
+        return EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED
     if opcode == _OP_ORACLE:
         return EscrowChainEventType.ORACLE_DELIVERY_ATTESTATION_ACCEPTED
     if opcode == _NFT_NOTIFICATION_OPCODE:
@@ -1357,6 +1361,96 @@ class PytoniqTONTestnetEscrowProvider:
                 raise EscrowProviderInvalidEvidence(
                     "ResolverDecision state name differs from the proof-read state"
                 )
+        elif opcode == _OP_RETRY:
+            # RetryFailedOutboundAction carries the OLD bounced descriptor ID.
+            # The successful post-state must contain exactly one replacement
+            # pending descriptor whose new ID equals the monotonic on-chain
+            # oracleAttemptId, and whose recipient is the proven message sender.
+            old_query_id, salt, _reason_hash = self._decode_direct_body(
+                tx.in_msg.body, opcode, deal
+            )
+            if event.query_id is not None and event.query_id != str(old_query_id):
+                raise EscrowProviderInvalidEvidence(
+                    "Indexed retry query id differs from the proof-decoded old descriptor id"
+                )
+            actions = getter.get("outbound_actions")
+            if not isinstance(actions, list):
+                raise EscrowProviderInvalidEvidence("Retry post-state has no outbound descriptors")
+            attempt_id = getter.get("oracle_attempt_id")
+            try:
+                attempt_id = int(attempt_id)
+            except (TypeError, ValueError) as exc:
+                raise EscrowProviderInvalidEvidence(
+                    "Retry post-state has no valid oracle attempt id"
+                ) from exc
+            candidates = [
+                action for action in actions
+                if isinstance(action, dict)
+                and action.get("status") == 0
+                and action.get("query_id") == attempt_id
+                and action.get("attempt_id") == attempt_id
+                and action.get("deal_salt") == f"{salt:064x}"
+                and action.get("expected_state") == state
+                and action.get("recipient_address") is not None
+                and _canonical_address(action.get("recipient_address"))
+                    == _canonical_address(message_source)
+                and attempt_id > old_query_id
+            ]
+            if len(candidates) != 1:
+                raise EscrowProviderInvalidEvidence(
+                    "Retry does not produce one sender-bound fresh pending descriptor"
+                )
+            descriptor = candidates[0]
+            kind = descriptor.get("kind")
+            if isinstance(kind, bool) or not isinstance(kind, int) or kind not in range(1, 8):
+                raise EscrowProviderInvalidEvidence("Retry descriptor has an unknown action kind")
+            if kind in {1, 2, 4, 5} and state not in {4, 7, 8, 9}:
+                raise EscrowProviderInvalidEvidence(
+                    "Critical retry descriptor is inconsistent with the proof-read state"
+                )
+            snapshot = deal.deployment_snapshot_json
+            if not isinstance(snapshot, dict):
+                raise EscrowProviderInvalidEvidence("Retry deal snapshot is missing")
+            if kind == 1:
+                expected_recipient = _canonical_address(snapshot["buyer_address"])
+            elif kind in {2, 4, 6}:
+                expected_recipient = _canonical_address(snapshot["seller_address"])
+            elif kind in {5, 7}:
+                expected_recipient = _canonical_address(snapshot["buyer_address"])
+            else:
+                expected_recipient = _canonical_address(getter.get("recovery_previous_owner"))
+            if (
+                expected_recipient is None
+                or _canonical_address(message_source) != expected_recipient
+            ):
+                raise EscrowProviderInvalidEvidence(
+                    "Retry sender is not the immutable participant/recovery recipient"
+                )
+            verified_query_id = old_query_id
+            event_type = EscrowChainEventType.OUTBOUND_ACTION_RETRY_ACCEPTED
+            source = message_source
+            destination = message_destination
+            item = _canonical_address(snapshot["item_address"])
+            collection = _canonical_address(snapshot["collection_address"])
+            amount = message_value
+            accepted = True
+            details = {
+                "verified_attempt_id": str(attempt_id),
+                "outbound_action_kind": kind,
+                "outbound_action_status": 0,
+                "outbound_action_expected_state": state,
+            }
+            return (
+                event_type,
+                source,
+                destination,
+                item,
+                collection,
+                amount,
+                accepted,
+                str(verified_query_id),
+                details,
+            )
         elif opcode in _DIRECT_OPCODES:
             query_id, _salt, _reason_hash = self._decode_direct_body(
                 tx.in_msg.body, opcode, deal
