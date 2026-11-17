@@ -885,10 +885,27 @@ class PytoniqTONTestnetEscrowProvider:
             snapshot = deal.deployment_snapshot_json
             if not isinstance(snapshot, dict):
                 raise ValueError("immutable deployment snapshot is missing")
-            expected_state = {1: 7, 2: 4}.get(outcome)
             getter_reason = getter.get("dispute_reason_hash")
             if not isinstance(getter_reason, str):
                 raise ValueError("proof-read dispute reason is missing")
+            post_delivery = dispute_phase == 2
+            nft_in_escrow = bool(getter.get("nft_in_escrow"))
+            principal_locked = bool(getter.get("principal_locked"))
+            # outcome 1 = buyer wins; outcome 2 = seller wins. In a
+            # post-delivery seller-win the NFT is already buyer-owned and the
+            # contract moves directly to seller_payout_pending (state 8).
+            if outcome == 1:
+                expected_state = 7
+                custody_valid = nft_in_escrow
+            elif outcome == 2 and post_delivery and not nft_in_escrow:
+                expected_state = 8
+                custody_valid = True
+            elif outcome == 2 and nft_in_escrow:
+                expected_state = 4
+                custody_valid = True
+            else:
+                expected_state = None
+                custody_valid = False
             if (
                 domain != _ESCROW_DOMAIN
                 or protocol_version != _PROTOCOL_VERSION
@@ -897,13 +914,15 @@ class PytoniqTONTestnetEscrowProvider:
                     != _canonical_address(deal.contract_address)
                 or deal_salt != int(deal.deal_salt, 16)
                 or dispute_phase != int(getter["dispute_phase"])
+                or dispute_phase not in {1, 2}
                 or attempt_id <= 0
                 or attempt_id != int(getter["dispute_attempt_id"])
                 or evidence_hash <= 0
                 or evidence_hash != int(getter_reason, 16)
                 or expected_state is None
                 or int(getter["contract_state"]) != expected_state
-                or not bool(getter["nft_in_escrow"])
+                or not principal_locked
+                or not custody_valid
             ):
                 raise ValueError("resolver context does not match final contract state")
             return {
