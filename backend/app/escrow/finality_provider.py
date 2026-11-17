@@ -1018,13 +1018,24 @@ class PytoniqTONTestnetEscrowProvider:
                 # its pre-transition recovery storage before clearing those fields.
                 # The accepted result never authorizes automatic listing release.
                 recovery_state = int(getter["contract_state"])
-                terminal_recovery = (
-                    recovery_state in {10, 11, 12}
-                    and int(getter.get("pending_action", 0)) == 6
-                )
-                if recovery_state != 13 and not terminal_recovery:
+                recovery_item = _canonical_address(getter.get("recovery_item_address"))
+                recovery_owner = _canonical_address(getter.get("recovery_previous_owner"))
+                if (
+                    recovery_state not in {10, 11, 12, 13}
+                    or int(getter.get("pending_action", 0)) != 6
+                    or not bool(getter.get("nft_in_escrow"))
+                    or recovery_item is None
+                    or recovery_owner is None
+                    or _canonical_address(item_address.to_str(is_user_friendly=False))
+                        != recovery_item
+                    or _canonical_address(destination_address.to_str(is_user_friendly=False))
+                        != recovery_owner
+                    or _canonical_address(source_address.to_str(is_user_friendly=False))
+                        != _canonical_address(deal.contract_address)
+                    or amount_nanotons != 0
+                ):
                     raise ValueError(
-                        "unexpected-NFT recovery must preserve manual-review or terminal state"
+                        "unexpected-NFT recovery route differs from proof-read recovery state"
                     )
             return {
                 "action": action,
