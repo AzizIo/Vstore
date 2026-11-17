@@ -290,6 +290,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareBuyerFunding).toHaveBeenCalledWith({
       deal_id: "deal-1",
       wallet_id: "wallet-testnet",
+      context: deal({ state: "awaiting_buyer_funds", available_actions: ["fund_deal"] }),
     });
     expect(tonConnectMocks.sendTransaction).not.toHaveBeenCalled();
   });
@@ -307,6 +308,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareBuyerAcceptance).toHaveBeenCalledWith({
       deal_id: "deal-1",
       wallet_id: "wallet-testnet",
+      context: deal({ state: "funded_review", available_actions: ["accept_deal"] }),
     });
   });
 
@@ -324,6 +326,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareDispute).toHaveBeenCalledWith({
       deal_id: "deal-1",
       reason: "NFT не совпадает с описанием",
+      context: deal({ state: "delivered_dispute_window", available_actions: ["open_dispute"] }),
     });
   });
 
@@ -360,6 +363,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareBuyerNftReturn).toHaveBeenCalledWith({
       deal_id: "deal-return",
       wallet_id: "wallet-testnet",
+      context: returnPending,
     });
   });
 
@@ -455,6 +459,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareNftDeposit).toHaveBeenCalledWith({
       deal_id: "deal-1",
       wallet_id: "wallet-testnet",
+      context: incoming,
     });
   });
 
@@ -476,6 +481,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareUnsoldNftWithdrawal).toHaveBeenCalledWith({
       deal_id: "deal-1",
       wallet_id: "wallet-testnet",
+      context: incoming,
     });
   });
 
@@ -639,8 +645,9 @@ describe("TON Escrow workspace", () => {
       proof_state_data_hash: "bb".repeat(32),
       proof_provider_id: "pytoniq-trust0-testnet-v1",
     };
+    const retryDeal = deal({ buyer_id: "buyer-1", seller_id: "seller-1", state: "refunded", available_actions: [] });
     const api = makeApi({
-      buyerDeals: [deal({ buyer_id: "buyer-1", seller_id: "seller-1", state: "refunded", available_actions: [] })],
+      buyerDeals: [retryDeal],
       retryableOutboundActions: [outbound],
     });
     installInventoryApi();
@@ -657,6 +664,7 @@ describe("TON Escrow workspace", () => {
     expect(api.prepareFailedOutboundRetry).toHaveBeenCalledWith({
       deal_id: "deal-1",
       query_id: "42",
+      context: retryDeal,
     });
     expect(await screen.findByRole("dialog", { name: /Повторить неудавшуюся отправку/ }))
       .toBeInTheDocument();
