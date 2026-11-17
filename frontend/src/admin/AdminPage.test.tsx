@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useRetrySession, useSession } from "../auth/SessionProvider";
@@ -6,7 +7,7 @@ import { fetchAdminAccess } from "./api";
 import { AdminPage } from "./AdminPage";
 
 vi.mock("../auth/SessionProvider", () => ({
-  SessionProvider: ({ children }: { children: React.ReactNode }) => children,
+  SessionProvider: ({ children }: { children: ReactNode }) => children,
   useSession: vi.fn(),
   useRetrySession: vi.fn(),
 }));
