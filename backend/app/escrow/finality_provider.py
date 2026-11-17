@@ -1018,24 +1018,22 @@ class PytoniqTONTestnetEscrowProvider:
                 # its pre-transition recovery storage before clearing those fields.
                 # The accepted result never authorizes automatic listing release.
                 recovery_state = int(getter["contract_state"])
-                recovery_item = _canonical_address(getter.get("recovery_item_address"))
-                recovery_owner = _canonical_address(getter.get("recovery_previous_owner"))
+                # The contract clears the recovery record after the NFT transfer
+                # has succeeded and the 2-of-3 oracle attestation is accepted.
+                # Verify the resulting empty recovery state, not fields that the
+                # successful transition intentionally deleted.
                 if (
                     recovery_state not in {10, 11, 12, 13}
-                    or int(getter.get("pending_action", 0)) != 6
-                    or not bool(getter.get("nft_in_escrow"))
-                    or recovery_item is None
-                    or recovery_owner is None
-                    or _canonical_address(item_address.to_str(is_user_friendly=False))
-                        != recovery_item
-                    or _canonical_address(destination_address.to_str(is_user_friendly=False))
-                        != recovery_owner
+                    or int(getter.get("pending_action", 0)) != 0
+                    or bool(getter.get("nft_in_escrow"))
+                    or getter.get("recovery_item_address") is not None
+                    or getter.get("recovery_previous_owner") is not None
                     or _canonical_address(source_address.to_str(is_user_friendly=False))
                         != _canonical_address(deal.contract_address)
                     or amount_nanotons != 0
                 ):
                     raise ValueError(
-                        "unexpected-NFT recovery route differs from proof-read recovery state"
+                        "unexpected-NFT recovery did not clear custody while preserving financial state"
                     )
             return {
                 "action": action,
@@ -1494,17 +1492,15 @@ class PytoniqTONTestnetEscrowProvider:
             if expected_state is not None and state != expected_state:
                 raise EscrowProviderInvalidEvidence("Direct message and getter state disagree")
             if opcode == _OP_RECOVER:
-                recovery_state_valid = (
-                    state == 7
-                    or (
-                        state in {10, 11, 12}
-                        and int(getter.get("pending_action", 0)) == 6
-                    )
+                recovery_state_valid = state == 7 or (
+                    state in {10, 11, 12}
+                    and int(getter.get("pending_action", 0)) == 6
                 )
                 recovery_item = _canonical_address(getter.get("recovery_item_address"))
                 recovery_owner = _canonical_address(getter.get("recovery_previous_owner"))
                 if (
                     not recovery_state_valid
+                    or int(getter.get("pending_action", 0)) != 6
                     or not bool(getter.get("nft_in_escrow"))
                     or recovery_item is None
                     or recovery_owner is None
