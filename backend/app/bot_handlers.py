@@ -119,7 +119,11 @@ def _terms_keyboard(url: str | None) -> InlineKeyboardMarkup | None:
     )
 
 
-def _menu_keyboard(telegram_user_id: int | None = None) -> InlineKeyboardMarkup:
+def _menu_keyboard(
+    telegram_user_id: int | None = None,
+    *,
+    is_private_chat: bool = False,
+) -> InlineKeyboardMarkup:
     settings = get_settings()
     rows: list[list[InlineKeyboardButton]] = []
     mini_app_button = _mini_app_button(settings.telegram_mini_app_url)
@@ -127,7 +131,8 @@ def _menu_keyboard(telegram_user_id: int | None = None) -> InlineKeyboardMarkup:
         rows.append([mini_app_button])
 
     if (
-        telegram_user_id is not None
+        is_private_chat
+        and telegram_user_id is not None
         and telegram_user_id in getattr(settings, "admin_telegram_ids", [])
     ):
         admin_button = _admin_mini_app_button(settings.telegram_mini_app_url)
@@ -267,9 +272,10 @@ SCREENS = {
 
 async def _send_menu(message: Message, text: str = START_MESSAGE) -> None:
     telegram_user_id = getattr(getattr(message, "from_user", None), "id", None)
+    is_private_chat = getattr(getattr(message, "chat", None), "type", None) == "private"
     await message.answer(
         text,
-        reply_markup=_menu_keyboard(telegram_user_id),
+        reply_markup=_menu_keyboard(telegram_user_id, is_private_chat=is_private_chat),
         parse_mode="HTML",
         disable_web_page_preview=True,
     )
@@ -446,7 +452,11 @@ async def handle_help_callback(callback: CallbackQuery) -> None:
             await callback.message.edit_text(
                 HELP_MESSAGE,
                 reply_markup=_menu_keyboard(
-                    getattr(getattr(callback, "from_user", None), "id", None)
+                    getattr(getattr(callback, "from_user", None), "id", None),
+                    is_private_chat=(
+                        getattr(getattr(getattr(callback, "message", None), "chat", None), "type", None)
+                        == "private"
+                    ),
                 ),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
@@ -464,7 +474,11 @@ async def handle_menu_callback(callback: CallbackQuery) -> None:
             await callback.message.edit_text(
                 START_MESSAGE,
                 reply_markup=_menu_keyboard(
-                    getattr(getattr(callback, "from_user", None), "id", None)
+                    getattr(getattr(callback, "from_user", None), "id", None),
+                    is_private_chat=(
+                        getattr(getattr(getattr(callback, "message", None), "chat", None), "type", None)
+                        == "private"
+                    ),
                 ),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
