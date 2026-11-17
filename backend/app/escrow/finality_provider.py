@@ -1033,7 +1033,8 @@ class PytoniqTONTestnetEscrowProvider:
                     or amount_nanotons != 0
                 ):
                     raise ValueError(
-                        "unexpected-NFT recovery did not clear custody while preserving financial state"
+                        "unexpected-NFT recovery did not clear custody "
+                        "while preserving financial state"
                     )
             return {
                 "action": action,
