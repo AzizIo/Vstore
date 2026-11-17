@@ -177,7 +177,7 @@ describe("TON Connect escrow adapter", () => {
     await expect(adapter.sendPreparedTransaction(
       preparedTransaction("create_deal_escrow", {
         factory_address: "0:" + "5".repeat(64),
-      } as Partial<PreparedEscrowTransaction>),
+      } as unknown as Partial<PreparedEscrowTransaction>),
       sellerAddress,
     )).rejects.toThrow(/неподтверждённый формат/i);
 
