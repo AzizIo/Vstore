@@ -196,3 +196,24 @@ Public policy text currently establishes that covered digital goods/services tra
 - [ ] Release owner explicitly signs off on the exact artifact and operational controls.
 
 Passing automated tests is not an independent audit, live testnet acceptance or launch authorization.
+
+
+## 8. Independent auditor shortlist — procurement leads, not endorsements
+
+The following firms publicly advertise TON smart-contract security work. Their public pages do **not** prove that a specific assigned reviewer has hands-on Acton 1.2.1 / Tolk 1.5.0 experience. Before sharing the frozen package or selecting a vendor, require a named reviewer, verifiable TON/Tolk references, conflict-of-interest confirmation and written scope.
+
+1. **Hacken — TON Smart Contract Audit.** Its dedicated TON audit page describes TVM-focused reviewers, line-by-line code review, static/dynamic analysis, fuzzing, attack simulation, gas optimization and remediation follow-up. Its public page also refers to experience with TON and FunC, so require explicit confirmation that the assigned team will manually audit this Tolk v1 / Acton project (not translate it to a generic EVM review). Request a quote through the [official Hacken TON audit page](https://hacken.io/services/blockchain-security/ton-smart-contract-audit/).
+2. **CertiK — TON ecosystem audit.** CertiK publicly advertises TON contract audits and describes source submission, scoping, security analysis, remediation and final report delivery. It also published a Tolk-specific security analysis in September 2026. Ask for the CV of the actual Tolk reviewer and a manual review commitment; AI tooling or an ecosystem listing alone is not independent audit evidence. Request scoping through the [official CertiK TON ecosystem page](https://www.certik.com/ecosystems/ton).
+3. **TierZero.dev — specialist alternative to screen.** Its public audit page shows TON contract work, including a Tact multisig audit and a TON Jetton design review, and states that its reviews include manual line-by-line work and reproducible proof-of-concepts. No public evidence reviewed here establishes Acton/Tolk delivery; include only if it can name a reviewer with Tolk/TVM bounce and async-message experience. [Public audit record](https://www.tierzero.dev/audits).
+
+### Mandatory vendor-screening questions
+
+- Who, by name, will manually review `DealEscrow.tolk` and the generated Acton/ABI artifacts? How many production Tolk/Acton audits have they personally completed?
+- Can they independently reproduce the fixed StateInit/address and message BOC vectors using Acton 1.2.1 / Tolk 1.5.0 and an independent TON SDK?
+- Can they review RichBounce envelope semantics, action-phase failures, message ordering, retry descriptors, TEP-62 custody, cell serialization, 2-of-3 Ed25519 attestations and TON balance/storage-floor invariants?
+- Will they inspect the backend finality/observer proof boundary as a separate scope item, or only the on-chain contract?
+- Will the report bind every finding and final sign-off to the exact source commit and artifact hashes and include reproducible PoCs?
+- Will the assigned reviewers disclose conflicts and confirm they did not author this code or operate the deal oracle/resolver keys?
+- What are the fixed scope, deliverables, quote, timeline, retest allowance, and conditions for public disclosure of the final report?
+
+**Procurement status:** shortlist prepared only. No company has been contacted, engaged, paid or authorized to receive private project information. No quote, reviewer assignment or audit slot has been confirmed. Select only after written confirmation of Tolk capability and scope.
