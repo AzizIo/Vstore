@@ -869,9 +869,9 @@ fun handleOracleAttestation(msg: OracleAttestation, storage: EscrowStorage) {
             && progress.state != STATE_EXPIRED
         ) {
             progress.state = STATE_MANUAL_REVIEW;
-            progress.deadlineUnix = 0;
         }
         progress.pendingAction = PENDING_NONE;
+        progress.deadlineUnix = 0;
         var clearedRecovery = progress.recovery.load();
         clearedRecovery.unexpectedPreviousOwner = null;
         clearedRecovery.unexpectedItemAddress = null;
