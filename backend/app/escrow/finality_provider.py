@@ -447,6 +447,16 @@ class PytoniqTONTestnetEscrowProvider:
                     or parsed.get("version") not in {1, 2}
                 ):
                     raise ValueError("unsupported cursor shape")
+                legacy_cursors = parsed["last_lt_by_address"]
+                if any(
+                    not isinstance(key, str)
+                    or not key
+                    or not isinstance(value, str)
+                    or not value.isdecimal()
+                    or int(value) < 0
+                    for key, value in legacy_cursors.items()
+                ):
+                    raise ValueError("invalid logical-time cursor")
                 # v1 cursoring skipped unknown opcodes before they were recognized.
                 # Reset once on migration so historical retry messages are backfilled.
                 if parsed.get("version") == 1:
@@ -454,18 +464,8 @@ class PytoniqTONTestnetEscrowProvider:
                 else:
                     cursor_state = {
                         "version": 2,
-                        "last_lt_by_address": {
-                            str(key): str(value)
-                            for key, value in parsed["last_lt_by_address"].items()
-                        },
+                        "last_lt_by_address": dict(legacy_cursors),
                     }
-                if any(
-                    not isinstance(value, str)
-                    or not value.isdecimal()
-                    or int(value) < 0
-                    for value in cursor_state["last_lt_by_address"].values()
-                ):
-                    raise ValueError("invalid logical-time cursor")
             except (ValueError, TypeError, json.JSONDecodeError) as exc:
                 raise EscrowProviderInvalidEvidence("Escrow scan cursor is malformed") from exc
 
