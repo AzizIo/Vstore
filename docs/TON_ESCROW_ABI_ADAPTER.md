@@ -20,7 +20,7 @@ Pinned provenance:
 | Exact successful Contract CI | [#44053217775](https://github.com/AzizIo/Vstore/actions/runs/44053217775) |
 | Artifact ID | `14314552321` |
 | Artifact archive SHA-256 | `fc84d2f467aacb9f63d36abd2807f393e212b93355d4da850cbb2a69aadd8a96` |
-| Build descriptor SHA-256 | `32c5ff1e392d77ade6c4a99b6010e41bcc2c1c9700e768fe190be45f98aeb5db` |
+| Build descriptor SHA-256 | `7d183fcdfea088494a04aa7fe59ff7a3b6c2ad044eba870aff8e6059880016b1` |
 | Acton / Tolk | `1.2.1` / `1.5.0` |
 | ABI compact SHA-256 | `df3b2ec393b2d1ed0f74474f630c81be8868b8421d2c7e429747cc2a4a336028` |
 | Code cell hash | `1A4F3E95226B5B6ACB3F81D324E2AB6038D5734C47253AF957E7E92887370A3D` |
