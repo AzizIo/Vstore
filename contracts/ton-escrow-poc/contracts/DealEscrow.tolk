@@ -1491,7 +1491,12 @@ fun onBouncedMessage(in: InMessageBounced) {
             action.exitCode = rich.exitCode;
             actions.second = action.toCell();
             matched = true;
-            criticalAction = action.kind <= OUTBOUND_KIND_BUYER_REFUND;
+            criticalAction = (
+                action.kind == OUTBOUND_KIND_NFT_RELEASE
+                || action.kind == OUTBOUND_KIND_NFT_RETURN
+                || action.kind == OUTBOUND_KIND_SELLER_PAYOUT
+                || action.kind == OUTBOUND_KIND_BUYER_REFUND
+            );
             if (criticalAction && progress.state == action.expectedState) {
                 progress = asManualReview(progress);
             }
