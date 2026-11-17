@@ -192,7 +192,7 @@ test("recipient can prepare the bounced outbound retry; signing remains disabled
   await expect(review).toContainText(escrowAddress);
   await expect(review).toContainText(nftItemAddress);
   await expect(review).toContainText(buyerWalletAddress);
-  await expect(review).toContainText("Повторить bounced refund для query 424242 в TON testnet.");
+  await expect(review).toContainText("Повторите исходящее действие по свежему доказательству");
   await expect(review.getByRole("button", { name: "Подписать в TON Connect" })).toBeDisabled();
   await expect(review.getByRole("status")).toContainText("Подписание отключено");
 
