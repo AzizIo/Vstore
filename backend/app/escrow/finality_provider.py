@@ -1017,8 +1017,15 @@ class PytoniqTONTestnetEscrowProvider:
                 # contract verifies both the attested item and prior owner against
                 # its pre-transition recovery storage before clearing those fields.
                 # The accepted result never authorizes automatic listing release.
-                if int(getter["contract_state"]) != 13:
-                    raise ValueError("unexpected-NFT recovery must remain in manual review")
+                recovery_state = int(getter["contract_state"])
+                terminal_recovery = (
+                    recovery_state in {10, 11, 12}
+                    and int(getter.get("pending_action", 0)) == 6
+                )
+                if recovery_state != 13 and not terminal_recovery:
+                    raise ValueError(
+                        "unexpected-NFT recovery must preserve manual-review or terminal state"
+                    )
             return {
                 "action": action,
                 "attempt_id": attempt_id,
@@ -1470,12 +1477,32 @@ class PytoniqTONTestnetEscrowProvider:
                 _OP_FUND: 3,
                 _OP_ACCEPT: 4,
                 _OP_DISPUTE: 6,
-                _OP_RECOVER: 7,
             }.get(opcode)
             if opcode == _OP_TIMEOUT and state not in {7, 8, 12, 13}:
                 raise EscrowProviderInvalidEvidence("TimeoutDeal did not reach an allowed state")
             if expected_state is not None and state != expected_state:
                 raise EscrowProviderInvalidEvidence("Direct message and getter state disagree")
+            if opcode == _OP_RECOVER:
+                recovery_state_valid = (
+                    state == 7
+                    or (
+                        state in {10, 11, 12}
+                        and int(getter.get("pending_action", 0)) == 6
+                    )
+                )
+                recovery_item = _canonical_address(getter.get("recovery_item_address"))
+                recovery_owner = _canonical_address(getter.get("recovery_previous_owner"))
+                if (
+                    not recovery_state_valid
+                    or not bool(getter.get("nft_in_escrow"))
+                    or recovery_item is None
+                    or recovery_owner is None
+                    or source != recovery_owner
+                    or destination != _canonical_address(deal.contract_address)
+                ):
+                    raise EscrowProviderInvalidEvidence(
+                        "Unexpected NFT recovery does not match the proof-read recovery state"
+                    )
             if opcode == _OP_FUND:
                 required_amount = int(snapshot["principal_nanotons"]) + int(
                     snapshot["execution_reserve_nanotons"]
@@ -1516,19 +1543,6 @@ class PytoniqTONTestnetEscrowProvider:
             amount = message_value
             accepted = False
             if opcode == _OP_RECOVER:
-                recovery_item = _canonical_address(getter.get("recovery_item_address"))
-                recovery_owner = _canonical_address(getter.get("recovery_previous_owner"))
-                if (
-                    state != 7
-                    or not bool(getter.get("nft_in_escrow"))
-                    or recovery_item is None
-                    or recovery_owner is None
-                    or source != recovery_owner
-                    or destination != _canonical_address(deal.contract_address)
-                ):
-                    raise EscrowProviderInvalidEvidence(
-                        "Unexpected NFT recovery does not match the proof-read recovery state"
-                    )
                 item = recovery_item
         elif opcode == _NFT_NOTIFICATION_OPCODE:
             parser = tx.in_msg.body.begin_parse()
@@ -1608,7 +1622,7 @@ class PytoniqTONTestnetEscrowProvider:
                 2: ("contract", "seller", {9, 12}, 0),
                 3: ("contract", "seller", {10}, int(snapshot["principal_nanotons"])),
                 4: ("contract", "buyer", {11}, int(snapshot["principal_nanotons"])),
-                5: ("contract", None, {13}, 0),
+                5: ("contract", None, {10, 11, 12, 13}, 0),
             }
             if action not in expected_routes:
                 raise EscrowProviderInvalidEvidence("Unknown oracle attestation action")
@@ -1634,7 +1648,7 @@ class PytoniqTONTestnetEscrowProvider:
                 else _canonical_address(getter.get("recovery_previous_owner"))
             )
             item_matches_snapshot = item == _canonical_address(snapshot["item_address"])
-            recovery_action = action == 5 and state == 13
+            recovery_action = action == 5 and state in {10, 11, 12, 13}
             if (
                 state not in expected_states
                 or source != expected_source
@@ -1657,6 +1671,9 @@ class PytoniqTONTestnetEscrowProvider:
                 (3, 10): EscrowChainEventType.SELLER_PAYOUT_RECONCILED,
                 (4, 11): EscrowChainEventType.BUYER_REFUND_RECONCILED,
                 (5, 13): EscrowChainEventType.MANUAL_REVIEW_REQUIRED,
+                (5, 10): EscrowChainEventType.UNEXPECTED_NFT_RECOVERY_RECONCILED,
+                (5, 11): EscrowChainEventType.UNEXPECTED_NFT_RECOVERY_RECONCILED,
+                (5, 12): EscrowChainEventType.UNEXPECTED_NFT_RECOVERY_RECONCILED,
             }.get((action, state))
             if event_type is None:
                 raise EscrowProviderInvalidEvidence(
