@@ -235,7 +235,7 @@ async def test_scan_rejects_corrupted_or_wrong_version_cursor() -> None:
         http_client=_FakeHttp({"transactions": []}),
         lite_client_factory=lambda: object(),
     )
-    for cursor in ("{bad-json", '{"version":2,"last_lt_by_address":{}}',
+    for cursor in ("{bad-json", '{"version":3,"last_lt_by_address":{}}',
                    '{"version":1,"last_lt_by_address":{"address":"not-a-number"}}'):
         with pytest.raises(EscrowProviderInvalidEvidence, match="cursor"):
             await provider.scan_events(cursor=cursor, limit=1)
