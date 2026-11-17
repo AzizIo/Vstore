@@ -891,7 +891,8 @@ fun handleDisputeResolution(msg: ResolveDispute, storage: EscrowStorage) {
     // safely held by this escrow, TimeoutDeal moves the contract to MANUAL_REVIEW.
     // Keep the 2-of-3 resolver path available for that exact quarantine state so
     // an unavailable resolver at the deadline cannot permanently strand collateral.
-    // A post-delivery dispute where the buyer never returned the NFT is excluded.
+    // A post-delivery dispute where the buyer retains the NFT is handled by the
+    // separate timedOutPostDeliveryDispute branch below.
     val timedOutEscrowedDispute = (
         progress.state == STATE_MANUAL_REVIEW
         && progress.deadlineUnix == 0
