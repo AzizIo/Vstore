@@ -31,7 +31,9 @@ describe("AdminPage Telegram launch and authorization states", () => {
     vi.mocked(fetchAdminAccess).mockResolvedValue(true);
   });
 
-  it("explains that the workspace must be launched through the bot when initData is missing", () => {
+  it(
+    "explains that the workspace must be launched through the bot when initData is missing",
+    () => {
     vi.mocked(useSession).mockReturnValue({
       status: "unauthenticated",
       reason: "missing_init_data",
@@ -44,7 +46,8 @@ describe("AdminPage Telegram launch and authorization states", () => {
     );
     expect(screen.getByRole("alert")).toHaveTextContent("/admin");
     expect(fetchAdminAccess).not.toHaveBeenCalled();
-  });
+    },
+  );
 
   it("explains that an expired Telegram session requires a fresh Mini App launch", () => {
     vi.mocked(useSession).mockReturnValue({
